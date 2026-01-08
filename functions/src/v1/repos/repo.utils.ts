@@ -1,11 +1,22 @@
-import type { ZodSchema } from "zod";
+import { z } from "zod";
 
 /**
- * Small helpers for consistent validation at the persistence boundary.
- * "Zod is the single source of truth" means: validate what we read + what we write.
+ * Validate at the persistence boundary (read + write).
+ *
+ * IMPORTANT:
+ * Use z.output<S> so TypeScript sees the POST-PARSE shape:
+ * - defaults applied (.default)
+ * - transforms applied (.transform)
+ * - preprocess applied (z.preprocess)
+ *
+ * If we used a plain generic T, TS can accidentally model the input type,
+ * which makes defaulted fields appear optional (causing TS2322 errors).
  */
-
-export function parseOrThrow<T>(schema: ZodSchema<T>, data: unknown, ctx: string): T {
+export function parseOrThrow<S extends z.ZodTypeAny>(
+  schema: S,
+  data: unknown,
+  ctx: string
+): z.output<S> {
   const res = schema.safeParse(data);
   if (!res.success) {
     const issues = res.error.issues.map((i) => ({
