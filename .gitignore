@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+functions/node_modules/
+
+# Firebase
+.firebase/
+functions/lib/
+functions/.runtimeconfig.json
+
+# Environment / secrets
+.env
+.env.*
+*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+firebase-debug.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/*.log
+
+# Build output
+dist/
+build/

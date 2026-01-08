@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "uuid": "^13.0.0",
+    "zod": "^3.5.4",
+    "zod-to-openapi": "^0.2.1"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2"
+  },
+
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "serve": "firebase emulators:start --only functions",
+    "deploy:dev": "firebase deploy --only functions --project <DEV_PROJECT_ID>",
+    "deploy:staging": "firebase deploy --only functions --project <STAGING_PROJECT_ID>",
+    "deploy:prod": "firebase deploy --only functions --project <PROD_PROJECT_ID>",
+    "openapi:v1": "ts-node ./src/v1/lib/openapi.generate.ts"
+  }
+}
