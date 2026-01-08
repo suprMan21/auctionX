@@ -1,6 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
-import { BidSchema, type Bid } from "../v1/schemas/domain/bid.schema";
+import { BidSchema, type Bid } from "../schemas/domain/bid.schema";
 import { parseOrThrow } from "./repo.utils";
 import { bidPath, bidsCollectionPath } from "./paths";
 

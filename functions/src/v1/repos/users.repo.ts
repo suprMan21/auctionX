@@ -1,6 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
-import { UserSchema, type User } from "../v1/schemas/domain/user.schema";
+import { UserSchema, type User } from "../schemas/domain/user.schema";
 import { parseOrThrow } from "./repo.utils";
 import { usersPath } from "./paths";
 

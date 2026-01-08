@@ -1,6 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
-import { CategorySchema, type Category } from "../v1/schemas/domain/category.schema";
+import { CategorySchema, type Category } from "../schemas/domain/category.schema";
 import { parseOrThrow } from "./repo.utils";
 import { categoriesCollectionPath, categoryPath } from "./paths";
 

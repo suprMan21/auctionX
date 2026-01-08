@@ -1,6 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
-import { AuctionSchema, type Auction } from "../v1/schemas/domain/auction.schema";
+import { AuctionSchema, type Auction } from "../schemas/domain/auction.schema";
 import { parseOrThrow } from "./repo.utils";
 import { auctionPath, auctionsCollectionPath } from "./paths";
 

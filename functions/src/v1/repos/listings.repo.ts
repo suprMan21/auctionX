@@ -1,6 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
-import { ListingSchema, type Listing } from "../v1/schemas/domain/listing.schema";
+import { ListingSchema, type Listing } from "../schemas/domain/listing.schema";
 import { parseOrThrow } from "./repo.utils";
 import { listingPath, listingsCollectionPath } from "./paths";
 
