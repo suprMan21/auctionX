@@ -3,6 +3,7 @@ import { sendError } from "./lib/http";
 import { AppError, toAppError } from "./lib/errors";
 import { withRequestContext } from "./lib/requestContext";
 import { healthRoute } from "./routes/health.routes";
+import { echoRoute } from "./routes/echo.routes";
 
 type Route = {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -12,6 +13,7 @@ type Route = {
 
 const routes: Route[] = [
   healthRoute,
+  echoRoute,
 ];
 
 export async function v1Router(req: Request, res: Response): Promise<void> {
