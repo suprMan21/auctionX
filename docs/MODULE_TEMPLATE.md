@@ -1,91 +1,60 @@
-# MODULE 01 — Core Domain Models & Persistence (Firestore)
+# MODULE TEMPLATE
 
-## Status
-- **In Progress / Modeling Complete**
-- Module 0 + 0.5 assumed locked and stable (no refactors).
+Use this template to document each module. Keep it concise, concrete, and reproducible.
 
-## Goal
-Define core domain models and Firestore persistence for:
-- listings
-- auctions
-- bids
-- users (base shape)
-- categories (including 18+)
+---
+
+## Module ID and Name
+- **Module:** XX — <Name>
+- **Branch:** <branch>
+- **Date:** <YYYY-MM-DD>
+
+---
+
+## Locked Inputs and Assumptions
+- List assumptions this module relied on.
+- List constraints (e.g., “No refactors to prior modules”).
+
+---
+
+## Goals
+- What this module was intended to achieve.
+- What success looks like at the end of the module.
+
+---
 
 ## Scope
+
 ### In
-- Zod schemas (single source of truth)
-- Firestore collection layout
-- Status/state enums
-- Read/write patterns (no business logic)
+- Explicitly list what is included in this module.
 
 ### Out
-- Auction mechanics
-- Bidding logic
-- Payments
-- Auth enforcement
-- UI concerns
+- Explicitly list what is excluded and deferred to later modules.
 
-## Repo Placement (Locked)
-- Zod domain schemas: `functions/src/v1/schemas/domain/*`
-- Firestore repos: `functions/src/v1/repos/*`
+---
 
-## Firestore Collection Structure
-### Users
-- `users/{uid}`
+## Repo Touchpoints
+- **Primary folders/files:**
+  - `functions/src/...`
+  - `docs/...`
+- **No-go zones (immutable modules):**
+  - List modules or folders that must not be modified.
 
-### Categories
-- `categories/{categoryId}`
+---
 
-### Listings
-- `listings/{listingId}`
+## Architecture Notes
+- Key design decisions.
+- Why certain approaches were chosen.
+- Notes on determinism, testability, and separation of concerns.
 
-### Auctions (subcollection under listing)
-- `listings/{listingId}/auctions/{auctionId}`
+---
 
-### Bids (subcollection under auction)
-- `listings/{listingId}/auctions/{auctionId}/bids/{bidId}`
+## Deliverables
+List each deliverable and where it lives in the repo.
 
-## Domain Models (Zod)
-### Enums
-- `ListingStatus`: `DRAFT | ACTIVE | SUSPENDED | ARCHIVED`
-- `AuctionStatus`: `SCHEDULED | RUNNING | CLOSED | VOIDED`
-- `BidStatus`: `PLACED | OUTBID | WINNING | RETRACTED`
-- `ItemCondition`: `NEW | LIKE_NEW | GOOD | FAIR | POOR`
-- Currency: `CAD`
+---
 
-### Users (base)
-- Persisted profile fields + roles (admin/moderator) only.
+## Validation Steps
+Provide copy-pasteable commands used to validate the module.
 
-### Categories
-- Hierarchy supported via `parentId` + `path[]`
-- **18+** is encoded via `isAdult: boolean`
-
-### Listings
-- Enduring listing document across relists.
-- Holds seller, category, condition, photos, location, pricing, flags, status.
-
-### Auctions
-- Stored under listing.
-- Contains `iteration` (0..2), schedule timestamps, status, and a small denormalized snapshot.
-
-### Bids
-- Stored under auction.
-- Contains bidder uid, amount, status, placedAt, optional idempotency key.
-
-## Read/Write Patterns (Persistence Only)
-- Repos validate **reads and writes** using Zod.
-- Update pattern: read -> merge -> validate -> overwrite (merge: false).
-- No business logic (winner selection, bidding rules, payments) is implemented here.
-
-## Indexing Notes (Planning Only)
-- Common queries expected:
-  - listings by `status`, `categoryId`, `flags.adult`
-  - auctions under listing ordered by `schedule.startAt`
-  - bids under auction ordered by `placedAt`
-- Composite indexes will be added when query patterns are implemented in later modules.
-
-## Lessons Learned
-- **Folder hygiene matters:** `schemas/domain/` prevents `schemas/` from becoming a dumping ground as modules grow.
-- **Zod-first discipline:** validate at persistence boundaries (read + write) to keep models consistent across services.
-- **Build artifact hygiene (observed):** compiled output includes duplicate-named artifacts (e.g., `index 2.js`). Not changed in this module due to locked decisions, but worth addressing later with a clean build output strategy.
+Example:
