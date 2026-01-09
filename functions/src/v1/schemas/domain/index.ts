@@ -5,3 +5,4 @@ export * from "./category.schema";
 export * from "./listing.schema";
 export * from "./auction.schema";
 export * from "./bid.schema";
+export * from "./auctionState.schema";

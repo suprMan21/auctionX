@@ -19,3 +19,9 @@ export const bidsCollectionPath = (listingId: string, auctionId: string) =>
   `listings/${listingId}/auctions/${auctionId}/bids`;
 export const bidPath = (listingId: string, auctionId: string, bidId: string) =>
   `listings/${listingId}/auctions/${auctionId}/bids/${bidId}`;
+
+// AuctionState doc path:
+// listings/{listingId}/auctions/{auctionId}/state/current
+export function auctionStatePath(listingId: string, auctionId: string): string {
+  return `${auctionPath(listingId, auctionId)}/state/current`;
+}
