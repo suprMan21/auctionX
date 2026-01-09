@@ -4,6 +4,7 @@
  */
 
 export type OrchestrationOutcome =
+  | "attempt"
   | "success"
   | "noop"
   | "validation_failed"
@@ -29,7 +30,6 @@ export type OrchestrationLogPayload = {
   op: string;
   aggregate: string;
 
-  // Domain identifiers (include what you have; omit what you don't)
   auctionId?: string;
   listingId?: string;
   bidId?: string;
@@ -38,15 +38,13 @@ export type OrchestrationLogPayload = {
   expectedVersion?: string | number;
 
   outcome: OrchestrationOutcome;
+  durationMs: number;
 
-  // Lightweight patch metadata (never dump full patch unless you explicitly want to later)
   patchSummary?: {
     paths?: string[];
     size?: number;
     hash?: string;
   };
-
-  durationMs: number;
 
   error?: {
     code: string;
@@ -55,8 +53,7 @@ export type OrchestrationLogPayload = {
 };
 
 /**
- * Minimal logger interface so orchestration can be tested without your real logger.
- * Adapter to your existing logger lives at composition time (handlers / service factories).
+ * Minimal logger interface so orchestration can be tested without the real logger.
  */
 export type OrchestrationLogger = {
   info: (event: string, payload: OrchestrationLogPayload) => void;
