@@ -71,9 +71,7 @@ async function main() {
         highBidderUid: null,
         highBidderMaxCents: null,
         secondHighestMaxCents: null,
-      },
-      close: undefined,
-    },
+      },},
     `Seed:AuctionState:${listingId}/${auctionId}`
   );
 
