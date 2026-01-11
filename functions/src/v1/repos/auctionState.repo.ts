@@ -40,7 +40,7 @@ function applyPatchToState(existing: AuctionState, patch: AuctionPatch, nowMs: n
       proxy: p.proxy
         ? { ...existing.proxy, ...p.proxy }
         : existing.proxy,
-      close: p.close ? { ...p.close } : existing.close,
+      ...(p.close !== undefined ? { close: { ...p.close } } : (existing.close !== undefined ? { close: existing.close } : {})),
       version: existing.version + p.versionBump,
       updatedAtMs: nowMs,
     },
