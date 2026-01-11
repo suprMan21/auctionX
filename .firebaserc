@@ -1,6 +1,7 @@
 {
   "projects": {
-    "dev": "unmentionables-4ef02"
+    "dev": "unmentionables-4ef02",
+    "default": "unmentionables-4ef02"
   },
   "targets": {},
   "etags": {}

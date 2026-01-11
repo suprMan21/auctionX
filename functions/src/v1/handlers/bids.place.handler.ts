@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { z } from "zod";
 import { sendError, sendJson } from "../lib/http";
 import { AppError } from "../lib/errors";
 
@@ -24,15 +25,43 @@ function mapOrchErrorToAppError(e: any): AppError {
   return { status, code, message, details } as any as AppError;
 }
 
-export async function placeBidHandler(req: Request, res: Response) {
-  try {
-    const auctionId = String((req as any).params?.auctionId ?? "");
+function toInternalError(e: unknown): AppError {
+  const message =
+    e instanceof Error ? e.message :
+    typeof e === "string" ? e :
+    "Unexpected error";
 
-    const input = PlaceBidCommandSchema.parse({
+  return {
+    status: 500,
+    code: "INTERNAL",
+    message: "Internal server error",
+    details: { message },
+  } as any as AppError;
+}
+
+export async function placeBidHandler(req: Request, res: Response) {
+  const auctionId = String((req as any).params?.auctionId ?? "");
+
+  let input: z.infer<typeof PlaceBidCommandSchema>;
+  try {
+    input = PlaceBidCommandSchema.parse({
       ...(req.body ?? {}),
       auctionId,
     });
+  } catch (e) {
+    sendError(
+      res,
+      {
+        status: 400,
+        code: "BAD_REQUEST",
+        message: "Invalid request body",
+        details: e,
+      } as any as AppError
+    );
+    return;
+  }
 
+  try {
     const deps = buildPlaceBidDeps(req);
 
     const result = await placeBid(deps, input);
@@ -44,14 +73,6 @@ export async function placeBidHandler(req: Request, res: Response) {
 
     sendJson(res, 200, { data: result.value });
   } catch (e) {
-    sendError(
-      res,
-      {
-        status: 400,
-        code: "BAD_REQUEST",
-        message: "Invalid request",
-        details: { cause: e },
-      } as any as AppError
-    );
+    sendError(res, toInternalError(e));
   }
 }

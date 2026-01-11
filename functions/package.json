@@ -19,6 +19,7 @@
     "deploy:prod": "firebase deploy --only functions --project <PROD_PROJECT_ID>",
     "openapi:v1": "tsx src/openapi/generate.ts",
     "test:auctions": "npx tsx src/v1/services/auctions/__tests__/run.ts",
-    "test": "npm run test:auctions"
+    "test": "npm run test:auctions",
+    "seed:auction": "ts-node ./scripts/seedAuction.ts"
   }
 }
