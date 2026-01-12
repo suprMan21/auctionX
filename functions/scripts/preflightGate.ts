@@ -25,11 +25,11 @@ function setEnv(k: string, v: string) {
   process.env[k] = v;
 }
 
-function assertOk(cond: any, msg: string): asserts cond {
+function assertOk(cond: any, _msg: string): asserts cond {
   if (!cond) throw new Error(`ASSERTION_FAILED: `);
 }
 
-function assertExists<T>(v: T | null | undefined, msg: string): asserts v is T {
+function assertExists<T>(v: T | null | undefined, _msg: string): asserts v is T {
   if (v === null || v === undefined) throw new Error(`ASSERTION_FAILED: `);
 }
 
