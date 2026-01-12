@@ -25,8 +25,12 @@ function setEnv(k: string, v: string) {
   process.env[k] = v;
 }
 
-function assertOk(cond: any, msg: string) {
-  if (!cond) throw new Error(`ASSERTION_FAILED: ${msg}`);
+function assertOk(cond: any, msg: string): asserts cond {
+  if (!cond) throw new Error(`ASSERTION_FAILED: `);
+}
+
+function assertExists<T>(v: T | null | undefined, msg: string): asserts v is T {
+  if (v === null || v === undefined) throw new Error(`ASSERTION_FAILED: `);
 }
 
 function getDb() {
@@ -69,7 +73,7 @@ async function expectClosedState(args: {
   const db = getDb();
 
   const meta = await readAuctionMeta(db, args.listingId, args.auctionId);
-  assertOk(meta, `auction meta missing: ${args.listingId}/${args.auctionId}`);
+  assertExists(meta, `auction meta missing: ${args.listingId}/${args.auctionId}`);
   assertOk(meta.status === "CLOSED", `auction.status expected CLOSED, got ${meta.status}`);
   assertOk(
     meta.pricing?.currentPriceCents === args.expectedAuctionPriceCents,
@@ -77,7 +81,7 @@ async function expectClosedState(args: {
   );
 
   const state = await readAuctionState(db, args.listingId, args.auctionId);
-  assertOk(state, `auction state missing: ${args.listingId}/${args.auctionId}`);
+  assertExists(state, `auction state missing: ${args.listingId}/${args.auctionId}`);
   assertOk(state.close?.reason === args.expectedReason, `close.reason expected ${args.expectedReason}, got ${state.close?.reason}`);
   assertOk(state.close?.winnerUid === args.expectedWinnerUid, `close.winnerUid expected ${args.expectedWinnerUid}, got ${state.close?.winnerUid}`);
   assertOk(
