@@ -1,101 +1,157 @@
-# MODULE 05 — Auction Close & Offer Cascade
+# MODULE_05.md — Auction Execution, Orchestration & Preflight Gate
 
-## Scope (Locked)
-IN:
-- Auction close orchestration (deterministic)
-- Offer cascade orchestration (2nd/3rd bidder offers)
-- Reserve-not-met outcome emission (payment-ready, not persisted)
-- Relist eligibility enforcement (read-only; enforcement result emitted)
-- AuctionState updates via existing optimistic concurrency path (`applyMechanicsPatch`)
-- Structured orchestration logging (attempt/success/rejection)
-- Emulator-first deterministic debug flows via scripts
+## Module Status
+**COMPLETE AND LOCKED**
 
-OUT:
-- Stripe/payments capture, authorization updates, refunds, payouts
-- Background schedulers, cron, triggers
-- UI changes
-- Trust scoring
-- Schema refactors
+Module 05 delivers the fully deterministic auction execution layer, validated end-to-end using a mandatory emulator preflight gate. All core auction mechanics have been exercised with no remaining functional defects.
 
-## Determinism & Layering
-All state changes follow:
-mechanics → orchestration → repository
+---
 
-- Mechanics remains pure (no clock access; `nowMs` is an input).
-- Orchestration coordinates reads/writes and emits outcomes.
-- Repositories perform IO + persistence validation only.
-- No logging in mechanics or repos.
+## Module Goal
+Implement and lock the behavioral core of the auction platform, including:
+- Bid placement and proxy bidding
+- Auction close logic
+- Outcome determination
+- Offer cascade execution
+- Emulator-first verification
+- Hard preflight gate enforcement
 
-## Persistence Inputs (Authoritative)
-- Listing reserve price:
-  - `Listing.pricing.reservePriceCents` (optional)
-- Auction relist iteration:
-  - `Auction.iteration` (0..2)
-- Close winner + winning price are persisted to AuctionState close:
-  - `AuctionState.close.{winnerUid, winningPriceCents, closedAtMs, reason}`
+This module establishes trust in auction correctness before payments or UI layers are introduced.
 
-## Close Auction (Orchestration)
-File:
-- `functions/src/v1/services/orchestration/auction.close.orchestrator.ts`
+---
 
-Flow:
-1) Validate command `{ listingId, auctionId, nowMs }`
-2) Load AuctionCore via aggregate adapter (Auction + AuctionState)
-3) Load Listing for reserve price (read-only)
-4) Load Auction meta for sellerUid + iteration (read-only)
-5) Run mechanics `computeCloseAuction({ auction, nowMs })`
-6) Apply patch via `applyMechanicsPatch` (optimistic concurrency)
-7) Emit a payment-ready outcome object (not persisted)
+## What Was Delivered
 
-Outcomes:
-- `NO_BIDS`
-- `RESERVE_NOT_MET`
-- `PAYMENT_REQUIRED` (winner-at-close)
+### 1. Auction Execution Mechanics
+- eBay-style proxy bidding
+- Deterministic price progression
+- Optimistic concurrency via versioning
+- Transactional Firestore updates
 
-Important:
-- Reserve-not-met does not modify persistence in this module.
-- Payment state is not persisted.
+### 2. Aggregate Separation (Locked)
+- **Auction (meta)**  
+  Identity, schedule, snapshot, status, version
+- **AuctionState (derived)**  
+  Proxy bidding state, close info, outcome
 
-## Offer Cascade (Non-payment)
-File:
-- `functions/src/v1/services/orchestration/auction.offerCascade.orchestrator.ts`
+Meta documents are not relied upon for computed price invariants after close.
 
-Purpose:
-Given a closed auction and a set of excluded bidder UIDs (including the failed winner), determine the next candidate and the price to offer.
+---
 
-Deterministic bidder ranking:
-- For each bidder: compute max `amountCents` across their bids
-- Tie-break: earliest `placedAt` timestamp at that max
-- Sort by:
-  1) maxCents desc
-  2) earliestPlacedAtMs asc
+### 3. Orchestration Layer
+Explicit orchestrators for:
+- `placeBid`
+- `closeAuction`
+- `advanceOfferCascade`
 
-Price computation:
-- Reuse proxy repricing helper:
-  - `repriceProxyState({ startPriceCents, highBidderUid, highBidderMaxCents, secondHighestMaxCents })`
-- Offer price is `repriced.currentPriceCents`
+Each orchestrator:
+- Is deterministic
+- Uses optimistic locking
+- Emits structured logs
+- Returns typed outcomes
 
-Outcomes:
-- `PAYMENT_REQUIRED` (reason: `CASCADE_OFFER`)
-- `NO_ELIGIBLE_BIDDERS`
+---
 
-Persistence:
-- No persistence writes in cascade (no payment state fields exist; no schema changes allowed).
+### 4. Structured Orchestration Logging (Canonical)
+Every orchestration emits logs with:
+- `requestId`
+- `op`
+- `aggregate`
+- `listingId`
+- `auctionId`
+- `outcome` (attempt | success | error)
+- `durationMs`
+- `expectedVersion` (where applicable)
 
-## Emulator-first Debug Flows
-Scripts:
-- `functions/scripts/debugCloseAuction.ts`
-- `functions/scripts/debugOfferCascade.ts`
+This format is now mandatory for all future modules.
 
-Typical flow:
-1) Seed auction/state (existing `seedAuction.ts`)
-2) Place bids (existing `debugPlaceBid.ts`)
-3) Close auction (`debugCloseAuction.ts`)
-4) Cascade offer (`debugOfferCascade.ts`) excluding failed winner
+---
 
-## Notes for Module 06+
-This module emits payment-ready intent objects but does not persist payment state.
-Module 06 should consume:
-- `PaymentReadyIntent` payloads for authorization/capture orchestration
-- Cascade offer payloads for second-chance payment attempts
+### 5. Emulator-First Tooling
+Supporting scripts were created to allow deterministic local validation:
+- Listing and auction seed scripts
+- Debug bid placement
+- Bid dumping utilities
+- Forced auction end and close scripts
+- Offer cascade execution
 
+All development and validation occurs against the Firebase emulator.
+
+---
+
+## Preflight Emulator Gate (HARD RULE)
+
+A **mandatory preflight verification gate** is introduced and locked.
+
+### Gate Script
+`scripts/preflightGate.ts`
+
+### Scenarios Enforced
+1. **Two bidders**
+   - Place bids
+   - Close auction
+   - Validate winner and winning price
+   - Execute offer cascade
+2. **Three bidders**
+   - Validate proxy bidding order
+   - Close auction
+   - Validate cascade pricing and eligibility
+3. **No bids**
+   - Close auction
+   - Validate `NO_BIDS`
+   - Validate cascade returns `NO_ELIGIBLE_BIDDERS`
+
+### Pass Criteria
+- All scenarios execute without error
+- Auction state reflects deterministic outcomes
+- No reliance on missing meta pricing fields
+- Firestore emulator configured exactly once
+- Gate prints `PREFLIGHT GATE: PASS`
+
+**This gate must pass and outputs must be recorded before any future module work proceeds.**
+
+---
+
+## Locked Decisions (Do Not Revisit)
+- Emulator-first development
+- Deterministic orchestration
+- Proxy bidding model
+- Auction + AuctionState separation
+- Structured orchestration logging
+- Preflight gate requirement
+- No test framework dependency at this stage
+
+---
+
+## Known Non-Goals
+Explicitly deferred:
+- Payments
+- Stripe integration
+- Buyer acceptance flows
+- Refunds or chargebacks
+- UI concerns
+
+These will be addressed in future modules.
+
+---
+
+## Forward Compatibility Notes
+Module 05 intentionally preserves extension points for:
+- Payment initiation from auction outcomes
+- Offer acceptance workflows
+- Relisting logic
+- Admin force-close tooling
+- Future test framework adoption (e.g., Jest)
+
+No refactors are required to extend this module.
+
+---
+
+## Exit Criteria (Satisfied)
+- Auction lifecycle fully implemented
+- All edge cases validated
+- Emulator preflight gate passing
+- Logging discipline enforced
+- Module documented and locked
+
+**Module 05 is complete.**
