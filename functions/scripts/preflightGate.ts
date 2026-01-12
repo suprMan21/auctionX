@@ -30,6 +30,7 @@ async function main() {
   header("SCENARIO 1: 2 bidders -> close -> cascade");
   setEnv("LISTING_ID", "listing_seed_1");
   setEnv("AUCTION_ID", "auction_seed_gate_2bidders_1");
+  sh("npx ts-node ./scripts/wipeAuction.ts");
   sh("npx ts-node ./scripts/seedListing.ts");
   sh("npx ts-node ./scripts/seedAuction.ts");
 
@@ -49,6 +50,7 @@ async function main() {
   header("SCENARIO 2: 3 bidders -> close -> cascade");
   setEnv("LISTING_ID", "listing_seed_1");
   setEnv("AUCTION_ID", "auction_seed_gate_3bidders_1");
+  sh("npx ts-node ./scripts/wipeAuction.ts");
   sh("npx ts-node ./scripts/seedListing.ts");
   sh("npx ts-node ./scripts/seedAuction.ts");
 
@@ -72,6 +74,7 @@ async function main() {
   header("SCENARIO 3: no bids -> close -> cascade");
   setEnv("LISTING_ID", "listing_seed_1");
   setEnv("AUCTION_ID", "auction_seed_gate_nobids_1");
+  sh("npx ts-node ./scripts/wipeAuction.ts");
   sh("npx ts-node ./scripts/seedListing.ts");
   sh("npx ts-node ./scripts/seedAuctionEnded.ts");
   sh("npx ts-node ./scripts/debugCloseAuction.ts");
