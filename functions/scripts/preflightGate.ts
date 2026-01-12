@@ -33,6 +33,8 @@ function assertExists<T>(v: T | null | undefined, _msg: string): asserts v is T 
   if (v === null || v === undefined) throw new Error(`ASSERTION_FAILED: `);
 }
 
+let _firestoreSettingsApplied = false;
+
 function getDb() {
   const projectId = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
   assertOk(projectId, "GCLOUD_PROJECT/GOOGLE_CLOUD_PROJECT must be set");
@@ -43,7 +45,7 @@ function getDb() {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
   assertOk(host, "FIRESTORE_EMULATOR_HOST must be set");
 
-  db.settings({ host, ssl: false });
+  if (!_firestoreSettingsApplied) { db.settings({ host, ssl: false }); _firestoreSettingsApplied = true; }
   return db;
 }
 
