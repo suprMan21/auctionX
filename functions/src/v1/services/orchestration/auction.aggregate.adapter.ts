@@ -15,6 +15,12 @@ export type AuctionAggregateRepoPort = {
     preconditions: Preconditions;
     patch: AuctionPatch;
     nowMs: number;
+    bid?: {
+      bidderUid: string;
+      amountCents: number;
+      currency?: "CAD";
+      clientRequestId?: string;
+    };
   }) => Promise<RepoApplyPatchResult<AuctionCore>>;
 };
 
@@ -52,9 +58,9 @@ export function makeAuctionAggregateRepoPort(db: Firestore): AuctionAggregateRep
         preconditions: args.preconditions,
         patch: args.patch,
         nowMs: args.nowMs,
+        ...(args.bid ? { bid: args.bid } : {}),
       });
 
-      // rebuild core from updated docs
       const core: AuctionCore = {
         id: out.auction.id,
         listingId: out.auction.listingId,

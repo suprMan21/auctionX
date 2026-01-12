@@ -1,11 +1,12 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { Timestamp } from "firebase-admin/firestore";
 
-import { auctionPath, auctionStatePath } from "./paths";
+import { auctionPath, auctionStatePath, bidPath, bidsCollectionPath } from "./paths";
 import { parseOrThrow } from "./repo.utils";
 
 import { AuctionSchema, type Auction } from "../schemas/domain/auction.schema";
 import { AuctionStateSchema, type AuctionState } from "../schemas/domain/auctionState.schema";
+import { BidSchema, type Bid } from "../schemas/domain/bid.schema";
 
 import {
   AuctionPatchSchema,
@@ -14,9 +15,6 @@ import {
   type Preconditions,
 } from "../services/auctions/auction.types";
 
-/**
- * Small, stable error surface for orchestration classification.
- */
 export class RepoError extends Error {
   constructor(
     public readonly code: "NOT_FOUND" | "VERSION_CONFLICT" | "PRECONDITION_FAILED" | "REPOSITORY_ERROR",
@@ -34,13 +32,13 @@ function applyPatchToState(existing: AuctionState, patch: AuctionPatch, nowMs: n
     AuctionStateSchema,
     {
       ...existing,
-      pricing: p.pricing
-        ? { ...existing.pricing, ...p.pricing }
-        : existing.pricing,
-      proxy: p.proxy
-        ? { ...existing.proxy, ...p.proxy }
-        : existing.proxy,
-      ...(p.close !== undefined ? { close: { ...p.close } } : (existing.close !== undefined ? { close: existing.close } : {})),
+      pricing: p.pricing ? { ...existing.pricing, ...p.pricing } : existing.pricing,
+      proxy: p.proxy ? { ...existing.proxy, ...p.proxy } : existing.proxy,
+      ...(p.close !== undefined
+        ? { close: { ...p.close } }
+        : existing.close !== undefined
+          ? { close: existing.close }
+          : {}),
       version: existing.version + p.versionBump,
       updatedAtMs: nowMs,
     },
@@ -66,7 +64,6 @@ function applyPatchToAuction(existing: Auction, patch: AuctionPatch): Auction {
             },
           }
         : {}),
-      // Auction.updatedAt stays Firestore Timestamp (IO-layer), not mechanics updatedAtMs
       updatedAt: Timestamp.now(),
     },
     `Auction:${existing.listingId}/${existing.id}:applyPatchMeta`
@@ -84,10 +81,6 @@ export class AuctionStateRepo {
     return parseOrThrow(AuctionStateSchema, snap.data(), `AuctionState:${listingId}/${auctionId}:read`);
   }
 
-  /**
-   * Create initial state (used when auction is created).
-   * Not called by orchestration yet (no endpoints in Module 03).
-   */
   async createInitialState(args: {
     listingId: string;
     auctionId: string;
@@ -118,19 +111,18 @@ export class AuctionStateRepo {
     return doc;
   }
 
-  /**
-   * Transactional apply:
-   * - reads Auction + AuctionState
-   * - enforces expectedVersion on AuctionState.version
-   * - applies mechanics patch to AuctionState
-   * - updates Auction meta fields (status/close) if patch includes them
-   */
   async applyMechanicsPatch(args: {
     listingId: string;
     auctionId: string;
     preconditions: Preconditions;
     patch: AuctionPatch;
     nowMs: number;
+    bid?: {
+      bidderUid: string;
+      amountCents: number;
+      currency?: "CAD";
+      clientRequestId?: string;
+    };
   }): Promise<{ auction: Auction; state: AuctionState }> {
     const listingId = args.listingId;
     const auctionId = args.auctionId;
@@ -147,6 +139,10 @@ export class AuctionStateRepo {
 
     const auctionRef = this.db.doc(auctionPath(listingId, auctionId));
     const stateRef = this.db.doc(auctionStatePath(listingId, auctionId));
+
+    const bidInput = args.bid;
+    const bidId = bidInput ? this.db.collection(bidsCollectionPath(listingId, auctionId)).doc().id : null;
+    const bidRef = bidId ? this.db.doc(bidPath(listingId, auctionId, bidId)) : null;
 
     try {
       const out = await this.db.runTransaction(async (tx) => {
@@ -168,9 +164,28 @@ export class AuctionStateRepo {
         const nextState = applyPatchToState(state, patch, nowMs);
         tx.set(stateRef, nextState, { merge: false });
 
-        // keep Auction doc query-friendly but consistent for status/close
         const nextAuction = applyPatchToAuction(auction, patch);
         tx.set(auctionRef, nextAuction, { merge: false });
+
+        if (bidInput && bidRef && bidId) {
+          const bidDoc: Bid = parseOrThrow(
+            BidSchema,
+            {
+              id: bidId,
+              listingId,
+              auctionId,
+              bidderUid: bidInput.bidderUid,
+              amountCents: bidInput.amountCents,
+              currency: bidInput.currency ?? "CAD",
+              status: "PLACED",
+              placedAt: Timestamp.fromMillis(nowMs),
+              ...(bidInput.clientRequestId ? { clientRequestId: bidInput.clientRequestId } : {}),
+            },
+            `Bid:${listingId}/${auctionId}/${bidId}:createTx`
+          );
+
+          tx.set(bidRef, bidDoc, { merge: false });
+        }
 
         return { auction: nextAuction, state: nextState };
       });

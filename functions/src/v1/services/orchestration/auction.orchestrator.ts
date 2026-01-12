@@ -11,19 +11,12 @@ import {
   type PlaceBidResult,
 } from "./auction.orchestrator.schemas";
 
-// Canonical auction schemas/types (authoritative)
 import { AuctionCoreSchema, PreconditionsSchema, AuctionPatchSchema } from "../auctions/auction.types";
 import type { AuctionCore, Preconditions, AuctionPatch } from "../auctions/auction.types";
 
-// Mechanics (pure/deterministic)
 import { computePlaceBid } from "../auctions/auction.mechanics";
 import type { AuctionMechanicsError } from "../auctions/auction.errors";
 
-/**
- * Repo port for transactional patch application.
- * NOTE: VersionToken here represents the persisted auction version at read time.
- * In our system, it will be the numeric auction.version.
- */
 export type AuctionsRepoPort = {
   getCore: (listingId: string, auctionId: string) => Promise<RepoReadResult<AuctionCore> | null>;
   applyMechanicsPatch: (args: {
@@ -33,6 +26,12 @@ export type AuctionsRepoPort = {
     preconditions: Preconditions;
     patch: AuctionPatch;
     nowMs: number;
+    bid?: {
+      bidderUid: string;
+      amountCents: number;
+      currency?: "CAD";
+      clientRequestId?: string;
+    };
   }) => Promise<RepoApplyPatchResult<AuctionCore>>;
 };
 
@@ -42,11 +41,6 @@ export type PlaceBidDeps = {
   requestId: string;
 };
 
-/**
- * Determinism note:
- * - Business outcomes must not depend on wall clock.
- * - For strictness, orchestration logs durationMs as 0.
- */
 const durationMs = () => 0;
 
 export async function placeBid(
@@ -67,7 +61,6 @@ export async function placeBid(
     deps.logger.info(orchEvent(op, "attempt"), basePayload("attempt"));
   } catch {}
 
-  // 1) Validate command
   let cmd: {
     listingId: string;
     auctionId: string;
@@ -93,7 +86,6 @@ export async function placeBid(
     return { ok: false, error };
   }
 
-  // 2) Load auction core
   const found = await deps.auctionsRepo.getCore(cmd.listingId, cmd.auctionId);
   if (!found) {
     const error = orchErr("NOT_FOUND", `Auction not found: ${cmd.listingId}/${cmd.auctionId}`);
@@ -111,17 +103,14 @@ export async function placeBid(
 
   const auction = AuctionCoreSchema.parse(found.value);
 
-  // persisted version should match auction.version, but keep tolerant:
   const readVersion = VersionTokenSchema.parse(found.version);
   const expectedVersion = typeof readVersion === "number" ? readVersion : auction.version;
 
-  // 3) Build mechanics input
   const mechanicsInput = PlaceBidInputForMechanicsSchema.parse({
     bidderUid: cmd.bidderUserId,
     maxCents: cmd.amountCents,
   });
 
-  // 4) Run mechanics
   const result = computePlaceBid({
     auction,
     input: mechanicsInput,
@@ -150,7 +139,6 @@ export async function placeBid(
 
   const mechanicsOut = PlaceBidMechanicsOutputSchema.parse(result.value);
 
-  // Defensive immutability guard
   Object.freeze(mechanicsOut);
   Object.freeze(mechanicsOut.patch);
   Object.freeze(mechanicsOut.preconditions);
@@ -158,7 +146,6 @@ export async function placeBid(
   const patch = AuctionPatchSchema.parse(mechanicsOut.patch);
   const pre = PreconditionsSchema.parse(mechanicsOut.preconditions);
 
-  // 5) Apply patch transactionally
   try {
     const applied = await deps.auctionsRepo.applyMechanicsPatch({
       listingId: cmd.listingId,
@@ -167,6 +154,12 @@ export async function placeBid(
       preconditions: pre,
       patch,
       nowMs: cmd.nowMs,
+      bid: {
+        bidderUid: cmd.bidderUserId,
+        amountCents: cmd.amountCents,
+        currency: "CAD",
+        ...(cmd.idempotencyKey ? { clientRequestId: cmd.idempotencyKey } : {}),
+      },
     });
 
     const updatedAuction = AuctionCoreSchema.parse(applied.value);
