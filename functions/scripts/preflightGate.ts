@@ -45,7 +45,7 @@ function getDb() {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
   assertOk(host, "FIRESTORE_EMULATOR_HOST must be set");
 
-  if (!_firestoreSettingsApplied) { db.settings({ host, ssl: false }); _firestoreSettingsApplied = true; }
+  if (!_firestoreSettingsApplied) { if (!_firestoreSettingsApplied) { db.settings({ host, ssl: false }); _firestoreSettingsApplied = true; } _firestoreSettingsApplied = true; }
   return db;
 }
 
