@@ -25,11 +25,11 @@ function setEnv(k: string, v: string) {
   process.env[k] = v;
 }
 
-function assertOk(cond: unknown, msg: string): asserts cond {
+function assertOk(cond: unknown, _msg: string): asserts cond {
   if (!cond) throw new Error(`ASSERTION_FAILED: `);
 }
 
-function assertExists<T>(v: T | null | undefined, msg: string): asserts v is T {
+function assertExists<T>(v: T | null | undefined, _msg: string): asserts v is T {
   if (v === null || v === undefined) throw new Error(`ASSERTION_FAILED: `);
 }
 
@@ -45,7 +45,7 @@ function getDb() {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
   assertOk(host, "FIRESTORE_EMULATOR_HOST must be set");
 
-  if (!_firestoreSettingsApplied) { if (!_firestoreSettingsApplied) { db.settings({ host, ssl: false }); _firestoreSettingsApplied = true; } _firestoreSettingsApplied = true; }
+  if (!_firestoreSettingsApplied) { db.settings({ host, ssl: false }); _firestoreSettingsApplied = true; } _firestoreSettingsApplied = true; }
   return db;
 }
 
