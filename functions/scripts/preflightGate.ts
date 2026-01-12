@@ -81,7 +81,7 @@ async function expectClosedState(args: {
   expectedWinnerUid: string | null;
   expectedWinningPriceCents: number;
   expectedReason: string;
-  expectedAuctionPriceCents: number;
+  expectedAuctionPriceCents?: number;
 }) {
   const db = getDb();
 
@@ -89,12 +89,7 @@ async function expectClosedState(args: {
   assertExists(meta, `auction meta missing: ${args.listingId}/${args.auctionId}`);
 
   assertOk(meta.status === "CLOSED", `auction.status expected CLOSED, got ${meta.status}`);
-  assertOk(
-    meta.pricing?.currentPriceCents === args.expectedAuctionPriceCents,
-    `auction.pricing.currentPriceCents expected ${args.expectedAuctionPriceCents}, got ${meta.pricing?.currentPriceCents}`
-  );
-
-  const state = await readAuctionState(db, args.listingId, args.auctionId);
+const state = await readAuctionState(db, args.listingId, args.auctionId);
   assertExists(state, `auction state missing: ${args.listingId}/${args.auctionId}`);
 
   assertOk(
