@@ -21,6 +21,7 @@
     "test:auctions": "npx tsx src/v1/services/auctions/__tests__/run.ts",
     "test": "npm run test:auctions",
     "seed:auction": "ts-node ./scripts/seedAuction.ts",
-    "debug:placeBid": "ts-node ./scripts/debugPlaceBid.ts"
+    "debug:placeBid": "ts-node ./scripts/debugPlaceBid.ts",
+    "postflight": "ts-node ./scripts/postflightGate.ts"
   }
 }
