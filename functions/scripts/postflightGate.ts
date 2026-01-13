@@ -67,6 +67,12 @@ function main() {
       mustInclude: ["PAYMENT GATE: PASS"],
     },
     {
+      name: "dispute",
+      cmd: "npx",
+      args: ["ts-node", "./scripts/disputeGate.ts"],
+      mustInclude: ["DISPUTE GATE: PASS"],
+    },
+    {
       name: "payout",
       cmd: "npx",
       args: ["ts-node", "./scripts/payoutGate.ts"],
