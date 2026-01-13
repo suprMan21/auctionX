@@ -1,3 +1,4 @@
+// TODO: unify command execution between preflight/postflight (consider using shared sh() shim + runWithSpinner for step commands)
 import { spawnSync } from "node:child_process";
 import { config as dotenvConfig } from "dotenv";
 

@@ -25,6 +25,5 @@
     "seed:auction": "ts-node ./scripts/seedAuction.ts",
     "debug:placeBid": "ts-node ./scripts/debugPlaceBid.ts",
     "postflight": "ts-node ./scripts/postflightGate.ts"
-  },
-  "main": "lib/index.js"
+  }
 }

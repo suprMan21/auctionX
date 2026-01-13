@@ -1,5 +1,4 @@
-import { execSync } from "node:child_process";
-
+import { sh } from "./preflightGate.shim";
 import admin from "firebase-admin";
 
 import { advanceOfferCascade } from "../src/v1/services/orchestration/auction.offerCascade.orchestrator";
@@ -7,10 +6,6 @@ import { ListingsRepo } from "../src/v1/repos/listings.repo";
 import { AuctionsRepo } from "../src/v1/repos/auctions.repo";
 import { AuctionStateRepo } from "../src/v1/repos/auctionState.repo";
 import { BidsRepo } from "../src/v1/repos/bids.repo";
-
-function sh(cmd: string) {
-  execSync(cmd, { stdio: "inherit", env: process.env });
-}
 
 function header(name: string) {
   const line = "=".repeat(60);

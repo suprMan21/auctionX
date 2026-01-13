@@ -25,3 +25,5 @@ export const bidPath = (listingId: string, auctionId: string, bidId: string) =>
 export function auctionStatePath(listingId: string, auctionId: string): string {
   return `${auctionPath(listingId, auctionId)}/state/current`;
 }
+
+export const disputeDoc = (disputeId: string) => `disputes/${disputeId}`;
