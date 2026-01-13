@@ -7,7 +7,8 @@ export function mapStripeError(err: unknown): PaymentFailure {
       retryable: false,
       code: err.decline_code || err.code || "CARD_ERROR",
       message: err.message || "Card declined",
-      provider: "stripe"
+      provider: "stripe",
+      providerPaymentId: err.payment_intent?.id
     }
   }
 

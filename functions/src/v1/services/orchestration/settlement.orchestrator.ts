@@ -3,6 +3,9 @@ import { createSettlementIfAbsent, getSettlement, updateSettlementTxn } from "..
 import { SettlementPersistSchema } from "../../schemas/domain/settlement.schema";
 import type { SettlementAction, SettlementPersist } from "../../schemas/domain/settlement.schema";
 
+import { StripePaymentProvider } from "../../payments/stripe/stripe.provider";
+import { mapStripeError } from "../../payments/stripe/stripe.errors";
+
 type OrchResult<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } };
 
 function nowMs() {
@@ -432,4 +435,139 @@ export async function orchMarkSettlementSettled(input: {
   });
 
   return { ok: true, value: { settlement: upd.value } };
+}
+
+export async function orchCollectAndPay(input: {
+  requestId: string;
+  settlementId: string;
+  listingId: string;
+  auctionId: string;
+  expectedVersion?: number;
+  paymentMethodRef: string;
+  customerRef?: string;
+}): Promise<OrchResult<{ settlement: SettlementPersist }>> {
+  const t0 = nowMs();
+  const { requestId, settlementId, listingId, auctionId, expectedVersion, paymentMethodRef, customerRef } = input;
+
+  logInfo("orch.collectAndPay.attempt", {
+    requestId,
+    op: "collectAndPay",
+    aggregate: "settlement",
+    listingId,
+    auctionId,
+    outcome: "attempt",
+    durationMs: 0,
+    expectedVersion,
+  });
+
+  const curRes = await getSettlement(settlementId);
+  if (!curRes.ok) return err(curRes.error.code, curRes.error.message);
+  const settlement = curRes.value;
+  if (!settlement) return err("NOT_FOUND", "Settlement not found");
+
+  if (settlement.outcomeKind !== "PAYMENT_REQUIRED") {
+    return err("PRECONDITION_FAILED", "Settlement outcomeKind is not PAYMENT_REQUIRED");
+  }
+
+  const payAction = settlement.actions.find((a) => a.id === actionPayV1Id());
+  if (!payAction || payAction.type !== "COLLECT_AND_PAY") {
+    return err("PRECONDITION_FAILED", "Settlement missing COLLECT_AND_PAY action");
+  }
+
+  if (settlement.status === "VOIDED" || settlement.status === "SETTLED") {
+    return err("PRECONDITION_FAILED", `Settlement not payable in status ${settlement.status}`);
+  }
+
+  if (!settlement.buyerUid) return err("PRECONDITION_FAILED", "Settlement buyerUid missing");
+  if (!settlement.amountCents) return err("PRECONDITION_FAILED", "Settlement amountCents missing");
+  if (!settlement.currency) return err("PRECONDITION_FAILED", "Settlement currency missing");
+
+  const startRes = await orchStartSettlement({
+    requestId,
+    settlementId,
+    listingId,
+    auctionId,
+    expectedVersion,
+  });
+
+  if (!startRes.ok) {
+    logWarn("orch.collectAndPay.failed", {
+      requestId,
+      op: "collectAndPay",
+      aggregate: "settlement",
+      listingId,
+      auctionId,
+      outcome: "failed",
+      durationMs: nowMs() - t0,
+      expectedVersion,
+    });
+    return err(startRes.error.code, startRes.error.message);
+  }
+
+  const started = startRes.value.settlement;
+
+  try {
+    const provider = new StripePaymentProvider();
+
+    await provider.authorizeAndCapture({
+      requestId,
+      settlementId,
+      amountCents: started.amountCents!,
+      currency: started.currency!,
+      buyerUid: started.buyerUid!,
+      paymentMethodRef,
+      customerRef,
+    });
+
+    const settledRes = await orchMarkSettlementSettled({
+      requestId,
+      settlementId,
+      listingId,
+      auctionId,
+      expectedVersion: started.version,
+    });
+
+    if (!settledRes.ok) return err(settledRes.error.code, settledRes.error.message);
+
+    logInfo("orch.collectAndPay.success", {
+      requestId,
+      op: "collectAndPay",
+      aggregate: "settlement",
+      listingId,
+      auctionId,
+      outcome: "success",
+      durationMs: nowMs() - t0,
+      expectedVersion,
+    });
+
+    return { ok: true, value: { settlement: settledRes.value.settlement } };
+  } catch (e: any) {
+    const failure = mapStripeError(e);
+
+    const failRes = await orchRecordSettlementFailure({
+      requestId,
+      settlementId,
+      listingId,
+      auctionId,
+      expectedVersion: started.version,
+      code: failure.code,
+      message: failure.message,
+      retryable: failure.retryable,
+    });
+
+    if (!failRes.ok) return err(failRes.error.code, failRes.error.message);
+
+    logWarn("orch.collectAndPay.failed", {
+      requestId,
+      op: "collectAndPay",
+      aggregate: "settlement",
+      listingId,
+      auctionId,
+      outcome: "failed",
+      durationMs: nowMs() - t0,
+      expectedVersion,
+    });
+
+    return err("PAYMENT_FAILED", failure.message);
+  }
 }

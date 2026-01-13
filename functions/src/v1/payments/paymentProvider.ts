@@ -9,7 +9,7 @@ export type PaymentAuthCaptureInput = {
 }
 
 export type PaymentAuthCaptureOutput = {
-  provider: string
+  provider: "stripe"
   providerPaymentId: string
   providerChargeId?: string
 }
@@ -18,7 +18,7 @@ export type PaymentFailure = {
   retryable: boolean
   code: string
   message: string
-  provider?: string
+  provider: "stripe"
   providerPaymentId?: string
 }
 

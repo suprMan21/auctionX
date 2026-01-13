@@ -45,12 +45,7 @@ function main() {
       args: ["ts-node", "./scripts/preflightGate.ts"],
       mustInclude: ["PREFLIGHT GATE: PASS"],
     },
-    {
-      name: "settlement",
-      cmd: "npx",
-      args: ["ts-node", "./scripts/settlementGate.ts"],
-      mustInclude: ["SETTLEMENT GATE: PASS"],
-    },
+    {  name: "settlement",  cmd: "npx",  args: ["ts-node", "./scripts/settlementGate.ts"],  mustInclude: ["SETTLEMENT GATE: PASS"],},{  name: "payment",  cmd: "npx",  args: ["ts-node", "./scripts/paymentGate.ts"],  mustInclude: ["PAYMENT GATE: PASS"],},
   ];
 
   process.stdout.write("============================================================\n");
