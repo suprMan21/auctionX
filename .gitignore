@@ -33,3 +33,6 @@ firestore-debug.log
 firestore-debug.log.*
 
 .env.local
+
+# Editor/backup junk
+*.bak
