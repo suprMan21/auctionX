@@ -1,82 +1,82 @@
-# Module 07 — Payments & Authorization (Stripe) — LOCK CANDIDATE
+# Module 07 — Stripe Integration (Payment + Payout Gates) — LOCKED
 
-## Goal
-Implement Stripe authorization + capture to satisfy the Settlement action `COLLECT_AND_PAY` **without** leaking Stripe concepts into domain models.
+## Intent
+Integrate Stripe payments into the post-auction settlement lifecycle without violating prior invariants:
+- Post-close authority is the `AuctionState.close` block.
+- Settlement remains the canonical lifecycle object after close.
+- Orchestration stays idempotent and concurrency-safe.
 
-## Non-Negotiables (Respected)
-- Settlement semantics unchanged (Module 06 remains authoritative).
-- Settlement consumes authoritative close data only:
-  - `winnerUid`
-  - `winningPriceCents`
-- No use of auction meta pricing fields post-close.
-- Idempotency via `requestId`.
-- Optimistic concurrency via `expectedVersion`.
-- No logging inside mechanics or repositories.
-- Orchestration owns logging.
-- No new persistence surfaces.
-- Emulator-first validation gates required.
+## What shipped
 
-## What Shipped
+### 1) Payment gate (Stripe)
+- Added a payment path that validates environment requirements:
+  - `FIRESTORE_EMULATOR_HOST`
+  - `STRIPE_SECRET_KEY` (test key)
+  - `STRIPE_CURRENCY` (cad)
+- Implemented a `collectAndPay` orchestration flow that:
+  - Starts settlement (if not already started)
+  - Performs the payment step(s) (Stripe test-mode)
+  - Marks settlement as `SETTLED`
+- Payment gate added to `postflightGate.ts` as a required step.
 
-### 1) Stripe adapter boundary (containerized)
-New provider-neutral contract:
-- `functions/src/v1/payments/paymentProvider.ts`
+### 2) Payout aggregate + payout gate
+- Introduced a payout aggregate derived from settlement (not from listing meta pricing):
+  - `grossAmountCents` comes from `winningPriceCents` via settlement
+  - Fee and tax rulesets exist but currently resolve to zeroed/default behavior (MVP scaffolding)
+- Implemented payout creation + release flow
+- Added payout gate that:
+  - Finds latest SETTLED settlement
+  - Creates payout for settlementId
+  - Releases payout
+  - Re-runs create to validate idempotency
+  - Reads back for sanity
 
-Stripe implementation:
-- `functions/src/v1/payments/stripe/stripe.provider.ts`
-- `functions/src/v1/payments/stripe/stripe.errors.ts`
+### 3) Gates workflow hardened
+- `postflightGate.ts` now includes settlement + payment + payout gates and asserts pass conditions.
+- `.env.local` support is used by gates where applicable.
+- Added convenience spinner shim for preflight command execution (quality-of-life only).
 
-Key properties:
-- Uses Stripe `PaymentIntent` with `capture_method: "manual"` then capture immediately.
-- Stripe idempotency keys derived from `{settlementId}:{AUTH|CAPTURE}:{requestId}`.
-- No Stripe fields persisted into settlement documents (provider IDs remain outside domain).
+## Hard rules (reinforced / clarified)
 
-### 2) Orchestration integration (COLLECT_AND_PAY)
-New orchestration entrypoint:
-- `orchCollectAndPay(...)` in `functions/src/v1/services/orchestration/settlement.orchestrator.ts`
+### A) Post-close authority
+Anything after close must use **only**:
+- `close.winnerUid`
+- `close.winningPriceCents`
+Never read pricing from listing meta for settlement/payment/payout invariants.
 
-Flow:
-1. Read settlement (must be `PAYMENT_REQUIRED` + action `COLLECT_AND_PAY`).
-2. Start settlement via existing Module 06 mutation (`orchStartSettlement`) using `expectedVersion`.
-3. Call Stripe provider `authorizeAndCapture(...)` (idempotent).
-4. On success: mark settled via `orchMarkSettlementSettled` using next version.
-5. On failure: classify retryable vs terminal via `mapStripeError` and record via `orchRecordSettlementFailure`.
+### B) Orchestration discipline
+All orchestration entrypoints that mutate aggregates must remain:
+- idempotent (via requestId)
+- version-checked (expectedVersion)
+- transactionally safe
 
-### 3) Failure classification (retryable vs terminal)
-`mapStripeError` classifies:
-- Terminal: card declines, invalid request, auth errors
-- Retryable: rate limits, API errors, connection issues, unknowns default retryable
+### C) Derived vs persisted
+Payout amounts must be derived from authoritative settlement/close state.
+Do not persist “duplicate truth” from listing meta.
 
-### 4) Emulator-first gates
-New scripts:
-- `functions/scripts/stripeGate.ts` (Stripe connectivity + manual capture)
-- `functions/scripts/paymentGate.ts` (end-to-end: preflight-seeded close → create settlement → collectAndPay → assert SETTLED)
+## Test gates (required)
 
-Postflight updated:
-- `functions/scripts/postflightGate.ts` now includes `paymentGate` step.
-
-## Security Posture
-- No card data stored or processed by Firestore/Functions.
-- Gate uses Stripe test PM reference (`pm_card_visa`) and Stripe test secret key.
-- Secrets kept in `.env.local` (gitignored).
-- Settlement remains provider-agnostic and stores no Stripe identifiers.
-
-## How To Run
-
-### Stripe gate
-- Requires `STRIPE_SECRET_KEY` (test) and `STRIPE_CURRENCY`.
-- `npx ts-node ./scripts/stripeGate.ts`
-
-### Payment gate (end-to-end)
-- Requires emulator env vars + Stripe env vars.
-- `npx ts-node ./scripts/preflightGate.ts`
-- `npx ts-node ./scripts/paymentGate.ts`
+### Preflight
+- Seed listing + auction
+- Place bids (2/3 bidder scenarios)
+- Close auction
+- Advance offer cascade
+- No-bids scenario
 
 ### Postflight
-- `npm run postflight`
-- Must end with `POSTFLIGHT GATE: PASS`
+Includes all preflight scenarios plus:
+- Settlement gate
+- Payment gate
+- Payout gate
 
-## Forward-Compat Notes (Modules 08–10)
-- No persistence changes were introduced; provider IDs are intentionally not stored.
-- If future payouts/disputes require provider identifiers, add a provider-owned persistence surface later (STOP-AND-ASK required).
-- Current design keeps Stripe fully swappable by isolating it behind `PaymentProvider`.
+Observed outcome in this lock:
+- `PREFLIGHT GATE: PASS`
+- `SETTLEMENT GATE: PASS`
+- `PAYMENT GATE: PASS`
+- `PAYOUT GATE: PASS`
+- `POSTFLIGHT GATE: PASS` (exit 0)
+
+## Forward-compat notes
+- Disputes domain was intentionally **not** included in this module (removed from gate scope).
+- Fee/tax rulesets are structured for future expansion but currently default to zero-impact for MVP.
+
