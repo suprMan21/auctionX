@@ -6,6 +6,10 @@ function must(cond: any, msg: string) {
 }
 
 async function main() {
+  if (!process.env.FIRESTORE_EMULATOR_HOST) {
+    throw new Error("FIRESTORE_EMULATOR_HOST must be set");
+  }
+
   if (!admin.apps.length) {
     admin.initializeApp({
       projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
@@ -20,15 +24,17 @@ async function main() {
 
   const orch = new DisputeOrchestrator(db);
 
-  const disputeId = "dispute_gate_1";
-  const payoutId = "payout_gate_1";
+  const runId = Date.now();
+  const disputeId = `dispute_gate_${runId}`;
+  const payoutId = `payout_gate_${runId}`;
+  const createRequestId = `dispute-gate-create-${runId}`;
 
-  const created = await orch.createDispute({
-    requestId: "dispute-gate-create",
+  const created1 = await orch.createDispute({
+    requestId: createRequestId,
     disputeId,
     listingId: "listing_seed_1",
     auctionId: "auction_seed_gate_2bidders_1",
-    settlementId: "settlement_gate_1",
+    settlementId: "auction_seed_gate_2bidders_1",
     payoutId,
     buyerUid: "user_2",
     sellerUid: "seller_seed_1",
@@ -38,22 +44,41 @@ async function main() {
     note: "gate create",
   });
 
-  must(created.dispute.id === disputeId, "create failed");
-  must(created.dispute.version === 0, "create version wrong");
+  must(created1.dispute.id === disputeId, "create failed");
+  must(created1.dispute.version === 0, "create version wrong");
+
+  const created2 = await orch.createDispute({
+    requestId: createRequestId,
+    disputeId,
+    listingId: "listing_seed_1",
+    auctionId: "auction_seed_gate_2bidders_1",
+    settlementId: "auction_seed_gate_2bidders_1",
+    payoutId,
+    buyerUid: "user_2",
+    sellerUid: "seller_seed_1",
+    reasonCode: "NOT_AS_DESCRIBED",
+    reasonText: "gate test",
+    actor: "SYSTEM",
+    note: "gate create (idempotency)",
+  });
+
+  must(created2.dispute.id === disputeId, "idempotent create failed");
+  must(created2.dispute.version === 0, "idempotent create should not bump version");
 
   const held = await orch.placeHold({
-    requestId: "dispute-gate-hold",
+    requestId: `dispute-gate-hold-${runId}`,
     disputeId,
-    expectedVersion: created.dispute.version,
+    expectedVersion: 0,
     actor: "SYSTEM",
     note: "place hold",
   });
 
   must(held.dispute.hold.status === "PLACED", "hold not placed");
+  must(held.dispute.version === 1, "hold version wrong");
 
   let releaseCalled = 0;
   const blocked = await orch.releasePayoutIfNoActiveDisputeHold({
-    requestId: "dispute-gate-release-blocked",
+    requestId: `dispute-gate-release-blocked-${runId}`,
     payoutId,
     release: async () => {
       releaseCalled += 1;
@@ -66,17 +91,18 @@ async function main() {
   must(releaseCalled === 0, "release should not be called when blocked");
 
   const unheld = await orch.releaseHold({
-    requestId: "dispute-gate-unhold",
+    requestId: `dispute-gate-unhold-${runId}`,
     disputeId,
-    expectedVersion: held.dispute.version,
+    expectedVersion: 1,
     actor: "SYSTEM",
     note: "release hold",
   });
 
   must(unheld.dispute.hold.status === "RELEASED", "hold not released");
+  must(unheld.dispute.version === 2, "release version wrong");
 
   const allowed = await orch.releasePayoutIfNoActiveDisputeHold({
-    requestId: "dispute-gate-release-allowed",
+    requestId: `dispute-gate-release-allowed-${runId}`,
     payoutId,
     release: async () => {
       releaseCalled += 1;
