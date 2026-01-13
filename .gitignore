@@ -31,3 +31,5 @@ build/
 # Local emulator logs
 firestore-debug.log
 firestore-debug.log.*
+
+.env.local

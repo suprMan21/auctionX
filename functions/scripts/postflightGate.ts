@@ -1,4 +1,8 @@
 import { spawnSync } from "node:child_process";
+import { config as dotenvConfig } from "dotenv";
+
+dotenvConfig({ path: ".env.local" });
+dotenvConfig({ path: ".env" });
 
 type Step = {
   name: string;
@@ -9,7 +13,11 @@ type Step = {
 
 function runStep(step: Step) {
   const startedAt = Date.now();
-  const res = spawnSync(step.cmd, step.args, { stdio: "pipe", encoding: "utf8" });
+  const res = spawnSync(step.cmd, step.args, {
+    stdio: "pipe",
+    encoding: "utf8",
+    env: process.env,
+  });
 
   const stdout = res.stdout ?? "";
   const stderr = res.stderr ?? "";
@@ -45,7 +53,24 @@ function main() {
       args: ["ts-node", "./scripts/preflightGate.ts"],
       mustInclude: ["PREFLIGHT GATE: PASS"],
     },
-    {  name: "settlement",  cmd: "npx",  args: ["ts-node", "./scripts/settlementGate.ts"],  mustInclude: ["SETTLEMENT GATE: PASS"],},{  name: "payment",  cmd: "npx",  args: ["ts-node", "./scripts/paymentGate.ts"],  mustInclude: ["PAYMENT GATE: PASS"],},
+    {
+      name: "settlement",
+      cmd: "npx",
+      args: ["ts-node", "./scripts/settlementGate.ts"],
+      mustInclude: ["SETTLEMENT GATE: PASS"],
+    },
+    {
+      name: "payment",
+      cmd: "npx",
+      args: ["ts-node", "./scripts/paymentGate.ts"],
+      mustInclude: ["PAYMENT GATE: PASS"],
+    },
+    {
+      name: "payout",
+      cmd: "npx",
+      args: ["ts-node", "./scripts/payoutGate.ts"],
+      mustInclude: ["PAYOUT GATE: PASS"],
+    },
   ];
 
   process.stdout.write("============================================================\n");
