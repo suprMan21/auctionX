@@ -6,3 +6,5 @@ export * from "./categories.repo";
 export * from "./listings.repo";
 export * from "./auctions.repo";
 export * from "./bids.repo";
+
+export * from "./adminActions.repo";
