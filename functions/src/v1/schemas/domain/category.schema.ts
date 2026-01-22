@@ -1,25 +1,27 @@
 import { z } from "zod";
-import { BaseMetaSchema, DocIdSchema } from "./common.schema";
+import { BrandSchema } from "./enums.schema";
 
 /**
- * Categories support hierarchy via parentId + path.
- * "isAdult" is the locked 18+ signal (category-based).
+ * Category schema with brand association
  */
-export const CategorySchema = BaseMetaSchema.extend({
+export const CategorySchema = z.object({
+  id: z.string().min(1),
   name: z.string().min(1).max(120),
-
-  parentId: DocIdSchema.optional(),
-
-  /**
-   * Hierarchy path of category IDs from root -> this node, inclusive.
-   * Example: ["collectibles", "cards", "pokemon"]
-   */
-  path: z.array(DocIdSchema).default([]),
-
-  isAdult: z.boolean().default(false),
+  
+  // NEW: Brand association
+  brand: BrandSchema,
+  
+  // DEPRECATED: Use brand === "UNMENTIONABLES" instead
+  isAdult: z.boolean().optional(),
+  
   isActive: z.boolean().default(true),
-
-  sortOrder: z.number().int().optional(),
+  
+  // Hierarchical support
+  parentId: z.string().optional(),
+  path: z.string().min(1), // materialized path
+  
+  // Display order
+  sortOrder: z.number().int().nonnegative().default(0),
 });
 
 export type Category = z.infer<typeof CategorySchema>;

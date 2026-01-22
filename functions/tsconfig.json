@@ -1,22 +1,23 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020"],
-    "rootDir": "src",
-    "outDir": "lib",
-
-    "strict": true,
-    "noImplicitAny": true,
+    "noImplicitReturns": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true,
-
+    "outDir": "lib",
+    "sourceMap": true,
+    "strict": true,
+    "target": "es2017",
     "esModuleInterop": true,
-    "resolveJsonModule": true,
     "skipLibCheck": true,
-
-    "sourceMap": true
+    "baseUrl": "./src",
+    "paths": {
+      "@/schemas/*": ["v1/schemas/*"],
+      "@/repos/*": ["v1/repos/*"],
+      "@/services/*": ["v1/services/*"],
+      "@/lib/*": ["v1/lib/*"],
+      "@/handlers/*": ["v1/handlers/*"]
+    }
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "lib"]
+  "compileOnSave": true,
+  "include": ["src"]
 }

@@ -5,8 +5,10 @@ import { z } from "zod";
  * They should be stable, backward-compatible, and safe for filtering/indexing.
  */
 
-export const CurrencySchema = z.literal("CAD");
+export const CurrencySchema = z.enum(["CAD", "USD"]);
 export type Currency = z.infer<typeof CurrencySchema>;
+
+export const DEFAULT_CURRENCY = "CAD" as const;
 
 export const ListingStatusSchema = z.enum(["DRAFT", "ACTIVE", "SUSPENDED", "ARCHIVED"]);
 export type ListingStatus = z.infer<typeof ListingStatusSchema>;
@@ -29,3 +31,21 @@ export const ItemConditionSchema = z.enum([
   "POOR",
 ]);
 export type ItemCondition = z.infer<typeof ItemConditionSchema>;
+
+/**
+ * Payment processor enum for dual-processor architecture
+ */
+export const PaymentProcessorSchema = z.enum([
+  "STRIPE",      // AuctionX (SFW)
+  "SEGPAY",      // Unmentionables (NSFW)
+]);
+export type PaymentProcessor = z.infer<typeof PaymentProcessorSchema>;
+
+/**
+ * Brand/marketplace enum
+ */
+export const BrandSchema = z.enum([
+  "AUCTIONX",        // SFW marketplace
+  "UNMENTIONABLES",  // NSFW marketplace
+]);
+export type Brand = z.infer<typeof BrandSchema>;

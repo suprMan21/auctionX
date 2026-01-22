@@ -69,6 +69,9 @@ export const SettlementLastRequestSchema = z.object({
 
 export type SettlementLastRequest = z.infer<typeof SettlementLastRequestSchema>;
 
+// NEW: Import payment processor enum
+import { PaymentProcessorSchema } from "./enums.schema";
+
 export const SettlementPersistSchema = z.object({
   id: z.string().min(1),
   listingId: z.string().min(1),
@@ -100,6 +103,13 @@ export const SettlementPersistSchema = z.object({
       retryable: z.boolean(),
     })
     .nullable(),
+  
+  // NEW: Payment processor tracking (optional for backward compatibility)
+  processor: PaymentProcessorSchema.optional(),
+  processorFeePercent: z.number().min(0).max(100).optional(),
+  processorFeeCents: z.number().int().nonnegative().optional(),
+  processorTransactionId: z.string().min(1).optional(),
+  processorCustomerId: z.string().optional(),
 });
 
 export type SettlementPersist = z.infer<typeof SettlementPersistSchema>;

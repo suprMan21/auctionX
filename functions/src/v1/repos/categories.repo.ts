@@ -1,58 +1,52 @@
-import type { Firestore } from "firebase-admin/firestore";
-import { Timestamp } from "firebase-admin/firestore";
-import { CategorySchema, type Category } from "../schemas/domain/category.schema";
+import { db } from "../lib/firebaseAdmin";
+import type { Category } from "../schemas/domain/category.schema";
+import { CategorySchema } from "../schemas/domain/category.schema";
 import { parseOrThrow } from "./repo.utils";
-import { categoriesCollectionPath, categoryPath } from "./paths";
 
-export type CreateCategoryInput = Omit<Category, "id" | "createdAt" | "updatedAt"> & { id?: string };
-export type UpdateCategoryPatch = Partial<Omit<Category, "id" | "createdAt">>;
+const COLLECTION = "categories";
 
 export class CategoriesRepo {
-  constructor(private readonly db: Firestore) {}
-
-  async get(categoryId: string): Promise<Category | null> {
-    const snap = await this.db.doc(categoryPath(categoryId)).get();
+  /**
+   * Get category by ID
+   */
+  static async getById(id: string): Promise<Category | null> {
+    const snap = await db.collection(COLLECTION).doc(id).get();
     if (!snap.exists) return null;
-    return parseOrThrow(CategorySchema, snap.data(), `Category:${categoryId}:read`);
+    const raw = snap.data();
+    return parseOrThrow(CategorySchema, { id: snap.id, ...raw }, `category:${id}`);
   }
 
-  async create(input: CreateCategoryInput): Promise<Category> {
-    const now = Timestamp.now();
-    const id = input.id ?? this.db.collection(categoriesCollectionPath()).doc().id;
-
-    const doc: Category = parseOrThrow(
-      CategorySchema,
-      {
-        ...input,
-        id,
-        createdAt: now,
-        updatedAt: now,
-      },
-      `Category:${id}:create`
+  /**
+   * List all categories
+   */
+  static async list(): Promise<Category[]> {
+    const snap = await db.collection(COLLECTION).get();
+    return snap.docs.map(doc => 
+      parseOrThrow(CategorySchema, { id: doc.id, ...doc.data() }, `category:${doc.id}`)
     );
-
-    await this.db.doc(categoryPath(id)).set(doc, { merge: false });
-    return doc;
   }
 
-  async update(categoryId: string, patch: UpdateCategoryPatch): Promise<Category> {
-    const now = Timestamp.now();
-    const existing = await this.get(categoryId);
-    if (!existing) throw new Error(`NotFound: Category:${categoryId}`);
+  /**
+   * Create or update category
+   */
+  static async save(category: Category): Promise<void> {
+    const ref = db.collection(COLLECTION).doc(category.id);
+    const existing = await ref.get();
 
-    const next: Category = parseOrThrow(
-      CategorySchema,
-      {
-        ...existing,
-        ...patch,
-        id: categoryId,
-        createdAt: existing.createdAt,
-        updatedAt: now,
-      },
-      `Category:${categoryId}:update`
-    );
-
-    await this.db.doc(categoryPath(categoryId)).set(next, { merge: false });
-    return next;
+    if (existing.exists) {
+      // Update existing
+      await ref.update({
+        name: category.name,
+        brand: category.brand,
+        isAdult: category.isAdult,
+        isActive: category.isActive,
+        parentId: category.parentId,
+        path: category.path,
+        sortOrder: category.sortOrder,
+      });
+    } else {
+      // Create new
+      await ref.set(category);
+    }
   }
 }
