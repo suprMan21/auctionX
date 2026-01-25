@@ -1,53 +1,42 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
-export const SignupForm = () => {
+export function SignupForm() {
+  const { signUp, error, loading } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [passwordError, setPasswordError] = useState('')
-  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false)
-  const { signUp, loading, error, clearError } = useAuth()
-  const navigate = useNavigate()
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    clearError()
-    setPasswordError('')
+    setPasswordError(null)
 
     if (password !== confirmPassword) {
       setPasswordError('Passwords do not match')
       return
     }
 
-    if (password.length < 8) {
-      setPasswordError('Password must be at least 8 characters')
+    if (password.length < 6) {
+      setPasswordError('Password must be at least 6 characters')
       return
     }
 
     try {
       await signUp(email, password)
-      setNeedsEmailConfirmation(true)
+      setSuccess(true)
     } catch (err) {
-      // Error already set in store
+      console.error('Signup error:', err)
     }
   }
 
-  if (needsEmailConfirmation) {
+  if (success) {
     return (
-      <div className="space-y-4">
-        <div className="rounded-md bg-blue-50 p-4">
-          <h3 className="text-sm font-medium text-blue-800">
-            Check your email
-          </h3>
-          <p className="mt-2 text-sm text-blue-700">
-            We sent a confirmation link to <strong>{email}</strong>. Click the link to verify your account and complete signup.
-          </p>
-          <p className="mt-2 text-xs text-blue-600">
-            Don't see it? Check your spam folder.
-          </p>
-        </div>
+      <div className="rounded-md bg-green-50 p-4">
+        <p className="text-sm text-green-800">
+          Account created! Please check your email to confirm your account.
+        </p>
       </div>
     )
   }
@@ -64,7 +53,7 @@ export const SignupForm = () => {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
       </div>
 
@@ -78,8 +67,7 @@ export const SignupForm = () => {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          minLength={8}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
       </div>
 
@@ -93,8 +81,7 @@ export const SignupForm = () => {
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
-          minLength={8}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
       </div>
 
