@@ -22,3 +22,29 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+#environments
+.environments
+.env
+.env.local
+.env.example
+
+# Test artifacts
+test-results/
+playwright-report/
+coverage/
+.nyc_output/
+*.lcov
+
+# Test cache
+.vitest/
+
+# Test artifacts
+test-results/
+playwright-report/
+coverage/
+.nyc_output/
+*.lcov
+
+# Test cache
+.vitest/

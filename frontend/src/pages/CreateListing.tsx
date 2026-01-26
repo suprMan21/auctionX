@@ -82,7 +82,7 @@ export function CreateListing() {
     }
   };
 
-  const confirmExit = async () => {
+  const handleSaveAndExit = async () => {
     if (canSaveDraft) {
       await saveDraft();
     }
@@ -90,61 +90,47 @@ export function CreateListing() {
     navigate('/my-listings');
   };
 
-  const handleSaveDraft = async () => {
-    if (!canSaveDraft) {
-      alert('Please fill in title, category, and condition before saving');
-      return;
-    }
-    
-    try {
-      await saveDraft();
-      alert('Draft saved successfully!');
-    } catch (err: any) {
-      alert('Failed to save draft: ' + err.message);
-    }
+  const handleDiscardAndExit = () => {
+    resetDraft();
+    navigate('/my-listings');
   };
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="flex justify-between items-center">
-              <h1 className="text-2xl font-bold text-gray-900">
-                {id ? 'Edit Listing' : 'Create Listing'}
-              </h1>
-              <button
-                onClick={handleExit}
-                className="text-gray-600 hover:text-gray-900"
-                aria-label="Exit listing creation"
-              >
-                Exit
-              </button>
-            </div>
+      <main role="main" className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <header className="mb-8">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-bold text-gray-900">
+              {id ? 'Edit Listing' : 'Create New Listing'}
+            </h1>
+            <button
+              onClick={handleExit}
+              className="text-gray-600 hover:text-gray-900"
+              aria-label="Exit listing creation"
+            >
+              Exit
+            </button>
           </div>
 
           <StepIndicator steps={STEPS} currentStep={draft.current_step} />
+        </header>
 
-          <div className="px-6 py-8">
-            <CurrentStepComponent />
-          </div>
+        <section aria-labelledby="step-heading" className="bg-white rounded-lg shadow p-6">
+          <h2 id="step-heading" className="text-xl font-semibold mb-6">
+            {currentStepData.name}
+          </h2>
+          
+          <CurrentStepComponent />
 
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between">
+          <nav className="mt-8 flex justify-between" aria-label="Listing creation navigation">
             <button
               onClick={handlePrevious}
               disabled={draft.current_step === 0}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
             </button>
             
-            <button
-              onClick={handleSaveDraft}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              Save Draft
-            </button>
-
             <button
               onClick={handleNext}
               disabled={draft.current_step === STEPS.length - 1}
@@ -152,44 +138,41 @@ export function CreateListing() {
             >
               Next
             </button>
-          </div>
-        </div>
-      </div>
+          </nav>
+        </section>
 
-      {showExitModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md mx-4">
-            <h2 className="text-lg font-semibold mb-4">Unsaved Changes</h2>
-            <p className="text-gray-600 mb-6">
-              You have unsaved changes. Would you like to save your draft before exiting?
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowExitModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  resetDraft();
-                  navigate('/my-listings');
-                }}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
-              >
-                Discard
-              </button>
-              <button
-                onClick={confirmExit}
-                disabled={!canSaveDraft}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Save & Exit
-              </button>
+        {showExitModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" role="dialog" aria-labelledby="exit-dialog-title" aria-describedby="exit-dialog-description">
+            <div className="bg-white rounded-lg max-w-md w-full p-6">
+              <h2 id="exit-dialog-title" className="text-xl font-bold mb-4">Unsaved Changes</h2>
+              <p id="exit-dialog-description" className="text-gray-600 mb-6">
+                You have unsaved changes. What would you like to do?
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleSaveAndExit}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  disabled={!canSaveDraft}
+                >
+                  Save & Exit
+                </button>
+                <button
+                  onClick={handleDiscardAndExit}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={() => setShowExitModal(false)}
+                  className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </main>
     </div>
   );
 }

@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from './features/auth/hooks/useAuth';
 import { LoginPage } from './features/auth/pages/LoginPage';
 import { SignupPage } from './features/auth/pages/SignupPage';
@@ -28,53 +30,80 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<SignupPage />} />
-        
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <ProfilePage />
-            </ProtectedRoute>
-          }
-        />
-        
-        <Route
-          path="/listings/create"
-          element={
-            <ProtectedRoute>
-              <CreateListing />
-            </ProtectedRoute>
-          }
-        />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<SignupPage />} />
+          
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/listings/create"
+            element={
+              <ProtectedRoute>
+                <CreateListing />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/listings/:id/edit"
-          element={
-            <ProtectedRoute>
-              <CreateListing />
-            </ProtectedRoute>
-          }
+          <Route
+            path="/listings/:id/edit"
+            element={
+              <ProtectedRoute>
+                <CreateListing />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/my-listings"
+            element={
+              <ProtectedRoute>
+                <MyListings />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route path="/listings/:id" element={<ViewListing />} />
+          <Route path="/seller/:id" element={<SellerProfilePage />} />
+          
+          <Route path="/" element={<Navigate to="/my-listings" replace />} />
+        </Routes>
+        
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+            success: {
+              duration: 3000,
+              iconTheme: {
+                primary: '#10b981',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              duration: 5000,
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#fff',
+              },
+            },
+          }}
         />
-        
-        <Route
-          path="/my-listings"
-          element={
-            <ProtectedRoute>
-              <MyListings />
-            </ProtectedRoute>
-          }
-        />
-        
-        <Route path="/listings/:id" element={<ViewListing />} />
-        <Route path="/seller/:id" element={<SellerProfilePage />} />
-        
-        <Route path="/" element={<Navigate to="/my-listings" replace />} />
-      </Routes>
-    </BrowserRouter>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
