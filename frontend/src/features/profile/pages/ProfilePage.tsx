@@ -1,186 +1,276 @@
-import { useState } from "react";
-import { useAuth } from "@/features/auth/hooks/useAuth";
-import { useProfile } from "../hooks/useProfile";
-import { useShippingAddresses } from "../hooks/useShippingAddresses";
-import { ProfileHeader } from "../components/ProfileHeader";
-import { ProfileEditForm } from "../components/ProfileEditForm";
-import { PhotoUploadButton } from "../components/PhotoUploadButton";
-import { SellerStats } from "../components/SellerStats";
-import { ShippingAddressList } from "../components/ShippingAddressList";
-import { ShippingAddressForm } from "../components/ShippingAddressForm";
-import { LogoutButton } from "@/features/auth/components/LogoutButton";
-import type { Database } from "@/types/database.types";
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/common/Button';
+import { Input } from '@/components/common/Input';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { supabase } from '@/features/auth/lib/supabase';
+import { ErrorHandler, AppError, ErrorCode } from '@/lib/errors/ErrorHandler';
 
-type ShippingAddress =
-  Database["public"]["Tables"]["shipping_addresses"]["Row"];
+interface Profile {
+  user_id: string;
+  display_name: string | null;
+  bio: string | null;
+  profile_photo_url: string | null;
+  shipping_address_line1: string | null;
+  shipping_address_line2: string | null;
+  shipping_city: string | null;
+  shipping_state: string | null;
+  shipping_postal_code: string | null;
+  shipping_country: string | null;
+}
 
 export function ProfilePage() {
   const { user } = useAuth();
-  const {
-    profile,
-    loading: profileLoading,
-    error: profileError,
-    refetch,
-  } = useProfile(user?.id);
-  const {
-    addresses,
-    loading: addressesLoading,
-    error: addressesError,
-    createAddress,
-    updateAddress,
-    deleteAddress,
-    setDefaultAddress,
-  } = useShippingAddresses();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [displayName, setDisplayName] = useState('');
+  const [bio, setBio] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [editingAddress, setEditingAddress] = useState<ShippingAddress | null>(
-    null,
-  );
-  const [showAddressForm, setShowAddressForm] = useState(false);
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    loadProfile();
+  }, [user, navigate]);
 
-  if (profileLoading) {
+  const loadProfile = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setProfile(data);
+        setDisplayName(data.display_name || '');
+        setBio(data.bio || '');
+        setPhotoPreview(data.profile_photo_url);
+      }
+    } catch (error) {
+      ErrorHandler.handle(error, 'ProfilePage.loadProfile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      ErrorHandler.handle(
+        new AppError(
+          ErrorCode.VALIDATION_FILE_TOO_LARGE,
+          'File too large',
+          { size: file.size, maxSize: 5242880 },
+          'Photo must be less than 5MB'
+        ),
+        'ProfilePage.handlePhotoChange'
+      );
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      ErrorHandler.handle(
+        new AppError(
+          ErrorCode.VALIDATION_INVALID_FILE_TYPE,
+          'Invalid file type',
+          { type: file.type },
+          'Please select an image file'
+        ),
+        'ProfilePage.handlePhotoChange'
+      );
+      return;
+    }
+
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    setSaving(true);
+
+    try {
+      let photoUrl = profile?.profile_photo_url;
+
+      if (photoFile) {
+        const fileExt = photoFile.name.split('.').pop();
+        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+        const filePath = `profile-photos/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('auctionx-media-prod-cl')
+          .upload(filePath, photoFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('auctionx-media-prod-cl')
+          .getPublicUrl(filePath);
+
+        photoUrl = publicUrl;
+      }
+
+      const { error } = await supabase
+        .from('user_profiles')
+        .upsert({
+          user_id: user.id,
+          display_name: displayName || null,
+          bio: bio || null,
+          profile_photo_url: photoUrl,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+
+      navigate('/my-listings');
+    } catch (error) {
+      ErrorHandler.handle(error, 'ProfilePage.handleSubmit');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <main role="main">
-          <div className="text-center" role="status" aria-live="polite">Loading profile...</div>
-        </main>
+      <div className="min-h-screen bg-dark-800 flex items-center justify-center">
+        <p className="text-gray-400">Loading profile...</p>
       </div>
     );
   }
 
-  if (profileError || !profile) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <main role="main">
-          <div className="rounded-md bg-red-50 p-4" role="alert">
-            <p className="text-sm text-red-800">
-              {profileError?.message || "Failed to load profile"}
+  return (
+    <ErrorBoundary>
+      <a 
+        href="#main-content" 
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 
+                   bg-primary-500 text-white px-4 py-2 rounded-lg z-50
+                   focus:outline-none focus:ring-2 focus:ring-white"
+      >
+        Skip to main content
+      </a>
+
+      <div className="min-h-screen bg-dark-800 py-12 px-4">
+        <main id="main-content" className="max-w-2xl mx-auto">
+          <div className="glass rounded-2xl p-8">
+            <h1 className="text-3xl font-bold text-white mb-2">
+              Your Profile
+            </h1>
+            <p className="text-gray-400 mb-8">
+              Complete your profile to start buying and selling.
             </p>
+
+            <form onSubmit={handleSubmit} aria-label="Profile form" className="space-y-8">
+              <section aria-labelledby="photo-heading">
+                <h2 id="photo-heading" className="text-xl font-semibold text-white mb-4">
+                  Profile Photo
+                </h2>
+                
+                <div className="flex items-center gap-6">
+                  {photoPreview ? (
+                    <img 
+                      src={photoPreview} 
+                      alt="Profile preview"
+                      className="w-24 h-24 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-dark-600 flex items-center justify-center">
+                      <span className="text-gray-500 text-sm">No photo</span>
+                    </div>
+                  )}
+                  
+                  <label className="cursor-pointer">
+                    <span className="sr-only">Choose profile photo</span>
+                    <Button type="button" variant="secondary" size="md" as="span">
+                      Choose Photo
+                    </Button>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoChange}
+                      className="sr-only"
+                      aria-label="Upload profile photo"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section aria-labelledby="info-heading">
+                <h2 id="info-heading" className="text-xl font-semibold text-white mb-4">
+                  Basic Information
+                </h2>
+
+                <div className="space-y-4">
+                  <Input
+                    label="Display Name"
+                    id="display-name"
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="How should we address you?"
+                    helperText="This will be visible to other users"
+                  />
+
+                  <div>
+                    <label htmlFor="bio" className="block text-sm font-medium text-gray-300 mb-2">
+                      Bio
+                    </label>
+                    <textarea
+                      id="bio"
+                      value={bio}
+                      onChange={(e) => setBio(e.target.value)}
+                      rows={4}
+                      placeholder="Tell us about yourself..."
+                      className="w-full min-h-[120px] px-4 py-3 rounded-xl
+                                bg-dark-600 text-white placeholder:text-gray-500
+                                border border-transparent
+                                focus:outline-none focus:ring-2 focus:ring-primary-500 
+                                focus:ring-offset-2 focus:ring-offset-dark-800
+                                resize-none"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <div className="flex gap-4">
+                <Button 
+                  type="submit" 
+                  variant="primary" 
+                  size="lg" 
+                  disabled={saving}
+                  fullWidth
+                >
+                  {saving ? 'Saving...' : 'Save Profile'}
+                </Button>
+                
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="lg"
+                  onClick={() => navigate('/my-listings')}
+                  disabled={saving}
+                >
+                  Skip
+                </Button>
+              </div>
+            </form>
           </div>
         </main>
       </div>
-    );
-  }
-
-  const handleProfileEditSuccess = () => {
-    setEditingProfile(false);
-    refetch();
-  };
-
-  const handlePhotoUploadComplete = () => {
-    refetch();
-  };
-
-  const handleAddressSubmit = async (data: any) => {
-    if (editingAddress) {
-      await updateAddress(editingAddress.id, data);
-    } else {
-      await createAddress(data);
-    }
-    setShowAddressForm(false);
-    setEditingAddress(null);
-  };
-
-  const handleAddAddressClick = () => {
-    setEditingProfile(false);
-    setShowAddressForm(true);
-  };
-
-  const handleEditAddressClick = (address: ShippingAddress) => {
-    setEditingProfile(false);
-    setEditingAddress(address);
-  };
-
-  const handleCancelAddressForm = () => {
-    setShowAddressForm(false);
-    setEditingAddress(null);
-  };
-
-  return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <main role="main">
-        {/* Page Header with Logout */}
-        <header className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
-          <LogoutButton variant="secondary" />
-        </header>
-
-        <div className="space-y-6">
-          {/* Profile Header */}
-          {!editingProfile ? (
-            <>
-              <section aria-labelledby="profile-heading">
-                <h2 id="profile-heading" className="sr-only">Profile Information</h2>
-                <ProfileHeader
-                  profile={profile}
-                  isOwnProfile={true}
-                  onEditClick={() => setEditingProfile(true)}
-                />
-              </section>
-              <section aria-labelledby="photo-heading" className="bg-white rounded-lg shadow p-6">
-                <h2 id="photo-heading" className="text-lg font-semibold mb-4">Profile Photo</h2>
-                <PhotoUploadButton
-                  userId={profile.id}
-                  onUploadComplete={handlePhotoUploadComplete}
-                />
-              </section>
-            </>
-          ) : (
-            <section aria-labelledby="edit-profile-heading" className="bg-white rounded-lg shadow p-6">
-              <h2 id="edit-profile-heading" className="text-xl font-bold mb-4">Edit Profile</h2>
-              <ProfileEditForm
-                profile={profile}
-                onSuccess={handleProfileEditSuccess}
-                onCancel={() => setEditingProfile(false)}
-              />
-            </section>
-          )}
-
-          {/* Seller Stats */}
-          <section aria-labelledby="stats-heading">
-            <h2 id="stats-heading" className="sr-only">Seller Statistics</h2>
-            <SellerStats profile={profile} />
-          </section>
-
-          {/* Shipping Addresses */}
-          <section aria-labelledby="addresses-heading" className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 id="addresses-heading" className="text-lg font-semibold">Shipping Addresses</h2>
-              {!showAddressForm && !editingAddress && (
-                <button
-                  onClick={handleAddAddressClick}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
-                  aria-label="Add new shipping address"
-                >
-                  Add Address
-                </button>
-              )}
-            </div>
-
-            {addressesError && (
-              <div className="rounded-md bg-red-50 p-4 mb-4" role="alert">
-                <p className="text-sm text-red-800">{addressesError.message}</p>
-              </div>
-            )}
-
-            {showAddressForm || editingAddress ? (
-              <ShippingAddressForm
-                address={editingAddress}
-                onSubmit={handleAddressSubmit}
-                onCancel={handleCancelAddressForm}
-                loading={addressesLoading}
-              />
-            ) : (
-              <ShippingAddressList
-                addresses={addresses}
-                onEdit={handleEditAddressClick}
-                onDelete={deleteAddress}
-                onSetDefault={setDefaultAddress}
-              />
-            )}
-          </section>
-        </div>
-      </main>
-    </div>
+    </ErrorBoundary>
   );
 }

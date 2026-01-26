@@ -7,21 +7,51 @@ export default {
   theme: {
     extend: {
       colors: {
-        // AuctionX brand colors (will be overridden per brand)
-        primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+        dark: {
+          900: '#0a0a0f',
+          800: '#13131a',
+          700: '#1a1a24',
+          600: '#252533',
+          500: '#2d2d3d',
         },
+        primary: {
+          400: '#9333ea',
+          500: '#7c3aed',
+          600: '#6d28d9',
+          700: '#5b21b6',
+        },
+        accent: {
+          400: '#60a5fa',
+          500: '#60a5fa',
+          600: '#3b82f6',
+        },
+        success: {
+          500: '#10b981',
+          600: '#059669',
+        },
+        error: {
+          500: '#ef4444',
+          600: '#dc2626',
+        },
+        warning: {
+          500: '#f59e0b',
+          600: '#d97706',
+        },
+      },
+      fontFamily: {
+        sans: [
+          'Inter',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'Roboto',
+          'sans-serif',
+        ],
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/forms'),
+  ],
 }

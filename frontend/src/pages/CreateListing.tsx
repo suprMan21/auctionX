@@ -1,178 +1,301 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useListingCreation } from '../stores/listingCreationStore';
-import { StepIndicator } from '../components/listings/StepIndicator';
-import { BasicInfoStep } from '../components/listings/steps/BasicInfoStep';
-import { CategoryStep } from '../components/listings/steps/CategoryStep';
-import { MediaStep } from '../components/listings/steps/MediaStep';
-import { PricingStep } from '../components/listings/steps/PricingStep';
-import { LocationStep } from '../components/listings/steps/LocationStep';
-import { ReviewStep } from '../components/listings/steps/ReviewStep';
-
-const STEPS = [
-  { id: 0, name: 'Basic Info', component: BasicInfoStep },
-  { id: 1, name: 'Category', component: CategoryStep },
-  { id: 2, name: 'Media', component: MediaStep },
-  { id: 3, name: 'Pricing', component: PricingStep },
-  { id: 4, name: 'Location', component: LocationStep },
-  { id: 5, name: 'Review', component: ReviewStep },
-];
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/common/Button';
+import { Input } from '@/components/common/Input';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { supabase } from '@/features/auth/lib/supabase';
+import { ErrorHandler, AppError, ErrorCode } from '@/lib/errors/ErrorHandler';
 
 export function CreateListing() {
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const { id } = useParams();
-  const { draft, isDirty, saveDraft, resetDraft, loadDraft, setCurrentStep } = useListingCreation();
-  const [showExitModal, setShowExitModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [startingPrice, setStartingPrice] = useState('');
+  const [reservePrice, setReservePrice] = useState('');
+  const [duration, setDuration] = useState('7');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
-  const currentStepData = STEPS[draft.current_step];
-  const CurrentStepComponent = currentStepData.component;
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const canSaveDraft = draft.title && draft.category_id && draft.condition;
-
-  useEffect(() => {
-    if (id) {
-      loadDraft(id);
-    } else {
-      resetDraft();
+    if (file.size > 10 * 1024 * 1024) {
+      ErrorHandler.handle(
+        new AppError(
+          ErrorCode.VALIDATION_FILE_TOO_LARGE,
+          'File too large',
+          { size: file.size, maxSize: 10485760 },
+          'Photo must be less than 10MB'
+        ),
+        'CreateListing.handlePhotoChange'
+      );
+      return;
     }
-  }, [id]);
 
-  useEffect(() => {
-    const autoSaveInterval = setInterval(() => {
-      if (isDirty && canSaveDraft) {
-        saveDraft().catch(err => {
-          console.error('Auto-save failed:', err);
-        });
+    if (!file.type.startsWith('image/')) {
+      ErrorHandler.handle(
+        new AppError(
+          ErrorCode.VALIDATION_INVALID_FILE_TYPE,
+          'Invalid file type',
+          { type: file.type },
+          'Please select an image file'
+        ),
+        'CreateListing.handlePhotoChange'
+      );
+      return;
+    }
+
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      let photoUrl = null;
+
+      if (photoFile) {
+        const fileExt = photoFile.name.split('.').pop();
+        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+        const filePath = `listings/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('auctionx-media-prod-cl')
+          .upload(filePath, photoFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('auctionx-media-prod-cl')
+          .getPublicUrl(filePath);
+
+        photoUrl = publicUrl;
       }
-    }, 30000);
 
-    return () => clearInterval(autoSaveInterval);
-  }, [isDirty, canSaveDraft]);
+      const endingAt = new Date();
+      endingAt.setDate(endingAt.getDate() + parseInt(duration));
 
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
+      const { data, error } = await supabase
+        .from('listings')
+        .insert({
+          seller_id: user.id,
+          title,
+          description,
+          starting_price: parseFloat(startingPrice),
+          current_price: parseFloat(startingPrice),
+          reserve_price: reservePrice ? parseFloat(reservePrice) : null,
+          ending_at: endingAt.toISOString(),
+          photo_url: photoUrl,
+          status: 'draft'
+        })
+        .select()
+        .single();
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isDirty]);
+      if (error) throw error;
 
-  const handleNext = () => {
-    if (draft.current_step < STEPS.length - 1) {
-      setCurrentStep(draft.current_step + 1);
+      navigate(`/listings/${data.id}`);
+    } catch (error) {
+      ErrorHandler.handle(error, 'CreateListing.handleSubmit');
+    } finally {
+      setSaving(false);
     }
-  };
-
-  const handlePrevious = () => {
-    if (draft.current_step > 0) {
-      setCurrentStep(draft.current_step - 1);
-    }
-  };
-
-  const handleExit = () => {
-    if (isDirty) {
-      setShowExitModal(true);
-    } else {
-      resetDraft();
-      navigate('/my-listings');
-    }
-  };
-
-  const handleSaveAndExit = async () => {
-    if (canSaveDraft) {
-      await saveDraft();
-    }
-    resetDraft();
-    navigate('/my-listings');
-  };
-
-  const handleDiscardAndExit = () => {
-    resetDraft();
-    navigate('/my-listings');
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <main role="main" className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <header className="mb-8">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">
-              {id ? 'Edit Listing' : 'Create New Listing'}
+    <ErrorBoundary>
+      <a 
+        href="#main-content" 
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 
+                   bg-primary-500 text-white px-4 py-2 rounded-lg z-50
+                   focus:outline-none focus:ring-2 focus:ring-white"
+      >
+        Skip to main content
+      </a>
+
+      <div className="min-h-screen bg-dark-800 py-12 px-4">
+        <main id="main-content" className="max-w-3xl mx-auto">
+          <div className="glass rounded-2xl p-8">
+            <h1 className="text-3xl font-bold text-white mb-2">
+              Create New Listing
             </h1>
-            <button
-              onClick={handleExit}
-              className="text-gray-600 hover:text-gray-900"
-              aria-label="Exit listing creation"
-            >
-              Exit
-            </button>
-          </div>
+            <p className="text-gray-400 mb-8">
+              Fill out the details below to create your auction listing.
+            </p>
 
-          <StepIndicator steps={STEPS} currentStep={draft.current_step} />
-        </header>
+            <form onSubmit={handleSubmit} aria-label="Create listing form" className="space-y-8">
+              <section aria-labelledby="photo-heading">
+                <h2 id="photo-heading" className="text-xl font-semibold text-white mb-4">
+                  Listing Photo
+                </h2>
+                
+                {photoPreview ? (
+                  <div className="relative">
+                    <img 
+                      src={photoPreview} 
+                      alt="Listing preview"
+                      className="w-full h-64 object-cover rounded-xl"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhotoFile(null);
+                        setPhotoPreview(null);
+                      }}
+                      aria-label="Remove photo"
+                      className="absolute top-2 right-2 glass rounded-lg w-[44px] h-[44px] flex items-center justify-center
+                                 hover:bg-white/10 transition-colors
+                                 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+                    >
+                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer block">
+                    <span className="sr-only">Choose listing photo</span>
+                    <div className="glass rounded-xl p-12 text-center hover:bg-white/10 transition-colors
+                                    focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-offset-2 focus-within:ring-offset-dark-800">
+                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <p className="mt-2 text-gray-400">Click to upload photo</p>
+                      <p className="mt-1 text-sm text-gray-500">PNG, JPG, GIF up to 10MB</p>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoChange}
+                      className="sr-only"
+                      aria-label="Upload listing photo"
+                    />
+                  </label>
+                )}
+              </section>
 
-        <section aria-labelledby="step-heading" className="bg-white rounded-lg shadow p-6">
-          <h2 id="step-heading" className="text-xl font-semibold mb-6">
-            {currentStepData.name}
-          </h2>
-          
-          <CurrentStepComponent />
+              <section aria-labelledby="details-heading">
+                <h2 id="details-heading" className="text-xl font-semibold text-white mb-4">
+                  Listing Details
+                </h2>
 
-          <nav className="mt-8 flex justify-between" aria-label="Listing creation navigation">
-            <button
-              onClick={handlePrevious}
-              disabled={draft.current_step === 0}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            
-            <button
-              onClick={handleNext}
-              disabled={draft.current_step === STEPS.length - 1}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </nav>
-        </section>
+                <div className="space-y-4">
+                  <Input
+                    label="Title"
+                    id="title"
+                    type="text"
+                    required
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g., Signed Baseball Card"
+                    helperText="Choose a clear, descriptive title"
+                  />
 
-        {showExitModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" role="dialog" aria-labelledby="exit-dialog-title" aria-describedby="exit-dialog-description">
-            <div className="bg-white rounded-lg max-w-md w-full p-6">
-              <h2 id="exit-dialog-title" className="text-xl font-bold mb-4">Unsaved Changes</h2>
-              <p id="exit-dialog-description" className="text-gray-600 mb-6">
-                You have unsaved changes. What would you like to do?
-              </p>
-              <div className="flex space-x-3">
-                <button
-                  onClick={handleSaveAndExit}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                  disabled={!canSaveDraft}
-                >
-                  Save & Exit
-                </button>
-                <button
-                  onClick={handleDiscardAndExit}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                >
-                  Discard
-                </button>
-                <button
-                  onClick={() => setShowExitModal(false)}
-                  className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                  <div>
+                    <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      id="description"
+                      required
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={6}
+                      placeholder="Describe your item in detail..."
+                      className="w-full min-h-[120px] px-4 py-3 rounded-xl
+                                bg-dark-600 text-white placeholder:text-gray-500
+                                border border-transparent
+                                focus:outline-none focus:ring-2 focus:ring-primary-500 
+                                focus:ring-offset-2 focus:ring-offset-dark-800
+                                resize-none"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section aria-labelledby="pricing-heading">
+                <h2 id="pricing-heading" className="text-xl font-semibold text-white mb-4">
+                  Pricing & Duration
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Starting Price"
+                    id="starting-price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={startingPrice}
+                    onChange={(e) => setStartingPrice(e.target.value)}
+                    placeholder="0.00"
+                    helperText="Minimum bid amount"
+                  />
+
+                  <Input
+                    label="Reserve Price (Optional)"
+                    id="reserve-price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={reservePrice}
+                    onChange={(e) => setReservePrice(e.target.value)}
+                    placeholder="0.00"
+                    helperText="Minimum sale price"
+                  />
+
+                  <div>
+                    <label htmlFor="duration" className="block text-sm font-medium text-gray-300 mb-2">
+                      Auction Duration
+                    </label>
+                    <select
+                      id="duration"
+                      value={duration}
+                      onChange={(e) => setDuration(e.target.value)}
+                      className="w-full min-h-[44px] px-4 py-3 rounded-xl
+                                bg-dark-600 text-white
+                                border border-transparent
+                                focus:outline-none focus:ring-2 focus:ring-primary-500 
+                                focus:ring-offset-2 focus:ring-offset-dark-800"
+                    >
+                      <option value="1">1 day</option>
+                      <option value="3">3 days</option>
+                      <option value="7">7 days</option>
+                      <option value="14">14 days</option>
+                      <option value="30">30 days</option>
+                    </select>
+                  </div>
+                </div>
+              </section>
+
+              <div className="flex gap-4">
+                <Button type="submit" variant="primary" size="lg" disabled={saving} fullWidth>
+                  {saving ? 'Creating...' : 'Create Listing'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="lg"
+                  onClick={() => navigate('/my-listings')}
+                  disabled={saving}
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
-            </div>
+            </form>
           </div>
-        )}
-      </main>
-    </div>
+        </main>
+      </div>
+    </ErrorBoundary>
   );
 }
