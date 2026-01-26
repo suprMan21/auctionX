@@ -1,37 +1,37 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
-import { supabase } from '@/features/auth/lib/supabase'
-import { useAuthStore } from '@/features/auth/store/authStore'
-import { LoginPage } from '@/features/auth/pages/LoginPage'
-import { SignupPage } from '@/features/auth/pages/SignupPage'
-import { ProtectedRoute } from '@/features/auth/components/ProtectedRoute'
-import { ProfilePage } from '@/features/profile/pages/ProfilePage'
-import { SellerProfilePage } from '@/features/profile/pages/SellerProfilePage'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from './features/auth/hooks/useAuth';
+import { LoginPage } from './features/auth/pages/LoginPage';
+import { SignupPage } from './features/auth/pages/SignupPage';
+import { ProfilePage } from './features/profile/pages/ProfilePage';
+import { SellerProfilePage } from './features/profile/pages/SellerProfilePage';
+import { CreateListing } from './pages/CreateListing';
+import { MyListings } from './pages/MyListings';
+import { ViewListing } from './pages/ViewListing';
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { session, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
 
 function App() {
-  const { setUser, setSession } = useAuthStore()
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-    })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [setSession, setUser])
-
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/register" element={<SignupPage />} />
         
         <Route
           path="/profile"
@@ -42,12 +42,40 @@ function App() {
           }
         />
         
+        <Route
+          path="/listings/create"
+          element={
+            <ProtectedRoute>
+              <CreateListing />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/listings/:id/edit"
+          element={
+            <ProtectedRoute>
+              <CreateListing />
+            </ProtectedRoute>
+          }
+        />
+        
+        <Route
+          path="/my-listings"
+          element={
+            <ProtectedRoute>
+              <MyListings />
+            </ProtectedRoute>
+          }
+        />
+        
+        <Route path="/listings/:id" element={<ViewListing />} />
         <Route path="/seller/:id" element={<SellerProfilePage />} />
         
-        <Route path="/" element={<Navigate to="/profile" replace />} />
+        <Route path="/" element={<Navigate to="/my-listings" replace />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }
 
-export default App
+export default App;

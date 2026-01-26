@@ -1,4 +1,5 @@
-import { useAuthStore } from '../store/authStore'
+import { useEffect } from "react";
+import { useAuthStore } from "../store/authStore";
 
 export const useAuth = () => {
   const {
@@ -10,8 +11,14 @@ export const useAuth = () => {
     signUp,
     signOut,
     resetPassword,
-    clearError
-  } = useAuthStore()
+    checkProfileComplete,
+    clearError,
+    initialize,
+  } = useAuthStore();
+
+  useEffect(() => {
+    initialize();
+  }, []);
 
   return {
     user,
@@ -22,7 +29,8 @@ export const useAuth = () => {
     signUp,
     signOut,
     resetPassword,
+    checkProfileComplete,
     clearError,
-    isAuthenticated: !!user
-  }
-}
+    isAuthenticated: !!user,
+  };
+};

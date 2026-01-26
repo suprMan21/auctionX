@@ -1,6 +1,16 @@
 import { z } from "zod";
-import { BaseMetaSchema, DocIdSchema, FirestoreTimestampSchema } from "./common.schema";
-import { CurrencySchema, ItemConditionSchema, ListingStatusSchema, BrandSchema, DEFAULT_CURRENCY } from "./enums.schema";
+import {
+  BaseMetaSchema,
+  DocIdSchema,
+  FirestoreTimestampSchema,
+} from "./common.schema";
+import {
+  CurrencySchema,
+  ItemConditionSchema,
+  ListingStatusSchema,
+  BrandSchema,
+  DEFAULT_CURRENCY,
+} from "./enums.schema";
 
 /**
  * Listing is the enduring entity across relists (locked decision).
@@ -13,24 +23,24 @@ import { CurrencySchema, ItemConditionSchema, ListingStatusSchema, BrandSchema, 
 export const ListingMediaSchema = z.object({
   id: z.string().min(1), // uuid
   type: z.enum(["IMAGE", "VIDEO"]),
-  
-  // S3 storage
-  s3Key: z.string().min(1), // e.g., "listings/l123/abc123.jpg"
-  s3Bucket: z.string().min(1),
-  
-  // Public URLs (from CloudFront or S3)
+
+  //  storage
+  Key: z.string().min(1), // e.g., "listings/l123/abc123.jpg"
+  Bucket: z.string().min(1),
+
+  // Public URLs (from CloudFront or )
   url: z.string().url(),
   thumbnailUrl: z.string().url().optional(), // for videos
-  
+
   // Metadata
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
   durationSeconds: z.number().int().positive().optional(), // for videos
   sizeBytes: z.number().int().positive(),
-  
+
   // Upload tracking
   uploadedAt: FirestoreTimestampSchema,
-  
+
   // Display order
   sortOrder: z.number().int().nonnegative().default(0),
 });
@@ -82,7 +92,7 @@ export const ListingSchema = BaseMetaSchema.extend({
   pricing: ListingPricingSchema.default({ currency: DEFAULT_CURRENCY }),
 
   flags: ListingFlagsSchema.optional(),
-  
+
   // NEW: Brand tracking
   brand: BrandSchema,
 

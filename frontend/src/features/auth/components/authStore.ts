@@ -6,7 +6,6 @@ interface AuthState {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  initialized: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
@@ -19,26 +18,21 @@ interface AuthState {
   initialize: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   session: null,
   loading: false,
-  initialized: false,
   error: null,
 
   initialize: async () => {
-    if (get().initialized) return;
-    
+    set({ loading: true });
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      set({ 
-        user: session?.user ?? null, 
-        session,
-        initialized: true 
-      });
-    } catch (error: any) {
+      set({ user: session?.user ?? null, session });
+    } catch (error) {
       console.error('Failed to initialize auth:', error);
-      set({ initialized: true });
+    } finally {
+      set({ loading: false });
     }
   },
 

@@ -1,37 +1,43 @@
-import { useState } from 'react'
-import { useUpdateProfile } from '../hooks/useProfile'
-import type { Database } from '@/types/database.types'
+import { useState } from "react";
+import { useUpdateProfile } from "../hooks/useProfile";
+import type { Database } from "@/types/database.types";
 
-type User = Database['public']['Tables']['users']['Row']
-type BrandType = Database['public']['Enums']['brand_type']
+type User = Database["public"]["Tables"]["users"]["Row"];
+type BrandType = Database["public"]["Enums"]["brand_type"];
 
 interface ProfileEditFormProps {
-  profile: User
-  onSuccess?: () => void
-  onCancel?: () => void
+  profile: User;
+  onSuccess?: () => void;
+  onCancel?: () => void;
 }
 
-export function ProfileEditForm({ profile, onSuccess, onCancel }: ProfileEditFormProps) {
-  const { updateProfile, loading, error } = useUpdateProfile()
-  const [displayName, setDisplayName] = useState(profile.display_name || '')
-  const [phoneNumber, setPhoneNumber] = useState(profile.phone_number || '')
+export function ProfileEditForm({
+  profile,
+  onSuccess,
+  onCancel,
+}: ProfileEditFormProps) {
+  const { updateProfile, loading, error } = useUpdateProfile();
+  const [displayName, setDisplayName] = useState(profile.display_name || "");
+  const [phoneNumber, setPhoneNumber] = useState(profile.phone_number || "");
   const [preferredBrand, setPreferredBrand] = useState<BrandType>(
-    profile.preferred_brand || 'AUCTIONX'
-  )
-  const [validationError, setValidationError] = useState<string | null>(null)
+    profile.preferred_brand || "AUCTIONX",
+  );
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setValidationError(null)
+    e.preventDefault();
+    setValidationError(null);
+    setSuccessMessage(null);
 
     if (displayName.length === 0) {
-      setValidationError('Display name is required')
-      return
+      setValidationError("Display name is required");
+      return;
     }
 
     if (displayName.length > 120) {
-      setValidationError('Display name must be 120 characters or less')
-      return
+      setValidationError("Display name must be 120 characters or less");
+      return;
     }
 
     try {
@@ -39,17 +45,36 @@ export function ProfileEditForm({ profile, onSuccess, onCancel }: ProfileEditFor
         display_name: displayName,
         phone_number: phoneNumber || undefined,
         preferred_brand: preferredBrand,
-      })
-      onSuccess?.()
+      });
+      setSuccessMessage("Profile updated successfully");
+      setTimeout(() => {
+        onSuccess?.();
+      }, 1000);
     } catch (err) {
-      console.error('[ProfileEditForm] Submit error:', err)
+      console.error("[ProfileEditForm] Submit error:", err);
     }
-  }
+  };
+
+  const currentError = validationError || error?.message;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Success message - announced to screen readers */}
+      {successMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-md bg-green-50 p-4"
+        >
+          <p className="text-sm text-green-800">{successMessage}</p>
+        </div>
+      )}
+
       <div>
-        <label htmlFor="displayName" className="block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="displayName"
+          className="block text-sm font-medium text-gray-700"
+        >
           Display Name *
         </label>
         <input
@@ -59,13 +84,21 @@ export function ProfileEditForm({ profile, onSuccess, onCancel }: ProfileEditFor
           onChange={(e) => setDisplayName(e.target.value)}
           maxLength={120}
           required
+          aria-describedby="displayName-hint"
+          aria-invalid={!!currentError}
+          aria-errormessage={currentError ? "form-error" : undefined}
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
-        <p className="text-xs text-gray-500 mt-1">{displayName.length}/120 characters</p>
+        <p id="displayName-hint" className="text-xs text-gray-500 mt-1">
+          {displayName.length}/120 characters
+        </p>
       </div>
 
       <div>
-        <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="phoneNumber"
+          className="block text-sm font-medium text-gray-700"
+        >
           Phone Number
         </label>
         <input
@@ -73,12 +106,16 @@ export function ProfileEditForm({ profile, onSuccess, onCancel }: ProfileEditFor
           type="tel"
           value={phoneNumber}
           onChange={(e) => setPhoneNumber(e.target.value)}
+          aria-invalid={!!currentError}
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
       </div>
 
       <div>
-        <label htmlFor="preferredBrand" className="block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="preferredBrand"
+          className="block text-sm font-medium text-gray-700"
+        >
           Preferred Brand
         </label>
         <select
@@ -92,9 +129,15 @@ export function ProfileEditForm({ profile, onSuccess, onCancel }: ProfileEditFor
         </select>
       </div>
 
-      {(validationError || error) && (
-        <div className="rounded-md bg-red-50 p-4">
-          <p className="text-sm text-red-800">{validationError || error?.message}</p>
+      {/* Error message - announced to screen readers */}
+      {currentError && (
+        <div
+          id="form-error"
+          role="alert"
+          aria-live="assertive"
+          className="rounded-md bg-red-50 p-4"
+        >
+          <p className="text-sm text-red-800">{currentError}</p>
         </div>
       )}
 
@@ -104,6 +147,7 @@ export function ProfileEditForm({ profile, onSuccess, onCancel }: ProfileEditFor
             type="button"
             onClick={onCancel}
             disabled={loading}
+            aria-label="Cancel editing profile"
             className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             Cancel
@@ -112,11 +156,14 @@ export function ProfileEditForm({ profile, onSuccess, onCancel }: ProfileEditFor
         <button
           type="submit"
           disabled={loading}
+          aria-label={
+            loading ? "Saving profile changes" : "Save profile changes"
+          }
           className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? 'Saving...' : 'Save Changes'}
+          {loading ? "Saving..." : "Save Changes"}
         </button>
       </div>
     </form>
-  )
+  );
 }

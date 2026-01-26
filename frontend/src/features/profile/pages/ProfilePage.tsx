@@ -1,20 +1,27 @@
-import { useState } from 'react'
-import { useAuth } from '@/features/auth/hooks/useAuth'
-import { useProfile } from '../hooks/useProfile'
-import { useShippingAddresses } from '../hooks/useShippingAddresses'
-import { ProfileHeader } from '../components/ProfileHeader'
-import { ProfileEditForm } from '../components/ProfileEditForm'
-import { PhotoUploadButton } from '../components/PhotoUploadButton'
-import { SellerStats } from '../components/SellerStats'
-import { ShippingAddressList } from '../components/ShippingAddressList'
-import { ShippingAddressForm } from '../components/ShippingAddressForm'
-import type { Database } from '@/types/database.types'
+import { useState } from "react";
+import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useProfile } from "../hooks/useProfile";
+import { useShippingAddresses } from "../hooks/useShippingAddresses";
+import { ProfileHeader } from "../components/ProfileHeader";
+import { ProfileEditForm } from "../components/ProfileEditForm";
+import { PhotoUploadButton } from "../components/PhotoUploadButton";
+import { SellerStats } from "../components/SellerStats";
+import { ShippingAddressList } from "../components/ShippingAddressList";
+import { ShippingAddressForm } from "../components/ShippingAddressForm";
+import { LogoutButton } from "@/features/auth/components/LogoutButton";
+import type { Database } from "@/types/database.types";
 
-type ShippingAddress = Database['public']['Tables']['shipping_addresses']['Row']
+type ShippingAddress =
+  Database["public"]["Tables"]["shipping_addresses"]["Row"];
 
 export function ProfilePage() {
-  const { user } = useAuth()
-  const { profile, loading: profileLoading, error: profileError, refetch } = useProfile(user?.id)
+  const { user } = useAuth();
+  const {
+    profile,
+    loading: profileLoading,
+    error: profileError,
+    refetch,
+  } = useProfile(user?.id);
   const {
     addresses,
     loading: addressesLoading,
@@ -23,18 +30,20 @@ export function ProfilePage() {
     updateAddress,
     deleteAddress,
     setDefaultAddress,
-  } = useShippingAddresses()
+  } = useShippingAddresses();
 
-  const [editingProfile, setEditingProfile] = useState(false)
-  const [editingAddress, setEditingAddress] = useState<ShippingAddress | null>(null)
-  const [showAddressForm, setShowAddressForm] = useState(false)
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<ShippingAddress | null>(
+    null,
+  );
+  const [showAddressForm, setShowAddressForm] = useState(false);
 
   if (profileLoading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="text-center">Loading profile...</div>
       </div>
-    )
+    );
   }
 
   if (profileError || !profile) {
@@ -42,34 +51,57 @@ export function ProfilePage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="rounded-md bg-red-50 p-4">
           <p className="text-sm text-red-800">
-            {profileError?.message || 'Failed to load profile'}
+            {profileError?.message || "Failed to load profile"}
           </p>
         </div>
       </div>
-    )
+    );
   }
 
   const handleProfileEditSuccess = () => {
-    setEditingProfile(false)
-    refetch()
-  }
+    setEditingProfile(false);
+    refetch();
+  };
 
   const handlePhotoUploadComplete = () => {
-    refetch()
-  }
+    refetch();
+  };
 
   const handleAddressSubmit = async (data: any) => {
     if (editingAddress) {
-      await updateAddress(editingAddress.id, data)
+      await updateAddress(editingAddress.id, data);
     } else {
-      await createAddress(data)
+      await createAddress(data);
     }
-    setShowAddressForm(false)
-    setEditingAddress(null)
-  }
+    setShowAddressForm(false);
+    setEditingAddress(null);
+  };
+
+  const handleAddAddressClick = () => {
+    // Close profile editing when opening address form
+    setEditingProfile(false);
+    setShowAddressForm(true);
+  };
+
+  const handleEditAddressClick = (address: ShippingAddress) => {
+    // Close profile editing when editing an address
+    setEditingProfile(false);
+    setEditingAddress(address);
+  };
+
+  const handleCancelAddressForm = () => {
+    setShowAddressForm(false);
+    setEditingAddress(null);
+  };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* Page Header with Logout */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
+        <LogoutButton variant="secondary" />
+      </div>
+
       <div className="space-y-6">
         {/* Profile Header */}
         {!editingProfile ? (
@@ -107,7 +139,7 @@ export function ProfilePage() {
             <h3 className="text-lg font-semibold">Shipping Addresses</h3>
             {!showAddressForm && !editingAddress && (
               <button
-                onClick={() => setShowAddressForm(true)}
+                onClick={handleAddAddressClick}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
               >
                 Add Address
@@ -121,20 +153,17 @@ export function ProfilePage() {
             </div>
           )}
 
-          {(showAddressForm || editingAddress) ? (
+          {showAddressForm || editingAddress ? (
             <ShippingAddressForm
               address={editingAddress}
               onSubmit={handleAddressSubmit}
-              onCancel={() => {
-                setShowAddressForm(false)
-                setEditingAddress(null)
-              }}
+              onCancel={handleCancelAddressForm}
               loading={addressesLoading}
             />
           ) : (
             <ShippingAddressList
               addresses={addresses}
-              onEdit={setEditingAddress}
+              onEdit={handleEditAddressClick}
               onDelete={deleteAddress}
               onSetDefault={setDefaultAddress}
             />
@@ -142,5 +171,5 @@ export function ProfilePage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
