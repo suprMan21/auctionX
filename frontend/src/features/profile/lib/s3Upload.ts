@@ -1,15 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/auctionx-dev/us-central1'
-
-export interface UploadProgress {
-  loaded: number
-  total: number
-  percentage: number
-}
-
-export interface UploadResult {
-  key: string
-  publicUrl: string
-}
+import { supabase } from '@/features/auth/lib/supabase';
 
 export class S3UploadError extends Error {
   constructor(
@@ -17,9 +6,20 @@ export class S3UploadError extends Error {
     public code?: string,
     public statusCode?: number
   ) {
-    super(message)
-    this.name = 'S3UploadError'
+    super(message);
+    this.name = 'S3UploadError';
   }
+}
+
+interface UploadProgress {
+  percentage: number;
+  loaded: number;
+  total: number;
+}
+
+interface UploadResult {
+  publicUrl: string;
+  s3Key: string;
 }
 
 export async function uploadProfilePhoto(
@@ -27,103 +27,82 @@ export async function uploadProfilePhoto(
   userId: string,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> {
-  try {
-    // Validate file
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    if (!allowedTypes.includes(file.type)) {
-      throw new S3UploadError(
-        'Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.',
-        'INVALID_FILE_TYPE'
-      )
-    }
+  const { data: { session } } = await supabase.auth.getSession();
 
-    const maxSize = 5 * 1024 * 1024 // 5MB
-    if (file.size > maxSize) {
-      throw new S3UploadError(
-        'File size exceeds 5MB limit.',
-        'FILE_TOO_LARGE'
-      )
-    }
+  if (!session?.access_token) {
+    throw new S3UploadError('Not authenticated', 'AUTH_REQUIRED', 401);
+  }
 
-    // Generate unique key
-    const timestamp = Date.now()
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-    const key = `profiles/${userId}/${timestamp}_${sanitizedName}`
+  onProgress?.({ percentage: 10, loaded: 0, total: file.size });
 
-    // Get pre-signed URL from backend
-    const presignResponse = await fetch(`${API_BASE_URL}/v1/media/upload-url`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-url`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
       body: JSON.stringify({
-        key,
+        type: "profile",
+        userId,
+        filename: file.name,
         contentType: file.type,
       }),
-    })
-
-    if (!presignResponse.ok) {
-      const error = await presignResponse.json().catch(() => ({}))
-      throw new S3UploadError(
-        error.message || 'Failed to get upload URL',
-        'PRESIGN_FAILED',
-        presignResponse.status
-      )
     }
+  );
 
-    const { uploadUrl, publicUrl } = await presignResponse.json()
-
-    // Upload to S3 with progress tracking
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable && onProgress) {
-          onProgress({
-            loaded: e.loaded,
-            total: e.total,
-            percentage: Math.round((e.loaded / e.total) * 100),
-          })
-        }
-      })
-
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve()
-        } else {
-          reject(new S3UploadError(
-            'Upload failed',
-            'UPLOAD_FAILED',
-            xhr.status
-          ))
-        }
-      })
-
-      xhr.addEventListener('error', () => {
-        reject(new S3UploadError(
-          'Network error during upload',
-          'NETWORK_ERROR'
-        ))
-      })
-
-      xhr.addEventListener('abort', () => {
-        reject(new S3UploadError(
-          'Upload aborted',
-          'UPLOAD_ABORTED'
-        ))
-      })
-
-      xhr.open('PUT', uploadUrl)
-      xhr.setRequestHeader('Content-Type', file.type)
-      xhr.send(file)
-    })
-
-    return { key, publicUrl }
-  } catch (error) {
-    if (error instanceof S3UploadError) {
-      throw error
-    }
+  if (!response.ok) {
+    const error = await response.json();
     throw new S3UploadError(
-      error instanceof Error ? error.message : 'Upload failed',
-      'UNKNOWN_ERROR'
-    )
+      error.error || "Failed to get upload URL",
+      error.error,
+      response.status
+    );
   }
+
+  const { uploadUrl, publicUrl, s3Key } = await response.json();
+
+  onProgress?.({ percentage: 30, loaded: 0, total: file.size });
+
+  const xhr = new XMLHttpRequest();
+
+  const uploadPromise = new Promise<void>((resolve, reject) => {
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const percentage = 30 + Math.round((e.loaded / e.total) * 60);
+        onProgress?.({
+          percentage,
+          loaded: e.loaded,
+          total: e.total,
+        });
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new S3UploadError('Failed to upload to S3', 'S3_UPLOAD_FAILED', xhr.status));
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      reject(new S3UploadError('Network error during upload', 'NETWORK_ERROR'));
+    });
+
+    xhr.addEventListener('abort', () => {
+      reject(new S3UploadError('Upload cancelled', 'UPLOAD_CANCELLED'));
+    });
+
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', file.type);
+    xhr.send(file);
+  });
+
+  await uploadPromise;
+
+  onProgress?.({ percentage: 100, loaded: file.size, total: file.size });
+
+  return { publicUrl, s3Key };
 }
