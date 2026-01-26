@@ -11,7 +11,8 @@ const ALLOWED_VIDEO_TYPES = ['video/mp4'];
 export function MediaUploader() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
-  const { draft, addMedia, removeMedia, reorderMedia, updateMedia } = useListingCreation();
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const { draft, addMedia, removeMedia, reorderMedia, updateMedia, saveDraft } = useListingCreation();
 
   const validateFile = (file: File): string | null => {
     const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
@@ -76,6 +77,9 @@ export function MediaUploader() {
         uploading: false,
         uploadProgress: 100,
       });
+
+      await saveDraft();
+
     } catch (error: any) {
       updateMedia(index, {
         uploading: false,
@@ -99,26 +103,31 @@ export function MediaUploader() {
       const newMedia: ListingMedia = {
         file,
         type: isImage ? 'IMAGE' : 'VIDEO',
-        size_bytes: file.size,
-        sort_order: draft.media.length,
+        url: '',
+        s3_key: '',
+        s3_bucket: '',
         uploading: true,
         uploadProgress: 0,
+        size_bytes: file.size,
+        sort_order: draft.media.length,
       };
 
+      const currentIndex = draft.media.length;
       addMedia(newMedia);
-      const index = draft.media.length;
-      await uploadToS3(file, index);
+      await uploadToS3(file, currentIndex);
     }
   };
 
-  const handleDrag = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -132,39 +141,41 @@ export function MediaUploader() {
   };
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index.toString());
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDropReorder = async (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    e.stopPropagation();
+
+    if (draggedIndex === null || draggedIndex === dropIndex) return;
+
+    reorderMedia(draggedIndex, dropIndex);
+    setDraggedIndex(null);
+
+    await saveDraft();
   };
 
-  const handleDropReorder = (e: React.DragEvent, toIndex: number) => {
-    e.preventDefault();
-    const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
-    if (fromIndex !== toIndex) {
-      reorderMedia(fromIndex, toIndex);
+  const handleDelete = async (index: number) => {
+    if (confirm('Are you sure you want to delete this media?')) {
+      removeMedia(index);
+      await saveDraft();
     }
   };
 
   return (
     <div className="space-y-4">
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-          dragActive
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400'
-        } ${draft.media.length >= MAX_MEDIA ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-        onDragEnter={handleDrag}
-        onDragOver={handleDrag}
-        onDragLeave={handleDrag}
-        onDrop={handleDrop}
         onClick={() => draft.media.length < MAX_MEDIA && fileInputRef.current?.click()}
-        role="button"
-        tabIndex={0}
-        aria-label="Upload media files"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`
+          border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+          ${dragActive ? 'border-primary-500 bg-primary-50' : 'border-gray-300 hover:border-gray-400'}
+          ${draft.media.length >= MAX_MEDIA ? 'opacity-50 cursor-not-allowed' : ''}
+        `}
       >
         <svg
           className="mx-auto h-12 w-12 text-gray-400"
@@ -200,7 +211,7 @@ export function MediaUploader() {
 
       {draft.media.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {draft.media.map((media, index) => (
+          {draft.media.filter(m => !m.error).map((media, index) => (
             <div
               key={index}
               draggable
@@ -210,7 +221,7 @@ export function MediaUploader() {
               className="relative aspect-square border-2 border-gray-300 rounded-lg overflow-hidden group cursor-move"
             >
               {index === 0 && (
-                <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded z-10">
+                <div className="absolute top-2 left-2 bg-primary-600 text-white text-xs px-2 py-1 rounded z-10">
                   Primary
                 </div>
               )}
@@ -218,7 +229,7 @@ export function MediaUploader() {
               {media.uploading ? (
                 <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
                   <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                    <div className="w-16 h-16 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto" />
                     <p className="text-sm text-gray-600 mt-2">
                       {Math.round(media.uploadProgress || 0)}%
                     </p>
@@ -233,28 +244,27 @@ export function MediaUploader() {
                   {media.type === 'IMAGE' ? (
                     <img
                       src={media.url}
-                      alt={`Upload ${index + 1}`}
+                      alt=""
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     <video
                       src={media.url}
                       className="w-full h-full object-cover"
-                      muted
+                      controls
                     />
                   )}
+                  
+                  <button
+                    onClick={() => handleDelete(index)}
+                    className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </>
               ) : null}
-
-              <button
-                onClick={() => removeMedia(index)}
-                className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                aria-label={`Remove media ${index + 1}`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
             </div>
           ))}
         </div>
