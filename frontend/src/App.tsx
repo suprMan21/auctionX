@@ -4,12 +4,14 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from './features/auth/hooks/useAuth';
 import { LoginPage } from './features/auth/pages/LoginPage';
 import { SignupPage } from './features/auth/pages/SignupPage';
+import { ForgotPasswordPage } from './features/auth/pages/ForgotPasswordPage';
 import { ProfilePage } from './features/profile/pages/ProfilePage';
 import { SellerProfilePage } from './features/profile/pages/SellerProfilePage';
 import { CreateListing } from './pages/CreateListing';
 import { MyListings } from './pages/MyListings';
 import { ViewListing } from './pages/ViewListing';
 import { AuctionDetailPage } from './features/auctions/components/AuctionDetailPage';
+import { Header } from './components/navigation/Header';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -26,7 +28,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <Header />
+      {children}
+    </>
+  );
 }
 
 function App() {
@@ -36,6 +43,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<SignupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           
           <Route
             path="/profile"

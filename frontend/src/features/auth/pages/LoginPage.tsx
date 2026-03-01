@@ -100,7 +100,7 @@ export function LoginPage() {
           <p className="mt-6 text-center text-gray-400">
             Don't have an account?{' '}
             <Link 
-              to="/signup" 
+              to="/register"
               className="text-accent-500 hover:text-accent-400 underline font-medium
                          focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 rounded"
             >

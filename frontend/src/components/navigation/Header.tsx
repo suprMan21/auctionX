@@ -89,7 +89,7 @@ export function Header() {
                     Log In
                   </Button>
                 </Link>
-                <Link to="/signup">
+                <Link to="/register">
                   <Button variant="primary" size="md">
                     Sign Up
                   </Button>
