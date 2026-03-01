@@ -1,55 +1,42 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/unmentionables-4ef02/us-east-2/api/v1';
+import { supabase } from './supabase';
 
-class ApiClient {
-  private baseUrl: string;
-  private token: string | null = null;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+async function getAuthHeader() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('Not authenticated');
   }
-
-  setToken(token: string | null) {
-    this.token = token;
-  }
-
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string>),
-    };
-
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
-
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...options,
-      headers,
-    });
-
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.statusText}`);
-    }
-
-    return response.json();
-  }
-
-  async login(email: string, password: string) {
-    return this.request<{ token: string; user: any }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-  }
-
-  async register(email: string, password: string, userData: any) {
-    return this.request<{ token: string; user: any }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, ...userData }),
-    });
-  }
+  return { Authorization: `Bearer ${session.access_token}` };
 }
 
-export const apiClient = new ApiClient(API_BASE_URL);
+export const api = {
+  async getAuction(auctionId: string) {
+    const response = await fetch(`${API_URL}/auctions/${auctionId}`);
+    if (!response.ok) throw new Error('Failed to fetch auction');
+    return response.json();
+  },
+
+  async getBidHistory(auctionId: string) {
+    const response = await fetch(`${API_URL}/auctions/${auctionId}/bids`);
+    if (!response.ok) throw new Error('Failed to fetch bids');
+    return response.json();
+  },
+
+  async placeBid(auctionId: string, amountCents: number, maxBidCents?: number) {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/auctions/${auctionId}/bids`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ auctionId, amountCents, maxBidCents }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to place bid');
+    }
+    return response.json();
+  },
+};

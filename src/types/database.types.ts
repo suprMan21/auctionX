@@ -7,85 +7,33 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.1"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
-      admin_roles: {
-        Row: {
-          created_at: string | null
-          permissions: Database["public"]["Enums"]["admin_permission"][]
-          role_id: string
-          role_name: string
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          permissions: Database["public"]["Enums"]["admin_permission"][]
-          role_id?: string
-          role_name: string
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          permissions?: Database["public"]["Enums"]["admin_permission"][]
-          role_id?: string
-          role_name?: string
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      admin_users: {
-        Row: {
-          admin_id: string
-          assigned_by: string | null
-          brand: string
-          created_at: string | null
-          is_active: boolean | null
-          last_active_at: string | null
-          role_id: string
-          session_version: number
-        }
-        Insert: {
-          admin_id: string
-          assigned_by?: string | null
-          brand: string
-          created_at?: string | null
-          is_active?: boolean | null
-          last_active_at?: string | null
-          role_id: string
-          session_version?: number
-        }
-        Update: {
-          admin_id?: string
-          assigned_by?: string | null
-          brand?: string
-          created_at?: string | null
-          is_active?: boolean | null
-          last_active_at?: string | null
-          role_id?: string
-          session_version?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "admin_users_assigned_by_fkey"
-            columns: ["assigned_by"]
-            isOneToOne: false
-            referencedRelation: "admin_users"
-            referencedColumns: ["admin_id"]
-          },
-          {
-            foreignKeyName: "admin_users_role_id_fkey"
-            columns: ["role_id"]
-            isOneToOne: false
-            referencedRelation: "admin_roles"
-            referencedColumns: ["role_id"]
-          },
-        ]
-      }
       auctions: {
         Row: {
           created_at: string
@@ -175,59 +123,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
-        ]
-      }
-      audit_logs: {
-        Row: {
-          action: string
-          admin_email: string
-          admin_id: string
-          brand: string
-          changes: Json | null
-          created_at: string | null
-          entity_id: string
-          entity_type: string
-          ip_address: unknown
-          log_id: string
-          reason: string | null
-          user_agent: string | null
-        }
-        Insert: {
-          action: string
-          admin_email: string
-          admin_id: string
-          brand: string
-          changes?: Json | null
-          created_at?: string | null
-          entity_id: string
-          entity_type: string
-          ip_address?: unknown
-          log_id?: string
-          reason?: string | null
-          user_agent?: string | null
-        }
-        Update: {
-          action?: string
-          admin_email?: string
-          admin_id?: string
-          brand?: string
-          changes?: Json | null
-          created_at?: string | null
-          entity_id?: string
-          entity_type?: string
-          ip_address?: unknown
-          log_id?: string
-          reason?: string | null
-          user_agent?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "audit_logs_admin_id_fkey"
-            columns: ["admin_id"]
-            isOneToOne: false
-            referencedRelation: "admin_users"
-            referencedColumns: ["admin_id"]
           },
         ]
       }
@@ -519,85 +414,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
-        ]
-      }
-      moderation_queue: {
-        Row: {
-          action_taken: Database["public"]["Enums"]["moderation_action"] | null
-          assigned_at: string | null
-          assigned_to: string | null
-          brand: string
-          created_at: string | null
-          flagged_by: string | null
-          flagged_by_system: boolean | null
-          flagged_reason: string
-          listing_id: string
-          priority: number | null
-          queue_id: string
-          resolution_notes: string | null
-          resolved_at: string | null
-          resolved_by: string | null
-          status: Database["public"]["Enums"]["moderation_status"]
-          updated_at: string | null
-        }
-        Insert: {
-          action_taken?: Database["public"]["Enums"]["moderation_action"] | null
-          assigned_at?: string | null
-          assigned_to?: string | null
-          brand: string
-          created_at?: string | null
-          flagged_by?: string | null
-          flagged_by_system?: boolean | null
-          flagged_reason: string
-          listing_id: string
-          priority?: number | null
-          queue_id?: string
-          resolution_notes?: string | null
-          resolved_at?: string | null
-          resolved_by?: string | null
-          status?: Database["public"]["Enums"]["moderation_status"]
-          updated_at?: string | null
-        }
-        Update: {
-          action_taken?: Database["public"]["Enums"]["moderation_action"] | null
-          assigned_at?: string | null
-          assigned_to?: string | null
-          brand?: string
-          created_at?: string | null
-          flagged_by?: string | null
-          flagged_by_system?: boolean | null
-          flagged_reason?: string
-          listing_id?: string
-          priority?: number | null
-          queue_id?: string
-          resolution_notes?: string | null
-          resolved_at?: string | null
-          resolved_by?: string | null
-          status?: Database["public"]["Enums"]["moderation_status"]
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "moderation_queue_assigned_to_fkey"
-            columns: ["assigned_to"]
-            isOneToOne: false
-            referencedRelation: "admin_users"
-            referencedColumns: ["admin_id"]
-          },
-          {
-            foreignKeyName: "moderation_queue_listing_id_fkey"
-            columns: ["listing_id"]
-            isOneToOne: false
-            referencedRelation: "listings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "moderation_queue_resolved_by_fkey"
-            columns: ["resolved_by"]
-            isOneToOne: false
-            referencedRelation: "admin_users"
-            referencedColumns: ["admin_id"]
           },
         ]
       }
@@ -1069,7 +885,6 @@ export type Database = {
           age_verified_at: string | null
           ban_reason: string | null
           banned_at: string | null
-          banned_by: string | null
           banned_until: string | null
           created_at: string
           deleted_at: string | null
@@ -1103,7 +918,6 @@ export type Database = {
           age_verified_at?: string | null
           ban_reason?: string | null
           banned_at?: string | null
-          banned_by?: string | null
           banned_until?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -1137,7 +951,6 @@ export type Database = {
           age_verified_at?: string | null
           ban_reason?: string | null
           banned_at?: string | null
-          banned_by?: string | null
           banned_until?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -1165,25 +978,13 @@ export type Database = {
           updated_at?: string
           warning_count?: number
         }
-        Relationships: [
-          {
-            foreignKeyName: "users_banned_by_fkey"
-            columns: ["banned_by"]
-            isOneToOne: false
-            referencedRelation: "admin_users"
-            referencedColumns: ["admin_id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      ban_user: {
-        Args: { p_admin_id: string; p_reason: string; p_user_id: string }
-        Returns: undefined
-      }
       calculate_platform_fee_percent: {
         Args: { tier: Database["public"]["Enums"]["tier_level"] }
         Returns: number
@@ -1199,10 +1000,6 @@ export type Database = {
         Args: { trailing_12mo_sales: number }
         Returns: Database["public"]["Enums"]["tier_level"]
       }
-      deactivate_admin: {
-        Args: { p_admin_id: string; p_reason?: string }
-        Returns: undefined
-      }
       determine_risk_level: {
         Args: { flags: Database["public"]["Enums"]["content_flag"][] }
         Returns: Database["public"]["Enums"]["content_risk_level"]
@@ -1213,39 +1010,10 @@ export type Database = {
         Args: { auction_uuid: string; user_uuid: string }
         Returns: boolean
       }
-      reactivate_admin: { Args: { p_admin_id: string }; Returns: undefined }
-      revoke_admin_session: { Args: { p_admin_id: string }; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
-      suspend_user: {
-        Args: {
-          p_admin_id: string
-          p_duration_hours: number
-          p_reason: string
-          p_user_id: string
-        }
-        Returns: undefined
-      }
-      unban_user: {
-        Args: { p_admin_id: string; p_user_id: string }
-        Returns: undefined
-      }
-      unsuspend_user: {
-        Args: { p_admin_id: string; p_user_id: string }
-        Returns: undefined
-      }
     }
     Enums: {
-      admin_permission:
-        | "view_users"
-        | "manage_users"
-        | "view_listings"
-        | "moderate_listings"
-        | "view_payments"
-        | "process_refunds"
-        | "view_analytics"
-        | "manage_admins"
-        | "view_audit_logs"
       auction_status:
         | "DRAFT"
         | "SCHEDULED"
@@ -1287,19 +1055,6 @@ export type Database = {
         | "SOLD"
         | "CANCELLED"
         | "REMOVED"
-      moderation_action:
-        | "approve"
-        | "reject"
-        | "remove_listing"
-        | "suspend_user"
-        | "ban_user"
-        | "flag_for_review"
-      moderation_status:
-        | "pending"
-        | "in_review"
-        | "approved"
-        | "rejected"
-        | "escalated"
       payment_method_type: "CARD" | "CRYPTO"
       payment_processor:
         | "STRIPE"
@@ -1459,19 +1214,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
-      admin_permission: [
-        "view_users",
-        "manage_users",
-        "view_listings",
-        "moderate_listings",
-        "view_payments",
-        "process_refunds",
-        "view_analytics",
-        "manage_admins",
-        "view_audit_logs",
-      ],
       auction_status: [
         "DRAFT",
         "SCHEDULED",
@@ -1509,21 +1256,6 @@ export const Constants = {
         "SOLD",
         "CANCELLED",
         "REMOVED",
-      ],
-      moderation_action: [
-        "approve",
-        "reject",
-        "remove_listing",
-        "suspend_user",
-        "ban_user",
-        "flag_for_review",
-      ],
-      moderation_status: [
-        "pending",
-        "in_review",
-        "approved",
-        "rejected",
-        "escalated",
       ],
       payment_method_type: ["CARD", "CRYPTO"],
       payment_processor: [
@@ -1566,3 +1298,4 @@ export const Constants = {
     },
   },
 } as const
+

@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import { requestIdMiddleware } from './middleware/requestId';
 import { log } from './lib/logger';
 import auctionRoutes from './routes/auctions';
-import paymentRoutes from './routes/payments';
 import webhookRoutes from './routes/webhooks';
 import adminRoutes from './routes/admin/index';
 
@@ -27,7 +26,6 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/v1/auctions', auctionRoutes);
-app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/admin', adminRoutes);
 
@@ -45,8 +43,6 @@ app.listen(PORT, () => {
   console.log(`   GET  /api/v1/auctions/:id`);
   console.log(`   GET  /api/v1/auctions/:id/bids`);
   console.log(`   POST /api/v1/auctions/:id/bids`);
-  console.log(`   POST /api/v1/payments/auctions/:auctionId/payment`);
-  console.log(`   GET  /api/v1/payments/transactions/:transactionId`);
   console.log(`   POST /api/v1/webhooks/paymentcloud`);
   console.log(`🛡️  Admin endpoints:`);
   console.log(`   GET  /api/v1/admin/users`);

@@ -9,6 +9,7 @@ import { SellerProfilePage } from './features/profile/pages/SellerProfilePage';
 import { CreateListing } from './pages/CreateListing';
 import { MyListings } from './pages/MyListings';
 import { ViewListing } from './pages/ViewListing';
+import { AuctionDetailPage } from './features/auctions/components/AuctionDetailPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -73,6 +74,7 @@ function App() {
           />
           
           <Route path="/listings/:id" element={<ViewListing />} />
+          <Route path="/auctions/:id" element={<AuctionDetailPage />} />
           <Route path="/seller/:id" element={<SellerProfilePage />} />
           
           <Route path="/" element={<Navigate to="/my-listings" replace />} />

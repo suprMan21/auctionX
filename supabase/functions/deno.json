@@ -1,0 +1,9 @@
+{
+  "nodeModulesDir": "auto",
+  "imports": {
+    "stripe": "npm:stripe@14.17.0"
+  },
+  "tasks": {
+    "cache": "deno cache _shared/payment/ProcessorFactory.ts"
+  }
+}
