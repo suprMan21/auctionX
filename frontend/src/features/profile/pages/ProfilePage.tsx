@@ -8,16 +8,9 @@ import { supabase } from '@/features/auth/lib/supabase';
 import { ErrorHandler, AppError, ErrorCode } from '@/lib/errors/ErrorHandler';
 
 interface Profile {
-  user_id: string;
+  id: string;
   display_name: string | null;
-  bio: string | null;
-  profile_photo_url: string | null;
-  shipping_address_line1: string | null;
-  shipping_address_line2: string | null;
-  shipping_city: string | null;
-  shipping_state: string | null;
-  shipping_postal_code: string | null;
-  shipping_country: string | null;
+  photo_url: string | null;
 }
 
 export function ProfilePage() {
@@ -44,9 +37,9 @@ export function ProfilePage() {
 
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', user.id)
+        .from('users')
+        .select('id, display_name, photo_url')
+        .eq('id', user.id)
         .single();
 
       if (error) throw error;
@@ -54,8 +47,7 @@ export function ProfilePage() {
       if (data) {
         setProfile(data);
         setDisplayName(data.display_name || '');
-        setBio(data.bio || '');
-        setPhotoPreview(data.profile_photo_url);
+        setPhotoPreview(data.photo_url);
       }
     } catch (error) {
       ErrorHandler.handle(error, 'ProfilePage.loadProfile');
@@ -105,7 +97,7 @@ export function ProfilePage() {
     setSaving(true);
 
     try {
-      let photoUrl = profile?.profile_photo_url;
+      let photoUrl = profile?.photo_url ?? null;
 
       if (photoFile) {
         const fileExt = photoFile.name.split('.').pop();
@@ -126,14 +118,13 @@ export function ProfilePage() {
       }
 
       const { error } = await supabase
-        .from('user_profiles')
-        .upsert({
-          user_id: user.id,
+        .from('users')
+        .update({
           display_name: displayName || null,
-          bio: bio || null,
-          profile_photo_url: photoUrl,
-          updated_at: new Date().toISOString()
-        });
+          photo_url: photoUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
 
       if (error) throw error;
 
@@ -155,9 +146,9 @@ export function ProfilePage() {
 
   return (
     <ErrorBoundary>
-      <a 
-        href="#main-content" 
-        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4
                    bg-primary-500 text-white px-4 py-2 rounded-lg z-50
                    focus:outline-none focus:ring-2 focus:ring-white"
       >
@@ -179,11 +170,11 @@ export function ProfilePage() {
                 <h2 id="photo-heading" className="text-xl font-semibold text-white mb-4">
                   Profile Photo
                 </h2>
-                
+
                 <div className="flex items-center gap-6">
                   {photoPreview ? (
-                    <img 
-                      src={photoPreview} 
+                    <img
+                      src={photoPreview}
                       alt="Profile preview"
                       className="w-24 h-24 rounded-full object-cover"
                     />
@@ -192,10 +183,10 @@ export function ProfilePage() {
                       <span className="text-gray-500 text-sm">No photo</span>
                     </div>
                   )}
-                  
+
                   <label className="cursor-pointer">
                     <span className="sr-only">Choose profile photo</span>
-                    <Button type="button" variant="secondary" size="md" as="span">
+                    <Button type="button" variant="secondary" size="md">
                       Choose Photo
                     </Button>
                     <input
@@ -238,7 +229,7 @@ export function ProfilePage() {
                       className="w-full min-h-[120px] px-4 py-3 rounded-xl
                                 bg-dark-600 text-white placeholder:text-gray-500
                                 border border-transparent
-                                focus:outline-none focus:ring-2 focus:ring-primary-500 
+                                focus:outline-none focus:ring-2 focus:ring-primary-500
                                 focus:ring-offset-2 focus:ring-offset-dark-800
                                 resize-none"
                     />
@@ -247,16 +238,16 @@ export function ProfilePage() {
               </section>
 
               <div className="flex gap-4">
-                <Button 
-                  type="submit" 
-                  variant="primary" 
-                  size="lg" 
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
                   disabled={saving}
                   fullWidth
                 >
                   {saving ? 'Saving...' : 'Save Profile'}
                 </Button>
-                
+
                 <Button
                   type="button"
                   variant="ghost"

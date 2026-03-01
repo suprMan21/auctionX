@@ -1,4 +1,4 @@
-import { useListingCreation, ListingMedia } from '../../../stores/listingCreationStore';
+import { useListingCreation } from '../../../stores/listingCreationStore';
 import { MediaUploader } from '../MediaUploader';
 
 export function MediaStep() {

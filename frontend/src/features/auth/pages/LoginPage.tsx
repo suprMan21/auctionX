@@ -79,7 +79,7 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              error={error}
+              error={error ?? undefined}
             />
 
             <Button type="submit" variant="primary" size="lg" fullWidth disabled={loading}>

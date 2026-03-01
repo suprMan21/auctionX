@@ -79,11 +79,11 @@ export const listingsApi = {
   },
 
   async getDraft(id: string) {
-    const { data: result, error } = await supabase.functions.invoke(`listings`, {
+    const { error: invokeError } = await supabase.functions.invoke(`listings`, {
       method: 'GET',
     });
 
-    if (error) throw error;
+    if (invokeError) throw invokeError;
     
     const { data, error: fetchError } = await supabase
       .from('listings')
@@ -171,7 +171,7 @@ export const listingsApi = {
     }
 
     if (params.status) {
-      query = query.eq('status', params.status);
+      query = query.eq('status', params.status as 'DRAFT' | 'ACTIVE' | 'CANCELLED' | 'PENDING_REVIEW' | 'SOLD' | 'REMOVED');
     } else {
       query = query.eq('status', 'ACTIVE');
     }

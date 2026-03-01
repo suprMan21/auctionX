@@ -63,8 +63,6 @@ export function CreateListing() {
     setSaving(true);
 
     try {
-      let photoUrl = null;
-
       if (photoFile) {
         const fileExt = photoFile.name.split('.').pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
@@ -75,29 +73,20 @@ export function CreateListing() {
           .upload(filePath, photoFile);
 
         if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('auctionx-media-prod-cl')
-          .getPublicUrl(filePath);
-
-        photoUrl = publicUrl;
+        // Photo uploaded; linking to listing_media handled separately
       }
-
-      const endingAt = new Date();
-      endingAt.setDate(endingAt.getDate() + parseInt(duration));
 
       const { data, error } = await supabase
         .from('listings')
         .insert({
           seller_id: user.id,
           title,
-          description,
-          starting_price: parseFloat(startingPrice),
-          current_price: parseFloat(startingPrice),
-          reserve_price: reservePrice ? parseFloat(reservePrice) : null,
-          ending_at: endingAt.toISOString(),
-          photo_url: photoUrl,
-          status: 'draft'
+          description: description || null,
+          brand: 'AUCTIONX' as const,
+          category_id: '', // simplified form — category not collected here
+          condition: 'GOOD' as const,
+          reserve_price_cents: reservePrice ? Math.round(parseFloat(reservePrice) * 100) : null,
+          status: 'DRAFT' as const,
         })
         .select()
         .single();

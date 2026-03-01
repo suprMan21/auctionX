@@ -12,7 +12,7 @@ export function PricingStep() {
   const { user } = useAuth();
 
   const reservePriceDollars = draft.reserve_price_cents / 100;
-  const sellerTier = user?.user_metadata?.seller_tier || 'TIER_1';
+  const sellerTier = (user?.user_metadata?.seller_tier || 'TIER_1') as keyof typeof TIER_FEES;
   const platformFeePercent = TIER_FEES[sellerTier] * 100;
   const estimatedFee = draft.reserve_price_cents * TIER_FEES[sellerTier];
 

@@ -16,7 +16,7 @@ export function ReviewStep() {
       const listingId = await publishListing();
       navigate(`/listings/${listingId}`);
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'An error occurred');
       setPublishing(false);
     }
   };

@@ -128,7 +128,7 @@ export const useListingCreation = create<ListingCreationState>()(
           const { draft } = get();
           
           const payload = {
-            id: draft.id,
+            id: draft.id ?? '',
             title: draft.title,
             description: draft.description,
             category_id: draft.category_id!,
@@ -166,14 +166,25 @@ export const useListingCreation = create<ListingCreationState>()(
         set({ isSaving: true, lastError: null });
         try {
           const draft = await listingsApi.getDraft(id);
-          set({ 
+          set({
             draft: {
-              ...draft,
-              media: draft.listing_media || [],
+              ...initialDraft,
+              id: draft.id,
+              title: draft.title || '',
+              description: draft.description || '',
+              category_id: draft.category_id,
+              condition: draft.condition,
+              reserve_price_cents: draft.reserve_price_cents ?? 0,
+              currency: draft.currency,
+              country: draft.location_country || 'CA',
+              region: draft.location_region || '',
+              city: draft.location_city || '',
+              postal_fsa: '',
+              media: (draft.listing_media || []) as unknown as ListingMedia[],
               current_step: 0,
-            }, 
-            isDirty: false, 
-            isSaving: false 
+            },
+            isDirty: false,
+            isSaving: false
           });
         } catch (error: any) {
           console.error('Load draft error:', error);
@@ -195,7 +206,7 @@ export const useListingCreation = create<ListingCreationState>()(
           }
           
           const result = await listingsApi.publish({
-            id: draft.id,
+            id: draft.id ?? '',
             title: draft.title,
             description: draft.description,
             category_id: draft.category_id,

@@ -21,7 +21,7 @@ export function ViewListing() {
       const data = await listingsApi.getById(listingId);
       setListing(data);
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
