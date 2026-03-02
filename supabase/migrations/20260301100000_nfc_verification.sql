@@ -139,9 +139,11 @@ DROP POLICY IF EXISTS "participants_read_transfers"        ON ownership_transfer
 DROP POLICY IF EXISTS "service_insert_transfers"           ON ownership_transfers;
 
 -- Public SELECT for published verifications
+-- Cast to text avoids the pg 55P04 "unsafe use of new enum value" error when
+-- the enum values were added in the same migration transaction via ADD VALUE.
 CREATE POLICY "public_read_verified_verifications"
   ON item_verifications FOR SELECT
-  USING (status IN ('VERIFIED', 'VIDEO_UPLOADED', 'NFC_PROGRAMMED'));
+  USING (status::text IN ('VERIFIED', 'VIDEO_UPLOADED', 'NFC_PROGRAMMED'));
 
 -- Seller has full access to their own verifications
 CREATE POLICY "seller_all_own_verifications"

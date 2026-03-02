@@ -382,6 +382,82 @@ export type Database = {
           },
         ]
       }
+      item_verifications: {
+        Row: {
+          created_at: string
+          current_owner_id: string | null
+          id: string
+          listing_id: string
+          nfc_programmed_at: string | null
+          nfc_tag_uid: string | null
+          scan_count: number
+          seller_id: string
+          share_count: number
+          status: Database["public"]["Enums"]["verification_status"]
+          token_name: string
+          updated_at: string
+          video_duration_seconds: number | null
+          video_url: string | null
+          view_count: number
+        }
+        Insert: {
+          created_at?: string
+          current_owner_id?: string | null
+          id?: string
+          listing_id: string
+          nfc_programmed_at?: string | null
+          nfc_tag_uid?: string | null
+          scan_count?: number
+          seller_id: string
+          share_count?: number
+          status?: Database["public"]["Enums"]["verification_status"]
+          token_name: string
+          updated_at?: string
+          video_duration_seconds?: number | null
+          video_url?: string | null
+          view_count?: number
+        }
+        Update: {
+          created_at?: string
+          current_owner_id?: string | null
+          id?: string
+          listing_id?: string
+          nfc_programmed_at?: string | null
+          nfc_tag_uid?: string | null
+          scan_count?: number
+          seller_id?: string
+          share_count?: number
+          status?: Database["public"]["Enums"]["verification_status"]
+          token_name?: string
+          updated_at?: string
+          video_duration_seconds?: number | null
+          video_url?: string | null
+          view_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_verifications_current_owner_id_fkey"
+            columns: ["current_owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "item_verifications_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "item_verifications_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       listing_media: {
         Row: {
           duration_seconds: number | null
@@ -598,6 +674,65 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "admin_users"
             referencedColumns: ["admin_id"]
+          },
+        ]
+      }
+      ownership_transfers: {
+        Row: {
+          from_user_id: string | null
+          id: string
+          settlement_id: string | null
+          to_user_id: string
+          transfer_type: Database["public"]["Enums"]["transfer_type"]
+          transferred_at: string
+          verification_id: string
+        }
+        Insert: {
+          from_user_id?: string | null
+          id?: string
+          settlement_id?: string | null
+          to_user_id: string
+          transfer_type: Database["public"]["Enums"]["transfer_type"]
+          transferred_at?: string
+          verification_id: string
+        }
+        Update: {
+          from_user_id?: string | null
+          id?: string
+          settlement_id?: string | null
+          to_user_id?: string
+          transfer_type?: Database["public"]["Enums"]["transfer_type"]
+          transferred_at?: string
+          verification_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ownership_transfers_from_user_id_fkey"
+            columns: ["from_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ownership_transfers_settlement_id_fkey"
+            columns: ["settlement_id"]
+            isOneToOne: false
+            referencedRelation: "settlements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ownership_transfers_to_user_id_fkey"
+            columns: ["to_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ownership_transfers_verification_id_fkey"
+            columns: ["verification_id"]
+            isOneToOne: false
+            referencedRelation: "item_verifications"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1468,6 +1603,7 @@ export type Database = {
         Args: { flags: Database["public"]["Enums"]["content_flag"][] }
         Returns: Database["public"]["Enums"]["content_risk_level"]
       }
+      generate_token_name: { Args: { p_user_id: string }; Returns: string }
       get_minimum_next_bid: { Args: { auction_uuid: string }; Returns: number }
       get_next_eligible_bidder: {
         Args: { p_auction_id: string; p_exclude_uids: string[] }
@@ -1594,6 +1730,7 @@ export type Database = {
         | "PARTIALLY_REFUNDED"
         | "DISPUTED"
         | "EXPIRED"
+      transfer_type: "SALE" | "GIFT" | "RETURN"
       user_role:
         | "user"
         | "moderator"
@@ -1601,7 +1738,16 @@ export type Database = {
         | "super_admin"
         | "support"
         | "finance"
-      verification_status: "NONE" | "PENDING" | "APPROVED" | "REJECTED"
+      verification_status:
+        | "NONE"
+        | "PENDING"
+        | "APPROVED"
+        | "REJECTED"
+        | "VIDEO_UPLOADED"
+        | "NFC_PROGRAMMED"
+        | "VERIFIED"
+        | "FLAGGED"
+        | "REVOKED"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1822,6 +1968,7 @@ export const Constants = {
         "DISPUTED",
         "EXPIRED",
       ],
+      transfer_type: ["SALE", "GIFT", "RETURN"],
       user_role: [
         "user",
         "moderator",
@@ -1830,7 +1977,17 @@ export const Constants = {
         "support",
         "finance",
       ],
-      verification_status: ["NONE", "PENDING", "APPROVED", "REJECTED"],
+      verification_status: [
+        "NONE",
+        "PENDING",
+        "APPROVED",
+        "REJECTED",
+        "VIDEO_UPLOADED",
+        "NFC_PROGRAMMED",
+        "VERIFIED",
+        "FLAGGED",
+        "REVOKED",
+      ],
     },
   },
 } as const

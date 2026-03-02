@@ -78,16 +78,16 @@ export function TokenCreationPage() {
     // We'll call the verifications detail via a workaround: store token in location state,
     // or re-fetch from backend. For MVP, we use a direct Supabase query from the client.
     // The RLS "seller_all_own_verifications" policy allows the authenticated seller to read their own row.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase.from as any)('item_verifications')
+    supabase
+      .from('item_verifications')
       .select('*')
       .eq('id', verificationId)
       .single()
-      .then(({ data, error }: { data: unknown; error: unknown }) => {
+      .then(({ data, error }) => {
         if (error || !data) {
           setLoadError('Could not load verification. Please go back and try again.');
         } else {
-          setVerification(data as Verification);
+          setVerification(data as unknown as Verification);
         }
       });
   }, [verificationId]);
