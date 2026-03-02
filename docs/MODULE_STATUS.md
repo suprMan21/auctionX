@@ -1,9 +1,9 @@
 # AuctionX Module Status (Post-Audit)
 
-**Last Updated:** March 1, 2026 (Pass 4 — cleanup complete)
+**Last Updated:** March 1, 2026 (Module 11 — auction settlement complete)
 **Audit Date:** February 28, 2026
 **Phase 0 Completed:** March 1, 2026 — 0 TS errors frontend/backend, critical security fix, dead code purge, route wiring, rate limiting, docs consolidation
-**Honest Progress:** 9/18 modules production-ready
+**Honest Progress:** 10/18 modules production-ready
 
 ---
 
@@ -20,7 +20,8 @@
 | 07 Design System | ✅ Ready | ✅ Ready | ✅ Fixed: Header wired into authenticated layout (Pass 4) |
 | 08 Auction Frontend+Backend | ✅ Ready | ✅ Ready | ✅ Fixed: bid rate limiting added (Pass 4) |
 | 09 Payment Cascade | ⚠️ Deployed | ⚠️ Security fixed | ✅ Fixed: mockUserId removed, table names corrected (Pass 3). Awaiting API keys |
-| 10 Admin Dashboard | Backend ✅ | Backend ✅ | Frontend not started (as documented) |
+| 10 Admin Dashboard | Backend ✅ | ✅ Complete | ✅ Frontend built (Module 10) |
+| 11 Auction Settlement | ❌ Not started | ✅ Complete | ✅ Built and deployed (March 1, 2026) |
 
 ---
 
@@ -63,11 +64,20 @@
 - **Known gap:** bid history not paginated
 - **Status:** PRODUCTION READY (pending settlement)
 
-### Module 10: Admin Dashboard — Backend Only
+### Module 10: Admin Dashboard — Complete
 - Zero trust auth, session versioning, tiered rate limiting
 - 8 admin API endpoints, audit logging
-- **Frontend:** NOT STARTED
-- **Status:** BACKEND PRODUCTION READY
+- Frontend: `/admin` route tree — 6 pages (Dashboard, Users, UserDetail, Moderation, AuditLog, Health)
+- AdminProtectedRoute, AdminLayout with sidebar, mobile hamburger
+- **Status:** PRODUCTION READY
+
+### Module 11: Auction Settlement — Complete
+- SQL migration: `settlement_offers`, `payment_penalties` tables; extended `settlements` table
+- RPCs: `get_next_eligible_bidder`, `apply_payment_penalty` (escalating: 7d → 30d → permanent ban)
+- Edge Functions deployed: `settle-auction` (idempotent, shared-secret auth), `check-payment-window` (atomic cascade), `payment-webhook` (updated with settlement completion hook)
+- Backend: `GET /api/v1/settlements/:id`, `GET /api/v1/auctions/:id/settlement`, `POST /api/v1/admin/auctions/:id/settle`
+- Frontend: `SettlementPage` (`/settlements/:settlementId`) with buyer/seller views, countdown timer, Realtime subscription; post-auction banner on `AuctionDetailPage`
+- **Status:** PRODUCTION READY (Pay Now button pending `process-payment` API key deployment)
 
 ---
 
@@ -99,17 +109,10 @@
 - **No browse page, no search results page, no search bar, no routes**
 - **Status:** NEEDS FULL BUILD
 
-### Module 10 Frontend: Admin Dashboard UI
-- No components, no routes, no pages
-- **Status:** NOT STARTED
-
-### Module 11: Auction Settlement
-- Escrow, winner notification, cascade to next bidder
-- **Note:** Pure auction mechanics in `functions/src/v1/services/auctions/` can be ported here
-- **Status:** NOT STARTED
+### Module 12: Seller Payouts
 
 ### Module 12: Seller Payouts
-- Auto-release after escrow period
+- Auto-release after escrow period; depends on Module 11 ESCROW_HOLD → COMPLETED transition
 - **Status:** NOT STARTED
 
 ### Module 13: NFC Verification System — CRITICAL PATH
@@ -168,7 +171,7 @@
 ## Recommended Build Order (Post-Stabilization)
 
 1. **Phase 0:** ✅ COMPLETE — zero TS errors, security fix, dead code cleanup, housekeeping
-2. **Phase 1:** Module 06 (Browse/Search), Module 09 deployment (API keys), Module 10 frontend
-3. **Phase 2:** Module 11 (settlement), Module 12 (payouts)
+2. **Phase 1:** ✅ COMPLETE — Module 06 (Browse/Search), Module 10 (Admin frontend), Module 11 (Settlement), Module 02 port
+3. **Phase 2:** Module 09 deployment (awaiting API keys), Module 12 (payouts)
 4. **Phase 3:** Module 13 (NFC), Module 14 (search), Module 15 (messaging)
 5. **Phase 4:** Module 16 (notifications), Module 17 (testing), Module 18 (launch)
