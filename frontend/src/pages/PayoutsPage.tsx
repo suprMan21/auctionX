@@ -137,8 +137,7 @@ export function PayoutsPage() {
     async function fetchPayouts() {
       try {
         setLoading(true);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error: dbError } = await (supabase as any)
+        const { data, error: dbError } = await supabase
           .from('payouts')
           .select(
             '*, settlement:settlements(auction_id, auctions(listing_id, listings(title)))',

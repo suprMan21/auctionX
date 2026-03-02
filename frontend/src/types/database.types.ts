@@ -791,6 +791,84 @@ export type Database = {
           },
         ]
       }
+      payouts: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          currency: string
+          eligible_at: string
+          failed_at: string | null
+          failure_reason: string | null
+          gross_amount_cents: number
+          id: string
+          initiated_at: string | null
+          net_payout_cents: number
+          payout_method: string
+          payout_processor_id: string | null
+          platform_fee_cents: number
+          processor_fee_cents: number
+          seller_id: string
+          settlement_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          eligible_at: string
+          failed_at?: string | null
+          failure_reason?: string | null
+          gross_amount_cents: number
+          id?: string
+          initiated_at?: string | null
+          net_payout_cents: number
+          payout_method?: string
+          payout_processor_id?: string | null
+          platform_fee_cents: number
+          processor_fee_cents: number
+          seller_id: string
+          settlement_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          eligible_at?: string
+          failed_at?: string | null
+          failure_reason?: string | null
+          gross_amount_cents?: number
+          id?: string
+          initiated_at?: string | null
+          net_payout_cents?: number
+          payout_method?: string
+          payout_processor_id?: string | null
+          platform_fee_cents?: number
+          processor_fee_cents?: number
+          seller_id?: string
+          settlement_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_settlement_id_fkey"
+            columns: ["settlement_id"]
+            isOneToOne: false
+            referencedRelation: "settlements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       processor_config: {
         Row: {
           created_at: string
@@ -980,6 +1058,10 @@ export type Database = {
           auction_id: string
           buyer_id: string | null
           created_at: string
+          dispute_opened_at: string | null
+          dispute_reason: string | null
+          escrow_ends_at: string | null
+          escrow_released_at: string | null
           gross_amount_cents: number
           id: string
           net_amount_cents: number
@@ -1001,6 +1083,10 @@ export type Database = {
           auction_id: string
           buyer_id?: string | null
           created_at?: string
+          dispute_opened_at?: string | null
+          dispute_reason?: string | null
+          escrow_ends_at?: string | null
+          escrow_released_at?: string | null
           gross_amount_cents: number
           id?: string
           net_amount_cents: number
@@ -1022,6 +1108,10 @@ export type Database = {
           auction_id?: string
           buyer_id?: string | null
           created_at?: string
+          dispute_opened_at?: string | null
+          dispute_reason?: string | null
+          escrow_ends_at?: string | null
+          escrow_released_at?: string | null
           gross_amount_cents?: number
           id?: string
           net_amount_cents?: number
