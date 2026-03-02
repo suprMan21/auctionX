@@ -1,26 +1,47 @@
 -- Module 13: NFC Verification System
 -- Creates item_verifications, ownership_transfers tables and supporting infrastructure
+-- Fully idempotent: safe to re-run if a previous push was interrupted.
 
 -- ─── Enums ────────────────────────────────────────────────────────────────────
 
-CREATE TYPE verification_status AS ENUM (
-  'PENDING',
-  'VIDEO_UPLOADED',
-  'NFC_PROGRAMMED',
-  'VERIFIED',
-  'FLAGGED',
-  'REVOKED'
-);
+DO $$ BEGIN
+  CREATE TYPE verification_status AS ENUM (
+    'PENDING',
+    'VIDEO_UPLOADED',
+    'NFC_PROGRAMMED',
+    'VERIFIED',
+    'FLAGGED',
+    'REVOKED'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE transfer_type AS ENUM (
-  'SALE',
-  'GIFT',
-  'RETURN'
-);
+-- Ensure all values exist (handles partial prior creation)
+DO $$ BEGIN ALTER TYPE verification_status ADD VALUE IF NOT EXISTS 'PENDING';        EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TYPE verification_status ADD VALUE IF NOT EXISTS 'VIDEO_UPLOADED'; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TYPE verification_status ADD VALUE IF NOT EXISTS 'NFC_PROGRAMMED'; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TYPE verification_status ADD VALUE IF NOT EXISTS 'VERIFIED';       EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TYPE verification_status ADD VALUE IF NOT EXISTS 'FLAGGED';        EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TYPE verification_status ADD VALUE IF NOT EXISTS 'REVOKED';        EXCEPTION WHEN others THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE transfer_type AS ENUM (
+    'SALE',
+    'GIFT',
+    'RETURN'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN ALTER TYPE transfer_type ADD VALUE IF NOT EXISTS 'SALE';   EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TYPE transfer_type ADD VALUE IF NOT EXISTS 'GIFT';   EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TYPE transfer_type ADD VALUE IF NOT EXISTS 'RETURN'; EXCEPTION WHEN others THEN NULL; END $$;
 
 -- ─── item_verifications ───────────────────────────────────────────────────────
 
-CREATE TABLE item_verifications (
+CREATE TABLE IF NOT EXISTS item_verifications (
   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   listing_id            UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
   seller_id             UUID NOT NULL REFERENCES users(id),
@@ -38,14 +59,14 @@ CREATE TABLE item_verifications (
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_item_verifications_listing_id ON item_verifications(listing_id);
-CREATE INDEX idx_item_verifications_seller_id ON item_verifications(seller_id);
-CREATE INDEX idx_item_verifications_current_owner_id ON item_verifications(current_owner_id);
-CREATE INDEX idx_item_verifications_status ON item_verifications(status);
+CREATE INDEX IF NOT EXISTS idx_item_verifications_listing_id       ON item_verifications(listing_id);
+CREATE INDEX IF NOT EXISTS idx_item_verifications_seller_id        ON item_verifications(seller_id);
+CREATE INDEX IF NOT EXISTS idx_item_verifications_current_owner_id ON item_verifications(current_owner_id);
+CREATE INDEX IF NOT EXISTS idx_item_verifications_status           ON item_verifications(status);
 
 -- ─── ownership_transfers ──────────────────────────────────────────────────────
 
-CREATE TABLE ownership_transfers (
+CREATE TABLE IF NOT EXISTS ownership_transfers (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   verification_id  UUID NOT NULL REFERENCES item_verifications(id) ON DELETE CASCADE,
   from_user_id     UUID REFERENCES users(id),
@@ -55,8 +76,8 @@ CREATE TABLE ownership_transfers (
   transferred_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_ownership_transfers_verification_id ON ownership_transfers(verification_id);
-CREATE INDEX idx_ownership_transfers_to_user_id ON ownership_transfers(to_user_id);
+CREATE INDEX IF NOT EXISTS idx_ownership_transfers_verification_id ON ownership_transfers(verification_id);
+CREATE INDEX IF NOT EXISTS idx_ownership_transfers_to_user_id      ON ownership_transfers(to_user_id);
 
 -- ─── generate_token_name RPC ──────────────────────────────────────────────────
 -- Returns username_01, username_02, ... based on existing verification count for user.
@@ -96,15 +117,26 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER trg_item_verifications_updated_at
-  BEFORE UPDATE ON item_verifications
-  FOR EACH ROW
-  EXECUTE FUNCTION update_item_verifications_updated_at();
+DO $$ BEGIN
+  CREATE TRIGGER trg_item_verifications_updated_at
+    BEFORE UPDATE ON item_verifications
+    FOR EACH ROW
+    EXECUTE FUNCTION update_item_verifications_updated_at();
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ─── Row Level Security ───────────────────────────────────────────────────────
 
 ALTER TABLE item_verifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ownership_transfers ENABLE ROW LEVEL SECURITY;
+
+-- Drop and recreate policies so this block is idempotent
+DROP POLICY IF EXISTS "public_read_verified_verifications" ON item_verifications;
+DROP POLICY IF EXISTS "seller_all_own_verifications"       ON item_verifications;
+DROP POLICY IF EXISTS "owner_read_own_verification"        ON item_verifications;
+DROP POLICY IF EXISTS "participants_read_transfers"        ON ownership_transfers;
+DROP POLICY IF EXISTS "service_insert_transfers"           ON ownership_transfers;
 
 -- Public SELECT for published verifications
 CREATE POLICY "public_read_verified_verifications"
