@@ -6,6 +6,7 @@ import { log } from './lib/logger';
 import auctionRoutes from './routes/auctions';
 import webhookRoutes from './routes/webhooks';
 import adminRoutes from './routes/admin/index';
+import settlementRoutes from './routes/settlements';
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/v1/auctions', auctionRoutes);
+app.use('/api/v1/settlements', settlementRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/admin', adminRoutes);
 

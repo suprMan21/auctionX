@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { Settlement, AuctionSettlementSummary } from '@/features/auctions/types/settlement';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
@@ -38,5 +39,24 @@ export const api = {
       throw new Error(error.error || 'Failed to place bid');
     }
     return response.json();
+  },
+
+  async getSettlement(settlementId: string): Promise<Settlement> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/settlements/${settlementId}`, { headers });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to fetch settlement');
+    }
+    const json = await response.json();
+    return json.data;
+  },
+
+  async getAuctionSettlement(auctionId: string): Promise<AuctionSettlementSummary | null> {
+    const response = await fetch(`${API_URL}/auctions/${auctionId}/settlement`);
+    if (response.status === 404) return null;
+    if (!response.ok) return null;
+    const json = await response.json();
+    return json.data;
   },
 };

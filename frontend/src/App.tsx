@@ -14,6 +14,7 @@ import { AuctionDetailPage } from './features/auctions/components/AuctionDetailP
 import { Header } from './components/navigation/Header';
 import { BrowsePage } from '@/pages/BrowsePage';
 import { SearchResultsPage } from '@/pages/SearchResultsPage';
+import { SettlementPage } from './pages/SettlementPage';
 import { AdminProtectedRoute } from '@/features/admin/components/AdminProtectedRoute';
 import { AdminLayout } from '@/features/admin/AdminLayout';
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
@@ -97,7 +98,16 @@ function App() {
           <Route path="/listings/:id" element={<ViewListing />} />
           <Route path="/auctions/:id" element={<AuctionDetailPage />} />
           <Route path="/seller/:id" element={<SellerProfilePage />} />
-          
+
+          <Route
+            path="/settlements/:settlementId"
+            element={
+              <ProtectedRoute>
+                <SettlementPage />
+              </ProtectedRoute>
+            }
+          />
+
           <Route path="/" element={<Navigate to="/my-listings" replace />} />
 
           {/* Admin routes — protected by AdminProtectedRoute */}

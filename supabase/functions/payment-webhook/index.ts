@@ -121,9 +121,10 @@ serve(async (req) => {
         });
       }
 
-      // If payment completed, update auction/listing status
+      // If payment completed, update auction/listing status then settlement
       if (result.status === PaymentStatus.COMPLETED) {
         await handlePaymentCompleted(supabase, result.transactionId);
+        await handleSettlementCompletion(supabase, result.transactionId);
       }
     }
 
@@ -209,6 +210,126 @@ function buildWebhookResponse(processorType: ProcessorType, result: any): any {
 
     default:
       return { received: true };
+  }
+}
+
+// Helper: Handle settlement completion after payment succeeds
+async function handleSettlementCompletion(supabase: any, transactionId: string) {
+  try {
+    // Get transaction to find auction_id
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions')
+      .select('auction_id, buyer_id')
+      .eq('id', transactionId)
+      .single();
+
+    if (txError || !transaction?.auction_id) {
+      logger.warn('Webhook: Cannot find transaction for settlement completion', {
+        transactionId,
+        error: txError,
+      });
+      return;
+    }
+
+    const { auctionId, buyerId } = { auctionId: transaction.auction_id, buyerId: transaction.buyer_id };
+
+    // Find the PENDING_PAYMENT settlement for this auction
+    const { data: settlement, error: settlementError } = await supabase
+      .from('settlements')
+      .select('id, status')
+      .eq('auction_id', auctionId)
+      .eq('status', 'PENDING_PAYMENT')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (settlementError || !settlement) {
+      logger.warn('Webhook: No PENDING_PAYMENT settlement found for auction', {
+        auctionId,
+        error: settlementError,
+      });
+      return;
+    }
+
+    // Find the active PENDING_PAYMENT offer
+    const { data: offer, error: offerError } = await supabase
+      .from('settlement_offers')
+      .select('id, bidder_id')
+      .eq('settlement_id', settlement.id)
+      .eq('status', 'PENDING_PAYMENT')
+      .order('offer_rank', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (offerError || !offer) {
+      logger.warn('Webhook: No PENDING_PAYMENT offer found for settlement', {
+        settlementId: settlement.id,
+        error: offerError,
+      });
+      return;
+    }
+
+    // Update offer → ACCEPTED with transaction_id
+    const { error: offerUpdateError } = await supabase
+      .from('settlement_offers')
+      .update({ status: 'ACCEPTED', transaction_id: transactionId, updated_at: new Date().toISOString() })
+      .eq('id', offer.id);
+
+    if (offerUpdateError) {
+      logger.error('Webhook: Failed to update settlement_offer to ACCEPTED', {
+        offerId: offer.id,
+        error: offerUpdateError,
+      });
+    }
+
+    // Update settlement → ESCROW_HOLD with transaction_id and buyer_id
+    const { error: settlementUpdateError } = await supabase
+      .from('settlements')
+      .update({
+        status: 'ESCROW_HOLD',
+        transaction_id: transactionId,
+        buyer_id: offer.bidder_id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', settlement.id);
+
+    if (settlementUpdateError) {
+      logger.error('Webhook: Failed to update settlement to ESCROW_HOLD', {
+        settlementId: settlement.id,
+        error: settlementUpdateError,
+      });
+    }
+
+    // Update auction → SETTLED with winner
+    const { error: auctionUpdateError } = await supabase
+      .from('auctions')
+      .update({
+        status: 'SETTLED',
+        winner_id: offer.bidder_id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', auctionId);
+
+    if (auctionUpdateError) {
+      logger.error('Webhook: Failed to update auction to SETTLED', {
+        auctionId,
+        error: auctionUpdateError,
+      });
+    }
+
+    logger.info('Webhook: Settlement completion handled', {
+      auctionId,
+      settlementId: settlement.id,
+      offerId: offer.id,
+      transactionId,
+    });
+
+  } catch (error) {
+    // Non-fatal — log and continue. Payment itself already succeeded.
+    logger.error('Webhook: Error handling settlement completion', {
+      error: error instanceof Error ? error.message : String(error),
+      transactionId,
+    });
   }
 }
 

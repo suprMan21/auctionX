@@ -4,6 +4,7 @@ import { adminRateLimit } from '../../middleware/adminRateLimit';
 import usersRouter from './users';
 import moderationRouter from './moderation';
 import auditLogsRouter from './auditLogs';
+import adminSettlementsRouter from './settlements';
 
 const router = Router();
 
@@ -17,5 +18,6 @@ router.use(adminRateLimit);
 router.use('/users', usersRouter);
 router.use('/moderation', moderationRouter);
 router.use('/audit-logs', auditLogsRouter);
+router.use('/auctions', adminSettlementsRouter);
 
 export default router;
