@@ -1,8 +1,36 @@
+/**
+ * payment-webhook Edge Function
+ *
+ * Receives and processes webhook callbacks from all payment processors.
+ * Identifies the processor from URL path or headers, delegates to the
+ * appropriate processor's handleWebhook() for signature verification,
+ * then updates the transaction status in the database.
+ *
+ * Stripe webhook signature is verified inside StripeProcessor.handleWebhook()
+ * using the stripe-signature header and STRIPE_WEBHOOK_SECRET env var.
+ * Other processors perform their own signature/digest verification similarly.
+ *
+ * @module payment-webhook
+ */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { ProcessorFactory } from '../_shared/payment/ProcessorFactory.ts';
 import { ProcessorType, PaymentStatus } from '../_shared/payment/types.ts';
 import { logger } from '../_shared/utils/logger.ts';
+
+/**
+ * Maps PaymentStatus (internal enum) → transaction_status DB enum.
+ * transaction_status does not have COMPLETED — it uses SUCCEEDED.
+ * CANCELLED maps to FAILED (no CANCELLED in transaction_status enum).
+ */
+const TX_STATUS_MAP: Record<string, string> = {
+  [PaymentStatus.PENDING]:    'PENDING',
+  [PaymentStatus.PROCESSING]: 'PROCESSING',
+  [PaymentStatus.COMPLETED]:  'SUCCEEDED',
+  [PaymentStatus.FAILED]:     'FAILED',
+  [PaymentStatus.REFUNDED]:   'REFUNDED',
+  [PaymentStatus.CANCELLED]:  'FAILED',
+};
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -71,10 +99,11 @@ serve(async (req) => {
 
     // Update transaction in database
     if (result.transactionId) {
+      const dbStatus = TX_STATUS_MAP[result.status] ?? 'FAILED';
       const { error: updateError } = await supabase
         .from('transactions')
         .update({
-          status: result.status === 'COMPLETED' ? 'SUCCEEDED' : result.status,
+          status: dbStatus,
           metadata: result.processorResponse,
           updated_at: new Date().toISOString(),
         })
