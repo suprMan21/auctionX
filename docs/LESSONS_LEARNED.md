@@ -2,6 +2,43 @@
 
 ---
 
+## Module 02 Port: Auction Mechanics → Backend — 2026-03-01
+
+### What Worked
+- The `functions/src/v1/services/auctions/` files were genuinely Firebase-free — zero `firebase-admin`
+  imports in any of the five mechanics files. Pre-verification before starting saved time.
+- Flattening the import names (e.g., `auction.errors.ts` → `errors.ts`) makes the internal module
+  cleaner without losing any information, since the directory name `auction/` already provides context.
+- Inline port interfaces (`ListingsRepoPort`, `AuctionsMetaRepoPort`) in `closeOrchestrator.ts` are
+  preferable to re-exporting Firestore-coupled types. Any future Supabase adapter just needs to satisfy
+  the minimal shape.
+
+### Patterns Discovered
+- **Port interfaces over concrete types for repo dependencies**: Instead of importing the real repo class,
+  define a minimal interface with only the methods actually called. This decouples the orchestrator from
+  the storage layer entirely and makes it trivially testable with inline mock objects.
+- **Barrel + named exports only**: The `index.ts` barrel with explicit named exports is the right pattern
+  for a multi-file library module — consumers get tree-shaking, and the public surface is immediately
+  visible without reading every file.
+- **Zod version alignment**: When porting Zod-dependent code, use the same major version (`^3.x`) to
+  avoid subtle schema behavior differences between major versions.
+
+### Gotchas
+- **`grep -rn "from.*repos"` matches JSDoc comments**: The verification grep `grep -rn "from.*repos"`
+  matched a JSDoc line (`* Load auction core + listing + auction meta from repos`) — not an import.
+  The check still passes; be aware when writing grep-based verification rules that comments can
+  produce false positives. Use `grep -rn "^import.*repos"` for stricter import-only checking.
+- **`nextSecondMax` type mismatch**: In `mechanics.ts` the challenger branch uses `let nextSecondMax: number | null`
+  (not `MoneyCents | null`) to allow `Math.max()` without a cast. This matches the source exactly
+  and TypeScript accepts it — the final `repriceProxyState` call handles the narrowing.
+
+### Time Estimate vs Actual
+- Estimated: ~30 minutes
+- Actual: ~15 minutes
+- Delta: Source files were clean; no unexpected Firebase dependencies discovered
+
+---
+
 ## Module 10: Admin Dashboard Frontend — 2026-03-01
 
 ### What Worked

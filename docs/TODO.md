@@ -1,6 +1,24 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-01 (Module 10 added)
+Last updated: 2026-03-01 (Module 02 Port added)
+
+---
+
+## Module 02 Port: Auction Mechanics
+
+- [ ] **TODO:** Wire `closeAuction` orchestrator to a Supabase repo adapter (Module 11)
+  - Context: `closeOrchestrator.ts` depends on `AuctionsAggregateRepoPort`, `ListingsRepoPort`, and
+    `AuctionsMetaRepoPort`. These are port interfaces — a Supabase implementation needs to be written
+    when Module 11 (Settlement) is built.
+  - Priority: HIGH — required before settlement flow works end-to-end
+  - Depends on: Module 11 (Settlement)
+
+- [ ] **TODO:** Consider porting `auction.offerCascade.orchestrator.ts`
+  - Context: `functions/src/v1/services/orchestration/auction.offerCascade.orchestrator.ts` handles
+    the reserve-not-met → next-bidder cascade flow. Not ported in Module 02 — only the primary
+    close path was needed. Port when the cascade flow is required.
+  - Priority: LOW
+  - Depends on: Module 11 (Settlement)
 
 ---
 
