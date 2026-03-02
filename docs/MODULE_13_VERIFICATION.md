@@ -1,7 +1,7 @@
 # Module 13: NFC Verification System
 
 **Status:** ✅ Complete
-**Date:** 2026-03-01
+**Date:** 2026-03-02
 **Branch:** dev
 
 ---
@@ -89,11 +89,19 @@ NFC verification is AuctionX's core authenticity differentiator. Sellers attach 
 - Current owner SELECT
 - Service role INSERT on transfers
 
+### Migration idempotency notes
+The migration was designed to survive a failed prior push attempt:
+- Enum creation uses `DO $$ BEGIN CREATE TYPE ... EXCEPTION WHEN duplicate_object THEN NULL END $$`
+- Each enum value uses `ALTER TYPE ... ADD VALUE IF NOT EXISTS` to fill in any missing labels
+- Tables use `CREATE TABLE IF NOT EXISTS`; indexes use `CREATE INDEX IF NOT EXISTS`
+- Trigger uses a `DO` block with `duplicate_object` guard
+- Policies use `DROP POLICY IF EXISTS` before `CREATE POLICY`
+- RLS policy `USING` clause casts `status::text IN (...)` instead of using enum literals directly — required to avoid PostgreSQL error `55P04 "unsafe use of new enum value"`, which fires when newly-added enum values are referenced as typed literals in the same transaction
+
 ---
 
 ## Known Gaps / Future Work
 
-- **DB types**: `item_verifications` not yet in `database.types.ts` (migration pending push). Frontend uses `(supabase.from as any)` cast in TokenCreationPage. Regenerate types after `npx supabase db push`.
 - **iOS NFC writing**: Web NFC API not supported on iOS. Users directed to NFC Tools app.
 - **NTAG 424 DNA cryptographic verification**: Anti-counterfeit server-side SUN message verification not implemented (future).
 - **Realtime**: VerificationPage does not yet subscribe to live scan count updates.
@@ -114,8 +122,7 @@ S3_BUCKET=auctionx-media-prod-cl
 
 ## Deployment Checklist
 
-- [ ] `npx supabase db push` — apply migration
-- [ ] `npx supabase gen types typescript --project-id pmlofthmobglcfkqjtru > frontend/src/types/database.types.ts`
-- [ ] `cp frontend/src/types/database.types.ts backend/src/types/database.types.ts`
-- [ ] Verify AWS credentials in backend `.env`
-- [ ] Deploy `release-escrow` edge function (ownership transfer added)
+- [x] `npx supabase db push` — migration applied (2026-03-02)
+- [x] Types regenerated — `item_verifications` + `ownership_transfers` now in `database.types.ts` (21 tables)
+- [ ] Verify AWS credentials in backend `.env` (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET`)
+- [ ] Deploy `release-escrow` edge function (ownership transfer block added)

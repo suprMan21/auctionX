@@ -156,3 +156,38 @@
 - **Non-fatal ownership transfer in release-escrow**: The NFC transfer block is wrapped in a try/catch with a `logger.warn` on failure. Settlement release is the critical path — NFC state should never block a payout.
 
 - **Route order in React Router**: `/verify/create/:verificationId` MUST be declared before `/verify/:tokenName` or "create" matches as a token name. Document this with a comment.
+
+### PostgreSQL enum + migration idempotency (discovered during Module 13 push)
+
+When a `db push` fails mid-migration, Supabase marks the migration as not yet applied but some statements may have already committed (Postgres DDL is not transactional for `CREATE TYPE`). Re-running then hits `42710 duplicate_object`.
+
+**Pattern to use for all future migrations involving enums:**
+
+```sql
+-- 1. Create enum idempotently
+DO $$ BEGIN
+  CREATE TYPE my_enum AS ENUM ('A', 'B');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+-- 2. Add each value idempotently (handles partial prior creation)
+DO $$ BEGIN ALTER TYPE my_enum ADD VALUE IF NOT EXISTS 'A'; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TYPE my_enum ADD VALUE IF NOT EXISTS 'B'; EXCEPTION WHEN others THEN NULL; END $$;
+```
+
+**RLS policies that reference new enum values must cast to text:**
+```sql
+-- ❌ Fails with 55P04 "unsafe use of new enum value" in same transaction
+USING (status IN ('NEW_VALUE', 'OTHER'))
+
+-- ✅ Works — text comparison sidesteps the same-transaction restriction
+USING (status::text IN ('NEW_VALUE', 'OTHER'))
+```
+
+**General idempotency checklist for migrations:**
+- `CREATE TABLE IF NOT EXISTS`
+- `CREATE INDEX IF NOT EXISTS`
+- `CREATE OR REPLACE FUNCTION` (already idempotent)
+- Trigger: wrap in `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL END $$`
+- Policies: `DROP POLICY IF EXISTS` before `CREATE POLICY`
