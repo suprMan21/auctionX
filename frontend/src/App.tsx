@@ -12,6 +12,16 @@ import { MyListings } from './pages/MyListings';
 import { ViewListing } from './pages/ViewListing';
 import { AuctionDetailPage } from './features/auctions/components/AuctionDetailPage';
 import { Header } from './components/navigation/Header';
+import { BrowsePage } from '@/pages/BrowsePage';
+import { SearchResultsPage } from '@/pages/SearchResultsPage';
+import { AdminProtectedRoute } from '@/features/admin/components/AdminProtectedRoute';
+import { AdminLayout } from '@/features/admin/AdminLayout';
+import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
+import { AdminUsersPage } from '@/features/admin/pages/AdminUsersPage';
+import { AdminUserDetailPage } from '@/features/admin/pages/AdminUserDetailPage';
+import { AdminModerationPage } from '@/features/admin/pages/AdminModerationPage';
+import { AdminAuditLogPage } from '@/features/admin/pages/AdminAuditLogPage';
+import { AdminHealthPage } from '@/features/admin/pages/AdminHealthPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -81,11 +91,26 @@ function App() {
             }
           />
           
+          <Route path="/browse" element={<BrowsePage />} />
+          <Route path="/browse/:categorySlug" element={<BrowsePage />} />
+          <Route path="/search" element={<SearchResultsPage />} />
           <Route path="/listings/:id" element={<ViewListing />} />
           <Route path="/auctions/:id" element={<AuctionDetailPage />} />
           <Route path="/seller/:id" element={<SellerProfilePage />} />
           
           <Route path="/" element={<Navigate to="/my-listings" replace />} />
+
+          {/* Admin routes — protected by AdminProtectedRoute */}
+          <Route path="/admin" element={<AdminProtectedRoute />}>
+            <Route element={<AdminLayout />}>
+              <Route index element={<AdminDashboardPage />} />
+              <Route path="users" element={<AdminUsersPage />} />
+              <Route path="users/:id" element={<AdminUserDetailPage />} />
+              <Route path="moderation" element={<AdminModerationPage />} />
+              <Route path="audit-logs" element={<AdminAuditLogPage />} />
+              <Route path="health" element={<AdminHealthPage />} />
+            </Route>
+          </Route>
         </Routes>
         
         <Toaster

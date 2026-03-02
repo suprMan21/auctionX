@@ -2,6 +2,31 @@
 
 ---
 
+## Module 10: Admin Dashboard Frontend — 2026-03-01
+
+### What Worked
+- Splitting the route guard into two stages (session check → `admin_users` query) gives clean separation: unauthenticated users go to `/login`, authenticated non-admins go to `/`. The single `<Outlet />` pattern means the guard is fully transparent to children.
+- React Router's `<NavLink end>` prop on the `/admin` index route correctly avoids the active state bleeding into all `/admin/*` sub-routes.
+- Using `Promise.all` in AdminDashboardPage to fetch users, moderation queue, Supabase direct counts, and audit logs in parallel keeps the dashboard fast even with 5 concurrent requests.
+- The `adminFetch` wrapper pattern (mirrors `lib/api.ts`) keeps all auth header injection in one place. Non-2xx responses reliably extract the `error` field from the backend's JSON response shape.
+
+### Patterns Discovered
+- **Health endpoint defensiveness**: The spec mentioned building the health page with graceful 404 handling — and indeed the `/admin/health` endpoint doesn't exist in the backend at module completion time. Any feature that depends on an optional or future endpoint should catch errors and show a helpful warning rather than a blank/broken state.
+- **`NavLink end` for index routes**: Without the `end` prop, `/admin` will match as active for every route under `/admin/*` since it's a prefix. Always add `end` to the exact-path NavLink for the index route.
+- **Supabase `count: 'exact', head: true` for count-only queries**: Fetching only the count (no rows) is much faster than fetching all rows and checking `.length`. Use `{ count: 'exact', head: true }` for stat cards.
+- **Debounce with `useRef` timer**: The 300ms search debounce uses a `useRef<ReturnType<typeof setTimeout>>` to hold the timer, cleared on each new keypress. Using a ref avoids stale closure issues and doesn't cause re-renders.
+
+### Gotchas
+- **Backend suspend endpoint requires `durationHours`**: The module spec description only showed `{ reason }` in the request body, but the actual backend route validates `!durationHours || !reason` — omitting `durationHours` returns a 400. Always read the actual backend route file, not just the spec description.
+- **Moderation resolve uses `notes` not `reason`**: The backend destructures `{ action, notes }` from the request body. The spec said `{ action, reason }`. This would have caused 400 errors on every resolve action without reading the actual route.
+- **Unsuspend is separate from unban**: `/users/:id/unsuspend` and `/users/:id/unban` are distinct routes. The AdminUserDetailPage action buttons must use the correct endpoint for each state transition.
+- **`admin_users` RLS with anon client**: `AdminProtectedRoute` queries `admin_users` using the anon Supabase client. This relies on RLS permitting the user to read their own row. If RLS blocks it, the check silently fails and the user is treated as non-admin. A backend endpoint would be more reliable.
+
+### Time Estimate vs Actual
+- Estimated: ~60 minutes (Claude Code session)
+- Actual: ~15 minutes
+- Delta: Exhaustive backend route reading before writing any frontend code eliminated all spec-vs-implementation mismatches upfront
+
 ## Module 09: Payment Hardening — 2026-03-01
 
 ### What Worked

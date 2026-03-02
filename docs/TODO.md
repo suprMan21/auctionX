@@ -1,6 +1,25 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-01 (Module 09 added)
+Last updated: 2026-03-01 (Module 10 added)
+
+---
+
+## Module 10: Admin Dashboard Frontend
+
+- [ ] **TODO:** Add `GET /admin/health` endpoint to the backend
+  - Context: AdminHealthPage polls this endpoint every 30s but it doesn't exist in the Module 10 backend routes (index.ts only mounts `/users`, `/moderation`, `/audit-logs`). The page handles the 404 gracefully with a warning.
+  - Priority: LOW — cosmetic; admin functionality works without it
+  - Depends on: Backend work in a future pass
+
+- [ ] **TODO:** Resolve AdminProtectedRoute RLS dependency
+  - Context: `AdminProtectedRoute` uses the anon Supabase client to query `admin_users`. If RLS prevents users from reading their own admin_users row, valid admins will be redirected to `/`. Consider adding a `/admin/auth/verify` backend endpoint instead.
+  - Priority: MEDIUM — affects admin access if RLS is restrictive
+  - Depends on: RLS policy review on `admin_users` table
+
+- [ ] **TODO:** Moderation queue listing_media join
+  - Context: Moderation cards cannot show listing images because the backend query does not join `listing_media`. A note is shown in each card. Requires backend change to include media URLs in the queue response.
+  - Priority: LOW — audit/moderation workflow still functional
+  - Depends on: Backend route update + adminApi.ts update
 
 ---
 
