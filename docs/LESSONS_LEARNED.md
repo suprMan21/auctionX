@@ -134,3 +134,25 @@
 - Estimated: ~15 minutes (Claude Code session)
 - Actual: 3m 30s
 - Delta: Simpler than expected — no backend work needed, just frontend pages + Supabase queries
+
+## Module 13: NFC Verification System — 2026-03-01
+
+### TypeScript gotchas
+
+- **Route handler type casting**: Express 5 + custom request types (extending `RequestWithId`) require `as unknown as RequestHandler` on route registration — same pattern as settlements/payouts routes. Should be the default when wiring custom-typed controllers.
+
+- **`wicg-web-nfc` types**: Don't add the npm package — it inflates the build. Use `(window as any).NDEFReader` and `(event: any)` for NFC callbacks. The `/// <reference types="wicg-web-nfc" />` directive only works if the package is installed.
+
+- **New Supabase tables before migration is pushed**: If `database.types.ts` doesn't include the new table yet, use `(supabase.from as any)('table_name')` with explicit result types. Remove the cast after `npx supabase db push` + type regeneration.
+
+- **Dynamic vs static imports**: A dynamic `import()` inside a component that is also statically imported elsewhere causes Vite to emit a warning. Use a static import at the top of the file — the module is already in the bundle.
+
+### Architecture decisions
+
+- **Two Express routers from one file**: The authenticated `/verifications` router and the public `/verify` router are both exported from `routes/verifications.ts`. Cleaner than splitting into two files since the controllers are shared.
+
+- **S3 presigned URLs from Express backend**: The plan called for generating presigned URLs in the Express backend (not a Deno edge function). This required adding `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` to backend dependencies. Works well.
+
+- **Non-fatal ownership transfer in release-escrow**: The NFC transfer block is wrapped in a try/catch with a `logger.warn` on failure. Settlement release is the critical path — NFC state should never block a payout.
+
+- **Route order in React Router**: `/verify/create/:verificationId` MUST be declared before `/verify/:tokenName` or "create" matches as a token name. Document this with a comment.

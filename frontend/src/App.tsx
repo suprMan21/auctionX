@@ -16,6 +16,8 @@ import { BrowsePage } from '@/pages/BrowsePage';
 import { SearchResultsPage } from '@/pages/SearchResultsPage';
 import { SettlementPage } from './pages/SettlementPage';
 import { PayoutsPage } from './pages/PayoutsPage';
+import { TokenCreationPage } from './features/verification/pages/TokenCreationPage';
+import { VerificationPage } from './features/verification/pages/VerificationPage';
 import { AdminProtectedRoute } from '@/features/admin/components/AdminProtectedRoute';
 import { AdminLayout } from '@/features/admin/AdminLayout';
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
@@ -97,6 +99,17 @@ function App() {
           <Route path="/browse/:categorySlug" element={<BrowsePage />} />
           <Route path="/search" element={<SearchResultsPage />} />
           <Route path="/listings/:id" element={<ViewListing />} />
+
+          {/* NFC Verification — /verify/create/:verificationId MUST precede /verify/:tokenName */}
+          <Route
+            path="/verify/create/:verificationId"
+            element={
+              <ProtectedRoute>
+                <TokenCreationPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/verify/:tokenName" element={<VerificationPage />} />
           <Route path="/auctions/:id" element={<AuctionDetailPage />} />
           <Route path="/seller/:id" element={<SellerProfilePage />} />
 

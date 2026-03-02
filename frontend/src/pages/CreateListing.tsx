@@ -6,6 +6,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { supabase } from '@/features/auth/lib/supabase';
 import { ErrorHandler, AppError, ErrorCode } from '@/lib/errors/ErrorHandler';
+import { api } from '@/lib/api';
 
 export function CreateListing() {
   const { user } = useAuth();
@@ -18,6 +19,7 @@ export function CreateListing() {
   const [duration, setDuration] = useState('7');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [addVerification, setAddVerification] = useState(false);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -93,7 +95,12 @@ export function CreateListing() {
 
       if (error) throw error;
 
-      navigate(`/listings/${data.id}`);
+      if (addVerification) {
+        const verif = await api.createVerification(data.id);
+        navigate(`/verify/create/${verif.id}`);
+      } else {
+        navigate(`/listings/${data.id}`);
+      }
     } catch (error) {
       ErrorHandler.handle(error, 'CreateListing.handleSubmit');
     } finally {
@@ -209,6 +216,31 @@ export function CreateListing() {
                                 resize-none"
                     />
                   </div>
+                </div>
+              </section>
+
+              <section aria-labelledby="verification-heading">
+                <h2 id="verification-heading" className="text-xl font-semibold text-white mb-4">
+                  NFC Verification
+                </h2>
+                <div className="glass rounded-xl p-4 space-y-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={addVerification}
+                      onChange={(e) => setAddVerification(e.target.checked)}
+                      className="w-5 h-5 rounded accent-purple-500 cursor-pointer"
+                    />
+                    <span className="text-gray-200 text-sm font-medium">
+                      Add NFC Verification (requires NFC tag + 15-second video)
+                    </span>
+                  </label>
+                  {addVerification && (
+                    <p className="text-sm text-gray-400 pl-8">
+                      After creating the listing, you'll record a possession-proof video on your phone
+                      and program your NTAG 424 DNA tag. Your token name will be assigned automatically.
+                    </p>
+                  )}
                 </div>
               </section>
 

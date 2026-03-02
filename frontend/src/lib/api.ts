@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { Settlement, AuctionSettlementSummary } from '@/features/auctions/types/settlement';
 import type { Payout } from '@/features/payouts/types/payout';
+import type { Verification, VerificationDetail } from '@/features/verification/types/verification';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
@@ -80,5 +81,81 @@ export const api = {
       const error = await response.json().catch(() => ({}));
       throw new Error((error as { error?: string }).error || 'Failed to open dispute');
     }
+  },
+
+  async createVerification(listingId: string): Promise<Verification> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/verifications/create`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ listingId }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to create verification');
+    }
+    const json = await response.json();
+    return json.data;
+  },
+
+  async getUploadUrl(verificationId: string, mimeType = 'video/webm'): Promise<{ uploadUrl: string; videoKey: string; publicUrl: string }> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/verifications/${verificationId}/upload-url`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mimeType }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to get upload URL');
+    }
+    const json = await response.json();
+    return json.data;
+  },
+
+  async confirmVideoUpload(verificationId: string, videoUrl: string, durationSeconds: number): Promise<Verification> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/verifications/${verificationId}/upload-video`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoUrl, durationSeconds }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to confirm video upload');
+    }
+    const json = await response.json();
+    return json.data;
+  },
+
+  async registerNfc(verificationId: string, nfcTagUid: string): Promise<Verification> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/verifications/${verificationId}/register-nfc`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nfcTagUid }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to register NFC tag');
+    }
+    const json = await response.json();
+    return json.data;
+  },
+
+  async getVerificationByToken(tokenName: string): Promise<VerificationDetail> {
+    const response = await fetch(`${API_URL}/verify/${tokenName}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Verification not found');
+    }
+    const json = await response.json();
+    return json.data;
+  },
+
+  async incrementScan(tokenName: string): Promise<void> {
+    await fetch(`${API_URL}/verify/${tokenName}/scan`, { method: 'POST' }).catch(() => {
+      // Non-fatal — scan count increment failure should not block page render
+    });
   },
 };

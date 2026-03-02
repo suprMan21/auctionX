@@ -117,7 +117,7 @@
 
 ### Module 13: NFC Verification System — CRITICAL PATH
 - Token generation, video proof, NFC programming, public verification pages
-- **Status:** NOT STARTED
+- **Status:** ✅ COMPLETE (2026-03-01) — pending DB migration push + type regen
 
 ### Module 14: Enhanced Search
 - Full-text search, advanced filters, saved searches

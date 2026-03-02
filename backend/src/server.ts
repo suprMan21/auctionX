@@ -8,6 +8,7 @@ import webhookRoutes from './routes/webhooks';
 import adminRoutes from './routes/admin/index';
 import settlementRoutes from './routes/settlements';
 import payoutRoutes from './routes/payouts';
+import { verificationRoutes, publicVerificationRoutes } from './routes/verifications';
 
 dotenv.config();
 
@@ -32,6 +33,8 @@ app.use('/api/v1/settlements', settlementRoutes);
 app.use('/api/v1/payouts', payoutRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/verifications', verificationRoutes);
+app.use('/api/v1/verify', publicVerificationRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   log.error('unhandled_error', { error: err.message, stack: err.stack });

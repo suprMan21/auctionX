@@ -31,6 +31,11 @@ interface ListingCardProps {
       type: string;
       sort_order: number;
     }> | null;
+    item_verifications: Array<{
+      id: string;
+      status: string;
+      token_name: string;
+    }> | null;
   };
 }
 
@@ -62,9 +67,14 @@ export function ListingCard({ listing }: ListingCardProps) {
         )}
 
         <div className="p-4">
-          <h3 className="text-white font-semibold text-base line-clamp-2 mb-3">
+          <h3 className="text-white font-semibold text-base line-clamp-2 mb-1">
             {listing.title}
           </h3>
+          {listing.item_verifications?.[0]?.status === 'VERIFIED' && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full border border-green-800 mb-2">
+              ✓ Verified
+            </span>
+          )}
 
           {auction ? (
             <div className="flex items-end justify-between">

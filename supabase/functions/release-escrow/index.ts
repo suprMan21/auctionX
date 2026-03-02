@@ -60,10 +60,12 @@ serve(async (req) => {
       .select(`
         id,
         seller_id,
+        buyer_id,
         gross_amount_cents,
         platform_fee_cents,
         escrow_ends_at,
         transaction_id,
+        auction_id,
         transactions!inner(
           id,
           status,
@@ -89,6 +91,7 @@ serve(async (req) => {
 
       try {
         const transaction = settlement.transactions as { id: string; status: string; successful_processor: string | null } | null;
+        const settlementRecord = settlement as typeof settlement & { buyer_id: string | null; auction_id: string | null };
         const processor = transaction?.successful_processor ?? 'STRIPE';
 
         const payout = calculatePayout(
@@ -167,6 +170,51 @@ serve(async (req) => {
           sellerId: settlement.seller_id,
           netPayoutCents: payout.netPayoutCents,
         });
+
+        // ── NFC Ownership Transfer (non-fatal) ──────────────────────────
+        try {
+          if (settlementRecord.buyer_id && settlementRecord.auction_id) {
+            // Get listing_id from auction
+            const { data: auction } = await supabase
+              .from('auctions')
+              .select('listing_id')
+              .eq('id', settlementRecord.auction_id)
+              .maybeSingle();
+
+            if (auction?.listing_id) {
+              const { data: verif } = await supabase
+                .from('item_verifications')
+                .select('id, current_owner_id')
+                .eq('listing_id', auction.listing_id)
+                .eq('status', 'VERIFIED')
+                .maybeSingle();
+
+              if (verif) {
+                await supabase.from('ownership_transfers').insert({
+                  verification_id: verif.id,
+                  from_user_id: verif.current_owner_id,
+                  to_user_id: settlementRecord.buyer_id,
+                  transfer_type: 'SALE',
+                  settlement_id: settlement.id,
+                });
+                await supabase
+                  .from('item_verifications')
+                  .update({ current_owner_id: settlementRecord.buyer_id })
+                  .eq('id', verif.id);
+
+                logger.info('release-escrow: NFC ownership transferred', {
+                  verificationId: verif.id,
+                  buyerId: settlementRecord.buyer_id,
+                });
+              }
+            }
+          }
+        } catch (nfcErr) {
+          logger.warn('release-escrow: NFC ownership transfer failed (non-fatal)', {
+            settlementId: settlement.id,
+            error: nfcErr instanceof Error ? nfcErr.message : String(nfcErr),
+          });
+        }
 
         stats.released++;
 

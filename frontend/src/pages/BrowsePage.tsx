@@ -42,6 +42,11 @@ interface BrowseListing {
     type: string;
     sort_order: number;
   }> | null;
+  item_verifications: Array<{
+    id: string;
+    status: string;
+    token_name: string;
+  }> | null;
 }
 
 export function BrowsePage() {
@@ -99,7 +104,7 @@ export function BrowsePage() {
 
         let query = supabase
           .from('listings')
-          .select('id, title, auctions(id, current_price_cents, end_time, status), listing_media(url, type, sort_order)')
+          .select('id, title, auctions(id, current_price_cents, end_time, status), listing_media(url, type, sort_order), item_verifications(id, status, token_name)')
           .eq('status', 'ACTIVE')
           .order('created_at', { ascending: false })
           .limit(24);

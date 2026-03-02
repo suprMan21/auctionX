@@ -38,6 +38,11 @@ interface SearchListing {
     type: string;
     sort_order: number;
   }> | null;
+  item_verifications: Array<{
+    id: string;
+    status: string;
+    token_name: string;
+  }> | null;
 }
 
 function sortListings(listings: SearchListing[], sort: SortOption): SearchListing[] {
@@ -102,7 +107,7 @@ export function SearchResultsPage() {
       try {
         const { data, error } = await supabase
           .from('listings')
-          .select('id, title, auctions(id, current_price_cents, end_time, status), listing_media(url, type, sort_order)')
+          .select('id, title, auctions(id, current_price_cents, end_time, status), listing_media(url, type, sort_order), item_verifications(id, status, token_name)')
           .eq('status', 'ACTIVE')
           .or(`title.ilike.%${query}%,description.ilike.%${query}%`)
           .order('created_at', { ascending: false })

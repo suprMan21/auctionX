@@ -113,3 +113,25 @@ Last updated: 2026-03-01 (Module 12 added)
   - Context: Currently sorting client-side after fetch. Works for small datasets but won't scale.
   - Priority: MEDIUM
   - Depends on: Module 14 (Enhanced Search)
+
+## Module 13: NFC Verification
+
+- [ ] **TODO:** Apply DB migration and regenerate types
+  - Context: `supabase/migrations/20260301100000_nfc_verification.sql` adds `item_verifications` + `ownership_transfers` tables. After applying, run `npx supabase gen types typescript --project-id pmlofthmobglcfkqjtru > frontend/src/types/database.types.ts && cp ...`. Then remove `(supabase.from as any)` cast in `TokenCreationPage.tsx`.
+  - Priority: HIGH — required before verification feature works
+  - Depends on: Supabase CLI + project credentials
+
+- [ ] **TODO:** iOS NFC tag programming UX
+  - Context: Web NFC API not supported on iOS. Current flow shows instructions to use NFC Tools app. Could improve with a deep-link to the app store or step-by-step screenshot guide.
+  - Priority: MEDIUM
+
+- [ ] **TODO:** Push notifications when item is scanned (Module 16)
+  - Context: When a buyer scans an NFC-verified item, the owner could receive a push notification. Requires web push / FCM integration.
+
+- [ ] **TODO:** Anti-counterfeit — server-side NTAG 424 DNA cryptographic SUN message verification
+  - Context: NTAG 424 DNA tags generate a cryptographic SUN message in the URL on each scan. A future endpoint could verify this signature server-side using the tag's key, making tag cloning detectable.
+  - Priority: LOW (future)
+
+- [ ] **TODO:** Supabase Realtime subscription on VerificationPage for live scan count updates
+  - Context: VerificationPage currently shows a static scan count fetched on load. A Realtime subscription on `item_verifications` would update the count live.
+  - Priority: LOW
