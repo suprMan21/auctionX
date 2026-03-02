@@ -654,6 +654,80 @@ export type Database = {
           },
         ]
       }
+      payment_penalties: {
+        Row: {
+          applied_at: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          offer_id: string | null
+          penalty_level: number
+          reason: string
+          reversal_reason: string | null
+          reversed_at: string | null
+          reversed_by: string | null
+          settlement_id: string
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          offer_id?: string | null
+          penalty_level: number
+          reason?: string
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          settlement_id: string
+          user_id: string
+        }
+        Update: {
+          applied_at?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          offer_id?: string | null
+          penalty_level?: number
+          reason?: string
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          settlement_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_penalties_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "settlement_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_penalties_reversed_by_fkey"
+            columns: ["reversed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_penalties_settlement_id_fkey"
+            columns: ["settlement_id"]
+            isOneToOne: false
+            referencedRelation: "settlements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_penalties_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount_cents: number
@@ -840,14 +914,78 @@ export type Database = {
           },
         ]
       }
+      settlement_offers: {
+        Row: {
+          bidder_id: string
+          created_at: string
+          id: string
+          offer_price_cents: number
+          offer_rank: number
+          payment_window_expires_at: string
+          settlement_id: string
+          status: string
+          transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          bidder_id: string
+          created_at?: string
+          id?: string
+          offer_price_cents: number
+          offer_rank: number
+          payment_window_expires_at: string
+          settlement_id: string
+          status?: string
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bidder_id?: string
+          created_at?: string
+          id?: string
+          offer_price_cents?: number
+          offer_rank?: number
+          payment_window_expires_at?: string
+          settlement_id?: string
+          status?: string
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlement_offers_bidder_id_fkey"
+            columns: ["bidder_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_offers_settlement_id_fkey"
+            columns: ["settlement_id"]
+            isOneToOne: false
+            referencedRelation: "settlements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_offers_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settlements: {
         Row: {
           auction_id: string
+          buyer_id: string | null
           created_at: string
           gross_amount_cents: number
           id: string
           net_amount_cents: number
-          payment_id: string
+          offer_attempt: number
+          payment_id: string | null
+          payment_window_expires_at: string | null
           platform_fee_cents: number
           platform_fee_percent: number
           processor_fee_cents: number
@@ -856,15 +994,19 @@ export type Database = {
           seller_id: string
           settled_at: string | null
           status: string
+          transaction_id: string | null
           updated_at: string
         }
         Insert: {
           auction_id: string
+          buyer_id?: string | null
           created_at?: string
           gross_amount_cents: number
           id?: string
           net_amount_cents: number
-          payment_id: string
+          offer_attempt?: number
+          payment_id?: string | null
+          payment_window_expires_at?: string | null
           platform_fee_cents: number
           platform_fee_percent: number
           processor_fee_cents: number
@@ -873,15 +1015,19 @@ export type Database = {
           seller_id: string
           settled_at?: string | null
           status?: string
+          transaction_id?: string | null
           updated_at?: string
         }
         Update: {
           auction_id?: string
+          buyer_id?: string | null
           created_at?: string
           gross_amount_cents?: number
           id?: string
           net_amount_cents?: number
-          payment_id?: string
+          offer_attempt?: number
+          payment_id?: string | null
+          payment_window_expires_at?: string | null
           platform_fee_cents?: number
           platform_fee_percent?: number
           processor_fee_cents?: number
@@ -890,9 +1036,17 @@ export type Database = {
           seller_id?: string
           settled_at?: string | null
           status?: string
+          transaction_id?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "settlements_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "settlements_payment_id_fkey"
             columns: ["payment_id"]
@@ -905,6 +1059,13 @@ export type Database = {
             columns: ["seller_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -1071,6 +1232,7 @@ export type Database = {
           banned_at: string | null
           banned_by: string | null
           banned_until: string | null
+          bio: string | null
           created_at: string
           deleted_at: string | null
           display_name: string | null
@@ -1083,6 +1245,7 @@ export type Database = {
           phone_number: string | null
           photo_url: string | null
           preferred_brand: Database["public"]["Enums"]["brand_type"] | null
+          profile_photo_url: string | null
           role: Database["public"]["Enums"]["user_role"]
           seller_tier: Database["public"]["Enums"]["tier_level"]
           seller_verification_rejection_reason: string | null
@@ -1105,6 +1268,7 @@ export type Database = {
           banned_at?: string | null
           banned_by?: string | null
           banned_until?: string | null
+          bio?: string | null
           created_at?: string
           deleted_at?: string | null
           display_name?: string | null
@@ -1117,6 +1281,7 @@ export type Database = {
           phone_number?: string | null
           photo_url?: string | null
           preferred_brand?: Database["public"]["Enums"]["brand_type"] | null
+          profile_photo_url?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           seller_tier?: Database["public"]["Enums"]["tier_level"]
           seller_verification_rejection_reason?: string | null
@@ -1139,6 +1304,7 @@ export type Database = {
           banned_at?: string | null
           banned_by?: string | null
           banned_until?: string | null
+          bio?: string | null
           created_at?: string
           deleted_at?: string | null
           display_name?: string | null
@@ -1151,6 +1317,7 @@ export type Database = {
           phone_number?: string | null
           photo_url?: string | null
           preferred_brand?: Database["public"]["Enums"]["brand_type"] | null
+          profile_photo_url?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           seller_tier?: Database["public"]["Enums"]["tier_level"]
           seller_verification_rejection_reason?: string | null
@@ -1180,6 +1347,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_payment_penalty: {
+        Args: { p_offer_id: string; p_settlement_id: string; p_user_id: string }
+        Returns: number
+      }
       ban_user: {
         Args: { p_admin_id: string; p_reason: string; p_user_id: string }
         Returns: undefined
@@ -1208,6 +1379,13 @@ export type Database = {
         Returns: Database["public"]["Enums"]["content_risk_level"]
       }
       get_minimum_next_bid: { Args: { auction_uuid: string }; Returns: number }
+      get_next_eligible_bidder: {
+        Args: { p_auction_id: string; p_exclude_uids: string[] }
+        Returns: {
+          bidder_id: string
+          max_bid_cents: number
+        }[]
+      }
       get_winning_bid: { Args: { auction_uuid: string }; Returns: string }
       is_high_bidder: {
         Args: { auction_uuid: string; user_uuid: string }
