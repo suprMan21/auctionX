@@ -1,6 +1,30 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-01 (Module 02 Port added)
+Last updated: 2026-03-01 (Module 12 added)
+
+---
+
+## Module 12: Seller Payouts
+
+- [ ] **TODO:** Apply DB migration and regenerate types
+  - Context: `supabase/migrations/20260301000002_payouts_table.sql` adds `payouts` table + escrow/dispute columns on settlements. After applying, run `npx supabase gen types typescript --project-id pmlofthmobglcfkqjtru > frontend/src/types/database.types.ts && cp ...`. Then remove `(supabase as any)` cast in `PayoutsPage.tsx`.
+  - Priority: HIGH — required before payouts feature works
+  - Depends on: Supabase CLI + project credentials
+
+- [ ] **TODO:** Set up pg_cron for release-escrow (every 5 min)
+  - Context: `supabase/functions/release-escrow/index.ts` is a cron-style function that finds expired ESCROW_HOLD settlements. Needs pg_cron + pg_net enabled in Supabase, or an external scheduler (e.g. Vercel cron). Call via POST with `x-release-secret` header.
+  - Priority: HIGH — without this, escrow is never released automatically
+  - Depends on: `RELEASE_ESCROW_SECRET` env var configured in Supabase edge function settings
+
+- [ ] **TODO:** Implement actual Stripe Connect Transfer in release-escrow
+  - Context: `release-escrow` creates a payout record and marks it PROCESSING but doesn't call Stripe's Transfer API. Requires seller's Stripe Connect account ID stored on their user profile.
+  - Priority: HIGH — payouts currently never actually reach sellers
+  - Depends on: Stripe Connect onboarding flow (future module)
+
+- [ ] **TODO:** Implement admin dispute resolution (approve → refund, reject → release)
+  - Context: `POST /api/v1/admin/disputes/:id/approve` and `reject` return 501. Approval should trigger buyer refund via Stripe; rejection should call release-escrow logic for the specific settlement.
+  - Priority: HIGH — disputed settlements are stuck until resolved manually
+  - Depends on: Module 13+
 
 ---
 

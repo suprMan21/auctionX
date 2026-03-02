@@ -39,6 +39,27 @@
 
 ---
 
+## Module 12: Seller Payouts — 2026-03-01
+
+### What Worked
+- Mirroring the `settle-auction` shared-secret auth pattern for `release-escrow` is clean and consistent — new edge functions should follow this same pattern.
+- Keeping `calculatePayout()` as a pure function in `_shared/payment/payoutCalculation.ts` makes it independently testable without Supabase or Deno context.
+- Using the `moderation_queue` table for dispute tracking (rather than a new table) reuses existing admin tooling at zero schema cost.
+
+### Patterns Discovered
+- **Typed Supabase client `from()` fails for new tables until migration + type regen**: The generated `database.types.ts` only reflects the DB state at the time of last `supabase gen types` run. Any new table added via migration will cause TS errors on `supabase.from('new_table')`. Solution: cast `supabase as any` with a TODO comment, apply migration, regen types, then remove the cast.
+- **Express `req.params` destructuring can produce `string | string[]`**: When typing custom request interfaces that extend multiple middleware types, destructuring `const { id } = req.params` can lose the `string` narrowing. Use `req.params['id'] as string` when this occurs.
+- **`settlement.status` type union must be updated in parallel with DB**: New status values (`RELEASED`, `DISPUTED`) introduced by Module 12 must be added to both the SQL `CHECK` constraint (implicitly via direct update in the edge function) and the TypeScript `SettlementStatus` union. The two can diverge if only one is updated.
+- **Cron functions need external orchestration**: Supabase edge functions are not self-scheduling. To call `release-escrow` every 5 minutes, use pg_cron + pg_net (within Supabase) or an external cron (Vercel, Railway). Document the env var and call signature clearly.
+
+### Gotchas
+- **Spec had `t.status = 'COMPLETED'` — wrong**: The `transactions` table uses `SUCCEEDED`, not `COMPLETED`, for successful payments. Always verify against the DB enum, not the spec text.
+- **Spec PayoutsPage join path was wrong**: `settlements(listing_id, listings(title))` — but `settlements` has no `listing_id`. Correct path: `settlements(auction_id, auctions(listing_id, listings(title)))`.
+- **`escrow_ends_at` was missing**: `payment-webhook` set status to `ESCROW_HOLD` but never set `escrow_ends_at`. Without it, `release-escrow` could never find any releasable settlements. Always check that new fields required by downstream functions are actually set by upstream code.
+- **Express `Array.isArray()` narrowing**: TypeScript may not narrow `string | string[]` via `Array.isArray()` when the branch result type is re-unified — use `as string` cast in the false branch or after the ternary when the value is known to be scalar.
+
+---
+
 ## Module 10: Admin Dashboard Frontend — 2026-03-01
 
 ### What Worked

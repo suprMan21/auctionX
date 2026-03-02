@@ -15,6 +15,7 @@ import { Header } from './components/navigation/Header';
 import { BrowsePage } from '@/pages/BrowsePage';
 import { SearchResultsPage } from '@/pages/SearchResultsPage';
 import { SettlementPage } from './pages/SettlementPage';
+import { PayoutsPage } from './pages/PayoutsPage';
 import { AdminProtectedRoute } from '@/features/admin/components/AdminProtectedRoute';
 import { AdminLayout } from '@/features/admin/AdminLayout';
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
@@ -104,6 +105,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <SettlementPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/payouts"
+            element={
+              <ProtectedRoute>
+                <PayoutsPage />
               </ProtectedRoute>
             }
           />

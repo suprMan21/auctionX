@@ -2,7 +2,9 @@ export type SettlementStatus =
   | 'PENDING_PAYMENT'
   | 'ESCROW_HOLD'
   | 'COMPLETED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'RELEASED'
+  | 'DISPUTED';
 
 export type OfferStatus =
   | 'PENDING_PAYMENT'
@@ -29,6 +31,10 @@ export interface Settlement {
   created_at: string;
   updated_at: string;
   settled_at: string | null;
+  escrow_ends_at: string | null;
+  escrow_released_at: string | null;
+  dispute_reason: string | null;
+  dispute_opened_at: string | null;
   auction?: {
     id: string;
     listing_id: string;

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { Settlement, AuctionSettlementSummary } from '@/features/auctions/types/settlement';
+import type { Payout } from '@/features/payouts/types/payout';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
@@ -58,5 +59,26 @@ export const api = {
     if (!response.ok) return null;
     const json = await response.json();
     return json.data;
+  },
+
+  async getPayouts(): Promise<Payout[]> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/payouts`, { headers });
+    if (!response.ok) throw new Error('Failed to fetch payouts');
+    const json = await response.json();
+    return json.data;
+  },
+
+  async openDispute(settlementId: string, reason: string): Promise<void> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/settlements/${settlementId}/dispute`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to open dispute');
+    }
   },
 };

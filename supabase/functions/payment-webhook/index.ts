@@ -282,13 +282,15 @@ async function handleSettlementCompletion(supabase: any, transactionId: string) 
       });
     }
 
-    // Update settlement → ESCROW_HOLD with transaction_id and buyer_id
+    // Update settlement → ESCROW_HOLD with transaction_id, buyer_id, and escrow_ends_at
+    const escrowEndsAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
     const { error: settlementUpdateError } = await supabase
       .from('settlements')
       .update({
         status: 'ESCROW_HOLD',
         transaction_id: transactionId,
         buyer_id: offer.bidder_id,
+        escrow_ends_at: escrowEndsAt,
         updated_at: new Date().toISOString(),
       })
       .eq('id', settlement.id);

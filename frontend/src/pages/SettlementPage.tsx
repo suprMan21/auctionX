@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { CountdownTimer } from '@/features/auctions/components/CountdownTimer';
 import type { Settlement } from '@/features/auctions/types/settlement';
+import toast from 'react-hot-toast';
 
 function centsToDisplay(cents: number, currency = 'USD'): string {
   return new Intl.NumberFormat('en-US', {
@@ -16,27 +17,48 @@ function centsToDisplay(cents: number, currency = 'USD'): string {
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     PENDING_PAYMENT: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-    ESCROW_HOLD: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-    COMPLETED: 'bg-green-500/20 text-green-300 border-green-500/30',
-    CANCELLED: 'bg-red-500/20 text-red-300 border-red-500/30',
+    ESCROW_HOLD:     'bg-blue-500/20 text-blue-300 border-blue-500/30',
+    COMPLETED:       'bg-green-500/20 text-green-300 border-green-500/30',
+    CANCELLED:       'bg-red-500/20 text-red-300 border-red-500/30',
+    RELEASED:        'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    DISPUTED:        'bg-orange-500/20 text-orange-300 border-orange-500/30',
   };
   const cls = colors[status] ?? 'bg-gray-500/20 text-gray-300 border-gray-500/30';
   return (
     <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${cls}`}>
-      {status.replace('_', ' ')}
+      {status.replace(/_/g, ' ')}
     </span>
   );
 }
 
-function BuyerView({ settlement }: { settlement: Settlement }) {
+function BuyerView({ settlement, onDisputeOpened }: { settlement: Settlement; onDisputeOpened: () => void }) {
   const currency = settlement.auction?.currency ?? 'USD';
   const activeOffer = settlement.offers?.find((o) => o.status === 'PENDING_PAYMENT') ?? null;
+  const [disputeReason, setDisputeReason] = useState('');
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
 
   const SUPABASE_FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_URL
     ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
     : null;
 
   const canPay = !!SUPABASE_FUNCTIONS_URL && settlement.status === 'PENDING_PAYMENT';
+
+  const handleOpenDispute = async () => {
+    if (disputeReason.trim().length < 20) {
+      toast.error('Please provide at least 20 characters for your dispute reason.');
+      return;
+    }
+    setDisputeSubmitting(true);
+    try {
+      await api.openDispute(settlement.id, disputeReason.trim());
+      toast.success('Dispute opened. An admin will review your case.');
+      onDisputeOpened();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to open dispute');
+    } finally {
+      setDisputeSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -94,10 +116,60 @@ function BuyerView({ settlement }: { settlement: Settlement }) {
       </div>
 
       {settlement.status === 'ESCROW_HOLD' && (
-        <div className="glass rounded-2xl p-6 border border-blue-500/20">
-          <h2 className="text-lg font-semibold text-blue-300 mb-2">Payment Received</h2>
+        <>
+          <div className="glass rounded-2xl p-6 border border-blue-500/20">
+            <h2 className="text-lg font-semibold text-blue-300 mb-2">Payment Received</h2>
+            <p className="text-gray-400 text-sm">
+              Your payment is in escrow. The seller will ship your item shortly. Funds release once delivery is confirmed.
+            </p>
+          </div>
+
+          <div className="glass rounded-2xl p-6 border border-orange-500/20">
+            <h2 className="text-lg font-semibold text-orange-300 mb-3">Open a Dispute</h2>
+            <p className="text-gray-400 text-sm mb-4">
+              If you have not received your item or there is a problem, you can open a dispute within the escrow window.
+              An admin will review your case.
+            </p>
+            <label htmlFor="dispute-reason" className="block text-sm text-gray-300 mb-2">
+              Describe the issue <span className="text-gray-500">(min. 20 characters)</span>
+            </label>
+            <textarea
+              id="dispute-reason"
+              rows={4}
+              value={disputeReason}
+              onChange={(e) => setDisputeReason(e.target.value)}
+              placeholder="Describe the problem in detail…"
+              className="w-full rounded-xl bg-white/5 border border-white/10 text-white text-sm px-3 py-2
+                         placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+            />
+            <p className="text-xs text-gray-500 mt-1 mb-3">{disputeReason.trim().length} / 20 minimum</p>
+            <button
+              type="button"
+              onClick={handleOpenDispute}
+              disabled={disputeSubmitting || disputeReason.trim().length < 20}
+              className="w-full bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed
+                         text-white font-semibold py-3 px-6 rounded-xl transition-all"
+            >
+              {disputeSubmitting ? 'Submitting…' : 'Open Dispute'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {settlement.status === 'DISPUTED' && (
+        <div className="glass rounded-2xl p-6 border border-orange-500/20">
+          <h2 className="text-lg font-semibold text-orange-300 mb-2">Dispute Under Review</h2>
           <p className="text-gray-400 text-sm">
-            Your payment is in escrow. The seller will ship your item shortly. Funds release once delivery is confirmed.
+            Your dispute has been submitted and is being reviewed by our team. We will contact you with a resolution.
+          </p>
+        </div>
+      )}
+
+      {settlement.status === 'RELEASED' && (
+        <div className="glass rounded-2xl p-6 border border-emerald-500/20">
+          <h2 className="text-lg font-semibold text-emerald-300 mb-2">Escrow Released</h2>
+          <p className="text-gray-400 text-sm">
+            The escrow hold has ended and funds have been released to the seller.
           </p>
         </div>
       )}
@@ -178,6 +250,18 @@ function SellerView({ settlement }: { settlement: Settlement }) {
           </div>
         ) : settlement.status === 'ESCROW_HOLD' ? (
           <p className="text-blue-300 text-sm">Payment received — awaiting delivery confirmation.</p>
+        ) : settlement.status === 'DISPUTED' ? (
+          <div className="space-y-2">
+            <p className="text-orange-300 text-sm font-semibold">The buyer has opened a dispute.</p>
+            {settlement.dispute_reason && (
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 text-orange-200 text-sm">
+                {settlement.dispute_reason}
+              </div>
+            )}
+            <p className="text-gray-400 text-xs">An admin will review and resolve the dispute.</p>
+          </div>
+        ) : settlement.status === 'RELEASED' ? (
+          <p className="text-emerald-300 text-sm">Escrow released — payout is being processed.</p>
         ) : settlement.status === 'COMPLETED' ? (
           <p className="text-green-300 text-sm">Payout complete.</p>
         ) : (
@@ -290,7 +374,12 @@ export function SettlementPage() {
         </div>
 
         {role === 'buyer' ? (
-          <BuyerView settlement={settlement} />
+          <BuyerView
+            settlement={settlement}
+            onDisputeOpened={() =>
+              setSettlement((prev) => prev ? { ...prev, status: 'DISPUTED' as const } : null)
+            }
+          />
         ) : (
           <SellerView settlement={settlement} />
         )}
