@@ -1,0 +1,66 @@
+MODULE 06: ERROR HANDLING & TESTING - FILE MANIFEST
+====================================================
+
+NEW FILES TO ADD TO YOUR PROJECT:
+----------------------------------
+
+Core Error Handling:
+  src/lib/errors/ErrorHandler.ts
+  src/components/common/ErrorBoundary.tsx
+
+Test Infrastructure:
+  src/test/setup.ts
+  src/test/preflight/environment.test.ts
+  src/test/integration/ErrorHandler.test.ts
+  src/test/integration/ErrorBoundary.test.tsx
+  src/test/e2e/auth.spec.ts
+  src/test/postflight/deployment.test.ts
+
+Configuration Files:
+  vitest.config.ts
+  vitest.preflight.config.ts
+  playwright.config.ts
+  .env.example
+
+Documentation:
+  TEST_README.md
+  MODULE_06_COMPLETION.md
+  MODULE_06_FILES.txt (this file)
+  DEPLOY_MODULE_06.sh
+
+FILES TO UPDATE:
+----------------
+  src/App.tsx (add ErrorBoundary wrapper and Toaster)
+  package.json (add testing dependencies and scripts)
+
+TOTAL: 16 new files, 2 updated files
+
+INSTALLATION COMMAND:
+---------------------
+npm install
+
+NEW NPM SCRIPTS:
+----------------
+npm run test:preflight    - Validate environment
+npm run test:integration  - Run component tests
+npm run test:e2e          - Run E2E tests
+npm run test:e2e:ui       - Run E2E with UI
+npm run test:postflight   - Validate deployment
+npm run test:coverage     - Generate coverage
+npm run test:all          - Run all tests
+
+DIRECTORY STRUCTURE:
+--------------------
+frontend/
+├── src/
+│   ├── lib/errors/
+│   ├── components/common/
+│   └── test/
+│       ├── preflight/
+│       ├── integration/
+│       ├── e2e/
+│       └── postflight/
+├── vitest.config.ts
+├── vitest.preflight.config.ts
+├── playwright.config.ts
+└── TEST_README.md
