@@ -1,8 +1,11 @@
 /**
- * Notification stubs — Module 16 placeholder
+ * @deprecated Module 16 — These stubs have been superseded by notificationService.ts.
+ * All controllers now import from '../lib/notifications/notificationService' directly.
+ * This file is kept to avoid breaking any future module imports but should not be
+ * used in new code.
  *
- * These functions will be replaced with real email/push notification
- * implementations in Module 16. For now they log intent only.
+ * Notification stubs — Module 16 placeholder
+ * Original implementations: see notificationService.ts
  */
 
 export async function notifyPayoutCompleted(

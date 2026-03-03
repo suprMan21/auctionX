@@ -11,6 +11,7 @@ import payoutRoutes from './routes/payouts';
 import { verificationRoutes, publicVerificationRoutes } from './routes/verifications';
 import searchRoutes from './routes/search';
 import messageRoutes from './routes/messages';
+import notificationRoutes from './routes/notifications';
 
 dotenv.config();
 
@@ -39,6 +40,7 @@ app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/verifications', verificationRoutes);
 app.use('/api/v1/verify', publicVerificationRoutes);
 app.use('/api/v1/conversations', messageRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   log.error('unhandled_error', { error: err.message, stack: err.stack });

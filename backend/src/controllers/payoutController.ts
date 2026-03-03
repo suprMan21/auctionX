@@ -4,7 +4,7 @@ import { RequestWithId } from '../middleware/requestId';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../lib/errors';
 import { withLogContext } from '../lib/logger';
-import { notifyDisputeOpened } from '../lib/notifications/stubs';
+import { notificationService } from '../lib/notifications/notificationService';
 
 interface PayoutRequest extends RequestWithId, AuthRequest {}
 
@@ -128,9 +128,28 @@ export const openDispute = async (req: PayoutRequest, res: Response) => {
       logger.warn('open_dispute_moderation_queue_failed', { settlementId, error: mqError });
     }
 
-    // Notification stub
+    // Notify both seller and buyer about the dispute
     const sellerId = Array.isArray(settlement.seller_id) ? settlement.seller_id[0] : settlement.seller_id;
-    await notifyDisputeOpened(settlementId, userId, sellerId);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const settlementUrl = `${frontendUrl}/settlements/${settlementId}`;
+    await notificationService.sendBatch(supabase, [
+      {
+        userId: sellerId,
+        type: 'DISPUTE_OPENED',
+        title: 'A dispute has been opened',
+        body: 'The buyer has opened a dispute on your settlement. Our team will review it.',
+        actionUrl: settlementUrl,
+        metadata: { settlementId, buyerId: userId },
+      },
+      {
+        userId,
+        type: 'DISPUTE_OPENED',
+        title: 'Your dispute has been received',
+        body: 'Your dispute is under review. Our moderation team will follow up.',
+        actionUrl: settlementUrl,
+        metadata: { settlementId },
+      },
+    ]);
 
     logger.info('dispute_opened', { settlementId, buyerId: userId });
 

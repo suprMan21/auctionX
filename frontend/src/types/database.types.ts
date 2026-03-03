@@ -783,6 +783,112 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          auction_outbid: boolean
+          auction_won: boolean
+          dispute_opened: boolean
+          email_enabled: boolean
+          escrow_released: boolean
+          id: string
+          in_app_enabled: boolean
+          item_scanned: boolean
+          message_received: boolean
+          payment_received: boolean
+          payment_window_expiring: boolean
+          payout_completed: boolean
+          settlement_cascade: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auction_outbid?: boolean
+          auction_won?: boolean
+          dispute_opened?: boolean
+          email_enabled?: boolean
+          escrow_released?: boolean
+          id?: string
+          in_app_enabled?: boolean
+          item_scanned?: boolean
+          message_received?: boolean
+          payment_received?: boolean
+          payment_window_expiring?: boolean
+          payout_completed?: boolean
+          settlement_cascade?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auction_outbid?: boolean
+          auction_won?: boolean
+          dispute_opened?: boolean
+          email_enabled?: boolean
+          escrow_released?: boolean
+          id?: string
+          in_app_enabled?: boolean
+          item_scanned?: boolean
+          message_received?: boolean
+          payment_received?: boolean
+          payment_window_expiring?: boolean
+          payout_completed?: boolean
+          settlement_cascade?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          action_url: string | null
+          body: string
+          created_at: string
+          id: string
+          metadata: Json
+          read_at: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          action_url?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          read_at?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          action_url?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          read_at?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ownership_transfers: {
         Row: {
           from_user_id: string | null

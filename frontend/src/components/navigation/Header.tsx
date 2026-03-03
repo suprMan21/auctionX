@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { NotificationBell } from '@/features/notifications/components/NotificationBell';
 
 function useUnreadCount(userId: string | undefined) {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -212,6 +213,7 @@ export function Header() {
             </button>
             {user ? (
               <>
+                <NotificationBell userId={user.id} />
                 <Link
                   to="/profile"
                   className="hidden sm:flex items-center gap-2 px-4 py-2 min-h-[44px] rounded-xl

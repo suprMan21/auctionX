@@ -21,6 +21,25 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logger } from '../_shared/utils/logger.ts';
 
+/** Insert a notification row silently — errors never block the main flow. */
+async function insertNotification(
+  supabase: any,
+  userId: string,
+  type: string,
+  title: string,
+  body: string,
+  actionUrl: string | null = null,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await supabase.from('notifications').insert({
+      user_id: userId, type, title, body, action_url: actionUrl, metadata,
+    });
+  } catch (_err) {
+    // Silently ignore — notification failures must never block payment/settlement flow
+  }
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -181,6 +200,18 @@ serve(async (req) => {
             newRank,
             newWindow,
           });
+
+          // Notify next bidder of their cascade offer (non-fatal)
+          const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:5173';
+          await insertNotification(
+            supabase,
+            nextBidder.bidder_id,
+            'SETTLEMENT_CASCADE',
+            'You have a purchase offer!',
+            `A purchase offer has come to you. You have 20 minutes to complete payment of $${(nextBidder.max_bid_cents / 100).toFixed(2)}.`,
+            `${frontendUrl}/settlements/${offer.settlement_id}`,
+            { settlementId: offer.settlement_id, offerCents: nextBidder.max_bid_cents, rank: newRank },
+          );
 
           cascaded++;
         } else {

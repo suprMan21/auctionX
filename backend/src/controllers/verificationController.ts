@@ -5,6 +5,7 @@ import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../lib/errors';
 import { withLogContext } from '../lib/logger';
 import { generatePresignedUrl } from '../lib/s3';
+import { notificationService } from '../lib/notifications/notificationService';
 
 interface VerificationRequest extends Request, RequestWithId, AuthRequest {}
 
@@ -355,7 +356,7 @@ export const incrementScanCount = async (req: VerificationRequest, res: Response
 
     const { data: verif } = await supabase
       .from('item_verifications')
-      .select('id, scan_count')
+      .select('id, scan_count, current_owner_id, token_name')
       .eq('token_name', tokenName)
       .maybeSingle();
 
@@ -369,6 +370,21 @@ export const incrementScanCount = async (req: VerificationRequest, res: Response
       .eq('id', verif.id);
 
     logger.info('verification_scanned', { tokenName, verificationId: verif.id });
+
+    // Notify the current owner that their item was scanned (non-fatal)
+    if (verif.current_owner_id) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      notificationService.send(supabase, {
+        userId: verif.current_owner_id,
+        type: 'ITEM_SCANNED',
+        title: 'Your item was scanned',
+        body: `Someone scanned your NFC-authenticated item (${verif.token_name}).`,
+        actionUrl: `${frontendUrl}/verify/${verif.token_name}`,
+        metadata: { verificationId: verif.id, tokenName: verif.token_name },
+      }).catch((err: unknown) => {
+        logger.warn('item_scanned_notification_failed', { error: String(err) });
+      });
+    }
 
     return res.json({ success: true });
   } catch (error) {

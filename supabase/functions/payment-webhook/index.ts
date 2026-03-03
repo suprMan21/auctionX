@@ -18,6 +18,25 @@ import { ProcessorFactory } from '../_shared/payment/ProcessorFactory.ts';
 import { ProcessorType, PaymentStatus } from '../_shared/payment/types.ts';
 import { logger } from '../_shared/utils/logger.ts';
 
+/** Insert a notification row silently — errors never block the main flow. */
+async function insertNotification(
+  supabase: any,
+  userId: string,
+  type: string,
+  title: string,
+  body: string,
+  actionUrl: string | null = null,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await supabase.from('notifications').insert({
+      user_id: userId, type, title, body, action_url: actionUrl, metadata,
+    });
+  } catch (_err) {
+    // Silently ignore — notification failures must never block payment/settlement flow
+  }
+}
+
 /**
  * Maps PaymentStatus (internal enum) → transaction_status DB enum.
  * transaction_status does not have COMPLETED — it uses SUCCEEDED.
@@ -317,6 +336,39 @@ async function handleSettlementCompletion(supabase: any, transactionId: string) 
         auctionId,
         error: auctionUpdateError,
       });
+    }
+
+    // Notify buyer and seller that payment was received (non-fatal)
+    const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:5173';
+    const settlementUrl = `${frontendUrl}/settlements/${settlement.id}`;
+
+    await insertNotification(
+      supabase,
+      offer.bidder_id,
+      'PAYMENT_RECEIVED',
+      'Payment confirmed',
+      'Your payment has been received and is now in escrow. The seller will ship your item.',
+      settlementUrl,
+      { settlementId: settlement.id, transactionId },
+    );
+
+    // Fetch seller_id from settlement to notify them
+    const { data: settl } = await supabase
+      .from('settlements')
+      .select('seller_id')
+      .eq('id', settlement.id)
+      .maybeSingle();
+
+    if (settl?.seller_id) {
+      await insertNotification(
+        supabase,
+        settl.seller_id,
+        'PAYMENT_RECEIVED',
+        'Payment received for your item',
+        'The buyer has completed payment. Funds are now held in escrow and will be released after the inspection period.',
+        settlementUrl,
+        { settlementId: settlement.id, transactionId },
+      );
     }
 
     logger.info('Webhook: Settlement completion handled', {

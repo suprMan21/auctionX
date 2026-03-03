@@ -1,6 +1,26 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-02 (Module 14 added)
+Last updated: 2026-03-03 (Module 16 added)
+
+---
+
+## Module 16: Notifications System
+
+- [ ] **TODO:** Resend email integration
+  - Context: `emailSender.ts` is a stub that logs intent only. When `RESEND_API_KEY` is available, install `resend` package and replace the stub body with `resend.emails.send(...)`.
+  - Priority: HIGH — required for real email delivery
+
+- [ ] **TODO:** Offline check before sending MESSAGE_RECEIVED email
+  - Context: `messagingController.sendMessage` always sends a notification to the recipient. Ideally it should check if the recipient has been active in the last 5 minutes (e.g., via presence/Realtime heartbeat) and skip the email if they're online.
+  - Priority: MEDIUM — avoids unnecessary emails for active users
+
+- [ ] **TODO:** PAYMENT_WINDOW_EXPIRING trigger (pg_cron job)
+  - Context: The `payment_window_expiring` preference column is defined and documented, but no trigger currently fires this notification. A pg_cron job should check for offers expiring within ~5 minutes and insert PAYMENT_WINDOW_EXPIRING notifications.
+  - Priority: MEDIUM — improves buyer experience during settlement
+
+- [ ] **TODO:** Add FRONTEND_URL env var to all edge functions
+  - Context: Edge functions (settle-auction, check-payment-window, release-escrow, payment-webhook) use `Deno.env.get('FRONTEND_URL')` for action URLs in notifications. This must be set in `supabase/.env.local` and Supabase dashboard secrets.
+  - Priority: HIGH — otherwise notification action_urls point to localhost in production
 
 ---
 

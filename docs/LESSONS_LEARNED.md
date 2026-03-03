@@ -2,6 +2,23 @@
 
 ---
 
+## Module 16: Notifications System — 2026-03-03
+
+### What Worked
+- **Non-fatal notification pattern**: Wrapping all notification calls in try/catch (or `.catch(() => {})`) and never letting them throw is the correct pattern. Notification failures should never affect primary flows (bidding, payment, messaging). This was implemented consistently across both Express controllers and Deno edge functions.
+- **Preference checking before insert**: Fetching the `notification_preferences` row before inserting a notification prevents unnecessary DB writes and gives users meaningful control. Upserting defaults on first access (instead of requiring users to explicitly configure preferences) provides a great out-of-the-box experience.
+- **`Promise.allSettled` for batching**: Using `sendBatch()` with `Promise.allSettled()` ensures one failed notification doesn't prevent others from being sent — the right primitive for parallel notification delivery.
+- **Inline helper for Deno**: Since edge functions (Deno) can't import Node.js modules, inlining a 10-line `insertNotification()` helper in each function file is the right approach. The pattern is minimal, readable, and eliminates the need for a shared Deno notification module.
+- **Static routes before `:id` routes**: In the notifications router, `/preferences` and `/mark-all-read` must be registered before `/:id/read`. This prevents Express from interpreting "preferences" or "mark-all-read" as an `:id` parameter.
+
+### What To Watch Out For
+- **`Notification` type name collision**: The browser's global `Notification` interface conflicts with an imported `Notification` type. TypeScript treats the import as unused when only `NotificationsResponse` and `NotificationPreferences` are referenced in `api.ts`. Always check what global names conflict with custom domain types.
+- **Service client in notification service**: The `notificationService` must always receive a service-role client — it needs to write notifications for any user regardless of the caller's auth context. Passing a user-scoped client would fail with RLS violations.
+- **Email address lookup**: The notification service fetches the user's email from `users.email` to send transactional emails. This assumes the `users` table has an `email` column populated at signup. Verify this column is synced from `auth.users` via trigger before enabling real email delivery.
+- **FRONTEND_URL env var in edge functions**: `Deno.env.get('FRONTEND_URL')` must be set in both `supabase/.env.local` (local dev) and Supabase dashboard secrets (production). Without it, notification `action_url` fields point to `localhost:5173` in production.
+
+---
+
 ## Module 14: Enhanced Search — 2026-03-02
 
 ### What Worked

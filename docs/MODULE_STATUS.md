@@ -1,6 +1,6 @@
 # AuctionX Module Status (Post-Audit)
 
-**Last Updated:** March 3, 2026 (Module 15 — messaging system complete)
+**Last Updated:** March 3, 2026 (Module 16 — notifications system complete)
 **Audit Date:** February 28, 2026
 **Phase 0 Completed:** March 1, 2026 — 0 TS errors frontend/backend, critical security fix, dead code purge, route wiring, rate limiting, docs consolidation
 **Honest Progress:** 11/18 modules production-ready
@@ -126,11 +126,11 @@
 
 ### Module 15: Messaging System
 - Buyer-seller real-time communication
-- **Status:** ✅ COMPLETE (2026-03-03) — pending DB migration push + type regen
+- **Status:** ✅ COMPLETE (2026-03-03)
 
 ### Module 16: Notifications
 - Email, push, in-app
-- **Status:** NOT STARTED
+- **Status:** ✅ COMPLETE (2026-03-03) — notifications table + preferences + bell UI + history page + triggers wired in all controllers and edge functions
 
 ### Module 17: E2E Testing & Security
 - Playwright tests, security audit

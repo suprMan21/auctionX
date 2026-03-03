@@ -8,6 +8,10 @@ import type {
   MessagesResponse,
   StartConversationResponse,
 } from '@/features/messaging/types/messaging';
+import type {
+  NotificationPreferences,
+  NotificationsResponse,
+} from '@/features/notifications/types/notification';
 
 // ── Module 14: Enhanced Search types ─────────────────────────────────────────
 
@@ -351,5 +355,57 @@ export const api = {
     }
     const json = await response.json();
     return json.data as StartConversationResponse;
+  },
+
+  // ── Module 16: Notifications ────────────────────────────────────────────────
+
+  /** Fetch paginated notifications for the authenticated user. */
+  async getNotifications(page = 1, unreadOnly = false): Promise<NotificationsResponse> {
+    const headers = await getAuthHeader();
+    const qs = new URLSearchParams({ page: String(page) });
+    if (unreadOnly) qs.set('unread', 'true');
+    const response = await fetch(`${API_URL}/notifications?${qs}`, { headers });
+    if (!response.ok) throw new Error('Failed to fetch notifications');
+    const json = await response.json();
+    return json.data as NotificationsResponse;
+  },
+
+  /** Mark a single notification as read. */
+  async markNotificationRead(id: string): Promise<void> {
+    const headers = await getAuthHeader();
+    await fetch(`${API_URL}/notifications/${id}/read`, { method: 'PATCH', headers });
+  },
+
+  /** Mark all unread notifications as read. */
+  async markAllNotificationsRead(): Promise<void> {
+    const headers = await getAuthHeader();
+    await fetch(`${API_URL}/notifications/mark-all-read`, { method: 'POST', headers });
+  },
+
+  /** Fetch notification preferences for the authenticated user. */
+  async getNotificationPreferences(): Promise<NotificationPreferences> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/notifications/preferences`, { headers });
+    if (!response.ok) throw new Error('Failed to fetch notification preferences');
+    const json = await response.json();
+    return json.data as NotificationPreferences;
+  },
+
+  /** Update notification preferences for the authenticated user. */
+  async updateNotificationPreferences(
+    prefs: Partial<Omit<NotificationPreferences, 'id' | 'user_id' | 'updated_at' | 'in_app_enabled'>>,
+  ): Promise<NotificationPreferences> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/notifications/preferences`, {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to update preferences');
+    }
+    const json = await response.json();
+    return json.data as NotificationPreferences;
   },
 };

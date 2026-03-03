@@ -28,6 +28,8 @@ import { AdminUserDetailPage } from '@/features/admin/pages/AdminUserDetailPage'
 import { AdminModerationPage } from '@/features/admin/pages/AdminModerationPage';
 import { AdminAuditLogPage } from '@/features/admin/pages/AdminAuditLogPage';
 import { AdminHealthPage } from '@/features/admin/pages/AdminHealthPage';
+import { NotificationsPage } from './features/notifications/pages/NotificationsPage';
+import { NotificationPreferencesPage } from './features/notifications/pages/NotificationPreferencesPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -155,6 +157,24 @@ function App() {
             element={
               <ProtectedRoute>
                 <ConversationsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <NotificationsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/settings/notifications"
+            element={
+              <ProtectedRoute>
+                <NotificationPreferencesPage />
               </ProtectedRoute>
             }
           />

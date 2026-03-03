@@ -22,6 +22,7 @@ import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../lib/errors';
 import { withLogContext } from '../lib/logger';
 import { filterMessage } from '../lib/moderation/messageFilter';
+import { notificationService } from '../lib/notifications/notificationService';
 
 interface ConversationRequest extends Request, RequestWithId, AuthRequest {}
 
@@ -287,6 +288,26 @@ export const sendMessage = async (req: ConversationRequest, res: Response) => {
     if (insertError) {
       logger.error('send_message_failed', { userId, convId: id, error: insertError.message });
       throw new AppError('internal', 'Failed to send message');
+    }
+
+    // Notify the other participant (non-fatal, fire-and-forget)
+    // TODO(module-16): Add offline check (> 5 min) before sending email; currently always notifies
+    const recipientId = conv.participant_1_id === userId
+      ? conv.participant_2_id
+      : conv.participant_1_id;
+
+    if (recipientId) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      notificationService.send(supabase, {
+        userId: recipientId,
+        type: 'MESSAGE_RECEIVED',
+        title: 'New message',
+        body: body.slice(0, 100) + (body.length > 100 ? '…' : ''),
+        actionUrl: `${frontendUrl}/messages/${id}`,
+        metadata: { conversationId: id, senderId: userId },
+      }).catch((err: unknown) => {
+        logger.warn('message_notification_failed', { error: String(err) });
+      });
     }
 
     return res.status(201).json({ success: true, data: message });

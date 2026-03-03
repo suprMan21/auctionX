@@ -3,9 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 import { withLogContext } from '../lib/logger';
 import { AppError } from '../lib/errors';
 import type { Database } from '../types/database';
+import { notificationService } from '../lib/notifications/notificationService';
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function placeBid(req: Request, res: Response, next: NextFunction) {
   const log = withLogContext(req);
@@ -56,6 +58,9 @@ export async function placeBid(req: Request, res: Response, next: NextFunction) 
       throw new AppError('failed_precondition', 'Cannot bid on your own auction');
     }
 
+    // Capture previous high bidder BEFORE inserting (for outbid notification)
+    const prevHighBidderId = auction.high_bidder_id;
+
     const minimumBid = auction.current_price_cents + auction.minimum_increment_cents;
     if (amountCents < minimumBid) {
       log.debug('bid_too_low', { auctionId, amountCents, minimumBid });
@@ -90,6 +95,22 @@ export async function placeBid(req: Request, res: Response, next: NextFunction) 
       .single();
 
     const isHighBidder = updatedAuction?.high_bidder_id === userId;
+
+    // Notify displaced high bidder (non-fatal, fire-and-forget)
+    if (isHighBidder && prevHighBidderId && prevHighBidderId !== userId) {
+      const serviceClient = createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      notificationService.send(serviceClient, {
+        userId: prevHighBidderId,
+        type: 'AUCTION_OUTBID',
+        title: "You've been outbid",
+        body: `Someone placed a higher bid on this auction.`,
+        actionUrl: `${frontendUrl}/auctions/${auctionId}`,
+        metadata: { auctionId, newPriceCents: updatedAuction?.current_price_cents },
+      }).catch((err: unknown) => {
+        log.warn('outbid_notification_failed', { error: String(err) });
+      });
+    }
 
     log.info('bid_placed_success', {
       auctionId,

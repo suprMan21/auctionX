@@ -15,6 +15,25 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { calculatePayout } from '../_shared/payment/payoutCalculation.ts';
 import { logger } from '../_shared/utils/logger.ts';
 
+/** Insert a notification row silently — errors never block the main flow. */
+async function insertNotification(
+  supabase: any,
+  userId: string,
+  type: string,
+  title: string,
+  body: string,
+  actionUrl: string | null = null,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await supabase.from('notifications').insert({
+      user_id: userId, type, title, body, action_url: actionUrl, metadata,
+    });
+  } catch (_err) {
+    // Silently ignore — notification failures must never block payment/settlement flow
+  }
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-release-secret',
@@ -215,6 +234,43 @@ serve(async (req) => {
             error: nfcErr instanceof Error ? nfcErr.message : String(nfcErr),
           });
         }
+
+        // Notify seller and buyer of escrow release (non-fatal)
+        const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:5173';
+        const settlementUrl = `${frontendUrl}/settlements/${settlement.id}`;
+
+        await insertNotification(
+          supabase,
+          settlement.seller_id,
+          'ESCROW_RELEASED',
+          'Escrow funds released',
+          `The escrow for your sale has been released. Your payout of $${(payout.netPayoutCents / 100).toFixed(2)} is now being processed.`,
+          settlementUrl,
+          { settlementId: settlement.id, netPayoutCents: payout.netPayoutCents },
+        );
+
+        if (settlementRecord.buyer_id) {
+          await insertNotification(
+            supabase,
+            settlementRecord.buyer_id,
+            'ESCROW_RELEASED',
+            'Transaction completed',
+            'The escrow period has ended and the transaction is complete.',
+            settlementUrl,
+            { settlementId: settlement.id },
+          );
+        }
+
+        // Notify seller of payout initiation
+        await insertNotification(
+          supabase,
+          settlement.seller_id,
+          'PAYOUT_COMPLETED',
+          `Payout of $${(payout.netPayoutCents / 100).toFixed(2)} is on its way`,
+          'Your payout is being processed and should arrive in your account within 2–5 business days.',
+          `${frontendUrl}/payouts`,
+          { payoutId: payoutRecord.id, netPayoutCents: payout.netPayoutCents },
+        );
 
         stats.released++;
 
