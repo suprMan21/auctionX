@@ -2,23 +2,24 @@
  * BrowsePage — Main browse/discovery interface for listings
  *
  * Routes: /browse, /browse/:categorySlug
- * Queries: listings (joined with auctions + listing_media), categories
- * Dependencies: ListingCard, formatPrice, timeRemaining
+ * Queries: listings via /api/v1/search (server-side pagination), categories (direct Supabase)
+ * Dependencies: ListingCard, api.search
  *
  * Features:
  * - Hero search bar (navigates to /search on submit)
  * - Category grid (fetched from categories table, slug column used for filtering)
- * - Active listings feed with auction data
+ * - Active listings feed with server-side pagination (?page=N URL param)
  * - Category filtering via URL param :categorySlug (matched against categories.slug)
  * - Breadcrumb navigation when filtering by category
  *
- * @module Module 06 — Browse & Search
+ * @module Module 14 — Enhanced Search (pagination added)
  */
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { supabase } from '@/features/auth/lib/supabase';
 import { ListingCard } from '@/components/listings/ListingCard';
+import { api } from '@/lib/api';
 
 interface Category {
   id: string;
@@ -51,7 +52,10 @@ interface BrowseListing {
 
 export function BrowsePage() {
   const { categorySlug } = useParams<{ categorySlug?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  const pageParam = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
@@ -59,8 +63,10 @@ export function BrowsePage() {
   const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingListings, setLoadingListings] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
-  // Fetch categories
+  // Fetch categories (unchanged — small table, no pagination needed)
   useEffect(() => {
     let mounted = true;
     const fetchCategories = async () => {
@@ -81,43 +87,35 @@ export function BrowsePage() {
     return () => { mounted = false; };
   }, []);
 
-  // Fetch listings (with optional category filter)
+  // Fetch listings via search API (supports server-side pagination)
   useEffect(() => {
     let mounted = true;
     setLoadingListings(true);
 
     const fetchListings = async () => {
       try {
-        let categoryId: string | null = null;
+        // Resolve category name for breadcrumb (categories table is authoritative)
         let categoryName: string | null = null;
-
         if (categorySlug) {
-          const { data: catData, error: catError } = await supabase
+          const { data: catData } = await supabase
             .from('categories')
-            .select('id, name')
+            .select('name')
             .eq('slug', categorySlug)
-            .single();
-          if (catError) throw catError;
-          categoryId = (catData as { id: string; name: string }).id;
-          categoryName = (catData as { id: string; name: string }).name;
+            .maybeSingle();
+          categoryName = (catData as { name: string } | null)?.name ?? null;
         }
 
-        let query = supabase
-          .from('listings')
-          .select('id, title, auctions(id, current_price_cents, end_time, status), listing_media(url, type, sort_order), item_verifications(id, status, token_name)')
-          .eq('status', 'ACTIVE')
-          .order('created_at', { ascending: false })
-          .limit(24);
-
-        if (categoryId) {
-          query = query.eq('category_id', categoryId);
-        }
-
-        const { data, error } = await query;
-        if (error) throw error;
+        const response = await api.search({
+          category: categorySlug || undefined,
+          sort: 'newest',
+          page: pageParam,
+          limit: 24,
+        });
 
         if (mounted) {
-          setListings((data as unknown as BrowseListing[]) || []);
+          setListings(response.results as unknown as BrowseListing[]);
+          setTotal(response.total);
+          setTotalPages(response.totalPages);
           setActiveCategoryName(categoryName);
         }
       } catch (err) {
@@ -129,13 +127,18 @@ export function BrowsePage() {
 
     fetchListings();
     return () => { mounted = false; };
-  }, [categorySlug]);
+  }, [categorySlug, pageParam]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setSearchParams(newPage > 1 ? { page: String(newPage) } : {});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -258,11 +261,47 @@ export function BrowsePage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                {listings.map((listing) => (
-                  <ListingCard key={listing.id} listing={listing} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                  {listings.map((listing) => (
+                    <ListingCard key={listing.id} listing={listing} />
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <nav
+                    aria-label="Listing pages"
+                    className="flex items-center justify-center gap-3 mt-10"
+                  >
+                    <button
+                      onClick={() => handlePageChange(pageParam - 1)}
+                      disabled={pageParam <= 1}
+                      className="px-4 py-2 rounded-xl glass text-sm text-gray-300 hover:text-white
+                                 disabled:opacity-40 disabled:cursor-not-allowed transition-colors
+                                 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      ← Previous
+                    </button>
+                    <span className="text-gray-400 text-sm">
+                      Page <span className="text-white font-semibold">{pageParam}</span> of{' '}
+                      <span className="text-white font-semibold">{totalPages}</span>
+                      {total > 0 && (
+                        <span className="ml-2 text-gray-500">({total.toLocaleString()} total)</span>
+                      )}
+                    </span>
+                    <button
+                      onClick={() => handlePageChange(pageParam + 1)}
+                      disabled={pageParam >= totalPages}
+                      className="px-4 py-2 rounded-xl glass text-sm text-gray-300 hover:text-white
+                                 disabled:opacity-40 disabled:cursor-not-allowed transition-colors
+                                 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      Next →
+                    </button>
+                  </nav>
+                )}
+              </>
             )}
           </section>
         </main>

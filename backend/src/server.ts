@@ -9,6 +9,8 @@ import adminRoutes from './routes/admin/index';
 import settlementRoutes from './routes/settlements';
 import payoutRoutes from './routes/payouts';
 import { verificationRoutes, publicVerificationRoutes } from './routes/verifications';
+import searchRoutes from './routes/search';
+import messageRoutes from './routes/messages';
 
 dotenv.config();
 
@@ -33,8 +35,10 @@ app.use('/api/v1/settlements', settlementRoutes);
 app.use('/api/v1/payouts', payoutRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/verifications', verificationRoutes);
 app.use('/api/v1/verify', publicVerificationRoutes);
+app.use('/api/v1/conversations', messageRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   log.error('unhandled_error', { error: err.message, stack: err.stack });
@@ -58,4 +62,14 @@ app.listen(PORT, () => {
   console.log(`   GET  /api/v1/admin/moderation/queue`);
   console.log(`   POST /api/v1/admin/moderation/queue/:queueId/resolve`);
   console.log(`   GET  /api/v1/admin/audit-logs`);
+  console.log(`🔍 Search endpoints:`);
+  console.log(`   GET    /api/v1/search`);
+  console.log(`   GET    /api/v1/search/saved`);
+  console.log(`   POST   /api/v1/search/saved`);
+  console.log(`   DELETE /api/v1/search/saved/:id`);
+  console.log(`💬 Messaging endpoints:`);
+  console.log(`   GET    /api/v1/conversations`);
+  console.log(`   POST   /api/v1/conversations/start`);
+  console.log(`   GET    /api/v1/conversations/:id/messages`);
+  console.log(`   POST   /api/v1/conversations/:id/messages`);
 });

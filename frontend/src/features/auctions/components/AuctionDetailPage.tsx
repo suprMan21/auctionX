@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useAuction } from '../hooks/useAuction';
 import { CountdownTimer } from './CountdownTimer';
@@ -8,6 +8,7 @@ import { BidPlacementForm } from './BidPlacementForm';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { api } from '@/lib/api';
 import type { AuctionSettlementSummary } from '@/features/auctions/types/settlement';
+import toast from 'react-hot-toast';
 
 function SettlementBanner({
   summary,
@@ -63,7 +64,11 @@ export function AuctionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { auction, loading, error } = useAuction(id!);
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [settlementSummary, setSettlementSummary] = useState<AuctionSettlementSummary | null>(null);
+  const [messageModalOpen, setMessageModalOpen] = useState(false);
+  const [messageDraft, setMessageDraft] = useState('');
+  const [messageSending, setMessageSending] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -93,6 +98,30 @@ export function AuctionDetailPage() {
   }
 
   const isSeller = user?.id === auction.seller_id;
+  const canMessageSeller = !!user && !isSeller;
+
+  const handleSendMessage = async () => {
+    const body = messageDraft.trim();
+    if (!body || messageSending) return;
+    if (!auction.listing_id || !auction.seller_id) return;
+
+    setMessageSending(true);
+    try {
+      const { conversation } = await api.startConversation(
+        auction.listing_id,
+        auction.seller_id,
+        body,
+      );
+      setMessageModalOpen(false);
+      setMessageDraft('');
+      navigate(`/messages/${conversation.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send message');
+    } finally {
+      setMessageSending(false);
+    }
+  };
+
   const showSettlementBanner =
     settlementSummary &&
     (auction.status === 'ENDED' || auction.status === 'SETTLED');
@@ -140,7 +169,7 @@ export function AuctionDetailPage() {
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg shadow-md p-6 sticky top-4">
             <h2 className="text-xl font-bold mb-4">Place Your Bid</h2>
-            
+
             {!user ? (
               <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded">
                 Please log in to place a bid
@@ -152,9 +181,69 @@ export function AuctionDetailPage() {
             ) : (
               <BidPlacementForm auction={auction} />
             )}
+
+            {canMessageSeller && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setMessageModalOpen(true)}
+                  className="w-full py-2.5 px-4 rounded-xl border border-purple-500/40 text-purple-400
+                             hover:bg-purple-500/10 transition-colors text-sm font-medium
+                             focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  Message Seller
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Message Seller modal */}
+      {messageModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setMessageModalOpen(false); }}
+        >
+          <div className="glass rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h2 className="text-lg font-bold text-white mb-4">Message Seller</h2>
+            <textarea
+              value={messageDraft}
+              onChange={(e) => setMessageDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
+              }}
+              placeholder="Hi, I have a question about this item…"
+              rows={4}
+              maxLength={2000}
+              autoFocus
+              className="w-full resize-none rounded-xl bg-white/5 border border-white/10 text-white text-sm
+                         px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-xs text-gray-500 mt-1 text-right">{messageDraft.trim().length}/2000</p>
+            <div className="flex gap-3 mt-4">
+              <button
+                type="button"
+                onClick={() => { setMessageModalOpen(false); setMessageDraft(''); }}
+                className="flex-1 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:text-white
+                           hover:bg-white/5 transition-colors text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/30"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendMessage}
+                disabled={!messageDraft.trim() || messageSending}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500
+                           hover:from-purple-500 hover:to-blue-400 disabled:opacity-40 disabled:cursor-not-allowed
+                           text-white text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {messageSending ? 'Sending…' : 'Send Message'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -17,6 +17,8 @@ import { SearchResultsPage } from '@/pages/SearchResultsPage';
 import { SettlementPage } from './pages/SettlementPage';
 import { PayoutsPage } from './pages/PayoutsPage';
 import { TokenCreationPage } from './features/verification/pages/TokenCreationPage';
+import { SavedSearchesPage } from '@/pages/SavedSearchesPage';
+import { ConversationsPage } from './features/messaging/pages/ConversationsPage';
 import { VerificationPage } from './features/verification/pages/VerificationPage';
 import { AdminProtectedRoute } from '@/features/admin/components/AdminProtectedRoute';
 import { AdminLayout } from '@/features/admin/AdminLayout';
@@ -127,6 +129,32 @@ function App() {
             element={
               <ProtectedRoute>
                 <PayoutsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/saved-searches"
+            element={
+              <ProtectedRoute>
+                <SavedSearchesPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/messages"
+            element={
+              <ProtectedRoute>
+                <ConversationsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/messages/:conversationId"
+            element={
+              <ProtectedRoute>
+                <ConversationsPage />
               </ProtectedRoute>
             }
           />

@@ -33,6 +33,15 @@
 | moderation_queue | Content review queue | Yes |
 | audit_logs | Admin action audit trail | Yes |
 
+### Messaging Tables (Module 15)
+| Table | Purpose | RLS |
+|-------|---------|-----|
+| conversations | Conversation thread between buyer and seller on a listing; UNIQUE(listing_id, participant_1_id, participant_2_id) | Yes — participants only |
+| messages | Individual messages within a conversation; body TEXT NOT NULL, read_at for receipts, flagged for moderation | Yes — participants only |
+
+**Trigger:** `update_conversation_on_message()` — SECURITY DEFINER, updates `conversations.last_message_at` and `last_message_preview` on every message INSERT.
+**Realtime:** Both tables added to `supabase_realtime` publication for live updates.
+
 ### Key Enums (PostgreSQL)
 ```sql
 auction_status: DRAFT, SCHEDULED, ACTIVE, ENDED, CANCELLED, SETTLED

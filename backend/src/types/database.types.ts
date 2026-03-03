@@ -323,6 +323,61 @@ export type Database = {
           },
         ]
       }
+      conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string | null
+          last_message_preview: string | null
+          listing_id: string
+          participant_1_id: string
+          participant_2_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          listing_id: string
+          participant_1_id: string
+          participant_2_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          listing_id?: string
+          participant_1_id?: string
+          participant_2_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_participant_1_id_fkey"
+            columns: ["participant_1_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_participant_2_id_fkey"
+            columns: ["participant_2_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crypto_payments: {
         Row: {
           actually_paid_crypto: number | null
@@ -532,6 +587,7 @@ export type Database = {
           published_at: string | null
           requires_age_verification: boolean
           reserve_price_cents: number | null
+          search_vector: unknown
           seller_id: string
           status: Database["public"]["Enums"]["listing_status"]
           title: string
@@ -554,6 +610,7 @@ export type Database = {
           published_at?: string | null
           requires_age_verification?: boolean
           reserve_price_cents?: number | null
+          search_vector?: unknown
           seller_id: string
           status?: Database["public"]["Enums"]["listing_status"]
           title: string
@@ -576,6 +633,7 @@ export type Database = {
           published_at?: string | null
           requires_age_verification?: boolean
           reserve_price_cents?: number | null
+          search_vector?: unknown
           seller_id?: string
           status?: Database["public"]["Enums"]["listing_status"]
           title?: string
@@ -592,6 +650,54 @@ export type Database = {
           {
             foreignKeyName: "listings_seller_id_fkey"
             columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          body: string
+          conversation_id: string
+          created_at: string
+          flagged: boolean
+          flagged_reason: string | null
+          id: string
+          read_at: string | null
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          conversation_id: string
+          created_at?: string
+          flagged?: boolean
+          flagged_reason?: string | null
+          id?: string
+          read_at?: string | null
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          flagged?: boolean
+          flagged_reason?: string | null
+          id?: string
+          read_at?: string | null
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -1126,6 +1232,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      saved_searches: {
+        Row: {
+          created_at: string
+          filters: Json
+          id: string
+          last_checked_at: string | null
+          name: string
+          notify_new_results: boolean
+          query: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          filters?: Json
+          id?: string
+          last_checked_at?: string | null
+          name: string
+          notify_new_results?: boolean
+          query?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          filters?: Json
+          id?: string
+          last_checked_at?: string | null
+          name?: string
+          notify_new_results?: boolean
+          query?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       settlement_offers: {
         Row: {

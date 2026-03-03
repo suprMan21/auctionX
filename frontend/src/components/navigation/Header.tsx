@@ -1,11 +1,71 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+
+function useUnreadCount(userId: string | undefined) {
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!userId) {
+      setUnreadCount(0);
+      return;
+    }
+
+    // Initial fetch: count unread messages not sent by the current user
+    supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .is('read_at', null)
+      .neq('sender_id', userId)
+      .then(({ count }) => {
+        setUnreadCount(count ?? 0);
+      });
+
+    // Realtime: re-count on any INSERT into messages
+    const channel = supabase
+      .channel(`header:unread:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        () => {
+          supabase
+            .from('messages')
+            .select('id', { count: 'exact', head: true })
+            .is('read_at', null)
+            .neq('sender_id', userId)
+            .then(({ count }) => {
+              setUnreadCount(count ?? 0);
+            });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        () => {
+          supabase
+            .from('messages')
+            .select('id', { count: 'exact', head: true })
+            .is('read_at', null)
+            .neq('sender_id', userId)
+            .then(({ count }) => {
+              setUnreadCount(count ?? 0);
+            });
+        }
+      )
+      .subscribe();
+
+    return () => { channel.unsubscribe(); };
+  }, [userId]);
+
+  return unreadCount;
+}
 
 export function Header() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const unreadCount = useUnreadCount(user?.id);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
@@ -79,6 +139,21 @@ export function Header() {
                                  focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
                     >
                       Payouts
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/messages"
+                      className="relative flex items-center gap-2 px-4 py-2 min-h-[44px] rounded-xl
+                                 text-gray-300 hover:text-white hover:bg-white/5 transition-colors
+                                 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+                    >
+                      Messages
+                      {unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center font-semibold">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
                     </Link>
                   </li>
                   <li>

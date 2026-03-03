@@ -1,6 +1,27 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-01 (Module 12 added)
+Last updated: 2026-03-02 (Module 14 added)
+
+---
+
+## Module 14: Enhanced Search
+
+- [ ] **TODO:** Apply DB migration and regenerate types
+  - Context: `supabase/migrations/20260302000001_full_text_search.sql` adds `search_vector` column + GIN index + `saved_searches` table. After applying, run `npx supabase gen types typescript --project-id pmlofthmobglcfkqjtru > frontend/src/types/database.types.ts && cp ...`. Until then, `.textSearch('search_vector')` uses `as never` assertion.
+  - Priority: HIGH — required before full-text search works in production
+  - Depends on: Supabase CLI + project credentials
+
+- [ ] **TODO:** Explicit ts_rank ordering for relevance sort
+  - Context: `textSearch()` returns results in relevance order naturally via PostgREST, but a raw SQL `ORDER BY ts_rank(search_vector, plainto_tsquery('english', $q)) DESC` would give more explicit control. Not implemented because the default behavior is correct for the common case.
+  - Priority: LOW
+
+- [ ] **TODO:** Saved search email notifications
+  - Context: `notify_new_results` column is stored in `saved_searches` but there is no background worker or cron to check for new matches and send notifications. Would require a Supabase Cron job + email provider integration.
+  - Priority: MEDIUM
+
+- [ ] **TODO:** BrowsePage category grid pagination
+  - Context: Categories are fetched in one query (no limit). Acceptable at current scale (< 20 categories). If categories grow large, paginate or use virtual scroll.
+  - Priority: LOW
 
 ---
 
@@ -94,25 +115,14 @@ Last updated: 2026-03-01 (Module 12 added)
 
 ## Module 06: Browse & Search
 
-- [ ] **TODO:** Add pagination to browse and search results
-  - Context: Currently hardcoded `.limit(24)` for browse and `.limit(48)` for search
-  - Priority: MEDIUM
-  - Depends on: Standalone
-
-- [ ] **TODO:** Replace ilike search with full-text search
-  - Context: Basic ilike on title/description is slow and imprecise at scale
-  - Priority: HIGH
-  - Depends on: Module 14 (Enhanced Search)
+- [x] **DONE (Module 14):** Add pagination to browse and search results
+- [x] **DONE (Module 14):** Replace ilike search with full-text search
+- [x] **DONE (Module 14):** Move sort to database level for ending soonest / price sorts
 
 - [ ] **TODO:** Add loading skeletons to BrowsePage and SearchResultsPage
-  - Context: No loading state during Supabase fetch — text placeholder only, page appears partially empty briefly
+  - Context: No loading state during fetch — text placeholder only, page appears partially empty briefly
   - Priority: LOW
   - Depends on: Standalone
-
-- [ ] **TODO:** Move sort to database level for ending soonest / price sorts
-  - Context: Currently sorting client-side after fetch. Works for small datasets but won't scale.
-  - Priority: MEDIUM
-  - Depends on: Module 14 (Enhanced Search)
 
 ## Module 13: NFC Verification
 
@@ -135,3 +145,26 @@ Last updated: 2026-03-01 (Module 12 added)
 - [ ] **TODO:** Supabase Realtime subscription on VerificationPage for live scan count updates
   - Context: VerificationPage currently shows a static scan count fetched on load. A Realtime subscription on `item_verifications` would update the count live.
   - Priority: LOW
+
+## Module 15: Messaging
+
+- [ ] **TODO:** Apply DB migration and regenerate types
+  - Context: `supabase/migrations/20260302120000_messaging.sql` adds `conversations` + `messages` tables. After applying, run `npx supabase gen types typescript --project-id pmlofthmobglcfkqjtru > frontend/src/types/database.types.ts && cp ...`. Then remove `as never` casts in `ConversationsPage.tsx` and `Header.tsx`.
+  - Priority: HIGH — required before messaging feature works
+  - Depends on: Supabase CLI + project credentials
+
+- [ ] **TODO:** RLS policy allows service client to bypass participant checks — validate participant in DB layer
+  - Context: messagingController.ts uses service client + manual participant checks. For defense-in-depth, an RLS policy using `service_role` bypass is acceptable but worth noting.
+  - Priority: LOW
+
+- [ ] **TODO:** Mobile nav menu — add Messages link to mobile hamburger / nav drawer
+  - Context: Messages link is added to desktop nav (md+) only. Mobile users need access via the mobile nav menu when it is built.
+  - Priority: MEDIUM — depends on mobile nav implementation
+
+- [ ] **TODO:** Message pagination — load older messages on scroll up
+  - Context: `getMessages` supports `page` param but ConversationsPage only loads page 1. "Load earlier messages" UI needed for long conversations.
+  - Priority: MEDIUM
+
+- [ ] **TODO:** Unread badge count in the `useUnreadCount` hook queries ALL messages not sent by the user, not scoped to conversations the user participates in — after type regen, tighten the query to use an IN subquery on `conversations`.
+  - Context: Until DB types include conversations/messages, using `as never` cast prevents the scoped query. Post-type-regen: use `.in('conversation_id', participantConvIds)`.
+  - Priority: MEDIUM

@@ -2,6 +2,31 @@
 
 ---
 
+## Module 14: Enhanced Search — 2026-03-02
+
+### What Worked
+- Replacing direct Supabase ilike queries with a backend search endpoint is the right architecture: it centralises auth, pagination logic, and makes the search surface testable via curl without needing a browser.
+- Using `useSearchParams` (react-router-dom) as the single source of truth for all filter/sort/page state makes the results page fully bookmarkable and shareable without any extra sync logic.
+- The `verifiedOnly` dynamic inner-join trick (switching `item_verifications(...)` to `item_verifications!inner(...)` in the select string) is clean and avoids a second query or client-side filter.
+
+### Patterns Discovered
+
+- **SQL enum values diverge from locked Zod schemas — always verify against `database.types.ts`**: The locked Zod schemas (`functions/src/v1/schemas/domain/`) use `RUNNING` for auction status, but the SQL database uses `ACTIVE`. A query using `RUNNING` would silently return zero results. Always check `database.types.ts` (generated from the real DB) not the locked Zod schemas for enum values.
+
+- **`verifiedOnly` requires a dynamic inner join in the select string, not just a `.eq()` filter**: PostgREST outer joins return all parent rows with null for the joined table when there is no match. To filter to only rows *with* a match, the join must be `!inner` in the select string. A `.not('item_verifications', 'is', null)` filter alone is insufficient because the join is already resolved as outer before the filter runs.
+
+- **Service client bypasses RLS — always filter by `user_id` manually on saved_searches**: The Supabase service role key ignores all Row Level Security policies. The `getSavedSearches` handler must include `.eq('user_id', userId)` even though RLS would normally enforce this for an anon/user client.
+
+- **`search_vector` column not in generated types until migration is applied**: `.textSearch('search_vector', ...)` requires the column to exist in `database.types.ts`. Before migration is pushed and types are regenerated, use `as never` type assertion. Add a comment and TODO entry so this is removed after the push.
+
+- **Price filter inputs display in dollars, store/send in cents**: The filter sidebar shows dollar amounts to users (`$25`) but the API expects cents (`2500`). The conversion (`value * 100` / `value / 100`) must happen at the UI boundary. Storing in URL params as cents (matching the API) keeps the conversion predictable.
+
+### Gotchas
+- **Unused import causes TS error in strict mode**: `Link` was imported in `SearchResultsPage.tsx` from react-router-dom but not used. TypeScript strict mode (noUnusedLocals) rejects this. Clean imports on every file before running `tsc --noEmit`.
+- **`as RequestHandler` not enough for custom `RequestWithId` types**: The SearchRequest interface extends `Request + RequestWithId`. The single `as RequestHandler` cast fails because the property mismatch is too large; `as unknown as RequestHandler` is required. This is the established project pattern (see verifications.ts).
+
+---
+
 ## Module 02 Port: Auction Mechanics → Backend — 2026-03-01
 
 ### What Worked
