@@ -2,6 +2,54 @@
 
 ---
 
+## HIGH Priority Fixes — 2026-03-03
+
+### What Worked
+- **Stripe metadata must be `Record<string, string>`**: Passing `Record<string, unknown>` to `paymentIntents.create()` silently includes array values (e.g. `contentFlags`) that Stripe rejects. Build an explicit `stripeMetadata` object with only string fields (`transactionId`, `auctionId`, `listingId`, `sellerId`). This also ensures webhook correlation works: `paymentIntent.metadata.transactionId` matches our internal UUID.
+- **Rate-limiting public endpoints with `router.use(limiter)`**: Applying `rateLimit` via `router.use()` before all route handlers is cleaner than per-route application — one line covers all methods and paths on that router. Use conservative limits on public, unauthenticated endpoints (60/min for search, 120/min for verify pages, 30/min for NFC scans).
+- **Dispute resolution reuses existing columns**: The settlements table doesn't have dedicated `dispute_resolution_notes` columns. Writing the admin resolution decision into `dispute_reason` (prefixed with `APPROVED:` / `REJECTED:`) is a clean interim approach — the audit_log middleware provides the full trail, and a future migration can add proper columns.
+- **FRONTEND_URL was already fixed**: All four edge functions already had `Deno.env.get('FRONTEND_URL') || 'http://localhost:5173'`. Verifying pre-existing state before implementing is always faster than re-implementing.
+- **`ALTER TYPE ... ADD VALUE IF NOT EXISTS` is safe for enum expansion**: Postgres enum additions are non-transactional (can't be rolled back in the same txn), but `IF NOT EXISTS` makes them idempotent. Use `TEXT DEFAULT NULL` for per-category flags until the enum is stable.
+
+### What To Watch Out For
+- **Upstream metadata must include all fields before the orchestrator runs**: `auctionId` was available in `process-payment/index.ts` (fetched in step 4) but never added to `paymentRequest.metadata`. The orchestrator passes metadata wholesale to processors — if a field isn't set before `orchestrator.processPayment()`, it will be missing in all processors. Set all correlation fields together after server-side validation completes.
+- **Admin routes inherit middleware from the index router**: `/api/v1/admin/*` already applies `verifyAdminAuth` + `adminRateLimit` via `router.use()` in `routes/admin/index.ts`. Individual admin route files don't need to re-apply auth. Adding `requirePermission()` per-route is fine for additional granularity.
+- **Vitest tests in a Jest project**: The mechanics test suite uses `vitest` imports but lives in a backend configured with Jest. Running `npx jest` fails with `import type` parse error. Always run `npx vitest run` for these tests.
+
+---
+
+## Module 18: Launch Prep — 2026-03-03
+
+### What Worked
+- **Extracting the error handler before launch is high value**: The inline anonymous error handler in `server.ts` had no structured logging, no requestId propagation, and leaked stack traces in all environments. Pulling it into `errorHandler.ts` added all three in ~25 lines. Any project with an Express backend should extract this in the first sprint, not the last.
+- **Deployment configs as code**: `vercel.json` and `railway.json` commit security headers and health check paths alongside the code. This prevents the "works locally, broken in prod" class of deployment issues where security headers were configured in a dashboard and forgotten.
+- **Error tracking stub pattern**: Shipping `initErrorTracking()` as a console stub with commented-out Sentry calls is the right approach for pre-launch. Real Sentry activation is a one-line uncomment once the DSN is available — no API changes required.
+- **`robots.txt` disallows list is as important as the allow list**: Explicitly disallowing `/admin`, `/settings`, `/messages`, `/payouts`, `/settlements` prevents crawlers from accidentally indexing authenticated pages and surfacing them in search results.
+
+### What To Watch Out For
+- **`og-image.png` is always forgotten until someone shares the link**: The meta tag is trivial to write, but the actual image asset is out-of-scope for a developer sprint. Add it to the launch checklist and designer handoff early — not as the last step.
+- **Health check route must be auth-free and mounted first**: `/api/v1/health` is mounted before all other routes in `server.ts`. If it were mounted after auth middleware, Railway's health check would receive 401s and restart the container in a loop. Always ensure health check paths bypass all middleware except request-ID.
+- **`window.onerror` returning `false` is intentional**: Returning `false` from `window.onerror` tells the browser not to suppress the default error handling. Returning `true` would silence the error in the console — undesirable during development. The stub correctly returns `false`.
+- **Sitemap generation requires build-time credentials**: `scripts/generateSitemap.ts` can't run in a pure frontend Vercel build because it needs Supabase credentials. Wire it as a separate CI step (post-deploy) or use a Vercel cron function that runs after deployment, not during the build.
+
+---
+
+## Module 17: E2E Testing & Security Audit — 2026-03-03
+
+### What Worked
+- **`data-testid` retrofitting is mechanical but necessary**: Adding testids to existing components required reading each file once, then making a single-attribute edit. The pattern is `data-testid="{noun}-{role}"` — container grids get `{noun}-grid`, individual items get `{noun}-card`, action elements get `{action}-button`. Future modules should add these at component creation time.
+- **Graceful `test.skip()` for environment-dependent tests**: E2E tests that need real Supabase users call `test.skip()` when test data is absent. This prevents hard CI failures on infra without seeded users while still documenting what needs to be covered when the environment is ready.
+- **API integration tests are the fastest return on investment**: 10 tests, ~200ms, no auth tokens needed for the 401 contract tests. These verify the most critical security property (protected routes return 401) and should run in every CI pipeline from day one.
+- **Security audit as living document**: Writing the audit as a Markdown table (PASS/FAIL/NEEDS_WORK) with remediation priority makes findings actionable. Cross-linking to TODO.md ensures issues don't get lost.
+
+### What To Watch Out For
+- **Dead nav links accumulate without tests**: Header.tsx had `/dashboard` and `/create-listing` broken for multiple modules. TypeScript can't catch incorrect route strings. A smoke test that visits every nav link is cheap insurance.
+- **Playwright `webServer.url` must be a truly public endpoint**: The backend webServer poll URL must return a non-error status without auth. Using a protected endpoint causes Playwright to hang waiting for readiness.
+- **In-memory rate limit state resets on restart**: The admin rate limiter Map is lost when Node.js restarts. In a crash-restart loop (common under load), an attacker gets unlimited attempts. Always back rate limit state with a persistent store (Redis, Supabase) for production.
+- **Missing rate limits on public read endpoints**: Auth protects writes, but public reads (search, browse) need their own rate limits. Add a checklist item: "Is this public read endpoint rate-limited?" when creating new routes.
+
+---
+
 ## Module 16: Notifications System — 2026-03-03
 
 ### What Worked

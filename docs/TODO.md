@@ -1,6 +1,48 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-03 (Module 16 added)
+Last updated: 2026-03-03 (Module 18 added)
+
+---
+
+## Module 18: Launch Prep
+
+- [ ] **TODO:** Activate Sentry error tracking
+  - Context: `frontend/src/lib/errorTracking.ts` has Sentry calls commented out. When ready: `npm install @sentry/react`, set `VITE_SENTRY_DSN` env var in Vercel, uncomment the Sentry init + captureException calls.
+  - Priority: HIGH — required for production error visibility
+  - File: `frontend/src/lib/errorTracking.ts`
+
+- [ ] **TODO:** Create `og-image.png` asset
+  - Context: `frontend/index.html` references `/og-image.png` for Open Graph and Twitter Card previews. This file does not exist yet. Create a 1200×630px branded image.
+  - Priority: MEDIUM — affects link previews on social media
+
+- [ ] **TODO:** Set up sitemap generation cron
+  - Context: `scripts/generateSitemap.ts` is a stub that generates `sitemap.xml` from active listings + NFC tokens. Wire it to the CI/CD pipeline or a daily cron job once Supabase credentials are available in the build environment.
+  - Priority: LOW — improves SEO discoverability
+  - Depends on: Supabase credentials in build environment
+
+- [ ] **TODO:** Add `GET /admin/health` endpoint
+  - Context: `AdminHealthPage` polls `/api/v1/admin/health` every 30s but the endpoint is not implemented. The page handles the 404 gracefully. Module 18 introduced `/api/v1/health` (DB ping), but the admin-specific health page needs a richer endpoint including queue depths and processor status.
+  - Priority: LOW — admin functionality works without it
+  - Depends on: Backend route addition
+
+---
+
+## Module 17: E2E Testing & Security Audit
+
+- [ ] **TODO:** Seed real test users in Supabase for E2E tests
+  - Context: E2E specs (`auth.spec.ts`, `admin.spec.ts`, `auction.spec.ts`) require `TEST_USER_EMAIL` and `TEST_ADMIN_EMAIL` to point to real Supabase users. Create these users via Supabase dashboard → Authentication → Users, then set credentials in `.env.test`.
+  - Priority: HIGH — without test users, authenticated E2E tests are skipped
+
+- [x] **DONE:** Add rate limit to `GET /search` endpoint
+  - Added `searchRateLimit` (60 req/min) via `router.use()` in `routes/search.ts`
+
+- [ ] **TODO:** Replace in-memory admin rate limit Map with persistent store
+  - Context: The admin rate limiter uses an in-memory Map that resets on server restart. Replace with Redis or Supabase-backed store.
+  - Priority: MEDIUM
+
+- [ ] **TODO:** Set up CI pipeline for automated test runs
+  - Context: `package.json` at root now has `test:all`, `test:e2e`, `test:api`, `test:mechanics` scripts. Wire these to GitHub Actions or similar CI on pull requests.
+  - Priority: MEDIUM — prevents regressions on future modules
 
 ---
 
@@ -18,9 +60,9 @@ Last updated: 2026-03-03 (Module 16 added)
   - Context: The `payment_window_expiring` preference column is defined and documented, but no trigger currently fires this notification. A pg_cron job should check for offers expiring within ~5 minutes and insert PAYMENT_WINDOW_EXPIRING notifications.
   - Priority: MEDIUM — improves buyer experience during settlement
 
-- [ ] **TODO:** Add FRONTEND_URL env var to all edge functions
-  - Context: Edge functions (settle-auction, check-payment-window, release-escrow, payment-webhook) use `Deno.env.get('FRONTEND_URL')` for action URLs in notifications. This must be set in `supabase/.env.local` and Supabase dashboard secrets.
-  - Priority: HIGH — otherwise notification action_urls point to localhost in production
+- [x] **DONE:** Add FRONTEND_URL env var to all edge functions
+  - All 4 edge functions already use `Deno.env.get('FRONTEND_URL') || 'http://localhost:5173'`
+  - Remaining: set `FRONTEND_URL` in Supabase dashboard secrets (ops task, not code)
 
 ---
 
@@ -62,10 +104,10 @@ Last updated: 2026-03-03 (Module 16 added)
   - Priority: HIGH — payouts currently never actually reach sellers
   - Depends on: Stripe Connect onboarding flow (future module)
 
-- [ ] **TODO:** Implement admin dispute resolution (approve → refund, reject → release)
-  - Context: `POST /api/v1/admin/disputes/:id/approve` and `reject` return 501. Approval should trigger buyer refund via Stripe; rejection should call release-escrow logic for the specific settlement.
-  - Priority: HIGH — disputed settlements are stuck until resolved manually
-  - Depends on: Module 13+
+- [x] **DONE:** Implement admin dispute resolution (approve → refund, reject → release)
+  - `POST /api/v1/admin/disputes/:id/approve` → DISPUTED → REFUNDED (with notes)
+  - `POST /api/v1/admin/disputes/:id/reject` → DISPUTED → ESCROW_HOLD (restores release-escrow eligibility)
+  - TODO: Wire actual Stripe refund in approve path once Stripe Connect is configured
 
 ---
 
@@ -108,25 +150,22 @@ Last updated: 2026-03-03 (Module 16 added)
 
 ## Module 09: Payment Hardening
 
-- [ ] **TODO:** Add `default_content_flag content_flag` column to `categories` table
-  - Context: CONTENT_FLAG_GUIDELINES.md documents this field but it doesn't exist in the DB. Currently using `categories.is_nsfw` (boolean) as a proxy for MEDIUM risk floor. A proper per-category content flag would enable more granular routing (e.g., SWIMWEAR-default category → MEDIUM, not just is_nsfw=true).
-  - Priority: MEDIUM
-  - Depends on: DB migration + `supabase gen types` re-run
+- [x] **DONE:** Add `default_content_flag TEXT` column to `categories` table
+  - Migration: `supabase/migrations/20260303000002_content_flag_enum_expansion.sql`
+  - Pending: `npx supabase db push` + `supabase gen types` re-run
 
-- [ ] **TODO:** Add SWIMWEAR, LINGERIE, PERSONAL_ITEM, FETISH to `content_flag` DB enum
-  - Context: These flags appear in CONTENT_FLAG_GUIDELINES.md and FLAG_SCORES but don't exist in the database content_flag enum. CascadeOrchestrator silently ignores unrecognized flags.
-  - Priority: MEDIUM
-  - Depends on: DB migration + `supabase gen types` re-run
+- [x] **DONE:** Add SWIMWEAR, LINGERIE, PERSONAL_ITEM, FETISH to `content_flag` DB enum
+  - Migration: `supabase/migrations/20260303000002_content_flag_enum_expansion.sql`
+  - Pending: `npx supabase db push` + update CascadeOrchestrator FLAG_SCORES with scores 3–5
 
 - [ ] **TODO:** Implement real NOWPayments integration in process-payment
   - Context: Crypto path returns 501 stub. Needs NOWPAYMENTS_API_KEY + NOWPAYMENTS_IPN_SECRET, invoice creation via `POST /v1/invoice`, crypto_payments record creation.
   - Priority: LOW (user opt-in, not blocking mainstream flow)
   - Depends on: NOWPayments merchant account + API keys
 
-- [ ] **TODO:** Add Stripe transactionId to payment_intent metadata for webhook correlation
-  - Context: StripeProcessor.processPayment creates a PaymentIntent but doesn't set `metadata.transactionId`. The webhook handler uses `paymentIntent.metadata.transactionId` — without it, it falls back to the Stripe PaymentIntent ID which doesn't match our transactions.id (UUID).
-  - Priority: HIGH — required for webhook → transaction status updates to work
-  - Fix: Pass `transactionId` in metadata when creating the PaymentIntent
+- [x] **DONE:** Add Stripe transactionId to payment_intent metadata for webhook correlation
+  - `StripeProcessor.ts` now builds a clean `stripeMetadata` with `transactionId`, `auctionId`, `listingId`, `sellerId`
+  - `process-payment/index.ts` now sets `paymentRequest.metadata.auctionId = auction.id` before cascade
 
 - [ ] **TODO:** Deploy process-payment and payment-webhook Edge Functions
   - Context: Functions are hardened and ready. Blocked on: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET env vars in Supabase dashboard.

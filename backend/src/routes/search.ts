@@ -10,6 +10,7 @@
  *   DELETE /saved/:id → deleteSavedSearch
  */
 import { Router, RequestHandler } from 'express';
+import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/auth';
 import {
   searchListings,
@@ -19,6 +20,16 @@ import {
 } from '../controllers/searchController';
 
 const router = Router();
+
+const searchRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many search requests. Please slow down.' },
+});
+
+router.use(searchRateLimit);
 
 router.get('/', searchListings as unknown as RequestHandler);
 router.post('/saved', requireAuth, createSavedSearch as unknown as RequestHandler);

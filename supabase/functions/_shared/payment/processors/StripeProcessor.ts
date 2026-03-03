@@ -47,6 +47,15 @@ export class StripeProcessor extends BaseProcessor implements PaymentProcessor {
       this.validateAmount(amount);
       this.validateCurrency(currency);
 
+      // Stripe metadata values must be strings. Build a clean object with only
+      // the key correlation fields needed for webhook→transaction lookup.
+      const stripeMetadata: Record<string, string> = {
+        transactionId: (metadata['transactionId'] as string) ?? '',
+        auctionId:     (metadata['auctionId'] as string) ?? '',
+        listingId:     (metadata['listingId'] as string) ?? '',
+        sellerId:      (metadata['sellerId'] as string) ?? '',
+      };
+
       const paymentIntent = await this.stripe.paymentIntents.create({
         amount,
         currency: currency.toLowerCase(),
@@ -64,7 +73,7 @@ export class StripeProcessor extends BaseProcessor implements PaymentProcessor {
           },
         },
         confirm: true,
-        metadata,
+        metadata: stripeMetadata,
       });
 
       if (paymentIntent.status === 'succeeded') {

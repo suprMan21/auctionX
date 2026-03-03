@@ -151,6 +151,7 @@ serve(async (req) => {
     const contentFlags = Array.from(new Set([...serverFloorFlags, ...clientFlags]));
     paymentRequest.metadata.contentFlags = contentFlags;
     paymentRequest.metadata.sellerId = listing.seller_id;
+    paymentRequest.metadata.auctionId = auction.id;
 
     logger.info('Processing payment', {
       listingId: listing.id,
@@ -210,6 +211,7 @@ serve(async (req) => {
     // We compute this before the cascade so the transaction record has the right risk_level
     // even if all processors fail. Risk level is derived from the merged content flags.
     const riskScores: Record<string, number> = {
+      SWIMWEAR: 3, LINGERIE: 4, PERSONAL_ITEM: 4, FETISH: 5,
       INTIMATE_ITEMS: 6, NSFW: 7, '18_PLUS': 7, ADULT_CONTENT: 8, EXPLICIT: 10,
     };
     const maxFlagScore = contentFlags.reduce((max, flag) => Math.max(max, riskScores[flag] ?? 1), 0);

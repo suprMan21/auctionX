@@ -41,9 +41,8 @@ export class CascadeOrchestrator {
    * Uses highest individual score (not additive sum) to determine risk level.
    * Thresholds: score >= 6 → HIGH, score >= 3 → MEDIUM, else LOW.
    *
-   * NOTE: SWIMWEAR, LINGERIE, PERSONAL_ITEM, FETISH are documented in
-   * CONTENT_FLAG_GUIDELINES.md as MEDIUM risk but do not exist in the
-   * DB content_flag enum. Add them here once the enum is extended.
+   * SWIMWEAR, LINGERIE, PERSONAL_ITEM, FETISH added to DB enum via
+   * migration 20260303000002_content_flag_enum_expansion.sql.
    */
   private readonly FLAG_SCORES: Record<string, number> = {
     // LOW risk (score 1–2)
@@ -58,7 +57,12 @@ export class CascadeOrchestrator {
     COLLECTIBLES:        1,
     DIGITAL_GOODS:       1,
     COSPLAY:             2,
-    // HIGH risk (score 6+) — no MEDIUM flags in DB enum yet
+    // MEDIUM risk (score 3–5)
+    SWIMWEAR:            3,
+    LINGERIE:            4,
+    PERSONAL_ITEM:       4,
+    FETISH:              5,
+    // HIGH risk (score 6+)
     INTIMATE_ITEMS:      6,
     NSFW:                7,
     '18_PLUS':           7,

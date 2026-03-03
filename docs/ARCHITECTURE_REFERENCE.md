@@ -129,6 +129,8 @@ POST   /api/v1/admin/users/:id/unban  — Unban user
 GET    /api/v1/admin/moderation      — Moderation queue
 GET    /api/v1/admin/audit-logs      — Audit log viewer
 GET    /api/v1/admin/health          — System health check
+POST   /api/v1/admin/disputes/:settlementId/approve — Approve dispute (DISPUTED→REFUNDED)
+POST   /api/v1/admin/disputes/:settlementId/reject  — Reject dispute (DISPUTED→ESCROW_HOLD)
 ```
 
 ---
