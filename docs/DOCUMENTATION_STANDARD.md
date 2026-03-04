@@ -104,42 +104,26 @@ Every known gap, deferred decision, or future improvement must be logged:
 ```
 
 ### 4. Lessons Learned
-**File:** `docs/LESSONS_LEARNED.md` (append to existing, create if not exists)
 
-After completing the module, document:
-```markdown
-## Module {XX}: {Name} — {Date}
+**Single source of truth:** [`docs/MASTER_LESSONS_LEARNED.md`](MASTER_LESSONS_LEARNED.md)
 
-### What Worked
-- Bullet points of approaches that went well
+After completing a module:
+1. Add any **cross-cutting patterns, gotchas, or rules** to the appropriate section of `MASTER_LESSONS_LEARNED.md`
+2. Add new gotchas to the **Section 10 quick-reference table**
 
-### What Didn't Work
-- Approaches that failed or needed revision
-
-### Patterns Discovered
-- Reusable patterns, utilities, or conventions established
-- E.g., "Supabase join pattern for listings+auctions+media is: `.select('*, auctions(...), listing_media(...)')`"
-
-### Gotchas
-- Surprising behaviors, type quirks, or things future modules should watch for
-- E.g., "Express 5 types req.params as string | string[] — always cast with `as string`"
-
-### Time Estimate vs Actual
-- Estimated: {X minutes}
-- Actual: {X minutes}
-- Delta reason: {why it took more/less}
-```
+**Archive (optional):** `docs/LESSONS_LEARNED.md` retains per-module session history (what worked, what didn't, time estimates). This is for historical reference only — `MASTER_LESSONS_LEARNED.md` is the mandatory pre-module review.
 
 ---
 
 ## Enforcement
 
-The commit step should NOT happen until all four documentation artifacts are complete:
+The commit step should NOT happen until all documentation artifacts are complete:
+0. ✅ `docs/MASTER_LESSONS_LEARNED.md` reviewed before starting (mandatory)
 1. ✅ `docs/MODULE_{XX}_VERIFICATION.md` exists and is filled out
 2. ✅ All new files have top-of-file doc comments
 3. ✅ All exported functions have JSDoc
 4. ✅ `docs/TODO.md` updated (even if just "No new TODOs")
-5. ✅ `docs/LESSONS_LEARNED.md` updated
+5. ✅ `docs/MASTER_LESSONS_LEARNED.md` updated with any new cross-cutting lessons or gotchas
 
 **Only then:**
 ```bash

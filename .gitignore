@@ -36,3 +36,5 @@ firestore-debug.log.*
 
 # Editor/backup junk
 *.bak
+
+.env.source

@@ -1,0 +1,27 @@
+{
+  "name": "auctionx-staging-tests",
+  "version": "1.0.0",
+  "description": "Staging smoke, visual, and design-review tests for AuctionX / Authentic Materials",
+  "private": true,
+  "scripts": {
+    "test:smoke": "playwright test --project smoke",
+    "test:visual": "playwright test --project visual",
+    "test": "tsx run-tests.ts --mode both",
+    "smoke": "tsx run-tests.ts --mode smoke",
+    "visual": "tsx run-tests.ts --mode visual",
+    "upload": "tsx upload-report.ts --mode both",
+    "upload:smoke": "tsx upload-report.ts --mode smoke",
+    "upload:visual": "tsx upload-report.ts --mode visual"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.1",
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^22.10.7",
+    "@types/prompts": "^2.4.9",
+    "prompts": "^2.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "@notionhq/client": "^2.2.15",
+    "dotenv": "^16.4.7"
+  }
+}

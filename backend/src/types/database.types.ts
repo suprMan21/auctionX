@@ -280,6 +280,7 @@ export type Database = {
         Row: {
           brand_restriction: Database["public"]["Enums"]["brand_type"] | null
           created_at: string
+          default_content_flag: string | null
           description: string | null
           id: string
           is_nsfw: boolean
@@ -292,6 +293,7 @@ export type Database = {
         Insert: {
           brand_restriction?: Database["public"]["Enums"]["brand_type"] | null
           created_at?: string
+          default_content_flag?: string | null
           description?: string | null
           id?: string
           is_nsfw?: boolean
@@ -304,6 +306,7 @@ export type Database = {
         Update: {
           brand_restriction?: Database["public"]["Enums"]["brand_type"] | null
           created_at?: string
+          default_content_flag?: string | null
           description?: string | null
           id?: string
           is_nsfw?: boolean
@@ -1920,6 +1923,10 @@ export type Database = {
         | "18_PLUS"
         | "EXPLICIT"
         | "INTIMATE_ITEMS"
+        | "SWIMWEAR"
+        | "LINGERIE"
+        | "PERSONAL_ITEM"
+        | "FETISH"
       content_risk_level: "LOW" | "MEDIUM" | "HIGH"
       currency_code: "CAD" | "USD"
       item_condition:
@@ -2157,6 +2164,10 @@ export const Constants = {
         "18_PLUS",
         "EXPLICIT",
         "INTIMATE_ITEMS",
+        "SWIMWEAR",
+        "LINGERIE",
+        "PERSONAL_ITEM",
+        "FETISH",
       ],
       content_risk_level: ["LOW", "MEDIUM", "HIGH"],
       currency_code: ["CAD", "USD"],

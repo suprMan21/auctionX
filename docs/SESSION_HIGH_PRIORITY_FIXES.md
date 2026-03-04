@@ -234,7 +234,7 @@ cat > unmentionables/Unmen/supabase/migrations/YYYYMMDDHHMMSS_content_flag_enum_
 -- Adds missing content_flag values referenced in payment cascade logic.
 -- Idempotent — safe to re-run.
 -- NOTE: Do NOT add the new enum values and reference them in the same transaction.
--- (See LESSONS_LEARNED.md — Module 13 pattern: use TEXT for same-tx references.)
+-- (See MASTER_LESSONS_LEARNED.md Section 1 — enum idempotency pattern.)
 
 DO $$ BEGIN ALTER TYPE content_flag ADD VALUE IF NOT EXISTS 'SWIMWEAR'; EXCEPTION WHEN others THEN NULL; END $$;
 DO $$ BEGIN ALTER TYPE content_flag ADD VALUE IF NOT EXISTS 'LINGERIE'; EXCEPTION WHEN others THEN NULL; END $$;
@@ -575,9 +575,12 @@ Open `docs/TODO.md`. Mark the following items as complete with today's date:
 If verify route rate limiting was skipped (Module 13 not yet implemented), add:
 - `[ ] Rate limits on /verify endpoints — awaiting Module 13 NFC implementation (HIGH)`
 
-### Step 8b — Update LESSONS_LEARNED.md
+### Step 8b — Update MASTER_LESSONS_LEARNED.md
 
-Append this entry to `docs/LESSONS_LEARNED.md`:
+> **Note:** All lessons below have been consolidated into `docs/MASTER_LESSONS_LEARNED.md`.
+> That document is now the single source of truth. The content below is retained for session history only.
+
+Previously appended to `docs/LESSONS_LEARNED.md`:
 
 ```markdown
 ## Session: HIGH Priority TODO Fixes — [DATE]

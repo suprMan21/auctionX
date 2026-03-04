@@ -1,4 +1,8 @@
-# AuctionX — Lessons Learned
+# AuctionX — Lessons Learned (Per-Module Archive)
+
+> **This file is a historical archive of per-module implementation lessons.**
+> For the consolidated, actionable reference used before every module, see
+> [`docs/MASTER_LESSONS_LEARNED.md`](MASTER_LESSONS_LEARNED.md) — **that is the single source of truth.**
 
 ---
 
@@ -312,10 +316,6 @@ USING (status::text IN ('NEW_VALUE', 'OTHER'))
 - `CREATE OR REPLACE FUNCTION` (already idempotent)
 - Trigger: wrap in `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL END $$`
 - Policies: `DROP POLICY IF EXISTS` before `CREATE POLICY`
-
-# LESSONS_LEARNED Append — Stripe Webhook Debugging (2026-03-03)
-
-Copy-paste these two entries to the bottom of `docs/LESSONS_LEARNED.md`.
 
 ---
 

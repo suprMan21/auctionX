@@ -42,8 +42,6 @@ app.use('/api/v1/verify', publicVerificationRoutes);
 app.use('/api/v1/conversations', messageRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use((_req, res) => { res.status(404).json({ error: 'Not found' }); });
-
-app.use((_req, res) => { res.status(404).json({ error: 'Not found' }); });
 app.use(errorHandler);
 
 app.listen(PORT, () => {

@@ -37,6 +37,16 @@ Reference docs:
 Task: [specific task description]
 ```
 
+### Step 2.5: Review Master Lessons Learned (MANDATORY)
+
+Before writing any code, review the relevant sections of `docs/MASTER_LESSONS_LEARNED.md`:
+- **Always review:** Sections 1 (Schema), 2 (Express), 6 (Security), 8 (Testing)
+- **If touching payments:** Section 4
+- **If adding Edge Functions:** Section 3
+- **If adding frontend pages:** Section 5
+- **If writing migrations:** Section 7
+- **Quick gotcha check:** Section 10 (table format)
+
 ### Step 3: Development
 
 - Follow module prompt guidelines
