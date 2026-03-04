@@ -75,10 +75,10 @@ export function PhotoUploadButton({
       />
       <label
         htmlFor="photo-upload"
-        className={`inline-block px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
+        className={`inline-block px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
           uploading
-            ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-            : "bg-blue-600 text-white hover:bg-blue-700"
+            ? "bg-dark-700 text-gray-400 cursor-not-allowed"
+            : "bg-gradient-to-r from-primary-500 to-accent-500 text-white hover:opacity-90"
         }`}
         aria-disabled={uploading}
       >
@@ -97,7 +97,7 @@ export function PhotoUploadButton({
             Upload progress: {progress} percent
           </div>
           <div
-            className="w-full bg-gray-200 rounded-full h-2"
+            className="w-full bg-dark-700 rounded-full h-2"
             role="progressbar"
             aria-valuenow={progress}
             aria-valuemin={0}
@@ -105,7 +105,7 @@ export function PhotoUploadButton({
             aria-label="Photo upload progress"
           >
             <div
-              className="bg-blue-600 h-2 rounded-full transition-all"
+              className="bg-gradient-to-r from-primary-500 to-accent-500 h-2 rounded-full transition-all"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -117,7 +117,7 @@ export function PhotoUploadButton({
         <div
           role="status"
           aria-live="polite"
-          className="text-sm text-green-600"
+          className="text-sm text-green-400"
         >
           {success}
         </div>
@@ -128,7 +128,7 @@ export function PhotoUploadButton({
         <div
           role="alert"
           aria-live="assertive"
-          className="text-sm text-red-600"
+          className="text-sm text-red-400"
         >
           {error}
         </div>

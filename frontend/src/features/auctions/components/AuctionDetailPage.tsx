@@ -81,17 +81,25 @@ export function AuctionDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl text-gray-600">Loading auction...</div>
+      <div className="flex items-center justify-center min-h-screen bg-dark-800">
+        <div className="text-xl text-gray-400">Loading auction...</div>
       </div>
     );
   }
 
   if (error || !auction) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl text-red-600">
-          {error || 'Auction not found'}
+      <div className="flex items-center justify-center min-h-screen bg-dark-800">
+        <div className="glass rounded-2xl p-8 max-w-md text-center border border-red-500/20">
+          <p className="text-xl text-red-400 mb-4">{error || 'Auction not found'}</p>
+          <div className="flex gap-3 justify-center">
+            <Link to="/browse" className="rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 px-4 py-2 text-sm font-medium transition-colors">
+              Back to Browse
+            </Link>
+            <button onClick={() => window.location.reload()} className="rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white px-4 py-2 text-sm font-semibold transition-all">
+              Try Again
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -138,22 +146,22 @@ export function AuctionDetailPage() {
               isSeller={isSeller}
             />
           )}
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="glass rounded-2xl p-6 mb-6">
             <div className="mb-4">
               <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                auction.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
-                auction.status === 'ENDED' ? 'bg-gray-100 text-gray-800' :
-                'bg-blue-100 text-blue-800'
+                auction.status === 'ACTIVE' ? 'bg-green-900/30 text-green-400' :
+                auction.status === 'ENDED' ? 'bg-dark-700 text-gray-400' :
+                'bg-blue-900/30 text-blue-400'
               }`}>
                 {auction.status}
               </span>
             </div>
 
-            <h1 className="text-3xl font-bold mb-4">Auction #{auction.id.slice(0, 8)}</h1>
+            <h1 className="text-3xl font-bold text-white mb-4">Auction #{auction.id.slice(0, 8)}</h1>
 
             {auction.status === 'ACTIVE' && (
               <div className="mb-6">
-                <h2 className="text-sm font-medium text-gray-600 mb-2">Time Remaining</h2>
+                <h2 className="text-sm font-medium text-gray-400 mb-2">Time Remaining</h2>
                 <CountdownTimer endTime={auction.end_time} />
               </div>
             )}
@@ -161,21 +169,21 @@ export function AuctionDetailPage() {
             <CurrentBidDisplay auction={auction} />
           </div>
 
-          <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="glass rounded-2xl p-6">
             <BidHistory auctionId={auction.id} currency={auction.currency} />
           </div>
         </div>
 
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow-md p-6 sticky top-4">
-            <h2 className="text-xl font-bold mb-4">Place Your Bid</h2>
+          <div className="glass rounded-2xl p-6 sticky top-4">
+            <h2 className="text-xl font-bold text-white mb-4">Place Your Bid</h2>
 
             {!user ? (
-              <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded">
+              <div className="glass rounded-xl p-4 border border-blue-500/20 text-blue-400">
                 Please log in to place a bid
               </div>
             ) : isSeller ? (
-              <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded">
+              <div className="glass rounded-xl p-4 border border-amber-500/20 text-amber-400">
                 You cannot bid on your own auction
               </div>
             ) : (
@@ -187,9 +195,9 @@ export function AuctionDetailPage() {
                 <button
                   type="button"
                   onClick={() => setMessageModalOpen(true)}
-                  className="w-full py-2.5 px-4 rounded-xl border border-purple-500/40 text-purple-400
-                             hover:bg-purple-500/10 transition-colors text-sm font-medium
-                             focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full py-2.5 px-4 rounded-xl border border-primary-500/40 text-primary-400
+                             hover:bg-primary-500/10 transition-colors text-sm font-medium
+                             focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   Message Seller
                 </button>

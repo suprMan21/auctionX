@@ -9,17 +9,17 @@ export function SellerProfilePage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="text-center">Loading seller profile...</div>
+      <div className="max-w-4xl mx-auto px-4 py-8 bg-dark-800">
+        <div className="text-center text-gray-400">Loading seller profile...</div>
       </div>
     )
   }
 
   if (error || !profile) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="rounded-md bg-red-50 p-4">
-          <p className="text-sm text-red-800">
+      <div className="max-w-4xl mx-auto px-4 py-8 bg-dark-800">
+        <div className="glass rounded-2xl p-4 border border-red-500/20">
+          <p className="text-sm text-red-400">
             {error?.message || 'Seller not found'}
           </p>
         </div>

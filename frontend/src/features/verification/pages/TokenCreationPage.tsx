@@ -29,7 +29,7 @@ function StepDots({ current }: { current: Step }) {
         <div
           key={s}
           className={`w-2 h-2 rounded-full transition-colors ${
-            s === current ? 'bg-purple-500' : 'bg-white/20'
+            s === current ? 'bg-primary-500' : 'bg-white/20'
           }`}
         />
       ))}
@@ -261,7 +261,7 @@ export function TokenCreationPage() {
       <div className="min-h-screen bg-dark-800 flex items-center justify-center px-4">
         <div className="glass rounded-2xl p-8 max-w-sm w-full text-center">
           <p className="text-red-400 mb-4">{loadError}</p>
-          <button onClick={() => navigate(-1)} className="text-purple-400 underline">Go back</button>
+          <button onClick={() => navigate(-1)} className="text-primary-400 underline">Go back</button>
         </div>
       </div>
     );
@@ -283,8 +283,8 @@ export function TokenCreationPage() {
         {/* ── Step 1: Intro ─────────────────────────────────────────────── */}
         {step === 'intro' && (
           <div className="glass rounded-2xl p-8 text-center space-y-6">
-            <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mx-auto">
-              <svg className="w-8 h-8 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-16 h-16 rounded-full bg-primary-500/20 flex items-center justify-center mx-auto">
+              <svg className="w-8 h-8 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
                 />
@@ -292,25 +292,25 @@ export function TokenCreationPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-white mb-2">Create NFC Token</h1>
-              <code className="text-purple-300 text-lg font-mono">{verification.token_name}</code>
+              <code className="text-primary-300 text-lg font-mono">{verification.token_name}</code>
             </div>
             <ul className="text-left space-y-3 text-gray-300 text-sm">
               <li className="flex gap-3">
-                <span className="text-purple-400 font-bold">1.</span>
+                <span className="text-primary-400 font-bold">1.</span>
                 Record a 15–30 second possession-proof video with your item
               </li>
               <li className="flex gap-3">
-                <span className="text-purple-400 font-bold">2.</span>
+                <span className="text-primary-400 font-bold">2.</span>
                 Upload it to our secure servers
               </li>
               <li className="flex gap-3">
-                <span className="text-purple-400 font-bold">3.</span>
+                <span className="text-primary-400 font-bold">3.</span>
                 Program your NFC tag — buyers scan it to verify authenticity
               </li>
             </ul>
             <button
               onClick={() => setStep('record')}
-              className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-colors"
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 hover:opacity-90 text-white font-semibold transition-colors"
             >
               Start Recording
             </button>
@@ -360,7 +360,7 @@ export function TokenCreationPage() {
                     <button
                       onClick={handleUpload}
                       disabled={recordedDuration < 15}
-                      className="flex-1 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 hover:opacity-90 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Use This Video
                     </button>
@@ -403,7 +403,7 @@ export function TokenCreationPage() {
             )}
             <div className="w-full h-3 bg-white/10 rounded-full overflow-hidden">
               <div
-                className="h-full bg-purple-500 rounded-full transition-all duration-300"
+                className="h-full bg-primary-500 rounded-full transition-all duration-300"
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>
@@ -472,7 +472,7 @@ export function TokenCreationPage() {
                     ? 'iOS does not support Web NFC. Use the NFC Tools app to write this URL to your tag:'
                     : 'Your browser does not support Web NFC. Use the NFC Tools app to write this URL:'}
                 </p>
-                <code className="block text-purple-300 text-xs bg-dark-700 rounded-xl p-3 break-all">
+                <code className="block text-primary-300 text-xs bg-dark-700 rounded-xl p-3 break-all">
                   {window.location.origin}/verify/{verification.token_name}
                 </code>
                 <p className="text-gray-500 text-xs">
@@ -500,7 +500,7 @@ export function TokenCreationPage() {
             </div>
             <div>
               <h2 className="text-2xl font-bold text-white mb-1">Token Created!</h2>
-              <code className="text-purple-300 text-lg font-mono">{verification.token_name}</code>
+              <code className="text-primary-300 text-lg font-mono">{verification.token_name}</code>
             </div>
             <p className="text-gray-400 text-sm">
               Your item now has a verifiable chain of custody. Buyers can scan the NFC tag or use the link below.
@@ -514,7 +514,7 @@ export function TokenCreationPage() {
               </button>
               <button
                 onClick={() => navigate(`/verify/${verification.token_name}`)}
-                className="flex-1 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-colors"
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 hover:opacity-90 text-white font-semibold transition-colors"
               >
                 View Token
               </button>

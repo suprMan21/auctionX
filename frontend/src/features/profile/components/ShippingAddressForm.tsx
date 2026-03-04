@@ -108,16 +108,16 @@ export function ShippingAddressForm({
         <div
           role="status"
           aria-live="polite"
-          className="rounded-md bg-green-50 p-4"
+          className="glass rounded-xl p-4 border border-green-500/20"
         >
-          <p className="text-sm text-green-800">{successMessage}</p>
+          <p className="text-sm text-green-400">{successMessage}</p>
         </div>
       )}
 
       <div>
         <label
           htmlFor="name"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-gray-300"
         >
           Full Name *
         </label>
@@ -131,14 +131,14 @@ export function ShippingAddressForm({
           aria-required="true"
           aria-invalid={!!validationError}
           aria-errormessage={validationError ? "address-form-error" : undefined}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
       <div>
         <label
           htmlFor="address_line1"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-gray-300"
         >
           Address Line 1 *
         </label>
@@ -151,14 +151,14 @@ export function ShippingAddressForm({
           required
           aria-required="true"
           aria-invalid={!!validationError}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
       <div>
         <label
           htmlFor="address_line2"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-gray-300"
         >
           Address Line 2
         </label>
@@ -168,7 +168,7 @@ export function ShippingAddressForm({
           type="text"
           value={formData.address_line2}
           onChange={handleChange}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
@@ -176,7 +176,7 @@ export function ShippingAddressForm({
         <div>
           <label
             htmlFor="city"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-gray-300"
           >
             City *
           </label>
@@ -189,14 +189,14 @@ export function ShippingAddressForm({
             required
             aria-required="true"
             aria-invalid={!!validationError}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
 
         <div>
           <label
             htmlFor="region"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-gray-300"
           >
             State/Province *
           </label>
@@ -209,7 +209,7 @@ export function ShippingAddressForm({
             required
             aria-required="true"
             aria-invalid={!!validationError}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
       </div>
@@ -218,7 +218,7 @@ export function ShippingAddressForm({
         <div>
           <label
             htmlFor="postal_code"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-gray-300"
           >
             Postal Code *
           </label>
@@ -231,14 +231,14 @@ export function ShippingAddressForm({
             required
             aria-required="true"
             aria-invalid={!!validationError}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
 
         <div>
           <label
             htmlFor="country"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-gray-300"
           >
             Country *
           </label>
@@ -249,7 +249,7 @@ export function ShippingAddressForm({
             onChange={handleChange}
             required
             aria-required="true"
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             {COUNTRIES.map((country) => (
               <option key={country.code} value={country.code}>
@@ -263,7 +263,7 @@ export function ShippingAddressForm({
       <div>
         <label
           htmlFor="phone_number"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-gray-300"
         >
           Phone Number
         </label>
@@ -273,7 +273,7 @@ export function ShippingAddressForm({
           type="tel"
           value={formData.phone_number}
           onChange={handleChange}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
@@ -285,11 +285,11 @@ export function ShippingAddressForm({
           checked={formData.is_default}
           onChange={handleChange}
           aria-describedby="is_default-description"
-          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          className="h-4 w-4 rounded border-white/10 text-primary-500 focus:ring-primary-500 bg-dark-700"
         />
         <label
           htmlFor="is_default"
-          className="ml-2 block text-sm text-gray-700"
+          className="ml-2 block text-sm text-gray-300"
         >
           Set as default address
         </label>
@@ -304,9 +304,9 @@ export function ShippingAddressForm({
           id="address-form-error"
           role="alert"
           aria-live="assertive"
-          className="rounded-md bg-red-50 p-4"
+          className="glass rounded-xl p-4 border border-red-500/20"
         >
-          <p className="text-sm text-red-800">{validationError}</p>
+          <p className="text-sm text-red-400">{validationError}</p>
         </div>
       )}
 
@@ -316,7 +316,7 @@ export function ShippingAddressForm({
           onClick={onCancel}
           disabled={loading}
           aria-label="Cancel address form"
-          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          className="px-4 py-2 rounded-xl border border-white/10 text-sm font-medium text-gray-400 hover:bg-white/5 disabled:opacity-50"
         >
           Cancel
         </button>
@@ -330,7 +330,7 @@ export function ShippingAddressForm({
                 ? "Update address"
                 : "Add address"
           }
-          className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
         >
           {loading ? "Saving..." : address ? "Update Address" : "Add Address"}
         </button>

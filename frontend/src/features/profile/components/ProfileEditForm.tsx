@@ -64,16 +64,16 @@ export function ProfileEditForm({
         <div
           role="status"
           aria-live="polite"
-          className="rounded-md bg-green-50 p-4"
+          className="glass rounded-xl p-4 border border-green-500/20"
         >
-          <p className="text-sm text-green-800">{successMessage}</p>
+          <p className="text-sm text-green-400">{successMessage}</p>
         </div>
       )}
 
       <div>
         <label
           htmlFor="displayName"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-gray-300"
         >
           Display Name *
         </label>
@@ -87,7 +87,7 @@ export function ProfileEditForm({
           aria-describedby="displayName-hint"
           aria-invalid={!!currentError}
           aria-errormessage={currentError ? "form-error" : undefined}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         <p id="displayName-hint" className="text-xs text-gray-500 mt-1">
           {displayName.length}/120 characters
@@ -97,7 +97,7 @@ export function ProfileEditForm({
       <div>
         <label
           htmlFor="phoneNumber"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-gray-300"
         >
           Phone Number
         </label>
@@ -107,14 +107,14 @@ export function ProfileEditForm({
           value={phoneNumber}
           onChange={(e) => setPhoneNumber(e.target.value)}
           aria-invalid={!!currentError}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
       <div>
         <label
           htmlFor="preferredBrand"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-gray-300"
         >
           Preferred Brand
         </label>
@@ -122,7 +122,7 @@ export function ProfileEditForm({
           id="preferredBrand"
           value={preferredBrand}
           onChange={(e) => setPreferredBrand(e.target.value as BrandType)}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="AUCTIONX">AuctionX</option>
           <option value="UNMENTIONABLES">Unmentionables</option>
@@ -135,9 +135,9 @@ export function ProfileEditForm({
           id="form-error"
           role="alert"
           aria-live="assertive"
-          className="rounded-md bg-red-50 p-4"
+          className="glass rounded-xl p-4 border border-red-500/20"
         >
-          <p className="text-sm text-red-800">{currentError}</p>
+          <p className="text-sm text-red-400">{currentError}</p>
         </div>
       )}
 
@@ -148,7 +148,7 @@ export function ProfileEditForm({
             onClick={onCancel}
             disabled={loading}
             aria-label="Cancel editing profile"
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="px-4 py-2 rounded-xl border border-white/10 text-sm font-medium text-gray-400 hover:bg-white/5 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -159,7 +159,7 @@ export function ProfileEditForm({
           aria-label={
             loading ? "Saving profile changes" : "Save profile changes"
           }
-          className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
         >
           {loading ? "Saving..." : "Save Changes"}
         </button>

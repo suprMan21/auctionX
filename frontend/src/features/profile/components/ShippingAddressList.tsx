@@ -76,26 +76,26 @@ export function ShippingAddressList({
         <div
           role="alert"
           aria-live="assertive"
-          className="rounded-md bg-red-50 p-4"
+          className="glass rounded-xl p-4 border border-red-500/20"
         >
-          <p className="text-sm text-red-800">{error}</p>
+          <p className="text-sm text-red-400">{error}</p>
         </div>
       )}
 
       {addresses.map((address) => (
         <div
           key={address.id}
-          className={`bg-white border rounded-lg p-4 ${
-            address.is_default ? "border-blue-500 border-2" : "border-gray-200"
+          className={`glass rounded-2xl p-4 ${
+            address.is_default ? "border-primary-500 border-2" : "border-white/10"
           }`}
         >
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <h4 className="font-semibold text-gray-900">{address.name}</h4>
+                <h4 className="font-semibold text-white">{address.name}</h4>
                 {address.is_default && (
                   <span
-                    className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded"
+                    className="px-2 py-0.5 bg-primary-500/20 text-primary-400 text-xs font-medium rounded"
                     aria-label="Default shipping address"
                   >
                     Default
@@ -103,7 +103,7 @@ export function ShippingAddressList({
                 )}
               </div>
 
-              <address className="not-italic text-sm text-gray-700">
+              <address className="not-italic text-sm text-gray-300">
                 <p>{address.address_line1}</p>
                 {address.address_line2 && <p>{address.address_line2}</p>}
                 <p>
@@ -111,7 +111,7 @@ export function ShippingAddressList({
                 </p>
                 <p>{address.country}</p>
                 {address.phone_number && (
-                  <p className="text-gray-600 mt-1">{address.phone_number}</p>
+                  <p className="text-gray-400 mt-1">{address.phone_number}</p>
                 )}
               </address>
             </div>
@@ -122,7 +122,7 @@ export function ShippingAddressList({
                   onClick={() => handleSetDefault(address.id)}
                   disabled={settingDefaultId === address.id}
                   aria-label={`Set ${address.name} as default address`}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
+                  className="text-xs text-primary-400 hover:text-primary-300 font-medium disabled:opacity-50"
                 >
                   {settingDefaultId === address.id
                     ? "Setting..."
@@ -132,7 +132,7 @@ export function ShippingAddressList({
               <button
                 onClick={() => onEdit(address)}
                 aria-label={`Edit ${address.name} address`}
-                className="text-xs text-gray-600 hover:text-gray-700 font-medium"
+                className="text-xs text-gray-400 hover:text-gray-300 font-medium"
               >
                 Edit
               </button>
@@ -146,8 +146,8 @@ export function ShippingAddressList({
                 }
                 className={`text-xs font-medium disabled:opacity-50 ${
                   address.is_default
-                    ? "text-gray-400 cursor-not-allowed"
-                    : "text-red-600 hover:text-red-700"
+                    ? "text-gray-500 cursor-not-allowed"
+                    : "text-red-400 hover:text-red-300"
                 }`}
                 title={
                   address.is_default ? "Cannot delete default address" : ""

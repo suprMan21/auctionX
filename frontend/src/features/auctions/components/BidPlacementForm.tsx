@@ -53,7 +53,7 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
 
   if (auction.status !== 'ACTIVE') {
     return (
-      <div className="bg-gray-100 p-4 rounded text-gray-600">
+      <div className="glass rounded-xl p-4 text-gray-400">
         Bidding is not available for this auction
       </div>
     );
@@ -62,7 +62,7 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
   return (
     <form data-testid="bid-form" onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="bidAmount" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="bidAmount" className="block text-sm font-medium text-gray-300 mb-1">
           Your Bid Amount
         </label>
         <div className="relative">
@@ -76,12 +76,12 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
               const value = e.target.value.replace(/[^0-9.]/g, '');
               setBidAmount(value);
             }}
-            className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-8 pr-4 py-2 rounded-xl bg-dark-700 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
             placeholder={minimumDollars}
             required
           />
         </div>
-        <p className="text-xs text-gray-600 mt-1">
+        <p className="text-xs text-gray-400 mt-1">
           Minimum: {formatCurrency(minimumNextBid, auction.currency)}
         </p>
       </div>
@@ -92,16 +92,16 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
           id="useProxyBid"
           checked={useProxyBid}
           onChange={(e) => setUseProxyBid(e.target.checked)}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          className="rounded border-white/10 text-primary-500 focus:ring-primary-500 bg-dark-700"
         />
-        <label htmlFor="useProxyBid" className="text-sm text-gray-700">
+        <label htmlFor="useProxyBid" className="text-sm text-gray-300">
           Use proxy bidding (auto-bid up to a maximum)
         </label>
       </div>
 
       {useProxyBid && (
         <div>
-          <label htmlFor="maxBidAmount" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="maxBidAmount" className="block text-sm font-medium text-gray-300 mb-1">
             Maximum Bid Amount
           </label>
           <div className="relative">
@@ -115,25 +115,25 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
                 const value = e.target.value.replace(/[^0-9.]/g, '');
                 setMaxBidAmount(value);
               }}
-              className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-8 pr-4 py-2 rounded-xl bg-dark-700 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
               placeholder={minimumDollars}
               required={useProxyBid}
             />
           </div>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             The system will automatically bid on your behalf up to this amount
           </p>
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="glass rounded-xl p-4 border border-red-500/20 text-red-400">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
+        <div className="glass rounded-xl p-4 border border-green-500/20 text-green-400">
           Bid placed successfully!
         </div>
       )}
@@ -141,7 +141,7 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+        className="w-full rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white py-3 px-6 font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
       >
         {loading ? 'Placing Bid...' : 'Place Bid'}
       </button>

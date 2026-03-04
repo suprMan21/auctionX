@@ -75,7 +75,7 @@ export function VerificationPage() {
           <p className="text-gray-400 mb-6">{error ?? 'This verification token does not exist.'}</p>
           <Link
             to="/browse"
-            className="inline-block px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-colors"
+            className="inline-block px-6 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 hover:opacity-90 text-white font-semibold transition-colors"
           >
             Browse Listings
           </Link>
@@ -214,7 +214,7 @@ export function VerificationPage() {
           </button>
           <Link
             to={`/browse`}
-            className="flex-1 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-colors text-center"
+            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 hover:opacity-90 text-white font-semibold transition-colors text-center"
           >
             Browse More
           </Link>
