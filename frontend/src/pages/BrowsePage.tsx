@@ -155,7 +155,7 @@ export function BrowsePage() {
       <div className="min-h-screen bg-dark-800">
         {/* Hero */}
         <section className="relative py-20 px-4 text-center overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary-900/40 via-dark-800 to-dark-800 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-b from-primary-500/10 via-dark-800 to-dark-800 pointer-events-none" />
           <div className="relative max-w-3xl mx-auto">
             <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">
               Discover Rare{' '}
@@ -177,8 +177,9 @@ export function BrowsePage() {
               />
               <button
                 type="submit"
-                className="h-12 px-6 rounded-xl bg-primary-600 hover:bg-primary-500 text-white font-semibold
-                           transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+                className="h-12 px-6 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white font-semibold
+                           hover:shadow-glow transition-all duration-200
+                           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
               >
                 Search
               </button>
@@ -244,6 +245,11 @@ export function BrowsePage() {
               </div>
             ) : listings.length === 0 ? (
               <div data-testid="empty-state" className="glass rounded-2xl p-12 text-center">
+                <div className="glass rounded-2xl w-16 h-16 mx-auto flex items-center justify-center mb-6">
+                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                  </svg>
+                </div>
                 <h3 className="text-xl font-bold text-white mb-3">No listings found</h3>
                 <p className="text-gray-400 mb-6">
                   {categorySlug

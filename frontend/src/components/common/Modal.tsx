@@ -60,7 +60,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
             ref={closeButtonRef}
             onClick={onClose}
             aria-label="Close dialog"
-            className="glass rounded-lg w-[44px] h-[44px] flex items-center justify-center
+            className="glass rounded-xl w-[44px] h-[44px] flex items-center justify-center
                        hover:bg-white/10 transition-colors
                        focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
           >

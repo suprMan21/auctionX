@@ -48,7 +48,7 @@ export function ListingCard({ listing }: ListingCardProps) {
   const linkTo = auction ? `/auctions/${auction.id}` : `/listings/${listing.id}`;
 
   return (
-    <article data-testid="listing-card" className="glass rounded-2xl overflow-hidden hover:border-white/20 hover:shadow-glow transition-all duration-200">
+    <article data-testid="listing-card" className="group glass rounded-2xl overflow-hidden hover:border-white/20 hover:shadow-glow transition-all duration-200">
       <Link
         to={linkTo}
         className="block focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 rounded-2xl"
@@ -58,10 +58,10 @@ export function ListingCard({ listing }: ListingCardProps) {
           <img
             src={primaryImage.url}
             alt=""
-            className="w-full h-48 object-cover"
+            className="w-full h-56 object-cover transition-transform duration-300 group-hover:scale-110"
           />
         ) : (
-          <div className="w-full h-48 bg-dark-700 flex items-center justify-center">
+          <div className="w-full h-56 bg-dark-700 flex items-center justify-center">
             <span className="text-gray-500 text-sm">No image</span>
           </div>
         )}

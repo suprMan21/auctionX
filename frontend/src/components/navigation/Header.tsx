@@ -94,9 +94,9 @@ export function Header() {
               to="/"
               className="text-2xl font-bold text-gradient
                          focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 rounded"
-              aria-label="AuctionX home"
+              aria-label="Authentic Materials home"
             >
-              AuctionX
+              Authentic Materials
             </Link>
 
             <ul className="hidden md:flex items-center gap-1" role="list">
@@ -114,7 +114,7 @@ export function Header() {
                 <>
                   <li>
                     <Link
-                      to="/browse"
+                      to="/dashboard"
                       className="flex items-center gap-2 px-4 py-2 min-h-[44px] rounded-xl
                                  text-gray-300 hover:text-white hover:bg-white/5 transition-colors
                                  focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"

@@ -55,7 +55,7 @@ export function SignupPage() {
             Create your account
           </h1>
           <p className="text-gray-400 mb-8">
-            Join AuctionX and start bidding on exclusive items.
+            Join Authentic Materials and start bidding on exclusive items.
           </p>
 
           <form onSubmit={handleSubmit} aria-label="Signup form" className="space-y-6">

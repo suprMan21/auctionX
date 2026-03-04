@@ -7,21 +7,25 @@ interface SellerTierBadgeProps {
   className?: string
 }
 
-const tierConfig: Record<SellerTier, { label: string; color: string; icon: string }> = {
+const tierConfig: Record<SellerTier, { label: string; dotColor: string; borderColor: string; textColor: string; useGradientText?: boolean }> = {
   TIER_1: {
     label: 'Bronze',
-    color: 'bg-amber-700 text-white',
-    icon: '🥉',
+    dotColor: 'bg-orange-400',
+    borderColor: 'border-orange-400/30',
+    textColor: 'text-orange-300',
   },
   TIER_2: {
     label: 'Silver',
-    color: 'bg-gray-400 text-white',
-    icon: '🥈',
+    dotColor: 'bg-gray-300',
+    borderColor: 'border-gray-300/30',
+    textColor: 'text-gray-300',
   },
   TIER_3: {
     label: 'Gold',
-    color: 'bg-yellow-400 text-gray-900',
-    icon: '🥇',
+    dotColor: 'bg-primary-500 animate-pulse',
+    borderColor: 'border-primary-500/30',
+    textColor: '',
+    useGradientText: true,
   },
 }
 
@@ -29,9 +33,9 @@ export function SellerTierBadge({ tier, className = '' }: SellerTierBadgeProps) 
   const config = tierConfig[tier]
 
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${config.color} ${className}`}>
-      <span>{config.icon}</span>
-      <span>{config.label}</span>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium glass border ${config.borderColor} ${className}`}>
+      <span className={`w-2 h-2 rounded-full ${config.dotColor}`} />
+      <span className={config.useGradientText ? 'text-gradient' : config.textColor}>{config.label}</span>
     </span>
   )
 }

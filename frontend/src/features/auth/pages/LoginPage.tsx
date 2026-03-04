@@ -46,7 +46,7 @@ export function LoginPage() {
       <div className="min-h-screen bg-dark-800 flex items-center justify-center p-4">
         <main id="main-content" className="glass rounded-2xl p-8 max-w-md w-full">
           <h1 className="text-3xl font-bold text-white mb-2">
-            Log in to AuctionX
+            Log in to Authentic Materials
           </h1>
           <p className="text-gray-400 mb-8">
             Welcome back! Enter your credentials to continue.

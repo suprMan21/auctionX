@@ -44,7 +44,7 @@ export function VerificationPage() {
       .then((data) => {
         if (!mounted) return;
         setVerif(data);
-        document.title = `${data.token_name} — Verified by @${data.seller?.username ?? 'unknown'} | AuctionX`;
+        document.title = `${data.token_name} — Verified by @${data.seller?.username ?? 'unknown'} | Authentic Materials`;
         // Non-blocking scan increment
         api.incrementScan(tokenName);
       })
