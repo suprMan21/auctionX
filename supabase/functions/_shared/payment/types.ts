@@ -70,3 +70,53 @@ export interface RiskAssessment {
   flags: string[];
   score: number;
 }
+
+export interface ProcessorResult {
+  success: boolean;
+  transactionId?: string;
+  processor: string;
+  amount?: number;
+  currency?: string;
+  metadata?: Record<string, string>;
+  errorMessage?: string;
+  errorCode?: string;
+}
+
+export interface RefundResult {
+  success: boolean;
+  refundId?: string;
+  processor: string;
+  amount?: number;
+  status?: string;
+  errorMessage?: string;
+}
+
+export interface HealthCheckResult {
+  healthy: boolean;
+  processor: string;
+  errorMessage?: string;
+}
+
+export interface PaymentProcessor {
+  readonly processorName: string;
+  processPayment(
+    amount: number,
+    currency: string,
+    paymentMethod: PaymentMethod,
+    metadata: Record<string, string>
+  ): Promise<ProcessorResult>;
+  refund(
+    transactionId: string,
+    amount?: number,
+    reason?: string
+  ): Promise<RefundResult>;
+  healthCheck(): Promise<HealthCheckResult>;
+}
+
+export interface PaymentIntent {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  metadata?: Record<string, string>;
+}

@@ -1,6 +1,6 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-03 (Module 18 added)
+Last updated: 2026-03-04 (Session E — Backend Hardening)
 
 ---
 
@@ -166,6 +166,14 @@ Last updated: 2026-03-03 (Module 18 added)
 - [x] **DONE:** Add Stripe transactionId to payment_intent metadata for webhook correlation
   - `StripeProcessor.ts` now builds a clean `stripeMetadata` with `transactionId`, `auctionId`, `listingId`, `sellerId`
   - `process-payment/index.ts` now sets `paymentRequest.metadata.auctionId = auction.id` before cascade
+
+- [x] **DONE (Session E):** Fix missing `await` on `constructEventAsync` in StripeProcessor webhook handler
+  - `StripeProcessor.ts` line 138: `constructEventAsync` returns `Promise<Stripe.Event>` — was missing `await`
+  - Without `await`, the event variable was a Promise object, not the resolved event — webhook handling silently broken
+
+- [x] **DONE (Session E):** Add missing type definitions to `_shared/payment/types.ts`
+  - Added: `ProcessorResult`, `RefundResult`, `HealthCheckResult`, `PaymentProcessor`, `PaymentIntent`
+  - Were imported by `StripeProcessor.ts`, `BaseProcessor.ts`, `PaymentCloudProcessor.ts` but never defined
 
 - [ ] **TODO:** Deploy process-payment and payment-webhook Edge Functions
   - Context: Functions are hardened and ready. Blocked on: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET env vars in Supabase dashboard.
