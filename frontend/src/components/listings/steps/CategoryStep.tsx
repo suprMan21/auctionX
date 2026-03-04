@@ -12,8 +12,8 @@ export function CategoryStep() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900 mb-4">Select Category</h2>
-        <p className="text-sm text-gray-600 mb-4">
+        <h2 className="text-lg font-medium text-white mb-4">Select Category</h2>
+        <p className="text-sm text-gray-400 mb-4">
           Choose the most specific category for your item. Only leaf categories (without sub-categories) can be selected.
         </p>
       </div>
@@ -24,8 +24,8 @@ export function CategoryStep() {
       />
 
       {draft.category_id && (
-        <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
-          <p className="text-sm font-medium text-green-900">
+        <div className="mt-4 p-4 bg-success-500/10 border border-success-500/30 rounded-xl">
+          <p className="text-sm font-medium text-success-400">
             ✓ Category selected
           </p>
         </div>

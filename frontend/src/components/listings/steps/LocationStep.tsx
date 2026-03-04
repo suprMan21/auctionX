@@ -69,22 +69,22 @@ export function LocationStep() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900 mb-2">Item Location</h2>
-        <p className="text-sm text-gray-600">
+        <h2 className="text-lg font-medium text-white mb-2">Item Location</h2>
+        <p className="text-sm text-gray-400">
           Let buyers know where this item is located for shipping purposes.
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-1">
-            Country <span className="text-red-500">*</span>
+          <label htmlFor="country" className="block text-sm font-medium text-gray-300 mb-1.5">
+            Country <span className="text-error-500">*</span>
           </label>
           <select
             id="country"
             value={draft.country}
             onChange={(e) => handleCountryChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
             required
           >
             <option value="CA">Canada</option>
@@ -93,14 +93,14 @@ export function LocationStep() {
         </div>
 
         <div>
-          <label htmlFor="region" className="block text-sm font-medium text-gray-700 mb-1">
-            {draft.country === 'CA' ? 'Province' : 'State'} <span className="text-red-500">*</span>
+          <label htmlFor="region" className="block text-sm font-medium text-gray-300 mb-1.5">
+            {draft.country === 'CA' ? 'Province' : 'State'} <span className="text-error-500">*</span>
           </label>
           <select
             id="region"
             value={draft.region}
             onChange={(e) => handleRegionChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
             required
           >
             <option value="">Select {draft.country === 'CA' ? 'province' : 'state'}</option>
@@ -113,8 +113,8 @@ export function LocationStep() {
         </div>
 
         <div>
-          <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
-            City <span className="text-red-500">*</span>
+          <label htmlFor="city" className="block text-sm font-medium text-gray-300 mb-1.5">
+            City <span className="text-error-500">*</span>
           </label>
           <input
             type="text"
@@ -122,7 +122,7 @@ export function LocationStep() {
             value={draft.city}
             onChange={(e) => handleCityChange(e.target.value)}
             maxLength={64}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
             placeholder="e.g., Toronto"
             required
           />
@@ -130,7 +130,7 @@ export function LocationStep() {
 
         {draft.country === 'CA' && (
           <div>
-            <label htmlFor="postal-fsa" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="postal-fsa" className="block text-sm font-medium text-gray-300 mb-1.5">
               Postal Code FSA <span className="text-gray-500">(Optional)</span>
             </label>
             <input
@@ -140,7 +140,7 @@ export function LocationStep() {
               onChange={(e) => handlePostalChange(e.target.value)}
               maxLength={3}
               pattern="[A-Z]\d[A-Z]"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
               placeholder="e.g., M5V"
             />
             <p className="mt-1 text-xs text-gray-500">

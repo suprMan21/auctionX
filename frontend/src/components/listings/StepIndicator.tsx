@@ -10,24 +10,29 @@ interface StepIndicatorProps {
 
 export function StepIndicator({ steps, currentStep }: StepIndicatorProps) {
   return (
-    <nav aria-label="Progress" className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+    <nav aria-label="Progress" className="glass rounded-2xl p-4 mb-6">
       <ol role="list" className="flex items-center justify-between">
         {steps.map((step, stepIdx) => (
           <li key={step.id} className="relative flex-1">
             {stepIdx !== steps.length - 1 && (
               <div
-                className="absolute top-4 left-1/2 w-full h-0.5 bg-gray-200"
+                className="absolute top-4 left-1/2 w-full h-px bg-white/10"
                 aria-hidden="true"
               />
             )}
             <div className="relative flex flex-col items-center group">
+              {step.id === currentStep && (
+                <span className="absolute inset-0 top-0 flex items-start justify-center" aria-hidden="true">
+                  <span className="h-8 w-8 bg-gradient-primary rounded-full blur opacity-50" />
+                </span>
+              )}
               <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${
+                className={`relative flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${
                   step.id < currentStep
-                    ? 'bg-blue-600 border-blue-600'
+                    ? 'bg-gradient-primary border-transparent'
                     : step.id === currentStep
-                    ? 'border-blue-600 bg-white'
-                    : 'border-gray-300 bg-white'
+                    ? 'border-primary-500 bg-dark-700'
+                    : 'border-white/10 bg-dark-600'
                 }`}
                 aria-current={step.id === currentStep ? 'step' : undefined}
               >
@@ -42,7 +47,7 @@ export function StepIndicator({ steps, currentStep }: StepIndicatorProps) {
                 ) : (
                   <span
                     className={`text-sm font-medium ${
-                      step.id === currentStep ? 'text-blue-600' : 'text-gray-500'
+                      step.id === currentStep ? 'text-white' : 'text-gray-400'
                     }`}
                   >
                     {step.id + 1}
@@ -51,7 +56,7 @@ export function StepIndicator({ steps, currentStep }: StepIndicatorProps) {
               </span>
               <span
                 className={`mt-2 text-xs font-medium ${
-                  step.id === currentStep ? 'text-blue-600' : 'text-gray-500'
+                  step.id === currentStep ? 'text-white' : 'text-gray-400'
                 }`}
               >
                 {step.name}

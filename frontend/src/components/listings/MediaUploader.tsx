@@ -47,7 +47,7 @@ export function MediaUploader() {
       if (urlError) throw urlError;
 
       const xhr = new XMLHttpRequest();
-      
+
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
           const progress = (e.loaded / e.total) * 100;
@@ -152,10 +152,10 @@ export function MediaUploader() {
   return (
     <div className="space-y-4">
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${
           dragActive
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400'
+            ? 'border-primary-500/50 bg-primary-500/5'
+            : 'glass border-white/10 hover:border-white/20'
         } ${draft.media.length >= MAX_MEDIA ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         onDragEnter={handleDrag}
         onDragOver={handleDrag}
@@ -179,7 +179,7 @@ export function MediaUploader() {
             strokeLinejoin="round"
           />
         </svg>
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="mt-2 text-sm text-gray-400">
           {draft.media.length >= MAX_MEDIA
             ? 'Maximum 10 media items reached'
             : 'Click to upload or drag and drop'}
@@ -207,26 +207,26 @@ export function MediaUploader() {
               onDragStart={(e) => handleDragStart(e, index)}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDropReorder(e, index)}
-              className="relative aspect-square border-2 border-gray-300 rounded-lg overflow-hidden group cursor-move"
+              className="relative aspect-square glass rounded-xl overflow-hidden group cursor-move"
             >
               {index === 0 && (
-                <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded z-10">
+                <div className="absolute top-2 left-2 bg-gradient-primary text-white text-xs px-2 py-1 rounded-lg z-10">
                   Primary
                 </div>
               )}
 
               {media.uploading ? (
-                <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
+                <div className="absolute inset-0 bg-dark-700 flex items-center justify-center">
                   <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-sm text-gray-600 mt-2">
+                    <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-sm text-gray-400 mt-2">
                       {Math.round(media.uploadProgress || 0)}%
                     </p>
                   </div>
                 </div>
               ) : media.error ? (
-                <div className="absolute inset-0 bg-red-50 flex items-center justify-center p-4">
-                  <p className="text-xs text-red-600 text-center">{media.error}</p>
+                <div className="absolute inset-0 bg-error-500/10 flex items-center justify-center p-4">
+                  <p className="text-xs text-error-400 text-center">{media.error}</p>
                 </div>
               ) : media.url ? (
                 <>
@@ -248,7 +248,7 @@ export function MediaUploader() {
 
               <button
                 onClick={() => removeMedia(index)}
-                className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                className="absolute top-2 right-2 glass rounded-lg p-1 text-white opacity-0 group-hover:opacity-100 transition-opacity z-10"
                 aria-label={`Remove media ${index + 1}`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

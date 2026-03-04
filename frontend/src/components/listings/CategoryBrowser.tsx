@@ -54,8 +54,8 @@ export function CategoryBrowser({ selectedCategoryId, onSelect }: CategoryBrowse
   const buildTree = (parentId: string | null = null): Category[] => {
     return categories
       .filter(cat => cat.parent_id === parentId)
-      .filter(cat => 
-        searchQuery === '' || 
+      .filter(cat =>
+        searchQuery === '' ||
         cat.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
   };
@@ -85,12 +85,12 @@ export function CategoryBrowser({ selectedCategoryId, onSelect }: CategoryBrowse
             }
           }}
           disabled={!isLeaf && children.length === 0}
-          className={`w-full text-left px-3 py-2 rounded-md flex items-center justify-between transition-colors ${
+          className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition-colors ${
             isSelected
-              ? 'bg-blue-100 text-blue-900'
+              ? 'bg-primary-500/20 text-primary-300'
               : isLeaf
-              ? 'hover:bg-gray-100 text-gray-900'
-              : 'text-gray-600 cursor-default'
+              ? 'hover:bg-white/5 text-gray-300'
+              : 'text-gray-400 cursor-default'
           }`}
           aria-expanded={children.length > 0 ? isExpanded : undefined}
         >
@@ -113,7 +113,7 @@ export function CategoryBrowser({ selectedCategoryId, onSelect }: CategoryBrowse
             <span className="text-xs text-gray-500">Selectable</span>
           )}
         </button>
-        
+
         {children.length > 0 && isExpanded && (
           <div className="mt-1">
             {children.map(child => renderCategory(child, depth + 1))}
@@ -134,27 +134,27 @@ export function CategoryBrowser({ selectedCategoryId, onSelect }: CategoryBrowse
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search categories..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-dark-600 text-white rounded-xl px-4 py-3 border border-transparent placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
             aria-label="Search categories"
           />
         </div>
         <div className="flex space-x-2">
           <button
             onClick={() => setBrandFilter('AUCTIONX')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+            className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
               brandFilter === 'AUCTIONX'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ? 'bg-gradient-primary text-white'
+                : 'glass text-gray-300 hover:bg-white/10'
             }`}
           >
             AuctionX
           </button>
           <button
             onClick={() => setBrandFilter('UNMENTIONABLES')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+            className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
               brandFilter === 'UNMENTIONABLES'
-                ? 'bg-purple-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ? 'bg-gradient-primary text-white'
+                : 'glass text-gray-300 hover:bg-white/10'
             }`}
           >
             Unmentionables
@@ -163,10 +163,10 @@ export function CategoryBrowser({ selectedCategoryId, onSelect }: CategoryBrowse
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-gray-500">Loading categories...</div>
+        <div className="text-center py-8 text-gray-400">Loading categories...</div>
       ) : (
-        <div 
-          className="border border-gray-300 rounded-md p-4 max-h-96 overflow-y-auto"
+        <div
+          className="glass rounded-2xl p-4 max-h-96 overflow-y-auto"
           role="tree"
           aria-label="Category tree"
         >
