@@ -313,8 +313,8 @@ function ConversationsSidebar({
         ) : conversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 px-6 text-center">
             <p className="text-gray-500 text-sm">No conversations yet.</p>
-            <p className="text-gray-600 text-xs mt-1">
-              Visit a listing and click "Message Seller" to start one.
+            <p className="text-gray-400 text-xs mt-1">
+              Visit a listing and click &quot;Message Seller&quot; to start one.
             </p>
           </div>
         ) : (
@@ -438,7 +438,7 @@ export function ConversationsPage() {
             <div className="hidden md:flex items-center justify-center flex-1 text-center px-8">
               <div>
                 <p className="text-gray-400 font-medium">Select a conversation</p>
-                <p className="text-gray-600 text-sm mt-1">Choose from the list on the left to start reading.</p>
+                <p className="text-gray-400 text-sm mt-1">Choose from the list on the left to start reading.</p>
               </div>
             </div>
           )}

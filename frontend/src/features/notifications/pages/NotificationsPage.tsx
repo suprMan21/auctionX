@@ -139,7 +139,7 @@ export function NotificationsPage() {
               <button
                 type="button"
                 onClick={handleMarkAllRead}
-                className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+                className="text-sm text-primary-400 hover:text-primary-300 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 Mark all as read
               </button>
@@ -147,7 +147,7 @@ export function NotificationsPage() {
             <button
               type="button"
               onClick={() => navigate('/settings/notifications')}
-              className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+              className="text-sm text-gray-400 hover:text-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               Preferences
             </button>
@@ -163,7 +163,7 @@ export function NotificationsPage() {
               aria-selected={tab === (unreadOnly ? 'unread' : 'all')}
               type="button"
               onClick={() => handleTabChange(tab)}
-              className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors capitalize ${
+              className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors capitalize focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 ${
                 tab === (unreadOnly ? 'unread' : 'all')
                   ? 'bg-primary-600 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -202,7 +202,7 @@ export function NotificationsPage() {
                 key={notif.id}
                 type="button"
                 onClick={() => handleItemClick(notif)}
-                className={`w-full text-left px-5 py-4 flex gap-4 hover:bg-white/5 transition-colors ${
+                className={`w-full text-left px-5 py-4 flex gap-4 hover:bg-white/5 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 ${
                   !notif.read_at ? 'bg-primary-500/5' : ''
                 }`}
               >
@@ -236,7 +236,8 @@ export function NotificationsPage() {
               disabled={page <= 1}
               onClick={() => setPage((p) => p - 1)}
               className="px-4 py-2 rounded-xl text-sm font-medium text-gray-300 hover:text-white
-                         hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                         hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+                         focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
             >
               ← Previous
             </button>
@@ -248,7 +249,8 @@ export function NotificationsPage() {
               disabled={page >= totalPages}
               onClick={() => setPage((p) => p + 1)}
               className="px-4 py-2 rounded-xl text-sm font-medium text-gray-300 hover:text-white
-                         hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                         hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+                         focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
             >
               Next →
             </button>

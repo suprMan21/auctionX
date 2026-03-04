@@ -19,12 +19,12 @@ export function LogoutButton({ className, variant = 'secondary' }: LogoutButtonP
     }
   }
 
-  const baseStyles = 'px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-  
+  const baseStyles = 'px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800'
+
   const variantStyles = {
-    primary: 'bg-red-600 text-white hover:bg-red-700',
-    secondary: 'border border-gray-300 text-gray-700 hover:bg-gray-50',
-    text: 'text-gray-700 hover:text-gray-900 hover:underline px-2'
+    primary: 'bg-red-600 text-white hover:bg-red-500',
+    secondary: 'border border-white/10 text-gray-300 hover:bg-white/5',
+    text: 'text-gray-400 hover:text-white hover:underline px-2'
   }
 
   return (
