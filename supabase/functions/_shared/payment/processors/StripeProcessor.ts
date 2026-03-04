@@ -135,7 +135,7 @@ export class StripeProcessor extends BaseProcessor implements PaymentProcessor {
 
     let event: Stripe.Event;
     try {
-      event = this.stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      event = this.stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
     } catch (err) {
       logger.error('Stripe webhook signature verification failed', {
         error: (err as Error).message,

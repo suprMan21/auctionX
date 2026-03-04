@@ -235,11 +235,11 @@ export const AdminModerationPage = () => {
           <p className="text-error-400 text-sm">{error}</p>
         </div>
       ) : queue.length === 0 ? (
-        <div className="glass rounded-2xl p-6">
+        <div data-testid="empty-queue" className="glass rounded-2xl p-6">
           <p className="text-gray-500 text-sm">No items in queue.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div data-testid="moderation-queue" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {queue.map((item) => (
             <QueueCard
               key={item.queue_id}

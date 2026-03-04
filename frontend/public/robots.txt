@@ -1,0 +1,18 @@
+User-agent: *
+
+# Allow public pages
+Allow: /
+Allow: /browse
+Allow: /search
+Allow: /verify/
+
+# Disallow private and user-specific routes
+Disallow: /admin
+Disallow: /settings
+Disallow: /messages
+Disallow: /payouts
+Disallow: /settlements
+Disallow: /register
+Disallow: /login
+
+Sitemap: https://auctionx.com/sitemap.xml

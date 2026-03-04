@@ -48,7 +48,7 @@ export function ListingCard({ listing }: ListingCardProps) {
   const linkTo = auction ? `/auctions/${auction.id}` : `/listings/${listing.id}`;
 
   return (
-    <article className="glass rounded-2xl overflow-hidden hover:border-white/20 hover:shadow-glow transition-all duration-200">
+    <article data-testid="listing-card" className="glass rounded-2xl overflow-hidden hover:border-white/20 hover:shadow-glow transition-all duration-200">
       <Link
         to={linkTo}
         className="block focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 rounded-2xl"

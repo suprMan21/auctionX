@@ -209,11 +209,12 @@ export function BrowsePage() {
               ) : categories.length === 0 ? (
                 <p className="text-gray-400">No categories available.</p>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div data-testid="category-grid" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                   {categories.map((cat) => (
                     <Link
                       key={cat.id}
                       to={`/browse/${cat.slug}`}
+                      data-testid="category-card"
                       className="glass rounded-2xl p-6 text-center hover:border-white/20 hover:shadow-glow
                                  transition-all duration-200 focus:outline-none focus:ring-2
                                  focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
@@ -242,7 +243,7 @@ export function BrowsePage() {
                 <p className="text-gray-400">Loading listings…</p>
               </div>
             ) : listings.length === 0 ? (
-              <div className="glass rounded-2xl p-12 text-center">
+              <div data-testid="empty-state" className="glass rounded-2xl p-12 text-center">
                 <h3 className="text-xl font-bold text-white mb-3">No listings found</h3>
                 <p className="text-gray-400 mb-6">
                   {categorySlug
@@ -262,7 +263,7 @@ export function BrowsePage() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                <div data-testid="listings-grid" className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                   {listings.map((listing) => (
                     <ListingCard key={listing.id} listing={listing} />
                   ))}

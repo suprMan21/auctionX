@@ -1,1 +1,10 @@
-{}
+{
+  "scripts": {
+    "test:e2e": "cd frontend && npx playwright test",
+    "test:e2e:ui": "cd frontend && npx playwright test --ui",
+    "test:e2e:headed": "cd frontend && npx playwright test --headed",
+    "test:api": "cd backend && npx vitest run src/__tests__/api.integration.test.ts",
+    "test:mechanics": "cd backend && npx vitest run src/lib/auction/__tests__/mechanics.test.ts",
+    "test:all": "npm run test:mechanics && npm run test:api && npm run test:e2e"
+  }
+}

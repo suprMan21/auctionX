@@ -180,6 +180,7 @@ export const AdminUsersPage = () => {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <input
+          data-testid="user-search"
           type="search"
           defaultValue={searchInput}
           onChange={(e) => handleSearchChange(e.target.value)}
@@ -201,7 +202,7 @@ export const AdminUsersPage = () => {
       </div>
 
       {/* Table */}
-      <div className="glass rounded-2xl overflow-hidden">
+      <div data-testid="users-table" className="glass rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-48">
             <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />

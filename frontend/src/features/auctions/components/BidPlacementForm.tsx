@@ -60,7 +60,7 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form data-testid="bid-form" onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label htmlFor="bidAmount" className="block text-sm font-medium text-gray-700 mb-1">
           Your Bid Amount

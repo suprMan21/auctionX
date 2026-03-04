@@ -2,7 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { requestIdMiddleware } from './middleware/requestId';
+import { errorHandler } from './middleware/errorHandler';
 import { log } from './lib/logger';
+import healthRoutes from './routes/health';
 import auctionRoutes from './routes/auctions';
 import webhookRoutes from './routes/webhooks';
 import adminRoutes from './routes/admin/index';
@@ -27,9 +29,7 @@ app.use(cors({
 
 app.use(express.json());
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+app.use('/api/v1', healthRoutes);
 
 app.use('/api/v1/auctions', auctionRoutes);
 app.use('/api/v1/settlements', settlementRoutes);
@@ -42,12 +42,7 @@ app.use('/api/v1/verify', publicVerificationRoutes);
 app.use('/api/v1/conversations', messageRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  log.error('unhandled_error', { error: err.message, stack: err.stack });
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
-  });
-});
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   log.info('server_started', { port: PORT });

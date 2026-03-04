@@ -14,7 +14,7 @@ export function CurrentBidDisplay({ auction }: CurrentBidDisplayProps) {
     <div className="bg-gray-50 rounded-lg p-6">
       <div className="mb-4">
         <div className="text-sm text-gray-600">Current Bid</div>
-        <div className="text-3xl font-bold text-gray-900">
+        <div data-testid="current-bid" className="text-3xl font-bold text-gray-900">
           {formatCurrency(auction.current_price_cents, auction.currency)}
         </div>
       </div>

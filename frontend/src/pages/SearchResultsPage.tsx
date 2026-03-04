@@ -491,7 +491,7 @@ export function SearchResultsPage() {
                   </button>
 
                   {!loading && (
-                    <p className="text-gray-300 text-sm">
+                    <p data-testid="results-count" className="text-gray-300 text-sm">
                       <span className="text-white font-semibold">{total.toLocaleString()}</span>{' '}
                       {total === 1 ? 'result' : 'results'}
                       {query && (
@@ -505,6 +505,7 @@ export function SearchResultsPage() {
                 <div className="flex items-center gap-2" role="group" aria-label="Sort results">
                   <span className="text-gray-400 text-sm sr-only sm:not-sr-only">Sort:</span>
                   <select
+                    data-testid="sort-select"
                     value={sortParam}
                     onChange={(e) => handleSortChange(e.target.value as SortOption)}
                     className="h-9 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm
@@ -529,7 +530,7 @@ export function SearchResultsPage() {
                   <p className="text-gray-400">Try searching for an athlete, team, or item type.</p>
                 </div>
               ) : results.length === 0 ? (
-                <div className="glass rounded-2xl p-12 text-center">
+                <div data-testid="empty-state" className="glass rounded-2xl p-12 text-center">
                   <h2 className="text-2xl font-bold text-white mb-3">No results found</h2>
                   <p className="text-gray-400 mb-6">
                     {query

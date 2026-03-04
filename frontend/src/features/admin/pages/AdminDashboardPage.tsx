@@ -166,7 +166,7 @@ export const AdminDashboardPage = () => {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div data-testid="stats-cards" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Users" value={stats?.totalUsers ?? 0} to="/admin/users" />
         <StatCard label="Pending Moderation" value={stats?.pendingModeration ?? 0} to="/admin/moderation" />
         <StatCard label="Active Listings" value={stats?.activeListings ?? 0} to="/admin/moderation" />

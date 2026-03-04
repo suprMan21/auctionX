@@ -47,4 +47,12 @@ test.describe('Protected Routes', () => {
     await page.goto('/profile');
     await expect(page).toHaveURL(/.*login/, { timeout: 5000 });
   });
+
+  test('should redirect unauthenticated user away from admin route', async ({ page }) => {
+    await page.goto('/admin');
+    // Should land on login or home — not the admin page
+    await page.waitForURL((url) => !url.pathname.startsWith('/admin'), { timeout: 5000 });
+    const url = page.url();
+    expect(url).not.toMatch(/\/admin($|\/)/);
+  });
 });
