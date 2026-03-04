@@ -30,6 +30,8 @@ import { AdminAuditLogPage } from '@/features/admin/pages/AdminAuditLogPage';
 import { AdminHealthPage } from '@/features/admin/pages/AdminHealthPage';
 import { NotificationsPage } from './features/notifications/pages/NotificationsPage';
 import { NotificationPreferencesPage } from './features/notifications/pages/NotificationPreferencesPage';
+import { AgeGateGuard } from '@/components/AgeGate/AgeGateGuard';
+import { UnmentionablesBrowsePage } from '@/pages/UnmentionablesBrowsePage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -99,6 +101,14 @@ function App() {
             }
           />
           
+          <Route
+            path="/unmentionables"
+            element={
+              <AgeGateGuard>
+                <UnmentionablesBrowsePage />
+              </AgeGateGuard>
+            }
+          />
           <Route path="/browse" element={<BrowsePage />} />
           <Route path="/browse/:categorySlug" element={<BrowsePage />} />
           <Route path="/search" element={<SearchResultsPage />} />

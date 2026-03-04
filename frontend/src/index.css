@@ -18,6 +18,21 @@
   .shadow-glow {
     box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
   }
+
+  .bg-gradient-unmentionables {
+    background: linear-gradient(135deg, #e11d48 0%, #7c3aed 100%);
+  }
+
+  .text-gradient-unmentionables {
+    background: linear-gradient(135deg, #e11d48 0%, #7c3aed 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .shadow-glow-unmentionables {
+    box-shadow: 0 0 20px rgba(225, 29, 72, 0.3);
+  }
 }
 
 @layer base {

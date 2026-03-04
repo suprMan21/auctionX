@@ -37,6 +37,11 @@ export default {
           500: '#f59e0b',
           600: '#d97706',
         },
+        unmentionables: {
+          500: '#e11d48',
+          400: '#fb7185',
+          300: '#fda4af',
+        },
       },
       fontFamily: {
         sans: [
