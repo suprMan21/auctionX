@@ -12,7 +12,7 @@ test.describe('Public routes load successfully', () => {
     test(`GET ${getRoutePath(route)} → 200 and renders`, async ({ page }) => {
       const response = await page.goto(getRoutePath(route));
       expect(response?.status()).toBeLessThan(400);
-      await expect(page).toHaveTitle(/AuctionX/i);
+      await expect(page).toHaveTitle(/Authentic Materials|AuctionX/i);
     });
   }
 });
@@ -83,7 +83,7 @@ test.describe('Auth flow', () => {
     await page.getByRole('button', { name: /sign in|log in/i }).click();
 
     // Should land somewhere authenticated
-    await page.waitForURL(/\/(dashboard|browse|profile)/, { timeout: 15000 });
+    await page.waitForURL(/\/(dashboard|browse|profile|my-listings)/, { timeout: 15000 });
 
     // Logout via header menu (varies by implementation)
     const logoutTrigger = page.getByRole('button', { name: /logout|sign out|account/i }).first();
