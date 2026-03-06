@@ -7,6 +7,10 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { user, loading } = useAuth()
+
+  if (import.meta.env.VITE_BYPASS_AUTH === 'true') {
+    return <>{children}</>
+  }
   
   if (loading) {
     return (

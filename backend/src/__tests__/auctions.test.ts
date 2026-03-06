@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import type { Database } from '../types/database';
+
+// Service role client bypasses RLS — used only for test setup/teardown
+const serviceClient = createClient<Database>(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 describe('Auction API Integration Tests', () => {
   let testAuctionId: string;
@@ -9,7 +17,7 @@ describe('Auction API Integration Tests', () => {
   let testCategoryId: string;
 
   beforeAll(async () => {
-    const { data: category } = await supabase
+    const { data: category } = await serviceClient
       .from('categories')
       .select('id')
       .limit(1)
@@ -18,10 +26,10 @@ describe('Auction API Integration Tests', () => {
     if (!category) {
       throw new Error('Need at least 1 category in database');
     }
-    
+
     testCategoryId = category.id;
 
-    const { data: users } = await supabase
+    const { data: users } = await serviceClient
       .from('users')
       .select('id')
       .limit(2);
@@ -33,7 +41,7 @@ describe('Auction API Integration Tests', () => {
     testSellerId = users[0].id;
     testBidderId = users[1].id;
 
-    const { data: listing, error: listingError } = await supabase
+    const { data: listing, error: listingError } = await serviceClient
       .from('listings')
       .insert({
         brand: 'AUCTIONX' as const,
@@ -51,10 +59,10 @@ describe('Auction API Integration Tests', () => {
       console.error('Listing creation failed:', listingError);
       throw listingError;
     }
-    
+
     testListingId = listing!.id;
 
-    const { data: auction, error: auctionError } = await supabase
+    const { data: auction, error: auctionError } = await serviceClient
       .from('auctions')
       .insert({
         listing_id: testListingId,
@@ -79,11 +87,11 @@ describe('Auction API Integration Tests', () => {
 
   afterAll(async () => {
     if (testAuctionId) {
-      await supabase.from('bids').delete().eq('auction_id', testAuctionId);
-      await supabase.from('auctions').delete().eq('id', testAuctionId);
+      await serviceClient.from('bids').delete().eq('auction_id', testAuctionId);
+      await serviceClient.from('auctions').delete().eq('id', testAuctionId);
     }
     if (testListingId) {
-      await supabase.from('listings').delete().eq('id', testListingId);
+      await serviceClient.from('listings').delete().eq('id', testListingId);
     }
   });
 
