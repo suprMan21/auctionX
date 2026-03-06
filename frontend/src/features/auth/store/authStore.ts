@@ -30,17 +30,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (get().initialized) return;
 
     try {
-      if (import.meta.env.VITE_BYPASS_AUTH === 'true') {
-        const { data } = await supabase.auth.signInWithPassword({
-          email: 'test@authenticmaterials.com',
-          password: import.meta.env.VITE_TEST_PASSWORD || '',
-        });
-        if (data.session) {
-          set({ user: data.session.user, session: data.session, initialized: true });
-          return;
-        }
-      }
-
       const { data: { session } } = await supabase.auth.getSession();
       set({ 
         user: session?.user ?? null, 
