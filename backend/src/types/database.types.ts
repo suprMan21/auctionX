@@ -1861,6 +1861,11 @@ export type Database = {
         }[]
       }
       get_winning_bid: { Args: { auction_uuid: string }; Returns: string }
+      is_active_admin: { Args: { p_user_id: string }; Returns: boolean }
+      is_admin_with_permission: {
+        Args: { p_permission: string; p_user_id: string }
+        Returns: boolean
+      }
       is_high_bidder: {
         Args: { auction_uuid: string; user_uuid: string }
         Returns: boolean

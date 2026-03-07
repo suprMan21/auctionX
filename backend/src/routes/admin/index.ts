@@ -6,6 +6,7 @@ import moderationRouter from './moderation';
 import auditLogsRouter from './auditLogs';
 import adminSettlementsRouter from './settlements';
 import disputesRouter from './disputes';
+import healthRouter from './health';
 
 const router = Router();
 
@@ -16,6 +17,7 @@ const router = Router();
 router.use(verifyAdminAuth);
 router.use(adminRateLimit);
 
+router.use('/health', healthRouter);
 router.use('/users', usersRouter);
 router.use('/moderation', moderationRouter);
 router.use('/audit-logs', auditLogsRouter);

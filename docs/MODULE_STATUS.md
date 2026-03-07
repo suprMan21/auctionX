@@ -1,6 +1,6 @@
 # AuctionX Module Status (Post-Audit)
 
-**Last Updated:** March 3, 2026 (Module 18 — Launch Prep complete)
+**Last Updated:** March 7, 2026 (DB migrations verified, types regenerated)
 **Audit Date:** February 28, 2026
 **Phase 0 Completed:** March 1, 2026 — 0 TS errors frontend/backend, critical security fix, dead code purge, route wiring, rate limiting, docs consolidation
 **Honest Progress:** 18/18 modules complete
@@ -22,7 +22,7 @@
 | 09 Payment Cascade | ⚠️ Deployed | ⚠️ Security fixed | ✅ Fixed: mockUserId removed, table names corrected (Pass 3). Awaiting API keys |
 | 10 Admin Dashboard | Backend ✅ | ✅ Complete | ✅ Frontend built (Module 10) |
 | 11 Auction Settlement | ❌ Not started | ✅ Complete | ✅ Built and deployed (March 1, 2026) |
-| 15 Messaging System   | ❌ Not started | ✅ Complete | ✅ Built (March 3, 2026); pending db push + type regen |
+| 15 Messaging System   | ❌ Not started | ✅ Complete | ✅ Built (March 3, 2026) |
 
 ---
 
@@ -115,35 +115,24 @@
 
 ---
 
-## ❌ NOT BUILT / INCOMPLETE
-
-### Module 06: Browse & Search
-- `CategoryBrowser.tsx` exists as a listing creation wizard step only
-- **No browse page, no search results page, no search bar, no routes**
-- **Status:** NEEDS FULL BUILD
-
-### Module 12: Seller Payouts
-
-### Module 12: Seller Payouts
-- Auto-release after escrow period; depends on Module 11 ESCROW_HOLD → COMPLETED transition
-- **Status:** NOT STARTED
+## ✅ COMPLETE (Modules 12–18)
 
 ### Module 12: Seller Payouts — Complete
 - `release-escrow` edge function, payout calculation, `payouts` table, escrow/dispute flow
 - `POST /api/v1/payouts/:id/open-dispute`, `GET /api/v1/payouts` frontend
-- **Status:** ✅ COMPLETE (2026-03-01) — pending DB migration push + type regen + Stripe Connect wiring
+- **Status:** ✅ COMPLETE (2026-03-01) — DB migrations applied; pending Stripe Connect wiring
 
 ### Module 13: NFC Verification System — Complete
 - Token generation, video proof, NFC programming, public verification pages
-- **Status:** ✅ COMPLETE (2026-03-01) — pending DB migration push + type regen
+- **Status:** ✅ COMPLETE (2026-03-01) — DB migrations applied
 
 ### Module 14: Enhanced Search — Complete
 - Full-text search, advanced filters, saved searches
-- **Status:** ✅ COMPLETE (2026-03-02) — pending DB migration push + type regen
+- **Status:** ✅ COMPLETE (2026-03-02) — DB migrations applied
 
 ### Module 15: Messaging System — Complete
 - Buyer-seller real-time communication, two-panel layout, message filtering
-- **Status:** ✅ COMPLETE (2026-03-03) — pending DB migration push + type regen
+- **Status:** ✅ COMPLETE (2026-03-03) — DB migrations applied
 
 ### Module 16: Notifications — Complete
 - Email, push, in-app notifications, preference management, bell UI, history page
