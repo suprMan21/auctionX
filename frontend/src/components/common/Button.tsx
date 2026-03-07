@@ -35,13 +35,10 @@ export function Button({
     return (
       <button
         disabled={disabled}
-        className={`${baseClasses} group`}
+        className={`${baseClasses} bg-gradient-to-br from-purple-600 via-purple-500 to-pink-500 border border-white/10 text-white hover:brightness-110`}
         {...props}
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-500 via-primary-400 to-accent-500 rounded-xl blur opacity-50 group-hover:opacity-75 transition-opacity" />
-        <div className={`relative bg-gradient-to-br from-primary-500 via-primary-400 to-accent-500 rounded-xl text-white flex items-center justify-center ${sizeClasses[size]}`}>
-          {children}
-        </div>
+        {children}
       </button>
     );
   }
