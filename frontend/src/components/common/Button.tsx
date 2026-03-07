@@ -35,7 +35,7 @@ export function Button({
     return (
       <button
         disabled={disabled}
-        className={`${baseClasses} bg-gradient-to-br from-purple-600 via-purple-500 to-pink-500 border border-white/10 text-white hover:brightness-110`}
+        className={`${baseClasses} bg-gradient-to-r from-primary-500 to-accent-500 border border-white/10 text-white hover:brightness-110`}
         {...props}
       >
         {children}

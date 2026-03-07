@@ -1,6 +1,6 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-07 (Session J — Auth Hardening + UI Polish)
+Last updated: 2026-03-07 (Session K — Admin API Fix + Button Gradient Fix)
 
 ---
 
@@ -26,6 +26,8 @@ Last updated: 2026-03-07 (Session J — Auth Hardening + UI Polish)
 - [x] **DONE (Session J):** Smooth harsh gradient stop — added `via-primary-400` + changed to `to-br` direction
 - [x] **DONE (Session J):** Enlarge header search bar — `h-9` → `h-11`, `max-w-xs` → `max-w-md`, added search icon
 - [x] **DONE (Session J):** Declutter nav — primary nav reduced to 3 items, rest moved to user dropdown
+- [x] **DONE (Session K):** Fix Button.tsx gradient — was hardcoded `purple→pink`, changed to design system `primary-500→accent-500` (purple→blue)
+- [x] **DONE (Session K):** Fix root `.env.production` — outdated App Runner URL `spuk5673jm` → `vw7zy9mkyg`
 
 ---
 
@@ -35,10 +37,11 @@ Last updated: 2026-03-07 (Session J — Auth Hardening + UI Polish)
 - [x] **DONE (Session I):** Fix TEXT vs admin_permission enum type mismatch in RLS helper
 - [x] **DONE (Session I):** Insert admin_users row for Boss's UUID (was missing from table)
 - [x] **DONE (Session J):** Add admin console access button in Header nav (desktop dropdown + mobile drawer)
-- [ ] **TODO:** Admin dashboard API calls return errors ("Insufficient permissions")
-  - Context: Frontend `/admin` renders correctly (sidebar, nav, user email). But API calls to App Runner backend (`/api/v1/admin/audit-logs`, `/api/v1/admin/users`, `/api/v1/admin/moderation/queue`) fail. The `adminAuth` middleware on the deployed backend may have wrong `SUPABASE_SERVICE_ROLE_KEY` env var (`sb_secret_uOUktG_...` in `backend/.env` is not a JWT — the real service role JWT is `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtbG9mdGhtb2JnbGNma3FqdHJ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSI...`). Check App Runner env vars and redeploy backend.
-  - Priority: HIGH — admin dashboard non-functional without working API
-  - Depends on: Correct service role key in App Runner environment
+- [x] **DONE (Session K):** Admin dashboard API calls fixed
+  - Root cause: App Runner had `sb_secret_...` format key instead of JWT for `SUPABASE_SERVICE_ROLE_KEY`
+  - Also fixed: `AWS_REGION` typo (`s-east-2` → `us-east-2`) in App Runner env
+  - Updated local `backend/.env` and App Runner env vars via `aws apprunner update-service`
+  - Admin dashboard, Users, Audit Logs all verified working on staging
 
 ---
 

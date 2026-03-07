@@ -1,6 +1,6 @@
 # AuctionX — Master Lessons Learned
 
-**Mandatory review before every module. Last updated: 2026-03-06**
+**Mandatory review before every module. Last updated: 2026-03-07**
 
 ---
 
@@ -384,6 +384,8 @@ From `DOCUMENTATION_STANDARD.md` — commit should NOT happen until all artifact
 | 39 | Crowded nav bar | Show all items in primary nav | Primary nav: 3 items max; rest in user dropdown | Session J |
 | 40 | Missing route = blank page | Assume route exists if link exists | Verify route + link both exist | Session J |
 | 41 | Gradient button inner padding | Rely on outer button padding only | Inner gradient div needs own `sizeClasses` + `flex items-center justify-center` | Session J |
+| 42 | App Runner env key format | `sb_secret_...` (Supabase dashboard key) | JWT `eyJhbGci...` for `createClient()` | Session K |
+| 43 | Button gradient off-brand | Hardcoded `from-purple-600 to-pink-500` | Use design system tokens `from-primary-500 to-accent-500` | Session K |
 
 ---
 
