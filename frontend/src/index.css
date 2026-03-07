@@ -4,19 +4,28 @@
 
 @layer utilities {
   .glass {
-    @apply bg-white/5 backdrop-blur-xl border border-white/10;
+    @apply bg-white/[0.04] backdrop-blur-xl border border-white/[0.08];
+  }
+
+  .glass-hover:hover {
+    @apply bg-white/[0.06] border-white/[0.14];
   }
 
   .text-gradient {
-    @apply bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent;
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #7c3aed, #6366f1, #3b82f6);
   }
 
   .bg-gradient-primary {
-    @apply bg-gradient-to-r from-primary-500 to-accent-500;
+    background-image: linear-gradient(135deg, #7c3aed, #6366f1, #3b82f6);
   }
 
   .shadow-glow {
-    box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
+    box-shadow: 0 4px 24px rgba(124, 58, 237, 0.25);
+  }
+
+  .shadow-glow-intense {
+    box-shadow: 0 8px 32px rgba(124, 58, 237, 0.35);
   }
 
   .bg-gradient-unmentionables {
@@ -62,4 +71,76 @@
     clip: auto;
     white-space: normal;
   }
+}
+
+/* Ambient background blobs */
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ambient-bg .blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.07;
+  will-change: transform;
+}
+
+.ambient-bg .blob-1 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, #7c3aed, transparent 70%);
+  top: -10%;
+  left: -8%;
+  animation: drift-1 22s ease-in-out infinite;
+}
+
+.ambient-bg .blob-2 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, #3b82f6, transparent 70%);
+  top: 30%;
+  right: -12%;
+  animation: drift-2 26s ease-in-out infinite;
+}
+
+.ambient-bg .blob-3 {
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, #6366f1, transparent 70%);
+  bottom: -5%;
+  left: 25%;
+  animation: drift-3 20s ease-in-out infinite;
+}
+
+@keyframes drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(60px, 40px) scale(1.08); }
+  66% { transform: translate(-30px, 70px) scale(0.95); }
+}
+
+@keyframes drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-50px, -30px) scale(1.1); }
+  66% { transform: translate(40px, -60px) scale(0.92); }
+}
+
+@keyframes drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(70px, -40px) scale(1.06); }
+}
+
+/* Noise texture overlay */
+.noise-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px;
 }

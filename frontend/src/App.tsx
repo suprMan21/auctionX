@@ -74,6 +74,15 @@ function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+        {/* Ambient background blobs */}
+        <div className="ambient-bg" aria-hidden="true">
+          <div className="blob blob-1" />
+          <div className="blob blob-2" />
+          <div className="blob blob-3" />
+        </div>
+        {/* Noise texture overlay */}
+        <div className="noise-overlay" aria-hidden="true" />
+
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<SignupPage />} />
@@ -251,8 +260,10 @@ function App() {
           toastOptions={{
             duration: 4000,
             style: {
-              background: '#363636',
-              color: '#fff',
+              background: '#1a1a24',
+              color: '#f4f4f5',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '12px',
             },
             success: {
               duration: 3000,

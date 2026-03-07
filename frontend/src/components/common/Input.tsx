@@ -29,9 +29,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           aria-describedby={error ? errorId : helperText ? helperId : undefined}
           className={`
             w-full min-h-[44px] px-4 py-3 rounded-xl
-            bg-dark-600 text-white placeholder:text-gray-400
-            border border-transparent
-            focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
+            bg-white/[0.06] text-white placeholder:text-gray-400
+            border border-white/[0.08]
+            focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
             disabled:opacity-50 disabled:cursor-not-allowed
             ${error ? 'border-error-500' : ''}
             ${className}

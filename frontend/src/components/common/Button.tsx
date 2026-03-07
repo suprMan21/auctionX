@@ -7,8 +7,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   fullWidth?: boolean;
 }
 
-export function Button({ 
-  variant = 'primary', 
+export function Button({
+  variant = 'primary',
   size = 'md',
   children,
   fullWidth = false,
@@ -23,31 +23,31 @@ export function Button({
   };
 
   const baseClasses = `
-    relative overflow-hidden rounded-xl font-semibold transition-all
+    relative overflow-hidden rounded-btn font-semibold transition-all
     focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
     disabled:opacity-50 disabled:cursor-not-allowed
     ${sizeClasses[size]}
     ${fullWidth ? 'w-full' : ''}
     ${className}
   `;
-  
+
   if (variant === 'primary') {
     return (
       <button
         disabled={disabled}
-        className={`${baseClasses} bg-gradient-to-r from-primary-500 to-accent-500 border border-white/10 text-white hover:brightness-110`}
+        className={`${baseClasses} bg-gradient-primary border border-white/10 text-white shadow-glow hover:shadow-glow-intense hover:brightness-110 hover:-translate-y-px`}
         {...props}
       >
         {children}
       </button>
     );
   }
-  
+
   if (variant === 'secondary') {
     return (
       <button
         disabled={disabled}
-        className={`${baseClasses} glass text-white hover:bg-white/10`}
+        className={`${baseClasses} glass text-white hover:bg-white/[0.07] hover:border-white/[0.14]`}
         {...props}
       >
         {children}
