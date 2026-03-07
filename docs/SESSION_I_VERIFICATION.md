@@ -1,7 +1,7 @@
-# Session I Verification — Design System Fixes + Staging Deploy
+# Session I Verification — Design System Fixes + Admin RLS Fix + Staging Deploy
 
 **Date:** 2026-03-07
-**Branch:** (working tree, uncommitted)
+**Commits:** `f7cb72d` (design system), `fc87f86` (admin RLS)
 
 ---
 
@@ -44,9 +44,36 @@
 - [x] Button.tsx has `overflow-hidden` in baseClasses
 - [x] S3 deploy completed
 - [x] CloudFront invalidation initiated
-- [ ] Staging protected routes show content (pending CloudFront propagation)
-- [ ] /admin shows admin dashboard (pending manual verification)
+- [x] Staging protected routes show content (verified via Playwright — `/my-listings`, `/profile` render correctly)
+- [x] /admin renders admin layout (sidebar, nav, user email) — no longer redirects
+- [ ] /admin dashboard API calls fail ("Insufficient permissions") — backend App Runner issue, not frontend
 - [ ] Button gradient visually confirmed (pending manual verification)
+
+---
+
+## Admin RLS Fix (discovered during staging verification)
+
+### Root Cause 1: RLS Infinite Recursion
+- `admin_users` had RLS policies ("Super admins can view all admins", "Super admins can manage admins") that queried `admin_users` in their `USING` clause
+- PostgreSQL detected infinite recursion and returned 500 errors on every query
+- **Fix:** Created `SECURITY DEFINER` helper functions (`is_admin_with_permission`, `is_active_admin`) that bypass RLS
+- Migration: `20260307000001_fix_admin_users_rls_recursion.sql`
+
+### Root Cause 2: Type Mismatch
+- `is_admin_with_permission` compared `TEXT` parameter against `admin_permission[]` enum array
+- PostgreSQL: `operator does not exist: text = admin_permission`
+- **Fix:** Cast array to text: `p_permission = ANY(ar.permissions::text[])`
+- Migration: `20260307000002_fix_admin_permission_cast.sql`
+
+### Root Cause 3: Missing Admin Row
+- Boss's UUID `2b3f1532-9345-4720-8fac-55d07517c78b` had no row in `admin_users` table
+- **Fix:** Inserted via Supabase REST API with service role key, assigned `super_admin` role
+
+### Remaining: Backend API
+- `/admin` frontend layout renders, but API calls to App Runner return errors
+- `adminAuth` middleware uses `SUPABASE_SERVICE_ROLE_KEY` — the value in `backend/.env` (`sb_secret_uOUktG_...`) is NOT a JWT
+- Real service role JWT: `eyJhbGci...FsMCD7DjFGmXWaAW2LfC6Js26kC821Gs_kqQ3vfzKos`
+- **Action needed:** Update App Runner env var and redeploy backend
 
 ---
 
@@ -56,5 +83,7 @@
 |------|--------|
 | `frontend/src/components/common/Button.tsx` | Added `overflow-hidden` |
 | 42 files in `frontend/src/` | `text-gray-500` -> `text-gray-400`, `text-gray-600` -> `text-gray-500` |
-| `docs/MASTER_LESSONS_LEARNED.md` | Added design system contrast + gradient lessons |
-| `docs/TODO.md` | Updated with Session I completions |
+| `supabase/migrations/20260307000001_*` | RLS recursion fix + SECURITY DEFINER helpers |
+| `supabase/migrations/20260307000002_*` | TEXT vs enum cast fix |
+| `docs/MASTER_LESSONS_LEARNED.md` | Added design system + RLS recursion lessons, gotchas 33-37 |
+| `docs/TODO.md` | Updated with Session I completions + admin backend TODO |

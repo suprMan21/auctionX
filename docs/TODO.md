@@ -1,6 +1,6 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-07 (Session I — Design System Fixes + Staging Deploy)
+Last updated: 2026-03-07 (Session I — Design System Fixes + Admin RLS Fix + Staging Deploy)
 
 ---
 
@@ -20,6 +20,18 @@ Last updated: 2026-03-07 (Session I — Design System Fixes + Staging Deploy)
 - [x] **DONE (Session I):** Fix button gradient bleed — added `overflow-hidden` to Button.tsx baseClasses
 - [x] **DONE (Session I):** Fix text contrast violations — replaced `text-gray-500` → `text-gray-400`, `text-gray-600` → `text-gray-500` across 42 files (102 occurrences)
 - [x] **DONE (Session I):** Document Unmentionables nav link pink accent as accepted brand exception
+
+---
+
+## Admin Dashboard
+
+- [x] **DONE (Session I):** Fix admin_users RLS infinite recursion — created SECURITY DEFINER helpers
+- [x] **DONE (Session I):** Fix TEXT vs admin_permission enum type mismatch in RLS helper
+- [x] **DONE (Session I):** Insert admin_users row for Boss's UUID (was missing from table)
+- [ ] **TODO:** Admin dashboard API calls return errors ("Insufficient permissions")
+  - Context: Frontend `/admin` renders correctly (sidebar, nav, user email). But API calls to App Runner backend (`/api/v1/admin/audit-logs`, `/api/v1/admin/users`, `/api/v1/admin/moderation/queue`) fail. The `adminAuth` middleware on the deployed backend may have wrong `SUPABASE_SERVICE_ROLE_KEY` env var (`sb_secret_uOUktG_...` in `backend/.env` is not a JWT — the real service role JWT is `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtbG9mdGhtb2JnbGNma3FqdHJ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSI...`). Check App Runner env vars and redeploy backend.
+  - Priority: HIGH — admin dashboard non-functional without working API
+  - Depends on: Correct service role key in App Runner environment
 
 ---
 

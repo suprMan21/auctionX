@@ -61,6 +61,12 @@ npx supabase gen types typescript --project-id pmlofthmobglcfkqjtru > frontend/s
 cp frontend/src/types/database.types.ts backend/src/types/database.types.ts
 ```
 
+### RLS Self-Referencing Policies
+- **Never** write an RLS policy on table X that queries table X in the `USING` clause — causes `infinite recursion detected in policy` error
+- Fix: create `SECURITY DEFINER` helper functions that bypass RLS for permission lookups
+- When comparing `TEXT` parameter against an enum array (`admin_permission[]`), cast the array: `p_text = ANY(col::text[])` — not the parameter
+- The `admin_users` table had this exact bug: "Super admins can view all admins" policy queried `admin_users` to check permissions
+
 ### Other Database Rules
 - `SECURITY DEFINER` on triggers that modify other users' tables
 - Add tables to Supabase Realtime publication explicitly (`ALTER PUBLICATION supabase_realtime ADD TABLE ...`)
@@ -369,6 +375,11 @@ From `DOCUMENTATION_STANDARD.md` — commit should NOT happen until all artifact
 | 30 | auth.users ON CONFLICT | `ON CONFLICT (email)` | Existence check before insert | Session B |
 | 31 | `constructEventAsync` await | `event = constructEventAsync(...)` | `event = await constructEventAsync(...)` | Session E |
 | 32 | ProtectedRoute race condition | Check `loading` only | Check `!initialized \|\| loading` | Session H_c |
+| 33 | Text contrast on dark bg | `text-gray-500` | `text-gray-400` minimum | Session I |
+| 34 | Button gradient bleed | No overflow clip | `overflow-hidden` on button | Session I |
+| 35 | RLS self-referencing policy | Policy on X queries X | `SECURITY DEFINER` helper function | Session I |
+| 36 | TEXT vs enum array comparison | `text = ANY(enum_col)` | `text = ANY(enum_col::text[])` | Session I |
+| 37 | admin_users row missing | Assume Dashboard user exists | Verify row exists in `admin_users` table | Session I |
 
 ---
 
