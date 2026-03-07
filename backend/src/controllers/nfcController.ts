@@ -7,6 +7,8 @@ import { withLogContext } from '../lib/logger';
 import { generatePresignedUrl } from '../lib/s3';
 import { validateScan, parseSunMessage, decryptPiccData, verifyCmac } from '../services/nfc/ntag424';
 import { registerTagSchema, scanTagSchema, uploadProofSchema, transferSchema, mintSchema } from '../services/nfc/schemas';
+import { prepareNftMetadata } from '../services/nfc/pinataService';
+import { mintNftOnChain } from '../services/nfc/nftMinting';
 
 interface NfcRequest extends RequestWithId, AuthRequest {}
 
@@ -501,11 +503,199 @@ export const listSellerTags = async (req: NfcRequest, res: Response) => {
 
 /**
  * POST /api/v1/nfc/mint
- * Stub — NFT minting integration pending Session N.
+ * Mint an NFT certificate for an NFC-tagged item on Base.
  */
-export const mintNft = async (_req: NfcRequest, res: Response) => {
-  return res.status(501).json({
-    success: false,
-    error: 'NFT minting integration pending - Session N',
-  });
+export const mintNft = async (req: NfcRequest, res: Response) => {
+  const logger = withLogContext({ requestId: req.requestId, route: req.path });
+
+  try {
+    const userId = req.user?.id;
+    if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+    const parsed = mintSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+    }
+
+    const { tagId } = parsed.data;
+    const supabase = getServiceClient();
+
+    // Fetch tag and verify ownership
+    const { data: tag, error: tagError } = await supabase
+      .from('nfc_tags')
+      .select('id, tag_uid, seller_id, verification_id, status, sun_counter')
+      .eq('id', tagId)
+      .maybeSingle();
+
+    if (tagError || !tag) throw new AppError('not_found', 'NFC tag not found');
+    if (tag.seller_id !== userId) throw new AppError('permission_denied', 'You do not own this tag');
+
+    // Prevent double mint
+    const { data: existingNft } = await supabase
+      .from('nft_metadata')
+      .select('id')
+      .eq('tag_id', tagId)
+      .maybeSingle();
+
+    if (existingNft) throw new AppError('conflict', 'NFT already minted for this tag');
+
+    // Fetch linked item details for metadata
+    let itemTitle = 'Authenticated Item';
+    let itemDescription: string | null = null;
+    let imageUrl: string | null = null;
+    let verificationStatus = tag.status;
+
+    if (tag.verification_id) {
+      const { data: verif } = await supabase
+        .from('item_verifications')
+        .select('status, listing:listings(title, description, listing_media(url, type, sort_order))')
+        .eq('id', tag.verification_id)
+        .maybeSingle();
+
+      if (verif) {
+        verificationStatus = verif.status ?? tag.status;
+        const listing = verif.listing as unknown as { title: string; description: string | null; listing_media: Array<{ url: string; type: string; sort_order: number }> } | null;
+        if (listing) {
+          itemTitle = listing.title;
+          itemDescription = listing.description;
+          const sortedMedia = [...listing.listing_media].sort((a, b) => a.sort_order - b.sort_order);
+          const firstImage = sortedMedia.find((m) => m.type === 'image');
+          if (firstImage) imageUrl = firstImage.url;
+        }
+      }
+    }
+
+    // Fetch seller username
+    const { data: seller } = await supabase
+      .from('users')
+      .select('username')
+      .eq('id', userId)
+      .maybeSingle();
+
+    const sellerUsername = seller?.username ?? 'unknown';
+
+    // Upload metadata to IPFS via Pinata
+    logger.info('nft_mint_preparing_metadata', { tagId, tagUid: tag.tag_uid });
+    const { metadataUri, metadataJson } = await prepareNftMetadata({
+      itemTitle,
+      itemDescription,
+      imageUrl,
+      tagUid: tag.tag_uid,
+      scanCount: tag.sun_counter ?? 0,
+      sellerUsername,
+      verificationStatus,
+    });
+
+    // Mint on-chain
+    logger.info('nft_mint_on_chain', { tagId, metadataUri });
+    const mintResult = await mintNftOnChain(metadataUri);
+
+    // Insert into nft_metadata table
+    const { error: insertError } = await supabase
+      .from('nft_metadata')
+      .insert({
+        tag_id: tagId,
+        chain: mintResult.chain,
+        contract_address: mintResult.contractAddress,
+        token_id: mintResult.tokenId,
+        mint_tx_hash: mintResult.txHash,
+        metadata_uri: metadataUri,
+        metadata_json: metadataJson,
+        owner_wallet: mintResult.ownerWallet,
+        minted_at: new Date().toISOString(),
+      });
+
+    if (insertError) {
+      // On-chain mint succeeded but DB insert failed — log but still return success
+      logger.error('nft_metadata_insert_failed', { tagId, txHash: mintResult.txHash, error: insertError });
+    }
+
+    logger.info('nft_minted', { tagId, tokenId: mintResult.tokenId, txHash: mintResult.txHash });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        txHash: mintResult.txHash,
+        tokenId: mintResult.tokenId,
+        metadataUri,
+        chain: mintResult.chain,
+        contractAddress: mintResult.contractAddress,
+        ownerWallet: mintResult.ownerWallet,
+      },
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    }
+    logger.error('nft_mint_error', { error });
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+/**
+ * GET /api/v1/nfc/by-uid/:tagUid
+ * Public endpoint — look up a tag by its physical UID.
+ */
+export const getTagByUid = async (req: NfcRequest, res: Response) => {
+  const logger = withLogContext({ requestId: req.requestId, route: req.path });
+
+  try {
+    const tagUid = req.params.tagUid as string;
+    const supabase = getServiceClient();
+
+    const { data: tag, error } = await supabase
+      .from('nfc_tags')
+      .select('*')
+      .eq('tag_uid', tagUid.toUpperCase())
+      .maybeSingle();
+
+    if (error || !tag) {
+      return res.status(404).json({ success: false, error: 'NFC tag not found' });
+    }
+
+    // Fetch related data in parallel (same as getTagVerification)
+    const [eventsResult, nftResult, verificationsResult] = await Promise.all([
+      supabase
+        .from('verification_events')
+        .select('*')
+        .eq('tag_id', tag.id)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('nft_metadata')
+        .select('*')
+        .eq('tag_id', tag.id)
+        .maybeSingle(),
+      tag.verification_id
+        ? supabase
+            .from('item_verifications')
+            .select('*, listing:listings(title, description, listing_media(url, type, sort_order))')
+            .eq('id', tag.verification_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const { data: seller } = await supabase
+      .from('users')
+      .select('username')
+      .eq('id', tag.seller_id)
+      .maybeSingle();
+
+    logger.info('nfc_tag_viewed_by_uid', { tagUid });
+
+    const { aes_key_enc: _omit, ...publicTag } = tag;
+
+    return res.json({
+      success: true,
+      data: {
+        tag: publicTag,
+        events: eventsResult.data ?? [],
+        nft: nftResult.data ?? null,
+        verification: verificationsResult.data ?? null,
+        seller: seller ?? null,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
 };

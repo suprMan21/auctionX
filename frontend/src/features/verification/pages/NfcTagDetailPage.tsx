@@ -56,6 +56,9 @@ export function NfcTagDetailPage() {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [minting, setMinting] = useState(false);
+  const [mintError, setMintError] = useState<string | null>(null);
+  const [mintSuccess, setMintSuccess] = useState<{ txHash: string; tokenId: string } | null>(null);
 
   const handleTransfer = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +116,22 @@ export function NfcTagDetailPage() {
       setUploadProgress(null);
     }
   }, [proofFile, tagId]);
+
+  const handleMint = useCallback(async () => {
+    if (!tagId) return;
+    setMintError(null);
+    setMintSuccess(null);
+    setMinting(true);
+
+    try {
+      const result = await api.nfcMint(tagId);
+      setMintSuccess({ txHash: result.txHash, tokenId: result.tokenId });
+    } catch (err) {
+      setMintError(err instanceof Error ? err.message : 'Minting failed');
+    } finally {
+      setMinting(false);
+    }
+  }, [tagId]);
 
   if (loading) {
     return (
@@ -290,11 +309,39 @@ export function NfcTagDetailPage() {
               )}
             </div>
           ) : (
-            <div className="text-center py-4">
-              <p className="text-gray-400 text-sm mb-3">Not yet minted</p>
-              <Button variant="secondary" disabled>
-                Mint NFT (Coming Soon)
-              </Button>
+            <div className="text-center py-4 space-y-3">
+              <p className="text-gray-400 text-sm">Not yet minted</p>
+              {mintSuccess ? (
+                <div className="text-left space-y-2">
+                  <p className="text-green-400 text-sm font-semibold">NFT minted successfully!</p>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Token ID</span>
+                    <span className="text-white font-mono">{mintSuccess.tokenId}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">TX Hash</span>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(mintSuccess.txHash).catch(() => {})}
+                      className="text-white font-mono text-xs hover:text-primary-400 transition-colors"
+                    >
+                      {mintSuccess.txHash.slice(0, 10)}...{mintSuccess.txHash.slice(-6)}
+                    </button>
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={() => window.location.reload()}>
+                    Refresh to view NFT
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Button onClick={handleMint} disabled={minting}>
+                    {minting ? 'Minting...' : 'Mint NFT Certificate'}
+                  </Button>
+                  {mintError && (
+                    <p className="text-error-500 text-sm" role="alert">{mintError}</p>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>

@@ -6,6 +6,7 @@ import {
   scanTag,
   uploadProof,
   getTagVerification,
+  getTagByUid,
   transferOwnership,
   mintNft,
   listSellerTags,
@@ -39,6 +40,9 @@ nfcRoutes.post('/scan', nfcScanLimit, scanTag as unknown as RequestHandler);
 nfcRoutes.post('/proof', requireAuth, uploadProof as unknown as RequestHandler);
 nfcRoutes.post('/transfer', requireAuth, transferOwnership as unknown as RequestHandler);
 nfcRoutes.post('/mint', requireAuth, mintNft as unknown as RequestHandler);
+
+// Static routes BEFORE parameterized (lesson #5)
+nfcRoutes.get('/by-uid/:tagUid', verifyPageLimit, getTagByUid as unknown as RequestHandler);
 
 // Parameterized route LAST
 nfcRoutes.get('/:tagId', verifyPageLimit, getTagVerification as unknown as RequestHandler);

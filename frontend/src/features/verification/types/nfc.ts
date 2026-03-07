@@ -43,6 +43,8 @@ export interface NftMetadata {
   token_id: string;
   mint_tx_hash: string | null;
   metadata_uri: string | null;
+  metadata_json: Record<string, unknown> | null;
+  owner_wallet: string | null;
   minted_at: string | null;
   created_at: string;
 }

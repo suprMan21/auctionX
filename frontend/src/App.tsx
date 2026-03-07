@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -20,9 +21,9 @@ import { TokenCreationPage } from './features/verification/pages/TokenCreationPa
 import { SavedSearchesPage } from '@/pages/SavedSearchesPage';
 import { ConversationsPage } from './features/messaging/pages/ConversationsPage';
 import { VerificationPage } from './features/verification/pages/VerificationPage';
-import { NfcDashboardPage } from './features/verification/pages/NfcDashboardPage';
-import { NfcTagDetailPage } from './features/verification/pages/NfcTagDetailPage';
-import { NfcScanPage } from './features/verification/pages/NfcScanPage';
+const NfcDashboardPage = lazy(() => import('./features/verification/pages/NfcDashboardPage').then(m => ({ default: m.NfcDashboardPage })));
+const NfcTagDetailPage = lazy(() => import('./features/verification/pages/NfcTagDetailPage').then(m => ({ default: m.NfcTagDetailPage })));
+const NfcScanPage = lazy(() => import('./features/verification/pages/NfcScanPage').then(m => ({ default: m.NfcScanPage })));
 import { AdminProtectedRoute } from '@/features/admin/components/AdminProtectedRoute';
 import { AdminLayout } from '@/features/admin/AdminLayout';
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
@@ -137,12 +138,12 @@ function App() {
           <Route path="/listings/:id" element={<PublicWithHeader><ViewListing /></PublicWithHeader>} />
 
           {/* NFC Tag Management — static routes before parameterized (lesson #5) */}
-          <Route path="/nfc/scan" element={<PublicWithHeader><NfcScanPage /></PublicWithHeader>} />
+          <Route path="/nfc/scan" element={<PublicWithHeader><Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="text-gray-400">Loading...</div></div>}><NfcScanPage /></Suspense></PublicWithHeader>} />
           <Route
             path="/nfc"
             element={
               <ProtectedRoute>
-                <NfcDashboardPage />
+                <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="text-gray-400">Loading...</div></div>}><NfcDashboardPage /></Suspense>
               </ProtectedRoute>
             }
           />
@@ -150,7 +151,7 @@ function App() {
             path="/nfc/:tagId"
             element={
               <ProtectedRoute>
-                <NfcTagDetailPage />
+                <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="text-gray-400">Loading...</div></div>}><NfcTagDetailPage /></Suspense>
               </ProtectedRoute>
             }
           />

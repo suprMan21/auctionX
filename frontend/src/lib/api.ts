@@ -470,6 +470,17 @@ export const api = {
     return json.data as NfcTagDetail;
   },
 
+  /** Get full tag verification data by UID (public). */
+  async nfcGetTagByUid(tagUid: string): Promise<NfcTagDetail> {
+    const response = await fetch(`${API_URL}/nfc/by-uid/${tagUid}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'NFC tag not found');
+    }
+    const json = await response.json();
+    return json.data as NfcTagDetail;
+  },
+
   /** Fetch all NFC tags for the authenticated seller. */
   async nfcGetTags(): Promise<NfcTag[]> {
     const headers = await getAuthHeader();
@@ -496,8 +507,8 @@ export const api = {
     }
   },
 
-  /** Mint NFT for an NFC tag (stub — Session N). */
-  async nfcMint(tagId: string): Promise<void> {
+  /** Mint NFT for an NFC tag. */
+  async nfcMint(tagId: string): Promise<{ txHash: string; tokenId: string; metadataUri: string; chain: string; contractAddress: string; ownerWallet: string }> {
     const headers = await getAuthHeader();
     const response = await fetch(`${API_URL}/nfc/mint`, {
       method: 'POST',
@@ -506,7 +517,9 @@ export const api = {
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error((error as { error?: string }).error || 'Minting not yet available');
+      throw new Error((error as { error?: string }).error || 'Minting failed');
     }
+    const json = await response.json();
+    return json.data;
   },
 };
