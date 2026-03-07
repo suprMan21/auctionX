@@ -786,6 +786,125 @@ export type Database = {
           },
         ]
       }
+      nfc_tags: {
+        Row: {
+          activated_at: string | null
+          aes_key_enc: string
+          created_at: string
+          id: string
+          item_id: string | null
+          metadata: Json | null
+          registered_at: string
+          seller_id: string
+          status: string
+          sun_counter: number
+          tag_uid: string
+          tenant_id: string
+          updated_at: string
+          verification_id: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          aes_key_enc: string
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          metadata?: Json | null
+          registered_at?: string
+          seller_id: string
+          status?: string
+          sun_counter?: number
+          tag_uid: string
+          tenant_id?: string
+          updated_at?: string
+          verification_id?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          aes_key_enc?: string
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          metadata?: Json | null
+          registered_at?: string
+          seller_id?: string
+          status?: string
+          sun_counter?: number
+          tag_uid?: string
+          tenant_id?: string
+          updated_at?: string
+          verification_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfc_tags_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfc_tags_verification_id_fkey"
+            columns: ["verification_id"]
+            isOneToOne: false
+            referencedRelation: "item_verifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nft_metadata: {
+        Row: {
+          chain: string
+          contract_address: string | null
+          created_at: string
+          id: string
+          metadata_json: Json | null
+          metadata_uri: string | null
+          mint_tx_hash: string | null
+          minted_at: string | null
+          owner_wallet: string | null
+          tag_id: string
+          token_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          chain?: string
+          contract_address?: string | null
+          created_at?: string
+          id?: string
+          metadata_json?: Json | null
+          metadata_uri?: string | null
+          mint_tx_hash?: string | null
+          minted_at?: string | null
+          owner_wallet?: string | null
+          tag_id: string
+          token_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          chain?: string
+          contract_address?: string | null
+          created_at?: string
+          id?: string
+          metadata_json?: Json | null
+          metadata_uri?: string | null
+          mint_tx_hash?: string | null
+          minted_at?: string | null
+          owner_wallet?: string | null
+          tag_id?: string
+          token_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nft_metadata_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_preferences: {
         Row: {
           auction_outbid: boolean
@@ -894,30 +1013,45 @@ export type Database = {
       }
       ownership_transfers: {
         Row: {
+          completed_at: string | null
           from_user_id: string | null
           id: string
           settlement_id: string | null
+          status: string | null
+          tag_id: string | null
           to_user_id: string
+          transaction_id: string | null
           transfer_type: Database["public"]["Enums"]["transfer_type"]
           transferred_at: string
+          verification_event_id: string | null
           verification_id: string
         }
         Insert: {
+          completed_at?: string | null
           from_user_id?: string | null
           id?: string
           settlement_id?: string | null
+          status?: string | null
+          tag_id?: string | null
           to_user_id: string
+          transaction_id?: string | null
           transfer_type: Database["public"]["Enums"]["transfer_type"]
           transferred_at?: string
+          verification_event_id?: string | null
           verification_id: string
         }
         Update: {
+          completed_at?: string | null
           from_user_id?: string | null
           id?: string
           settlement_id?: string | null
+          status?: string | null
+          tag_id?: string | null
           to_user_id?: string
+          transaction_id?: string | null
           transfer_type?: Database["public"]["Enums"]["transfer_type"]
           transferred_at?: string
+          verification_event_id?: string | null
           verification_id?: string
         }
         Relationships: [
@@ -936,10 +1070,31 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ownership_transfers_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "ownership_transfers_to_user_id_fkey"
             columns: ["to_user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ownership_transfers_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ownership_transfers_verification_event_id_fkey"
+            columns: ["verification_event_id"]
+            isOneToOne: false
+            referencedRelation: "verification_events"
             referencedColumns: ["id"]
           },
           {
@@ -1812,6 +1967,65 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "admin_users"
             referencedColumns: ["admin_id"]
+          },
+        ]
+      }
+      verification_events: {
+        Row: {
+          blockchain_tx_hash: string | null
+          cmac_valid: boolean | null
+          created_at: string
+          id: string
+          ip_address: unknown
+          metadata: Json | null
+          scan_type: string
+          scanned_by: string | null
+          sun_counter_value: number | null
+          sun_message: string | null
+          tag_id: string
+          user_agent: string | null
+          video_proof_status: string | null
+          video_proof_url: string | null
+        }
+        Insert: {
+          blockchain_tx_hash?: string | null
+          cmac_valid?: boolean | null
+          created_at?: string
+          id?: string
+          ip_address?: unknown
+          metadata?: Json | null
+          scan_type?: string
+          scanned_by?: string | null
+          sun_counter_value?: number | null
+          sun_message?: string | null
+          tag_id: string
+          user_agent?: string | null
+          video_proof_status?: string | null
+          video_proof_url?: string | null
+        }
+        Update: {
+          blockchain_tx_hash?: string | null
+          cmac_valid?: boolean | null
+          created_at?: string
+          id?: string
+          ip_address?: unknown
+          metadata?: Json | null
+          scan_type?: string
+          scanned_by?: string | null
+          sun_counter_value?: number | null
+          sun_message?: string | null
+          tag_id?: string
+          user_agent?: string | null
+          video_proof_status?: string | null
+          video_proof_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_events_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
           },
         ]
       }

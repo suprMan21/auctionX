@@ -308,4 +308,49 @@ Before committing schema changes:
 
 ---
 
+## Session L: NFC Verification Tables (Added 2026-03-07)
+
+### nfc_tags
+**Location:** Supabase PostgreSQL — `nfc_tags`
+
+**Fields:**
+```
+id UUID PK, tenant_id TEXT, tag_uid TEXT, item_id UUID FK->listings,
+seller_id UUID FK->auth.users, verification_id UUID FK->item_verifications,
+aes_key_enc TEXT, sun_counter INTEGER, status TEXT,
+registered_at TIMESTAMPTZ, activated_at TIMESTAMPTZ, metadata JSONB,
+created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
+```
+UNIQUE: `(tenant_id, tag_uid)`
+
+### verification_events
+**Location:** Supabase PostgreSQL — `verification_events`
+
+**Fields:**
+```
+id UUID PK, tag_id UUID FK->nfc_tags, scan_type TEXT, scanned_by UUID FK->auth.users,
+video_proof_url TEXT, video_proof_status TEXT, blockchain_tx_hash TEXT,
+sun_message TEXT, sun_counter_value INTEGER, cmac_valid BOOLEAN,
+ip_address INET, user_agent TEXT, metadata JSONB, created_at TIMESTAMPTZ
+```
+
+### nft_metadata
+**Location:** Supabase PostgreSQL — `nft_metadata`
+
+**Fields:**
+```
+id UUID PK, tag_id UUID FK->nfc_tags, chain TEXT, contract_address TEXT,
+token_id TEXT, mint_tx_hash TEXT, metadata_uri TEXT, metadata_json JSONB,
+owner_wallet TEXT, minted_at TIMESTAMPTZ, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
+```
+
+### ownership_transfers (Extended)
+**Added optional columns:**
+```
+tag_id UUID FK->nfc_tags, transaction_id UUID FK->transactions,
+verification_event_id UUID FK->verification_events, status TEXT, completed_at TIMESTAMPTZ
+```
+
+---
+
 **END OF SCHEMA LOCK**
