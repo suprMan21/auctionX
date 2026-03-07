@@ -103,12 +103,15 @@ export const verifyAdminAuth = async (
     }
 
     // 4. Attach verified admin context to request
-    const adminRoles = adminData.admin_roles as Array<{ role_name: string; permissions: string[] }>;
+    // Supabase returns the join as a single object (many-to-one FK), not an array
+    // Supabase types say array but runtime returns object for many-to-one FK joins
+    const rawRole = adminData.admin_roles as unknown;
+    const adminRole = Array.isArray(rawRole) ? rawRole[0] : rawRole as { role_name: string; permissions: string[] } | null;
     req.admin = {
       admin_id: adminData.admin_id,
       email: user.email!,
-      role: adminRoles[0]?.role_name ?? '',
-      permissions: adminRoles[0]?.permissions ?? [],
+      role: adminRole?.role_name ?? '',
+      permissions: adminRole?.permissions ?? [],
       brand: adminData.brand,
       session_version: adminData.session_version
     };
