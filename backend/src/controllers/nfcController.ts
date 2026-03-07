@@ -473,6 +473,33 @@ export const transferOwnership = async (req: NfcRequest, res: Response) => {
 };
 
 /**
+ * GET /api/v1/nfc/tags
+ * List all NFC tags belonging to the authenticated seller.
+ */
+export const listSellerTags = async (req: NfcRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+    const supabase = getServiceClient();
+    const { data: tags, error } = await supabase
+      .from('nfc_tags')
+      .select('id, tenant_id, tag_uid, item_id, seller_id, verification_id, status, sun_counter, activated_at, created_at, updated_at')
+      .eq('seller_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw new AppError('internal', 'Failed to fetch tags');
+
+    return res.json({ success: true, data: tags ?? [] });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    }
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+/**
  * POST /api/v1/nfc/mint
  * Stub — NFT minting integration pending Session N.
  */

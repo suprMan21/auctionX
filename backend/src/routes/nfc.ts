@@ -8,6 +8,7 @@ import {
   getTagVerification,
   transferOwnership,
   mintNft,
+  listSellerTags,
 } from '../controllers/nfcController';
 
 /** 30 req/min per IP for NFC scan POSTs. */
@@ -32,6 +33,7 @@ const verifyPageLimit = rateLimit({
 export const nfcRoutes = Router();
 
 // Static routes BEFORE parameterized routes (lesson #5)
+nfcRoutes.get('/tags', requireAuth, listSellerTags as unknown as RequestHandler);
 nfcRoutes.post('/register', requireAuth, registerTag as unknown as RequestHandler);
 nfcRoutes.post('/scan', nfcScanLimit, scanTag as unknown as RequestHandler);
 nfcRoutes.post('/proof', requireAuth, uploadProof as unknown as RequestHandler);

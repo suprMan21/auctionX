@@ -20,6 +20,9 @@ import { TokenCreationPage } from './features/verification/pages/TokenCreationPa
 import { SavedSearchesPage } from '@/pages/SavedSearchesPage';
 import { ConversationsPage } from './features/messaging/pages/ConversationsPage';
 import { VerificationPage } from './features/verification/pages/VerificationPage';
+import { NfcDashboardPage } from './features/verification/pages/NfcDashboardPage';
+import { NfcTagDetailPage } from './features/verification/pages/NfcTagDetailPage';
+import { NfcScanPage } from './features/verification/pages/NfcScanPage';
 import { AdminProtectedRoute } from '@/features/admin/components/AdminProtectedRoute';
 import { AdminLayout } from '@/features/admin/AdminLayout';
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
@@ -132,6 +135,25 @@ function App() {
           <Route path="/browse/:categorySlug" element={<PublicWithHeader><BrowsePage /></PublicWithHeader>} />
           <Route path="/search" element={<PublicWithHeader><SearchResultsPage /></PublicWithHeader>} />
           <Route path="/listings/:id" element={<PublicWithHeader><ViewListing /></PublicWithHeader>} />
+
+          {/* NFC Tag Management — static routes before parameterized (lesson #5) */}
+          <Route path="/nfc/scan" element={<PublicWithHeader><NfcScanPage /></PublicWithHeader>} />
+          <Route
+            path="/nfc"
+            element={
+              <ProtectedRoute>
+                <NfcDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/nfc/:tagId"
+            element={
+              <ProtectedRoute>
+                <NfcTagDetailPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* NFC Verification — /verify/create/:verificationId MUST precede /verify/:tokenName */}
           <Route

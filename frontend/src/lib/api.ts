@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { Settlement, AuctionSettlementSummary } from '@/features/auctions/types/settlement';
 import type { Payout } from '@/features/payouts/types/payout';
 import type { Verification, VerificationDetail } from '@/features/verification/types/verification';
+import type { NfcTag, NfcTagDetail, ScanResult } from '@/features/verification/types/nfc';
 import type {
   ConversationWithDetails,
   Message,
@@ -407,5 +408,105 @@ export const api = {
     }
     const json = await response.json();
     return json.data as NotificationPreferences;
+  },
+
+  // ── Module 13: NFC Verification (Session M) ──────────────────────────────
+
+  /** Register an NTAG 424 DNA tag. */
+  async nfcRegister(input: { tagUid: string; aesKey: string; itemId?: string }): Promise<NfcTag> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/nfc/register`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to register NFC tag');
+    }
+    const json = await response.json();
+    return json.data as NfcTag;
+  },
+
+  /** Scan an NFC tag (public, no auth). */
+  async nfcScan(input: { sunMessage: string } | { piccData: string; cmac: string; tagUid: string }): Promise<ScanResult> {
+    const response = await fetch(`${API_URL}/nfc/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Scan failed');
+    }
+    const json = await response.json();
+    return json.data as ScanResult;
+  },
+
+  /** Get presigned S3 URL for video proof upload. */
+  async nfcUploadProof(input: { tagId: string; contentType: string; fileSize: number }): Promise<{ uploadUrl: string; publicUrl: string; videoKey: string }> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/nfc/proof`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to get upload URL');
+    }
+    const json = await response.json();
+    return json.data;
+  },
+
+  /** Get full tag verification data (public). */
+  async nfcGetTag(tagId: string): Promise<NfcTagDetail> {
+    const response = await fetch(`${API_URL}/nfc/${tagId}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'NFC tag not found');
+    }
+    const json = await response.json();
+    return json.data as NfcTagDetail;
+  },
+
+  /** Fetch all NFC tags for the authenticated seller. */
+  async nfcGetTags(): Promise<NfcTag[]> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/nfc/tags`, { headers });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to fetch tags');
+    }
+    const json = await response.json();
+    return json.data as NfcTag[];
+  },
+
+  /** Transfer ownership of an NFC-tagged item. */
+  async nfcTransfer(input: { tagId: string; toUserId: string; transferType: string; transactionId?: string }): Promise<void> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/nfc/transfer`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to transfer ownership');
+    }
+  },
+
+  /** Mint NFT for an NFC tag (stub — Session N). */
+  async nfcMint(tagId: string): Promise<void> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/nfc/mint`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tagId }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Minting not yet available');
+    }
   },
 };

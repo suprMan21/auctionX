@@ -178,6 +178,37 @@ export function VerificationPage() {
           )}
         </div>
 
+        {/* ── NFC Authentication ─────────────────────────────────────────── */}
+        {verif.nfc_tag_uid && (
+          <div className="glass rounded-2xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-4">NFC Authentication</h2>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Tag UID</span>
+                <span className="text-white font-mono">{verif.nfc_tag_uid}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Status</span>
+                <span className="inline-flex items-center gap-1 text-green-400">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  NFC Linked
+                </span>
+              </div>
+              {verif.nfc_programmed_at && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Programmed</span>
+                  <span className="text-white">{new Date(verif.nfc_programmed_at).toLocaleDateString()}</span>
+                </div>
+              )}
+              <p className="text-gray-500 text-xs mt-2">
+                This item is protected by an NTAG 424 DNA NFC chip. Scan the physical tag to verify authenticity.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── Engagement Stats ────────────────────────────────────────────── */}
         <div className="glass rounded-2xl p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Engagement</h2>
