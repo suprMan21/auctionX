@@ -89,7 +89,7 @@ function ConversationRow({
                 {conv.unread_count > 9 ? '9+' : conv.unread_count}
               </span>
             )}
-            <span className="text-xs text-gray-500">{formatTime(conv.last_message_at)}</span>
+            <span className="text-xs text-gray-400">{formatTime(conv.last_message_at)}</span>
           </div>
         </div>
         <p className="text-xs text-gray-400 truncate mt-0.5">
@@ -113,7 +113,7 @@ function MessageBubble({ message, isMine }: { message: Message; isMine: boolean 
         }`}
       >
         <p className="whitespace-pre-wrap break-words">{message.body}</p>
-        <p className={`text-xs mt-1 ${isMine ? 'text-white/60 text-right' : 'text-gray-500'}`}>
+        <p className={`text-xs mt-1 ${isMine ? 'text-white/60 text-right' : 'text-gray-400'}`}>
           {formatTime(message.created_at)}
           {isMine && message.read_at && (
             <span className="ml-1" title="Read">✓</span>
@@ -234,7 +234,7 @@ function MessageThread({
         </button>
         <div className="min-w-0">
           <p className="text-white font-semibold text-sm truncate">{displayName}</p>
-          <p className="text-gray-500 text-xs truncate">{listingTitle}</p>
+          <p className="text-gray-400 text-xs truncate">{listingTitle}</p>
         </div>
       </div>
 
@@ -242,11 +242,11 @@ function MessageThread({
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
         {loading ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500 text-sm">Loading messages…</p>
+            <p className="text-gray-400 text-sm">Loading messages…</p>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500 text-sm">No messages yet. Say hello!</p>
+            <p className="text-gray-400 text-sm">No messages yet. Say hello!</p>
           </div>
         ) : (
           messages.map((msg) => (
@@ -267,7 +267,7 @@ function MessageThread({
           rows={1}
           maxLength={2000}
           className="flex-1 resize-none bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm
-                     text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500
+                     text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500
                      max-h-32 overflow-y-auto"
           style={{ minHeight: '40px' }}
         />
@@ -308,11 +308,11 @@ function ConversationsSidebar({
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center h-32">
-            <p className="text-gray-500 text-sm">Loading…</p>
+            <p className="text-gray-400 text-sm">Loading…</p>
           </div>
         ) : conversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 px-6 text-center">
-            <p className="text-gray-500 text-sm">No conversations yet.</p>
+            <p className="text-gray-400 text-sm">No conversations yet.</p>
             <p className="text-gray-400 text-xs mt-1">
               Visit a listing and click &quot;Message Seller&quot; to start one.
             </p>

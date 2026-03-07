@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useListingCreation, ListingMedia } from '../../stores/listingCreationStore';
-import { supabase } from '../../features/auth/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 const MAX_MEDIA = 10;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -184,7 +184,7 @@ export function MediaUploader() {
             ? 'Maximum 10 media items reached'
             : 'Click to upload or drag and drop'}
         </p>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-xs text-gray-400 mt-1">
           {draft.media.length}/{MAX_MEDIA} media items
         </p>
       </div>

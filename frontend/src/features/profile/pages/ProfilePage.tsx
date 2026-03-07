@@ -177,7 +177,7 @@ export function ProfilePage() {
                     />
                   ) : (
                     <div className="w-24 h-24 rounded-full bg-dark-600 flex items-center justify-center">
-                      <span className="text-gray-500 text-sm">No photo</span>
+                      <span className="text-gray-400 text-sm">No photo</span>
                     </div>
                   )}
 
@@ -224,7 +224,7 @@ export function ProfilePage() {
                       rows={4}
                       placeholder="Tell us about yourself..."
                       className="w-full min-h-[120px] px-4 py-3 rounded-xl
-                                bg-dark-600 text-white placeholder:text-gray-500
+                                bg-dark-600 text-white placeholder:text-gray-400
                                 border border-transparent
                                 focus:outline-none focus:ring-2 focus:ring-primary-500
                                 focus:ring-offset-2 focus:ring-offset-dark-800

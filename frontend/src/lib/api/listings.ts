@@ -1,4 +1,4 @@
-import { supabase } from '../../features/auth/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 export interface CreateListingDraft {
   title: string;

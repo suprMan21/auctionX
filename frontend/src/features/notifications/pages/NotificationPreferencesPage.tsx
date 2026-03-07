@@ -221,7 +221,7 @@ export function NotificationPreferencesPage() {
           ))}
         </div>
 
-        <p className="text-xs text-gray-500 mt-8 text-center">
+        <p className="text-xs text-gray-400 mt-8 text-center">
           Changes are saved automatically.
         </p>
       </div>

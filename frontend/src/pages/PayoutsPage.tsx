@@ -223,7 +223,7 @@ export function PayoutsPage() {
         {payouts.length === 0 ? (
           <div className="glass rounded-2xl p-12 text-center">
             <p className="text-gray-400 text-lg">No payouts yet.</p>
-            <p className="text-gray-500 text-sm mt-2">
+            <p className="text-gray-400 text-sm mt-2">
               Payouts appear here after your auctions are settled and the 72-hour escrow window expires.
             </p>
           </div>

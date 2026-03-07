@@ -50,7 +50,7 @@ export function AgeGate() {
 
   const inputClass =
     'w-full h-12 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-center text-lg ' +
-    'placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-unmentionables-500';
+    'placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-unmentionables-500';
 
   return (
     <div role="main" className="min-h-screen bg-dark-800 flex items-center justify-center p-4 relative overflow-hidden">

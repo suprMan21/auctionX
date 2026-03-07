@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '@/features/auth/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/database.types'
 
 type ShippingAddress = Database['public']['Tables']['shipping_addresses']['Row']

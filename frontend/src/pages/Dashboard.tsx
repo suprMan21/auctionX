@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { supabase } from '@/features/auth/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 interface Listing {
   id: string;
@@ -118,7 +118,7 @@ export function Dashboard() {
                           />
                         ) : (
                           <div className="w-full h-48 bg-dark-600 flex items-center justify-center">
-                            <span className="text-gray-500">No image</span>
+                            <span className="text-gray-400">No image</span>
                           </div>
                         )}
                         <div className="p-6">

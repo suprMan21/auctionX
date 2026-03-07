@@ -72,7 +72,7 @@ export function ListingCard({ listing, risk = 'LOW', ageVerified = true }: Listi
             />
           ) : (
             <div className="w-full h-56 bg-dark-700 flex items-center justify-center">
-              <span className="text-gray-500 text-sm">No image</span>
+              <span className="text-gray-400 text-sm">No image</span>
             </div>
           )}
 
@@ -118,14 +118,14 @@ export function ListingCard({ listing, risk = 'LOW', ageVerified = true }: Listi
                     {timeRemaining(auction.end_time)}
                   </p>
                 ) : (
-                  <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">
+                  <span className="text-xs text-gray-400 bg-white/5 px-2 py-0.5 rounded-full">
                     {auction.status}
                   </span>
                 )}
               </div>
             </div>
           ) : !isLocked ? (
-            <p className="text-gray-500 text-sm">No active auction</p>
+            <p className="text-gray-400 text-sm">No active auction</p>
           ) : null}
         </div>
       </Link>

@@ -46,7 +46,7 @@ export const SignupForm = () => {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
@@ -64,7 +64,7 @@ export const SignupForm = () => {
           onChange={(e) => setPassword(e.target.value)}
           required
           minLength={6}
-          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
@@ -82,7 +82,7 @@ export const SignupForm = () => {
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
           minLength={6}
-          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 

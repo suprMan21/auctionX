@@ -18,11 +18,11 @@ type CheckState = 'loading' | 'admin' | 'not-admin' | 'unauthenticated';
  * While checking it renders a full-screen spinner to prevent flash-of-content.
  */
 export const AdminProtectedRoute = () => {
-  const { session, loading: authLoading } = useAuth();
+  const { session, loading: authLoading, initialized } = useAuth();
   const [checkState, setCheckState] = useState<CheckState>('loading');
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !initialized) return;
 
     if (!session) {
       setCheckState('unauthenticated');
@@ -43,9 +43,9 @@ export const AdminProtectedRoute = () => {
       }
     };
     check();
-  }, [session, authLoading]);
+  }, [session, authLoading, initialized]);
 
-  if (authLoading || checkState === 'loading') {
+  if (!initialized || authLoading || checkState === 'loading') {
     return (
       <div className="min-h-screen bg-dark-800 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">

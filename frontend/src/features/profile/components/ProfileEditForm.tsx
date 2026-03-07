@@ -87,9 +87,9 @@ export function ProfileEditForm({
           aria-describedby="displayName-hint"
           aria-invalid={!!currentError}
           aria-errormessage={currentError ? "form-error" : undefined}
-          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
-        <p id="displayName-hint" className="text-xs text-gray-500 mt-1">
+        <p id="displayName-hint" className="text-xs text-gray-400 mt-1">
           {displayName.length}/120 characters
         </p>
       </div>
@@ -107,7 +107,7 @@ export function ProfileEditForm({
           value={phoneNumber}
           onChange={(e) => setPhoneNumber(e.target.value)}
           aria-invalid={!!currentError}
-          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 

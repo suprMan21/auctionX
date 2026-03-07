@@ -101,7 +101,7 @@ const SuspendForm = ({
           onChange={(e) => setReason(e.target.value)}
           rows={3}
           placeholder="Reason for suspension…"
-          className="w-full px-4 py-3 rounded-xl bg-dark-700 text-white placeholder:text-gray-500
+          className="w-full px-4 py-3 rounded-xl bg-dark-700 text-white placeholder:text-gray-400
                      border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
                      resize-none"
         />
@@ -145,7 +145,7 @@ const ReasonForm = ({
             onChange={(e) => setReason(e.target.value)}
             rows={3}
             placeholder="Enter reason…"
-            className="w-full px-4 py-3 rounded-xl bg-dark-700 text-white placeholder:text-gray-500
+            className="w-full px-4 py-3 rounded-xl bg-dark-700 text-white placeholder:text-gray-400
                        border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
                        resize-none"
           />
@@ -365,7 +365,7 @@ export const AdminUserDetailPage = () => {
       <div className="glass rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-white mb-4">Recent Listings</h2>
         {listings.length === 0 ? (
-          <p className="text-gray-500 text-sm">No listings.</p>
+          <p className="text-gray-400 text-sm">No listings.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -394,7 +394,7 @@ export const AdminUserDetailPage = () => {
       <div className="glass rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-white mb-4">Recent Bids</h2>
         {bids.length === 0 ? (
-          <p className="text-gray-500 text-sm">No bids.</p>
+          <p className="text-gray-400 text-sm">No bids.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

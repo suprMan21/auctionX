@@ -143,7 +143,7 @@ export function SavedSearchesPage() {
                             ))}
                           </div>
                         )}
-                        <p className="text-gray-500 text-xs mt-2">
+                        <p className="text-gray-400 text-xs mt-2">
                           Saved {new Date(item.created_at).toLocaleDateString()}
                           {item.notify_new_results && (
                             <span className="ml-2 text-primary-400">· Notifications on</span>

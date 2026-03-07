@@ -24,7 +24,7 @@ export function BasicInfoStep() {
           value={draft.title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={160}
-          className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+          className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
           placeholder="e.g., Vintage Nike Air Jordan 1 Sneakers"
           required
           aria-required="true"
@@ -42,7 +42,7 @@ export function BasicInfoStep() {
           onChange={(e) => setDescription(e.target.value)}
           maxLength={5000}
           rows={6}
-          className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+          className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
           placeholder="Describe your item in detail..."
         />
         <p className="mt-1 text-xs text-gray-400">{draft.description.length}/5000 characters</p>

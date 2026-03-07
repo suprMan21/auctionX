@@ -19,7 +19,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { ListingCard } from '@/components/listings/ListingCard';
-import { supabase } from '@/features/auth/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { api, type SearchResult, type SearchResponse, type SavedSearchFilters } from '@/lib/api';
 
@@ -89,7 +89,7 @@ function SaveSearchForm({ query, filters, onSaved, onCancel }: SaveSearchFormPro
         onChange={(e) => setName(e.target.value)}
         placeholder="e.g. Jordan rookie cards"
         className="w-full h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-white
-                   placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 mb-3"
+                   placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 mb-3"
       />
       <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer mb-4">
         <input
@@ -305,7 +305,7 @@ export function SearchResultsPage() {
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="Search listings…"
                 className="flex-1 h-11 px-4 rounded-xl bg-white/5 border border-white/10 text-white
-                           placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                           placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 autoFocus
               />
               <button
@@ -378,7 +378,7 @@ export function SearchResultsPage() {
                         }}
                         placeholder="$ Min"
                         className="w-full h-9 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm
-                                   placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                   placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                     </div>
                     <div className="flex-1">
@@ -394,7 +394,7 @@ export function SearchResultsPage() {
                         }}
                         placeholder="$ Max"
                         className="w-full h-9 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm
-                                   placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                   placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                     </div>
                   </div>

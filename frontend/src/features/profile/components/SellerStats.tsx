@@ -48,7 +48,7 @@ export function SellerStats({ profile }: SellerStatsProps) {
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-400 mt-1">
                 {progress.toFixed(1)}% to {nextTierName}
               </p>
             </div>

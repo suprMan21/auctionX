@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { User, Session } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 interface AuthState {
   user: User | null;
@@ -28,16 +28,40 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     if (get().initialized) return;
+    console.log('[auth] initialize called');
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      set({ 
-        user: session?.user ?? null, 
+      // First try getSession() which returns the in-memory cached session
+      let { data: { session } } = await supabase.auth.getSession();
+      console.log('[auth] getSession result:', !!session);
+
+      // If no session but there's a token in localStorage, restore it.
+      // This handles the race where getSession() resolves before the
+      // Supabase client's internal async init reads from storage.
+      if (!session) {
+        const stored = localStorage.getItem(
+          `sb-pmlofthmobglcfkqjtru-auth-token`
+        );
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.access_token && parsed.refresh_token) {
+            const { data, error } = await supabase.auth.setSession({
+              access_token: parsed.access_token,
+              refresh_token: parsed.refresh_token,
+            });
+            if (!error) session = data.session;
+          }
+        }
+      }
+
+      console.log('[auth] final session:', !!session, 'user:', session?.user?.email);
+      set({
+        user: session?.user ?? null,
         session,
-        initialized: true 
+        initialized: true,
       });
     } catch (error: any) {
-      console.error('Failed to initialize auth:', error);
+      console.error('[auth] Failed to initialize:', error);
       set({ initialized: true });
     }
   },
@@ -130,5 +154,6 @@ supabase.auth.onAuthStateChange((_event, session) => {
   useAuthStore.setState({
     user: session?.user ?? null,
     session,
+    initialized: true,
   });
 });

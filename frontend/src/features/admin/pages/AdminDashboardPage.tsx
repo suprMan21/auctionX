@@ -44,11 +44,11 @@ const AuditRow = ({ log }: { log: AuditLog }) => (
   <div className="flex items-start justify-between gap-4 py-3 border-b border-white/5 last:border-0">
     <div className="min-w-0">
       <p className="text-sm text-white font-medium truncate">{log.action.replace(/_/g, ' ')}</p>
-      <p className="text-xs text-gray-500 truncate">
+      <p className="text-xs text-gray-400 truncate">
         {log.admin_email} · {log.entity_type} {log.entity_id.slice(0, 8)}…
       </p>
     </div>
-    <time className="text-xs text-gray-500 flex-shrink-0">
+    <time className="text-xs text-gray-400 flex-shrink-0">
       {log.created_at ? new Date(log.created_at).toLocaleString() : '—'}
     </time>
   </div>
@@ -186,7 +186,7 @@ export const AdminDashboardPage = () => {
         </div>
 
         {recentLogs.length === 0 ? (
-          <p className="text-gray-500 text-sm">No recent activity.</p>
+          <p className="text-gray-400 text-sm">No recent activity.</p>
         ) : (
           <div>
             {recentLogs.map((log) => (
@@ -199,7 +199,7 @@ export const AdminDashboardPage = () => {
       {/* Health indicator */}
       {health !== null && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">System status:</span>
+          <span className="text-xs text-gray-400">System status:</span>
           <HealthChip health={health} />
         </div>
       )}

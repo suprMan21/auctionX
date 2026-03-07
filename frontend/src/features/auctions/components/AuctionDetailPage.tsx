@@ -226,9 +226,9 @@ export function AuctionDetailPage() {
               maxLength={2000}
               autoFocus
               className="w-full resize-none rounded-xl bg-white/5 border border-white/10 text-white text-sm
-                         px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                         px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
-            <p className="text-xs text-gray-500 mt-1 text-right">{messageDraft.trim().length}/2000</p>
+            <p className="text-xs text-gray-400 mt-1 text-right">{messageDraft.trim().length}/2000</p>
             <div className="flex gap-3 mt-4">
               <button
                 type="button"

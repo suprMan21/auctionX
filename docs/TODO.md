@@ -1,6 +1,6 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-06 (Session H_c — Auth Race Condition Fix)
+Last updated: 2026-03-07 (Session I — Design System Fixes + Staging Deploy)
 
 ---
 
@@ -10,6 +10,16 @@ Last updated: 2026-03-06 (Session H_c — Auth Race Condition Fix)
   - `App.tsx` inline ProtectedRoute now checks `!initialized || loading` before rendering
   - Removed redundant page-level auth redirects from `MyListings.tsx` and `ProfilePage.tsx`
   - Deleted unused `features/auth/components/ProtectedRoute.tsx` (zero imports)
+- [x] **DONE (Session I):** Deploy auth fixes to staging — Session H fixes were in code but never deployed
+  - Built and deployed to S3 + CloudFront invalidation
+
+---
+
+## Design System Fixes
+
+- [x] **DONE (Session I):** Fix button gradient bleed — added `overflow-hidden` to Button.tsx baseClasses
+- [x] **DONE (Session I):** Fix text contrast violations — replaced `text-gray-500` → `text-gray-400`, `text-gray-600` → `text-gray-500` across 42 files (102 occurrences)
+- [x] **DONE (Session I):** Document Unmentionables nav link pink accent as accepted brand exception
 
 ---
 

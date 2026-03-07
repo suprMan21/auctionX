@@ -131,7 +131,7 @@ export function ShippingAddressForm({
           aria-required="true"
           aria-invalid={!!validationError}
           aria-errormessage={validationError ? "address-form-error" : undefined}
-          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
@@ -151,7 +151,7 @@ export function ShippingAddressForm({
           required
           aria-required="true"
           aria-invalid={!!validationError}
-          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
@@ -168,7 +168,7 @@ export function ShippingAddressForm({
           type="text"
           value={formData.address_line2}
           onChange={handleChange}
-          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 
@@ -189,7 +189,7 @@ export function ShippingAddressForm({
             required
             aria-required="true"
             aria-invalid={!!validationError}
-            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
 
@@ -209,7 +209,7 @@ export function ShippingAddressForm({
             required
             aria-required="true"
             aria-invalid={!!validationError}
-            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
       </div>
@@ -231,7 +231,7 @@ export function ShippingAddressForm({
             required
             aria-required="true"
             aria-invalid={!!validationError}
-            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
 
@@ -249,7 +249,7 @@ export function ShippingAddressForm({
             onChange={handleChange}
             required
             aria-required="true"
-            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             {COUNTRIES.map((country) => (
               <option key={country.code} value={country.code}>
@@ -273,7 +273,7 @@ export function ShippingAddressForm({
           type="tel"
           value={formData.phone_number}
           onChange={handleChange}
-          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
 

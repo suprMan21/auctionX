@@ -123,7 +123,7 @@ export function MyListings() {
                           />
                         ) : (
                           <div className="w-full h-48 bg-dark-600 flex items-center justify-center">
-                            <span className="text-gray-500">No image</span>
+                            <span className="text-gray-400">No image</span>
                           </div>
                         )}
                         <div className="p-6">

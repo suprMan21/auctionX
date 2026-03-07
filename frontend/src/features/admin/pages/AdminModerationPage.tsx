@@ -99,7 +99,7 @@ const QueueCard = ({
     </div>
 
     {/* Meta */}
-    <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+    <div className="flex flex-wrap gap-4 text-xs text-gray-400">
       {item.priority != null && <span>Priority: {item.priority}</span>}
       {item.brand && <span>Brand: {item.brand}</span>}
       <span>Flagged: {item.flagged_by_system ? 'System' : 'Manual'}</span>
@@ -107,7 +107,7 @@ const QueueCard = ({
     </div>
 
     {/* Note: images not available */}
-    <p className="text-xs text-gray-600 italic">Listing images not available in moderation queue.</p>
+    <p className="text-xs text-gray-500 italic">Listing images not available in moderation queue.</p>
 
     {/* Actions — only show for actionable statuses */}
     {(item.status === 'pending' || item.status === 'in_review') && (
@@ -236,7 +236,7 @@ export const AdminModerationPage = () => {
         </div>
       ) : queue.length === 0 ? (
         <div data-testid="empty-queue" className="glass rounded-2xl p-6">
-          <p className="text-gray-500 text-sm">No items in queue.</p>
+          <p className="text-gray-400 text-sm">No items in queue.</p>
         </div>
       ) : (
         <div data-testid="moderation-queue" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -267,7 +267,7 @@ export const AdminModerationPage = () => {
               onChange={(e) => setRejectNotes(e.target.value)}
               rows={4}
               placeholder="Explain why this listing is being rejected…"
-              className="w-full px-4 py-3 rounded-xl bg-dark-700 text-white placeholder:text-gray-500
+              className="w-full px-4 py-3 rounded-xl bg-dark-700 text-white placeholder:text-gray-400
                          border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
                          resize-none"
             />

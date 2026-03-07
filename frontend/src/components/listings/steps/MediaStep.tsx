@@ -11,7 +11,7 @@ export function MediaStep() {
         <p className="text-sm text-gray-400 mb-1">
           Upload up to 10 photos or videos. The first image will be your primary photo.
         </p>
-        <ul className="text-xs text-gray-500 list-disc list-inside space-y-1">
+        <ul className="text-xs text-gray-400 list-disc list-inside space-y-1">
           <li>Images: JPG, PNG, WebP, GIF (max 5MB each)</li>
           <li>Videos: MP4 (max 50MB each)</li>
           <li>At least 1 photo required to publish</li>

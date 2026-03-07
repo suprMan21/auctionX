@@ -59,9 +59,9 @@ const AuditRow = ({ log }: { log: AuditLog }) => {
         <td className="px-4 py-3 text-sm text-white max-w-[160px] truncate">{log.admin_email}</td>
         <td className="px-4 py-3 text-sm text-primary-400">{log.action.replace(/_/g, ' ')}</td>
         <td className="px-4 py-3 text-xs text-gray-400">{log.entity_type}</td>
-        <td className="px-4 py-3 text-xs text-gray-500 font-mono">{log.entity_id.slice(0, 12)}…</td>
+        <td className="px-4 py-3 text-xs text-gray-400 font-mono">{log.entity_id.slice(0, 12)}…</td>
         <td className="px-4 py-3 text-xs text-gray-400">{log.brand}</td>
-        <td className="px-4 py-3 text-right text-xs text-gray-500">{expanded ? '▲' : '▼'}</td>
+        <td className="px-4 py-3 text-right text-xs text-gray-400">{expanded ? '▲' : '▼'}</td>
       </tr>
 
       {expanded && (
@@ -72,7 +72,7 @@ const AuditRow = ({ log }: { log: AuditLog }) => {
                 {JSON.stringify(log.changes, null, 2)}
               </pre>
             ) : (
-              <p className="text-xs text-gray-500">No change data recorded.</p>
+              <p className="text-xs text-gray-400">No change data recorded.</p>
             )}
             {log.reason && (
               <p className="text-xs text-gray-400 mt-2">Reason: {log.reason}</p>
@@ -164,7 +164,7 @@ export const AdminAuditLogPage = () => {
           value={actionInput}
           onChange={(e) => setActionInput(e.target.value)}
           placeholder="Filter by action…"
-          className="flex-1 min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-500
+          className="flex-1 min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-400
                      border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
         />
         <input
@@ -172,7 +172,7 @@ export const AdminAuditLogPage = () => {
           value={entityInput}
           onChange={(e) => setEntityInput(e.target.value)}
           placeholder="Filter by entity type…"
-          className="flex-1 min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-500
+          className="flex-1 min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-400
                      border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
         />
         <button
@@ -205,11 +205,11 @@ export const AdminAuditLogPage = () => {
           </div>
         ) : !result || result.logs.length === 0 ? (
           <div className="p-6">
-            <p className="text-gray-500 text-sm">No audit log entries found.</p>
+            <p className="text-gray-400 text-sm">No audit log entries found.</p>
           </div>
         ) : (
           <>
-            <p className="px-4 pt-3 text-xs text-gray-500">Click a row to expand change details.</p>
+            <p className="px-4 pt-3 text-xs text-gray-400">Click a row to expand change details.</p>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-dark-700 border-b border-white/10">

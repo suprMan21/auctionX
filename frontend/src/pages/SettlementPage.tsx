@@ -104,7 +104,7 @@ function BuyerView({ settlement, onDisputeOpened }: { settlement: Settlement; on
             >
               Pay Now — {centsToDisplay(settlement.gross_amount_cents, currency)}
             </button>
-            <p className="text-xs text-gray-500 text-center">
+            <p className="text-xs text-gray-400 text-center">
               Card payment window: 20 min · Crypto (if offered): 72 hrs
             </p>
           </div>
@@ -131,7 +131,7 @@ function BuyerView({ settlement, onDisputeOpened }: { settlement: Settlement; on
               An admin will review your case.
             </p>
             <label htmlFor="dispute-reason" className="block text-sm text-gray-300 mb-2">
-              Describe the issue <span className="text-gray-500">(min. 20 characters)</span>
+              Describe the issue <span className="text-gray-400">(min. 20 characters)</span>
             </label>
             <textarea
               id="dispute-reason"
@@ -140,9 +140,9 @@ function BuyerView({ settlement, onDisputeOpened }: { settlement: Settlement; on
               onChange={(e) => setDisputeReason(e.target.value)}
               placeholder="Describe the problem in detail…"
               className="w-full rounded-xl bg-white/5 border border-white/10 text-white text-sm px-3 py-2
-                         placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+                         placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
             />
-            <p className="text-xs text-gray-500 mt-1 mb-3">{disputeReason.trim().length} / 20 minimum</p>
+            <p className="text-xs text-gray-400 mt-1 mb-3">{disputeReason.trim().length} / 20 minimum</p>
             <button
               type="button"
               onClick={handleOpenDispute}
@@ -243,7 +243,7 @@ function SellerView({ settlement }: { settlement: Settlement }) {
             )}
             {settlement.payment_window_expires_at && (
               <div className="mt-3">
-                <p className="text-xs text-gray-500 mb-2">Current window expires:</p>
+                <p className="text-xs text-gray-400 mb-2">Current window expires:</p>
                 <CountdownTimer endTime={settlement.payment_window_expires_at} />
               </div>
             )}

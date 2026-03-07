@@ -122,7 +122,7 @@ export function LocationStep() {
             value={draft.city}
             onChange={(e) => handleCityChange(e.target.value)}
             maxLength={64}
-            className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+            className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
             placeholder="e.g., Toronto"
             required
           />
@@ -131,7 +131,7 @@ export function LocationStep() {
         {draft.country === 'CA' && (
           <div>
             <label htmlFor="postal-fsa" className="block text-sm font-medium text-gray-300 mb-1.5">
-              Postal Code FSA <span className="text-gray-500">(Optional)</span>
+              Postal Code FSA <span className="text-gray-400">(Optional)</span>
             </label>
             <input
               type="text"
@@ -140,10 +140,10 @@ export function LocationStep() {
               onChange={(e) => handlePostalChange(e.target.value)}
               maxLength={3}
               pattern="[A-Z]\d[A-Z]"
-              className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+              className="w-full bg-dark-600 text-white border border-transparent rounded-xl px-4 py-3 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
               placeholder="e.g., M5V"
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-gray-400">
               First 3 characters only (e.g., M5V for M5V 3A8)
             </p>
           </div>

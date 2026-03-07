@@ -185,7 +185,7 @@ export const AdminUsersPage = () => {
           defaultValue={searchInput}
           onChange={(e) => handleSearchChange(e.target.value)}
           placeholder="Search by email or name…"
-          className="flex-1 min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-500
+          className="flex-1 min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-400
                      border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
         />
         <select
@@ -213,7 +213,7 @@ export const AdminUsersPage = () => {
           </div>
         ) : !result || result.users.length === 0 ? (
           <div className="p-6">
-            <p className="text-gray-500 text-sm">No users found.</p>
+            <p className="text-gray-400 text-sm">No users found.</p>
           </div>
         ) : (
           <>

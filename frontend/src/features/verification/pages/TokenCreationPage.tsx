@@ -13,7 +13,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
-import { supabase } from '@/features/auth/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import type { Verification } from '../types/verification';
 
 type Step = 'intro' | 'record' | 'upload' | 'nfc' | 'success';
@@ -475,7 +475,7 @@ export function TokenCreationPage() {
                 <code className="block text-primary-300 text-xs bg-dark-700 rounded-xl p-3 break-all">
                   {window.location.origin}/verify/{verification.token_name}
                 </code>
-                <p className="text-gray-500 text-xs">
+                <p className="text-gray-400 text-xs">
                   After programming the tag, come back and tap Skip below.
                 </p>
               </>

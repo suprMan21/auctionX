@@ -221,7 +221,7 @@ export function NotificationsPage() {
                     {notif.title}
                   </p>
                   <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{notif.body}</p>
-                  <p className="text-xs text-gray-500 mt-1">{timeAgo(notif.created_at)}</p>
+                  <p className="text-xs text-gray-400 mt-1">{timeAgo(notif.created_at)}</p>
                 </div>
               </button>
             ))}

@@ -66,7 +66,7 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
           Your Bid Amount
         </label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
           <input
             type="text"
             inputMode="decimal"
@@ -76,7 +76,7 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
               const value = e.target.value.replace(/[^0-9.]/g, '');
               setBidAmount(value);
             }}
-            className="w-full pl-8 pr-4 py-2 rounded-xl bg-dark-700 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full pl-8 pr-4 py-2 rounded-xl bg-dark-700 border border-white/10 text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
             placeholder={minimumDollars}
             required
           />
@@ -105,7 +105,7 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
             Maximum Bid Amount
           </label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
             <input
               type="text"
               inputMode="decimal"
@@ -115,7 +115,7 @@ export function BidPlacementForm({ auction, onSuccess }: BidPlacementFormProps) 
                 const value = e.target.value.replace(/[^0-9.]/g, '');
                 setMaxBidAmount(value);
               }}
-              className="w-full pl-8 pr-4 py-2 rounded-xl bg-dark-700 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full pl-8 pr-4 py-2 rounded-xl bg-dark-700 border border-white/10 text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
               placeholder={minimumDollars}
               required={useProxyBid}
             />

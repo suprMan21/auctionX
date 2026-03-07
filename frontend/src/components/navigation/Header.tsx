@@ -212,7 +212,7 @@ export function Header() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search…"
               className="w-full h-9 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm
-                         placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                         placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </form>
 
@@ -313,7 +313,7 @@ export function Header() {
                 placeholder="Search listings…"
                 autoFocus
                 className="flex-1 h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm
-                           placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                           placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <button
                 type="submit"
@@ -376,7 +376,7 @@ export function Header() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search listings…"
                 className="flex-1 h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm
-                           placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                           placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <button
                 type="submit"

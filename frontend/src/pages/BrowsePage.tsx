@@ -17,7 +17,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
-import { supabase } from '@/features/auth/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { ListingCard } from '@/components/listings/ListingCard';
 import { api } from '@/lib/api';
 
@@ -173,7 +173,7 @@ export function BrowsePage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search listings…"
                 className="flex-1 h-12 px-4 rounded-xl bg-white/5 border border-white/10 text-white
-                           placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                           placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <button
                 type="submit"
@@ -294,7 +294,7 @@ export function BrowsePage() {
                       Page <span className="text-white font-semibold">{pageParam}</span> of{' '}
                       <span className="text-white font-semibold">{totalPages}</span>
                       {total > 0 && (
-                        <span className="ml-2 text-gray-500">({total.toLocaleString()} total)</span>
+                        <span className="ml-2 text-gray-400">({total.toLocaleString()} total)</span>
                       )}
                     </span>
                     <button

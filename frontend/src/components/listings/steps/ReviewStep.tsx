@@ -47,7 +47,7 @@ export function ReviewStep() {
             <div>
               <h3 className="text-sm font-medium text-white mb-1">Basic Information</h3>
               <p className="text-sm text-gray-400">{draft.title}</p>
-              <p className="text-xs text-gray-500 mt-1">Condition: {draft.condition}</p>
+              <p className="text-xs text-gray-400 mt-1">Condition: {draft.condition}</p>
             </div>
             <button className="text-primary-400 text-sm hover:text-primary-300">Edit</button>
           </div>

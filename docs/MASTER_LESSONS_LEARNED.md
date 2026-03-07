@@ -219,6 +219,9 @@ cp frontend/src/types/database.types.ts backend/src/types/database.types.ts
 - Cards: Glassmorphism (`backdrop-blur` + border), use `glass` utility class
 - Rounded corners: `rounded-2xl` for cards, `rounded-xl` for buttons
 - WCAG 2.2 AA: 4.5:1 contrast minimum, visible focus indicators, keyboard nav
+- **Text contrast:** Never use `text-gray-500` or lower on dark backgrounds — use `text-gray-400` minimum. `text-gray-600` → `text-gray-500` for secondary text.
+- **Button gradient bleed:** Primary buttons use `overflow-hidden` to clip blur glow layer at rounded-xl boundary
+- **Accepted exception:** "Unmentionables" nav link uses pink/rose accent (`unmentionables` palette) for intentional brand differentiation — not a contrast violation
 
 ### State Management
 - Zustand for client state

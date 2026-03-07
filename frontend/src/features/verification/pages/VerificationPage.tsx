@@ -166,10 +166,10 @@ export function VerificationPage() {
                     {' → '}
                     @{transfer.to_user_id.slice(0, 8)}
                   </span>
-                  <span className="ml-auto text-gray-500 shrink-0">
+                  <span className="ml-auto text-gray-400 shrink-0">
                     {new Date(transfer.transferred_at).toLocaleDateString()}
                   </span>
-                  <span className="text-xs text-gray-600 bg-white/5 px-2 py-0.5 rounded-full shrink-0">
+                  <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full shrink-0">
                     {transfer.transfer_type}
                   </span>
                 </li>

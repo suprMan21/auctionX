@@ -161,7 +161,7 @@ export const AdminHealthPage = () => {
               <StatusChip status={health.status} />
             </div>
             {health.timestamp && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-400">
                 Server time: {new Date(health.timestamp).toLocaleString()}
               </p>
             )}

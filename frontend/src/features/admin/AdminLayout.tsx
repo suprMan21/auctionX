@@ -111,7 +111,7 @@ export const AdminLayout = () => {
 
       {/* Admin info + logout */}
       <div className="p-4 border-t border-white/10">
-        <p className="text-xs text-gray-500 truncate mb-3" title={session?.user.email}>
+        <p className="text-xs text-gray-400 truncate mb-3" title={session?.user.email}>
           {session?.user.email}
         </p>
         <button

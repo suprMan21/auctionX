@@ -185,7 +185,7 @@ export function ViewListing() {
                     )}
                     <div>
                       <p className="font-medium text-white">{listing.users.display_name || 'Anonymous'}</p>
-                      <p className="text-sm text-gray-500">Tier: {listing.users.seller_tier}</p>
+                      <p className="text-sm text-gray-400">Tier: {listing.users.seller_tier}</p>
                     </div>
                   </Link>
                 </div>

@@ -65,7 +65,7 @@ export const ForgotPasswordPage = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               className="w-full h-11 px-3 rounded-xl bg-dark-600 border border-white/10 text-white
-                         placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                         placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
 

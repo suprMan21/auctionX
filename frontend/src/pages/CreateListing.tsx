@@ -4,7 +4,7 @@ import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { supabase } from '@/features/auth/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { ErrorHandler, AppError, ErrorCode } from '@/lib/errors/ErrorHandler';
 import { api } from '@/lib/api';
 
@@ -167,7 +167,7 @@ export function CreateListing() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                       <p className="mt-2 text-gray-400">Click to upload photo</p>
-                      <p className="mt-1 text-sm text-gray-500">PNG, JPG, GIF up to 10MB</p>
+                      <p className="mt-1 text-sm text-gray-400">PNG, JPG, GIF up to 10MB</p>
                     </div>
                     <input
                       type="file"
@@ -209,7 +209,7 @@ export function CreateListing() {
                       rows={6}
                       placeholder="Describe your item in detail..."
                       className="w-full min-h-[120px] px-4 py-3 rounded-xl
-                                bg-dark-600 text-white placeholder:text-gray-500
+                                bg-dark-600 text-white placeholder:text-gray-400
                                 border border-transparent
                                 focus:outline-none focus:ring-2 focus:ring-primary-500 
                                 focus:ring-offset-2 focus:ring-offset-dark-800

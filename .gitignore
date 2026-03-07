@@ -11,6 +11,7 @@ functions/.runtimeconfig.json
 .env
 .env.*
 *.local
+.env.test
 
 # Logs
 npm-debug.log*

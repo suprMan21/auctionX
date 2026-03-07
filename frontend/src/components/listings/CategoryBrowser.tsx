@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../features/auth/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 interface Category {
   id: string;
@@ -110,7 +110,7 @@ export function CategoryBrowser({ selectedCategoryId, onSelect }: CategoryBrowse
             </span>
           </div>
           {isLeaf && (
-            <span className="text-xs text-gray-500">Selectable</span>
+            <span className="text-xs text-gray-400">Selectable</span>
           )}
         </button>
 
@@ -134,7 +134,7 @@ export function CategoryBrowser({ selectedCategoryId, onSelect }: CategoryBrowse
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search categories..."
-            className="w-full bg-dark-600 text-white rounded-xl px-4 py-3 border border-transparent placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full bg-dark-600 text-white rounded-xl px-4 py-3 border border-transparent placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
             aria-label="Search categories"
           />
         </div>

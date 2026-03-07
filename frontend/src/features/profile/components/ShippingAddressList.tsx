@@ -62,7 +62,7 @@ export function ShippingAddressList({
 
   if (addresses.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
+      <div className="text-center py-8 text-gray-400">
         <p>No shipping addresses yet.</p>
         <p className="text-sm mt-1">Add one to get started!</p>
       </div>
@@ -146,7 +146,7 @@ export function ShippingAddressList({
                 }
                 className={`text-xs font-medium disabled:opacity-50 ${
                   address.is_default
-                    ? "text-gray-500 cursor-not-allowed"
+                    ? "text-gray-400 cursor-not-allowed"
                     : "text-red-400 hover:text-red-300"
                 }`}
                 title={
