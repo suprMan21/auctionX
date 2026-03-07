@@ -380,6 +380,10 @@ From `DOCUMENTATION_STANDARD.md` — commit should NOT happen until all artifact
 | 35 | RLS self-referencing policy | Policy on X queries X | `SECURITY DEFINER` helper function | Session I |
 | 36 | TEXT vs enum array comparison | `text = ANY(enum_col)` | `text = ANY(enum_col::text[])` | Session I |
 | 37 | admin_users row missing | Assume Dashboard user exists | Verify row exists in `admin_users` table | Session I |
+| 38 | Public pages missing header | Render page directly | Wrap in `PublicWithHeader` layout | Session J |
+| 39 | Crowded nav bar | Show all items in primary nav | Primary nav: 3 items max; rest in user dropdown | Session J |
+| 40 | Missing route = blank page | Assume route exists if link exists | Verify route + link both exist | Session J |
+| 41 | Gradient button inner padding | Rely on outer button padding only | Inner gradient div needs own `sizeClasses` + `flex items-center justify-center` | Session J |
 
 ---
 

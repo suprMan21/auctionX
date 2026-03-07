@@ -38,8 +38,8 @@ export function Button({
         className={`${baseClasses} group`}
         {...props}
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-accent-500 rounded-xl blur opacity-50 group-hover:opacity-75 transition-opacity" />
-        <div className="relative bg-gradient-to-r from-primary-500 to-accent-500 rounded-xl text-white">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-500 via-primary-400 to-accent-500 rounded-xl blur opacity-50 group-hover:opacity-75 transition-opacity" />
+        <div className={`relative bg-gradient-to-br from-primary-500 via-primary-400 to-accent-500 rounded-xl text-white flex items-center justify-center ${sizeClasses[size]}`}>
           {children}
         </div>
       </button>

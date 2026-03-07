@@ -32,6 +32,7 @@ import { NotificationsPage } from './features/notifications/pages/NotificationsP
 import { NotificationPreferencesPage } from './features/notifications/pages/NotificationPreferencesPage';
 import { AgeGateGuard } from '@/components/AgeGate/AgeGateGuard';
 import { UnmentionablesBrowsePage } from '@/pages/UnmentionablesBrowsePage';
+import { Dashboard } from '@/pages/Dashboard';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading, initialized } = useAuth();
@@ -48,6 +49,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
+  return (
+    <>
+      <Header />
+      {children}
+    </>
+  );
+}
+
+function PublicWithHeader({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Header />
@@ -109,10 +119,19 @@ function App() {
               </AgeGateGuard>
             }
           />
-          <Route path="/browse" element={<BrowsePage />} />
-          <Route path="/browse/:categorySlug" element={<BrowsePage />} />
-          <Route path="/search" element={<SearchResultsPage />} />
-          <Route path="/listings/:id" element={<ViewListing />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="/browse" element={<PublicWithHeader><BrowsePage /></PublicWithHeader>} />
+          <Route path="/browse/:categorySlug" element={<PublicWithHeader><BrowsePage /></PublicWithHeader>} />
+          <Route path="/search" element={<PublicWithHeader><SearchResultsPage /></PublicWithHeader>} />
+          <Route path="/listings/:id" element={<PublicWithHeader><ViewListing /></PublicWithHeader>} />
 
           {/* NFC Verification — /verify/create/:verificationId MUST precede /verify/:tokenName */}
           <Route
@@ -123,9 +142,9 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/verify/:tokenName" element={<VerificationPage />} />
-          <Route path="/auctions/:id" element={<AuctionDetailPage />} />
-          <Route path="/seller/:id" element={<SellerProfilePage />} />
+          <Route path="/verify/:tokenName" element={<PublicWithHeader><VerificationPage /></PublicWithHeader>} />
+          <Route path="/auctions/:id" element={<PublicWithHeader><AuctionDetailPage /></PublicWithHeader>} />
+          <Route path="/seller/:id" element={<PublicWithHeader><SellerProfilePage /></PublicWithHeader>} />
 
           <Route
             path="/settlements/:settlementId"

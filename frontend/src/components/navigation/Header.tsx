@@ -1,9 +1,24 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { NotificationBell } from '@/features/notifications/components/NotificationBell';
+
+function useIsAdmin(userId: string | undefined) {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    if (!userId) { setIsAdmin(false); return; }
+    supabase
+      .from('admin_users')
+      .select('admin_id')
+      .eq('admin_id', userId)
+      .eq('is_active', true)
+      .single()
+      .then(({ data }) => setIsAdmin(!!data));
+  }, [userId]);
+  return isAdmin;
+}
 
 function useUnreadCount(userId: string | undefined) {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -74,9 +89,12 @@ export function Header() {
   const navigate = useNavigate();
   const location = useLocation();
   const unreadCount = useUnreadCount(user?.id);
+  const isAdmin = useIsAdmin(user?.id);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const isUnmentionablesRoute = location.pathname.startsWith('/unmentionables');
 
@@ -101,6 +119,18 @@ export function Header() {
     }
     return () => { document.body.style.overflow = ''; };
   }, [menuOpen]);
+
+  // Close user dropdown on click outside
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [userMenuOpen]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -152,38 +182,11 @@ export function Header() {
                 </Link>
               </li>
               {user && (
-                <>
-                  <li>
-                    <Link to="/dashboard" className={navLinkClass}>
-                      Dashboard
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/my-listings" className={navLinkClass}>
-                      My Listings
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/payouts" className={navLinkClass}>
-                      Payouts
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/messages" className={`relative ${navLinkClass}`}>
-                      Messages
-                      {unreadCount > 0 && (
-                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center font-semibold">
-                          {unreadCount > 9 ? '9+' : unreadCount}
-                        </span>
-                      )}
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/listings/create" className={navLinkClass}>
-                      Create Listing
-                    </Link>
-                  </li>
-                </>
+                <li>
+                  <Link to="/dashboard" className={navLinkClass}>
+                    Dashboard
+                  </Link>
+                </li>
               )}
               <li>
                 <Link
@@ -202,18 +205,23 @@ export function Header() {
           <form
             onSubmit={handleSearchSubmit}
             role="search"
-            className="hidden lg:flex items-center gap-2 flex-1 max-w-xs mx-6"
+            className="hidden lg:flex items-center gap-2 flex-1 max-w-md mx-6"
           >
             <label htmlFor="header-search" className="sr-only">Search listings</label>
-            <input
-              id="header-search"
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search…"
-              className="w-full h-9 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm
-                         placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+            <div className="relative w-full">
+              <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+              </svg>
+              <input
+                id="header-search"
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search listings…"
+                className="w-full h-11 pl-9 pr-4 rounded-xl bg-white/5 border border-white/10 text-white text-sm
+                           placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
           </form>
 
           <div className="flex items-center gap-3">
@@ -241,25 +249,68 @@ export function Header() {
             {user ? (
               <>
                 <NotificationBell userId={user.id} />
-                <Link
-                  to="/profile"
-                  className="hidden sm:flex items-center gap-2 px-4 py-2 min-h-[44px] rounded-xl
-                             text-gray-300 hover:text-white hover:bg-white/5 transition-colors
-                             focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
-                  aria-label="View profile"
-                >
-                  Profile
-                </Link>
-                <Button
-                  variant="ghost"
-                  size="md"
-                  onClick={handleSignOut}
-                  aria-label="Sign out"
-                  data-testid="logout-button"
-                  className="hidden lg:inline-flex"
-                >
-                  Sign Out
-                </Button>
+                {/* User dropdown (desktop) */}
+                <div className="hidden lg:block relative" ref={userMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setUserMenuOpen((o) => !o)}
+                    className="flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-xl text-gray-300 hover:text-white hover:bg-white/5 transition-colors
+                               focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+                    aria-expanded={userMenuOpen}
+                    aria-haspopup="true"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-sm font-semibold">
+                      {user.email?.[0]?.toUpperCase() ?? 'U'}
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                  {userMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-56 rounded-xl bg-dark-700 border border-white/10 shadow-xl py-1 z-50">
+                      <Link to="/my-listings" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
+                        My Listings
+                      </Link>
+                      <Link to="/listings/create" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
+                        Create Listing
+                      </Link>
+                      <Link to="/messages" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
+                        Messages
+                        {unreadCount > 0 && (
+                          <span className="ml-auto w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center font-semibold">
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                        )}
+                      </Link>
+                      <Link to="/payouts" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
+                        Payouts
+                      </Link>
+                      <Link to="/profile" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
+                        Profile
+                      </Link>
+                      {isAdmin && (
+                        <>
+                          <div className="border-t border-white/10 my-1" />
+                          <Link to="/admin" className="flex items-center gap-2 px-4 py-2.5 text-sm text-primary-400 hover:text-primary-300 hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                              <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            Admin Console
+                          </Link>
+                        </>
+                      )}
+                      <div className="border-t border-white/10 my-1" />
+                      <button
+                        type="button"
+                        onClick={() => { setUserMenuOpen(false); handleSignOut(); }}
+                        className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"
+                        data-testid="logout-button"
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
               <div className="hidden lg:flex items-center gap-3">
@@ -450,6 +501,24 @@ export function Header() {
               <span className="ml-auto text-xs text-unmentionables-500/60">18+</span>
             </Link>
           </div>
+
+          {/* Admin link (mobile) */}
+          {isAdmin && (
+            <div className="border-t border-white/10 mt-4 pt-4">
+              <Link
+                to="/admin"
+                className="flex items-center gap-3 w-full px-4 py-3 min-h-[44px] rounded-xl
+                           text-primary-400 hover:text-primary-300 hover:bg-white/5 transition-colors
+                           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+                onClick={handleMobileNavClick}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                Admin Console
+              </Link>
+            </div>
+          )}
 
           {/* Auth actions */}
           <div className="border-t border-white/10 mt-4 pt-4 space-y-1">
