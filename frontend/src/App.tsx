@@ -34,9 +34,9 @@ import { AgeGateGuard } from '@/components/AgeGate/AgeGateGuard';
 import { UnmentionablesBrowsePage } from '@/pages/UnmentionablesBrowsePage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+  const { session, loading, initialized } = useAuth();
 
-  if (loading) {
+  if (!initialized || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-gray-400">Loading...</div>

@@ -4,7 +4,7 @@ import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { supabase } from '@/features/auth/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { ErrorHandler, AppError, ErrorCode } from '@/lib/errors/ErrorHandler';
 
 interface Profile {
@@ -14,7 +14,7 @@ interface Profile {
 }
 
 export function ProfilePage() {
-  const { user } = useAuth();
+  const { user, initialized } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -25,12 +25,9 @@ export function ProfilePage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
+    if (!initialized || !user) return;
     loadProfile();
-  }, [user, navigate]);
+  }, [user, initialized]);
 
   const loadProfile = async () => {
     if (!user) return;

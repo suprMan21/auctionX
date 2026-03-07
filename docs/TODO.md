@@ -1,6 +1,15 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-04 (Session E — Backend Hardening)
+Last updated: 2026-03-06 (Session H_c — Auth Race Condition Fix)
+
+---
+
+## Auth / Session Fixes
+
+- [x] **DONE (Session H_c):** Fix ProtectedRoute race condition — add `initialized` guard
+  - `App.tsx` inline ProtectedRoute now checks `!initialized || loading` before rendering
+  - Removed redundant page-level auth redirects from `MyListings.tsx` and `ProfilePage.tsx`
+  - Deleted unused `features/auth/components/ProtectedRoute.tsx` (zero imports)
 
 ---
 

@@ -1,6 +1,6 @@
 # AuctionX — Master Lessons Learned
 
-**Mandatory review before every module. Last updated: 2026-03-04**
+**Mandatory review before every module. Last updated: 2026-03-06**
 
 ---
 
@@ -177,6 +177,12 @@ cp frontend/src/types/database.types.ts backend/src/types/database.types.ts
 ---
 
 ## 5. Frontend & React Patterns
+
+### Auth Initialization
+- `useAuth()` exposes `initialized` — must be checked in route guards alongside `loading`
+- `loading` can be `false` before `supabase.auth.getSession()` resolves on fresh page load
+- Without `!initialized` check, authenticated users get redirected to `/login` on refresh
+- Page-level auth redirects are redundant when `ProtectedRoute` already handles them — remove to avoid maintenance drift
 
 ### Route Order
 - Specific routes before parameterized: `/verify/create/:verificationId` before `/verify/:tokenName`
@@ -359,6 +365,7 @@ From `DOCUMENTATION_STANDARD.md` — commit should NOT happen until all artifact
 | 29 | user_role enum casing | `ADMIN`, `SUPER_ADMIN` | `admin`, `super_admin` | Session B |
 | 30 | auth.users ON CONFLICT | `ON CONFLICT (email)` | Existence check before insert | Session B |
 | 31 | `constructEventAsync` await | `event = constructEventAsync(...)` | `event = await constructEventAsync(...)` | Session E |
+| 32 | ProtectedRoute race condition | Check `loading` only | Check `!initialized \|\| loading` | Session H_c |
 
 ---
 

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { supabase } from '@/features/auth/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 interface Listing {
   id: string;
@@ -14,18 +14,14 @@ interface Listing {
 }
 
 export function MyListings() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
+  const { user, initialized } = useAuth();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
+    if (!initialized || !user) return;
     loadListings();
-  }, [user, navigate]);
+  }, [user, initialized]);
 
   const loadListings = async () => {
     if (!user) return;
