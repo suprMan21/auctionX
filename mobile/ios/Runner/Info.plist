@@ -61,6 +61,12 @@
 	</array>
 	<key>NFCReaderUsageDescription</key>
 	<string>AuctionX uses NFC to verify the authenticity of physical items</string>
+	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+	<array>
+		<string>D2760000850101</string>
+	</array>
+	<key>FlutterDeepLinkingEnabled</key>
+	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

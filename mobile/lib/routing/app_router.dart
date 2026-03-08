@@ -8,7 +8,10 @@ import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/register_screen.dart';
 import '../features/auth/presentation/screens/splash_screen.dart';
 import '../features/browse/presentation/screens/browse_screen.dart';
-import '../features/nfc/presentation/screens/nfc_placeholder_screen.dart';
+import '../features/nfc/presentation/screens/nfc_scan_screen.dart';
+import '../features/nfc/presentation/screens/tag_detail_screen.dart';
+import '../features/nfc/presentation/screens/scan_history_screen.dart';
+import '../features/nfc/presentation/providers/nfc_scan_provider.dart';
 import '../features/activity/presentation/screens/activity_screen.dart';
 import '../features/profile/presentation/screens/profile_screen.dart';
 import '../features/onboarding/presentation/screens/onboarding_screen.dart';
@@ -41,6 +44,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           currentPath == RouteNames.forgotPassword;
       final isSplash = currentPath == RouteNames.splash;
       final isOnboarding = currentPath == RouteNames.onboarding;
+      final isVerify = currentPath == RouteNames.verify;
 
       if (isInitialOrLoading) {
         return isSplash ? null : RouteNames.splash;
@@ -50,7 +54,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return RouteNames.browse;
       }
 
-      if (!isAuthenticated && !isAuthRoute && !isSplash && !isOnboarding) {
+      if (!isAuthenticated && !isAuthRoute && !isSplash && !isOnboarding && !isVerify) {
         return RouteNames.login;
       }
 
@@ -77,6 +81,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RouteNames.forgotPassword,
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
+      // Deep link: /verify?picc_data=...&cmac=...
+      GoRoute(
+        path: RouteNames.verify,
+        builder: (context, state) {
+          final piccData = state.uri.queryParameters['picc_data'] ?? '';
+          final cmac = state.uri.queryParameters['cmac'] ?? '';
+          // Trigger auto-validation via provider
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (piccData.isNotEmpty && cmac.isNotEmpty) {
+              final container = ProviderScope.containerOf(context);
+              container
+                  .read(nfcScanNotifierProvider.notifier)
+                  .validateFromParams(piccData: piccData, cmac: cmac);
+            }
+          });
+          return const NfcScanScreen();
+        },
+      ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => AppScaffold(child: child),
@@ -90,8 +112,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: RouteNames.nfc,
             pageBuilder: (context, state) => const NoTransitionPage(
-              child: NfcPlaceholderScreen(),
+              child: NfcScanScreen(),
             ),
+          ),
+          GoRoute(
+            path: '${RouteNames.tagDetail}/:tagId',
+            builder: (context, state) => TagDetailScreen(
+              tagId: state.pathParameters['tagId']!,
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.scanHistory,
+            builder: (context, state) => const ScanHistoryScreen(),
           ),
           GoRoute(
             path: RouteNames.activity,

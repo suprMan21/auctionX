@@ -6,4 +6,7 @@ class ApiConstants {
   static const apiBaseUrl = 'https://vw7zy9mkyg.us-east-2.awsapprunner.com/api/v1';
   static const connectTimeout = Duration(seconds: 15);
   static const receiveTimeout = Duration(seconds: 15);
+
+  /// Set to false for physical NFC tag testing
+  static const bool kUseMockNfc = true;
 }

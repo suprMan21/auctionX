@@ -11,4 +11,7 @@ class RouteNames {
   static const nfc = '/home/nfc';
   static const activity = '/home/activity';
   static const profile = '/home/profile';
+  static const verify = '/verify';
+  static const tagDetail = '/home/nfc/detail';
+  static const scanHistory = '/home/nfc/history';
 }
