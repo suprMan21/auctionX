@@ -45,6 +45,7 @@ dependencies:
   # Video Proof
   camera: ^0.11.0
   video_compress: ^3.1.3
+  watermark_kit: ^2.2.0
   path_provider: ^2.1.5
   permission_handler: ^11.3.1
   video_player: ^2.9.2

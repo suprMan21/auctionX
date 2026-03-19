@@ -1445,6 +1445,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.2.1"
+  watermark_kit:
+    dependency: "direct main"
+    description:
+      name: watermark_kit
+      sha256: "5aa4ab9ee7c005292179e3934953a567edd6e47677a74921be2720b312cb66ac"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   web:
     dependency: transitive
     description:
