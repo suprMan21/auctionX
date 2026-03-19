@@ -640,7 +640,7 @@ as String?,
 /// @nodoc
 mixin _$VerificationEvent {
 
- String get scanType; bool get cmacValid; String get createdAt;
+ String get scanType; bool get cmacValid; String get createdAt; String? get videoProofStatus;
 /// Create a copy of VerificationEvent
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -653,16 +653,16 @@ $VerificationEventCopyWith<VerificationEvent> get copyWith => _$VerificationEven
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VerificationEvent&&(identical(other.scanType, scanType) || other.scanType == scanType)&&(identical(other.cmacValid, cmacValid) || other.cmacValid == cmacValid)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VerificationEvent&&(identical(other.scanType, scanType) || other.scanType == scanType)&&(identical(other.cmacValid, cmacValid) || other.cmacValid == cmacValid)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.videoProofStatus, videoProofStatus) || other.videoProofStatus == videoProofStatus));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,scanType,cmacValid,createdAt);
+int get hashCode => Object.hash(runtimeType,scanType,cmacValid,createdAt,videoProofStatus);
 
 @override
 String toString() {
-  return 'VerificationEvent(scanType: $scanType, cmacValid: $cmacValid, createdAt: $createdAt)';
+  return 'VerificationEvent(scanType: $scanType, cmacValid: $cmacValid, createdAt: $createdAt, videoProofStatus: $videoProofStatus)';
 }
 
 
@@ -673,7 +673,7 @@ abstract mixin class $VerificationEventCopyWith<$Res>  {
   factory $VerificationEventCopyWith(VerificationEvent value, $Res Function(VerificationEvent) _then) = _$VerificationEventCopyWithImpl;
 @useResult
 $Res call({
- String scanType, bool cmacValid, String createdAt
+ String scanType, bool cmacValid, String createdAt, String? videoProofStatus
 });
 
 
@@ -690,12 +690,13 @@ class _$VerificationEventCopyWithImpl<$Res>
 
 /// Create a copy of VerificationEvent
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? scanType = null,Object? cmacValid = null,Object? createdAt = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? scanType = null,Object? cmacValid = null,Object? createdAt = null,Object? videoProofStatus = freezed,}) {
   return _then(_self.copyWith(
 scanType: null == scanType ? _self.scanType : scanType // ignore: cast_nullable_to_non_nullable
 as String,cmacValid: null == cmacValid ? _self.cmacValid : cmacValid // ignore: cast_nullable_to_non_nullable
 as bool,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
-as String,
+as String,videoProofStatus: freezed == videoProofStatus ? _self.videoProofStatus : videoProofStatus // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -780,10 +781,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String scanType,  bool cmacValid,  String createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String scanType,  bool cmacValid,  String createdAt,  String? videoProofStatus)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _VerificationEvent() when $default != null:
-return $default(_that.scanType,_that.cmacValid,_that.createdAt);case _:
+return $default(_that.scanType,_that.cmacValid,_that.createdAt,_that.videoProofStatus);case _:
   return orElse();
 
 }
@@ -801,10 +802,10 @@ return $default(_that.scanType,_that.cmacValid,_that.createdAt);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String scanType,  bool cmacValid,  String createdAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String scanType,  bool cmacValid,  String createdAt,  String? videoProofStatus)  $default,) {final _that = this;
 switch (_that) {
 case _VerificationEvent():
-return $default(_that.scanType,_that.cmacValid,_that.createdAt);case _:
+return $default(_that.scanType,_that.cmacValid,_that.createdAt,_that.videoProofStatus);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -821,10 +822,10 @@ return $default(_that.scanType,_that.cmacValid,_that.createdAt);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String scanType,  bool cmacValid,  String createdAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String scanType,  bool cmacValid,  String createdAt,  String? videoProofStatus)?  $default,) {final _that = this;
 switch (_that) {
 case _VerificationEvent() when $default != null:
-return $default(_that.scanType,_that.cmacValid,_that.createdAt);case _:
+return $default(_that.scanType,_that.cmacValid,_that.createdAt,_that.videoProofStatus);case _:
   return null;
 
 }
@@ -836,12 +837,13 @@ return $default(_that.scanType,_that.cmacValid,_that.createdAt);case _:
 @JsonSerializable()
 
 class _VerificationEvent implements VerificationEvent {
-  const _VerificationEvent({required this.scanType, required this.cmacValid, required this.createdAt});
+  const _VerificationEvent({required this.scanType, required this.cmacValid, required this.createdAt, this.videoProofStatus});
   factory _VerificationEvent.fromJson(Map<String, dynamic> json) => _$VerificationEventFromJson(json);
 
 @override final  String scanType;
 @override final  bool cmacValid;
 @override final  String createdAt;
+@override final  String? videoProofStatus;
 
 /// Create a copy of VerificationEvent
 /// with the given fields replaced by the non-null parameter values.
@@ -856,16 +858,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VerificationEvent&&(identical(other.scanType, scanType) || other.scanType == scanType)&&(identical(other.cmacValid, cmacValid) || other.cmacValid == cmacValid)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VerificationEvent&&(identical(other.scanType, scanType) || other.scanType == scanType)&&(identical(other.cmacValid, cmacValid) || other.cmacValid == cmacValid)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.videoProofStatus, videoProofStatus) || other.videoProofStatus == videoProofStatus));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,scanType,cmacValid,createdAt);
+int get hashCode => Object.hash(runtimeType,scanType,cmacValid,createdAt,videoProofStatus);
 
 @override
 String toString() {
-  return 'VerificationEvent(scanType: $scanType, cmacValid: $cmacValid, createdAt: $createdAt)';
+  return 'VerificationEvent(scanType: $scanType, cmacValid: $cmacValid, createdAt: $createdAt, videoProofStatus: $videoProofStatus)';
 }
 
 
@@ -876,7 +878,7 @@ abstract mixin class _$VerificationEventCopyWith<$Res> implements $VerificationE
   factory _$VerificationEventCopyWith(_VerificationEvent value, $Res Function(_VerificationEvent) _then) = __$VerificationEventCopyWithImpl;
 @override @useResult
 $Res call({
- String scanType, bool cmacValid, String createdAt
+ String scanType, bool cmacValid, String createdAt, String? videoProofStatus
 });
 
 
@@ -893,12 +895,13 @@ class __$VerificationEventCopyWithImpl<$Res>
 
 /// Create a copy of VerificationEvent
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? scanType = null,Object? cmacValid = null,Object? createdAt = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? scanType = null,Object? cmacValid = null,Object? createdAt = null,Object? videoProofStatus = freezed,}) {
   return _then(_VerificationEvent(
 scanType: null == scanType ? _self.scanType : scanType // ignore: cast_nullable_to_non_nullable
 as String,cmacValid: null == cmacValid ? _self.cmacValid : cmacValid // ignore: cast_nullable_to_non_nullable
 as bool,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
-as String,
+as String,videoProofStatus: freezed == videoProofStatus ? _self.videoProofStatus : videoProofStatus // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

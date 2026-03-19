@@ -38,6 +38,7 @@ abstract class VerificationEvent with _$VerificationEvent {
     required String scanType,
     required bool cmacValid,
     required String createdAt,
+    String? videoProofStatus,
   }) = _VerificationEvent;
 
   factory VerificationEvent.fromJson(Map<String, dynamic> json) =>

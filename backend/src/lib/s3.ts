@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const region = process.env.AWS_REGION || 'us-east-1';
@@ -34,4 +34,17 @@ export async function generatePresignedUrl(
   const publicUrl = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 
   return { uploadUrl, publicUrl };
+}
+
+/**
+ * Checks whether an object exists in S3 by issuing a HEAD request.
+ */
+export async function verifyS3ObjectExists(key: string): Promise<boolean> {
+  const client = getS3Client();
+  try {
+    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch {
+    return false;
+  }
 }

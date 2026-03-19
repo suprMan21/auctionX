@@ -4,8 +4,9 @@ import { RequestWithId } from '../middleware/requestId';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../lib/errors';
 import { withLogContext } from '../lib/logger';
-import { generatePresignedUrl } from '../lib/s3';
+import { generatePresignedUrl, verifyS3ObjectExists } from '../lib/s3';
 import { validateScan, parseSunMessage, decryptPiccData, verifyCmac } from '../services/nfc/ntag424';
+import { z } from 'zod';
 import { registerTagSchema, scanTagSchema, uploadProofSchema, transferSchema, mintSchema } from '../services/nfc/schemas';
 import { prepareNftMetadata } from '../services/nfc/pinataService';
 import { mintNftOnChain } from '../services/nfc/nftMinting';
@@ -292,7 +293,7 @@ export const uploadProof = async (req: NfcRequest, res: Response) => {
     const { uploadUrl, publicUrl } = await generatePresignedUrl(s3Key, contentType);
 
     // Insert verification event for the proof
-    await supabase
+    const { data: event, error: eventError } = await supabase
       .from('verification_events')
       .insert({
         tag_id: tagId,
@@ -300,11 +301,83 @@ export const uploadProof = async (req: NfcRequest, res: Response) => {
         scanned_by: userId,
         video_proof_url: publicUrl,
         video_proof_status: 'pending',
-      });
+      })
+      .select('id')
+      .single();
+
+    if (eventError) {
+      logger.error('proof_event_insert_failed', { tagId, error: eventError });
+      throw new AppError('internal', 'Failed to create proof record');
+    }
 
     logger.info('nfc_proof_upload_url_generated', { tagId, s3Key });
 
-    return res.json({ success: true, data: { uploadUrl, publicUrl, videoKey: s3Key } });
+    return res.json({ success: true, data: { uploadUrl, publicUrl, videoKey: s3Key, proofId: event.id } });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    }
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+/**
+ * POST /api/v1/nfc/proof/confirm
+ * Confirm that a video proof has been uploaded to S3.
+ */
+export const confirmProof = async (req: NfcRequest, res: Response) => {
+  const logger = withLogContext({ requestId: req.requestId, route: req.path });
+
+  try {
+    const userId = req.user?.id;
+    if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+    const confirmSchema = z.object({ proofId: z.string().uuid() });
+    const parsed = confirmSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+    }
+
+    const { proofId } = parsed.data;
+    const supabase = getServiceClient();
+
+    // Fetch the verification event
+    const { data: event, error } = await supabase
+      .from('verification_events')
+      .select('id, scanned_by, video_proof_url, video_proof_status')
+      .eq('id', proofId)
+      .maybeSingle();
+
+    if (error || !event) throw new AppError('not_found', 'Proof record not found');
+    if (event.scanned_by !== userId) throw new AppError('permission_denied', 'You did not create this proof');
+    if (event.video_proof_status === 'confirmed') {
+      return res.json({ success: true, data: { proofId, status: 'confirmed' } });
+    }
+
+    // Parse S3 key from the public URL and verify the object exists
+    if (event.video_proof_url) {
+      const url = new URL(event.video_proof_url);
+      const s3Key = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
+      const exists = await verifyS3ObjectExists(s3Key);
+      if (!exists) {
+        throw new AppError('not_found', 'Video file not found in storage — upload may still be in progress');
+      }
+    }
+
+    // Update status to confirmed
+    const { error: updateError } = await supabase
+      .from('verification_events')
+      .update({ video_proof_status: 'confirmed' })
+      .eq('id', proofId);
+
+    if (updateError) {
+      logger.error('proof_confirm_update_failed', { proofId, error: updateError });
+      throw new AppError('internal', 'Failed to confirm proof');
+    }
+
+    logger.info('nfc_proof_confirmed', { proofId });
+
+    return res.json({ success: true, data: { proofId, status: 'confirmed' } });
   } catch (error) {
     if (error instanceof AppError) {
       return res.status(error.status).json({ success: false, error: error.message, code: error.code });

@@ -5,6 +5,7 @@ import {
   registerTag,
   scanTag,
   uploadProof,
+  confirmProof,
   getTagVerification,
   getTagByUid,
   transferOwnership,
@@ -38,6 +39,7 @@ nfcRoutes.get('/tags', requireAuth, listSellerTags as unknown as RequestHandler)
 nfcRoutes.post('/register', requireAuth, registerTag as unknown as RequestHandler);
 nfcRoutes.post('/scan', nfcScanLimit, scanTag as unknown as RequestHandler);
 nfcRoutes.post('/proof', requireAuth, uploadProof as unknown as RequestHandler);
+nfcRoutes.post('/proof/confirm', requireAuth, confirmProof as unknown as RequestHandler);
 nfcRoutes.post('/transfer', requireAuth, transferOwnership as unknown as RequestHandler);
 nfcRoutes.post('/mint', requireAuth, mintNft as unknown as RequestHandler);
 
