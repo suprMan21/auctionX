@@ -5,7 +5,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:video_compress/video_compress.dart';
 import '../../../../core/network/api_client.dart';
 import '../../data/datasources/camera_datasource.dart';
-import '../../data/datasources/ffmpeg_overlay_service.dart';
 import '../../data/datasources/video_proof_remote_datasource.dart';
 import '../../data/repositories/video_proof_repository_impl.dart';
 import '../../domain/entities/upload_progress.dart';
@@ -32,10 +31,8 @@ final videoProofNotifierProvider = StateNotifierProvider.autoDispose<
 class VideoProofNotifier extends StateNotifier<VideoProofState> {
   final VideoProofRepository _repository;
   final CameraDatasource _camera = CameraDatasource();
-  final FfmpegOverlayService _ffmpeg = FfmpegOverlayService();
   Timer? _timer;
   int _elapsed = 0;
-  DateTime? _recordingStartTime;
   Subscription? _compressSubscription;
   static const int _maxDuration = 60;
   static const int _minDuration = 15;
@@ -75,7 +72,6 @@ class VideoProofNotifier extends StateNotifier<VideoProofState> {
     try {
       await _camera.startRecording();
       _elapsed = 0;
-      _recordingStartTime = DateTime.now();
       state = VideoProofState.recording(current.controller, _elapsed);
 
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -105,32 +101,6 @@ class VideoProofNotifier extends StateNotifier<VideoProofState> {
     } catch (e) {
       if (mounted) {
         state = VideoProofState.error('Failed to stop recording: $e');
-      }
-    }
-  }
-
-  Future<void> burnOverlay(String filePath, String tagUid) async {
-    state = const VideoProofState.burning(0.0);
-
-    try {
-      final burnedPath = await _ffmpeg.burnOverlay(
-        inputPath: filePath,
-        tagUid: tagUid,
-        recordingStart: _recordingStartTime ?? DateTime.now(),
-        onProgress: (progress) {
-          if (mounted) {
-            state = VideoProofState.burning(progress);
-          }
-        },
-      );
-
-      if (mounted) {
-        await compressVideo(burnedPath);
-      }
-    } catch (e) {
-      if (mounted) {
-        // Fall back to compressing without overlay
-        state = VideoProofState.error('Overlay burn failed: $e');
       }
     }
   }
@@ -247,24 +217,7 @@ class VideoProofNotifier extends StateNotifier<VideoProofState> {
       if (state is VideoProofError) return;
     }
 
-    // Confirm the upload with backend
-    if (mounted && state is VideoProofUploading && proof.proofId != null) {
-      final confirmResult =
-          await _repository.confirmUpload(proofId: proof.proofId!);
-      confirmResult.fold(
-        (failure) {
-          if (mounted) {
-            // Upload succeeded but confirmation failed — still show success with note
-            state = VideoProofState.complete(proof.publicUrl ?? '');
-          }
-        },
-        (_) {
-          if (mounted) {
-            state = VideoProofState.complete(proof.publicUrl ?? '');
-          }
-        },
-      );
-    } else if (mounted && state is VideoProofUploading) {
+    if (mounted && state is VideoProofUploading) {
       state = VideoProofState.complete(proof.publicUrl ?? '');
     }
   }

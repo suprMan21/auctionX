@@ -18,7 +18,6 @@ sealed class VideoProofState with _$VideoProofState {
     String filePath,
     int durationSeconds,
   ) = VideoProofStopped;
-  const factory VideoProofState.burning(double progress) = VideoProofBurning;
   const factory VideoProofState.compressing(double progress) =
       VideoProofCompressing;
   const factory VideoProofState.compressed(

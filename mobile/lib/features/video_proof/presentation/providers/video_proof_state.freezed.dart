@@ -55,7 +55,7 @@ extension VideoProofStatePatterns on VideoProofState {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( VideoProofIdle value)?  idle,TResult Function( VideoProofInitializing value)?  initializing,TResult Function( VideoProofReady value)?  ready,TResult Function( VideoProofRecording value)?  recording,TResult Function( VideoProofStopped value)?  stopped,TResult Function( VideoProofBurning value)?  burning,TResult Function( VideoProofCompressing value)?  compressing,TResult Function( VideoProofCompressed value)?  compressed,TResult Function( VideoProofUploading value)?  uploading,TResult Function( VideoProofComplete value)?  complete,TResult Function( VideoProofError value)?  error,TResult Function( VideoProofPermissionDenied value)?  permissionDenied,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( VideoProofIdle value)?  idle,TResult Function( VideoProofInitializing value)?  initializing,TResult Function( VideoProofReady value)?  ready,TResult Function( VideoProofRecording value)?  recording,TResult Function( VideoProofStopped value)?  stopped,TResult Function( VideoProofCompressing value)?  compressing,TResult Function( VideoProofCompressed value)?  compressed,TResult Function( VideoProofUploading value)?  uploading,TResult Function( VideoProofComplete value)?  complete,TResult Function( VideoProofError value)?  error,TResult Function( VideoProofPermissionDenied value)?  permissionDenied,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case VideoProofIdle() when idle != null:
@@ -63,8 +63,7 @@ return idle(_that);case VideoProofInitializing() when initializing != null:
 return initializing(_that);case VideoProofReady() when ready != null:
 return ready(_that);case VideoProofRecording() when recording != null:
 return recording(_that);case VideoProofStopped() when stopped != null:
-return stopped(_that);case VideoProofBurning() when burning != null:
-return burning(_that);case VideoProofCompressing() when compressing != null:
+return stopped(_that);case VideoProofCompressing() when compressing != null:
 return compressing(_that);case VideoProofCompressed() when compressed != null:
 return compressed(_that);case VideoProofUploading() when uploading != null:
 return uploading(_that);case VideoProofComplete() when complete != null:
@@ -88,7 +87,7 @@ return permissionDenied(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( VideoProofIdle value)  idle,required TResult Function( VideoProofInitializing value)  initializing,required TResult Function( VideoProofReady value)  ready,required TResult Function( VideoProofRecording value)  recording,required TResult Function( VideoProofStopped value)  stopped,required TResult Function( VideoProofBurning value)  burning,required TResult Function( VideoProofCompressing value)  compressing,required TResult Function( VideoProofCompressed value)  compressed,required TResult Function( VideoProofUploading value)  uploading,required TResult Function( VideoProofComplete value)  complete,required TResult Function( VideoProofError value)  error,required TResult Function( VideoProofPermissionDenied value)  permissionDenied,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( VideoProofIdle value)  idle,required TResult Function( VideoProofInitializing value)  initializing,required TResult Function( VideoProofReady value)  ready,required TResult Function( VideoProofRecording value)  recording,required TResult Function( VideoProofStopped value)  stopped,required TResult Function( VideoProofCompressing value)  compressing,required TResult Function( VideoProofCompressed value)  compressed,required TResult Function( VideoProofUploading value)  uploading,required TResult Function( VideoProofComplete value)  complete,required TResult Function( VideoProofError value)  error,required TResult Function( VideoProofPermissionDenied value)  permissionDenied,}){
 final _that = this;
 switch (_that) {
 case VideoProofIdle():
@@ -96,8 +95,7 @@ return idle(_that);case VideoProofInitializing():
 return initializing(_that);case VideoProofReady():
 return ready(_that);case VideoProofRecording():
 return recording(_that);case VideoProofStopped():
-return stopped(_that);case VideoProofBurning():
-return burning(_that);case VideoProofCompressing():
+return stopped(_that);case VideoProofCompressing():
 return compressing(_that);case VideoProofCompressed():
 return compressed(_that);case VideoProofUploading():
 return uploading(_that);case VideoProofComplete():
@@ -117,7 +115,7 @@ return permissionDenied(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( VideoProofIdle value)?  idle,TResult? Function( VideoProofInitializing value)?  initializing,TResult? Function( VideoProofReady value)?  ready,TResult? Function( VideoProofRecording value)?  recording,TResult? Function( VideoProofStopped value)?  stopped,TResult? Function( VideoProofBurning value)?  burning,TResult? Function( VideoProofCompressing value)?  compressing,TResult? Function( VideoProofCompressed value)?  compressed,TResult? Function( VideoProofUploading value)?  uploading,TResult? Function( VideoProofComplete value)?  complete,TResult? Function( VideoProofError value)?  error,TResult? Function( VideoProofPermissionDenied value)?  permissionDenied,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( VideoProofIdle value)?  idle,TResult? Function( VideoProofInitializing value)?  initializing,TResult? Function( VideoProofReady value)?  ready,TResult? Function( VideoProofRecording value)?  recording,TResult? Function( VideoProofStopped value)?  stopped,TResult? Function( VideoProofCompressing value)?  compressing,TResult? Function( VideoProofCompressed value)?  compressed,TResult? Function( VideoProofUploading value)?  uploading,TResult? Function( VideoProofComplete value)?  complete,TResult? Function( VideoProofError value)?  error,TResult? Function( VideoProofPermissionDenied value)?  permissionDenied,}){
 final _that = this;
 switch (_that) {
 case VideoProofIdle() when idle != null:
@@ -125,8 +123,7 @@ return idle(_that);case VideoProofInitializing() when initializing != null:
 return initializing(_that);case VideoProofReady() when ready != null:
 return ready(_that);case VideoProofRecording() when recording != null:
 return recording(_that);case VideoProofStopped() when stopped != null:
-return stopped(_that);case VideoProofBurning() when burning != null:
-return burning(_that);case VideoProofCompressing() when compressing != null:
+return stopped(_that);case VideoProofCompressing() when compressing != null:
 return compressing(_that);case VideoProofCompressed() when compressed != null:
 return compressed(_that);case VideoProofUploading() when uploading != null:
 return uploading(_that);case VideoProofComplete() when complete != null:
@@ -149,15 +146,14 @@ return permissionDenied(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  idle,TResult Function()?  initializing,TResult Function( CameraController controller)?  ready,TResult Function( CameraController controller,  int elapsedSeconds)?  recording,TResult Function( String filePath,  int durationSeconds)?  stopped,TResult Function( double progress)?  burning,TResult Function( double progress)?  compressing,TResult Function( String filePath,  int fileSize,  int durationSeconds)?  compressed,TResult Function( UploadProgress progress)?  uploading,TResult Function( String publicUrl)?  complete,TResult Function( String message)?  error,TResult Function()?  permissionDenied,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  idle,TResult Function()?  initializing,TResult Function( CameraController controller)?  ready,TResult Function( CameraController controller,  int elapsedSeconds)?  recording,TResult Function( String filePath,  int durationSeconds)?  stopped,TResult Function( double progress)?  compressing,TResult Function( String filePath,  int fileSize,  int durationSeconds)?  compressed,TResult Function( UploadProgress progress)?  uploading,TResult Function( String publicUrl)?  complete,TResult Function( String message)?  error,TResult Function()?  permissionDenied,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case VideoProofIdle() when idle != null:
 return idle();case VideoProofInitializing() when initializing != null:
 return initializing();case VideoProofReady() when ready != null:
 return ready(_that.controller);case VideoProofRecording() when recording != null:
 return recording(_that.controller,_that.elapsedSeconds);case VideoProofStopped() when stopped != null:
-return stopped(_that.filePath,_that.durationSeconds);case VideoProofBurning() when burning != null:
-return burning(_that.progress);case VideoProofCompressing() when compressing != null:
+return stopped(_that.filePath,_that.durationSeconds);case VideoProofCompressing() when compressing != null:
 return compressing(_that.progress);case VideoProofCompressed() when compressed != null:
 return compressed(_that.filePath,_that.fileSize,_that.durationSeconds);case VideoProofUploading() when uploading != null:
 return uploading(_that.progress);case VideoProofComplete() when complete != null:
@@ -181,15 +177,14 @@ return permissionDenied();case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  idle,required TResult Function()  initializing,required TResult Function( CameraController controller)  ready,required TResult Function( CameraController controller,  int elapsedSeconds)  recording,required TResult Function( String filePath,  int durationSeconds)  stopped,required TResult Function( double progress)  burning,required TResult Function( double progress)  compressing,required TResult Function( String filePath,  int fileSize,  int durationSeconds)  compressed,required TResult Function( UploadProgress progress)  uploading,required TResult Function( String publicUrl)  complete,required TResult Function( String message)  error,required TResult Function()  permissionDenied,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  idle,required TResult Function()  initializing,required TResult Function( CameraController controller)  ready,required TResult Function( CameraController controller,  int elapsedSeconds)  recording,required TResult Function( String filePath,  int durationSeconds)  stopped,required TResult Function( double progress)  compressing,required TResult Function( String filePath,  int fileSize,  int durationSeconds)  compressed,required TResult Function( UploadProgress progress)  uploading,required TResult Function( String publicUrl)  complete,required TResult Function( String message)  error,required TResult Function()  permissionDenied,}) {final _that = this;
 switch (_that) {
 case VideoProofIdle():
 return idle();case VideoProofInitializing():
 return initializing();case VideoProofReady():
 return ready(_that.controller);case VideoProofRecording():
 return recording(_that.controller,_that.elapsedSeconds);case VideoProofStopped():
-return stopped(_that.filePath,_that.durationSeconds);case VideoProofBurning():
-return burning(_that.progress);case VideoProofCompressing():
+return stopped(_that.filePath,_that.durationSeconds);case VideoProofCompressing():
 return compressing(_that.progress);case VideoProofCompressed():
 return compressed(_that.filePath,_that.fileSize,_that.durationSeconds);case VideoProofUploading():
 return uploading(_that.progress);case VideoProofComplete():
@@ -209,15 +204,14 @@ return permissionDenied();}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  idle,TResult? Function()?  initializing,TResult? Function( CameraController controller)?  ready,TResult? Function( CameraController controller,  int elapsedSeconds)?  recording,TResult? Function( String filePath,  int durationSeconds)?  stopped,TResult? Function( double progress)?  burning,TResult? Function( double progress)?  compressing,TResult? Function( String filePath,  int fileSize,  int durationSeconds)?  compressed,TResult? Function( UploadProgress progress)?  uploading,TResult? Function( String publicUrl)?  complete,TResult? Function( String message)?  error,TResult? Function()?  permissionDenied,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  idle,TResult? Function()?  initializing,TResult? Function( CameraController controller)?  ready,TResult? Function( CameraController controller,  int elapsedSeconds)?  recording,TResult? Function( String filePath,  int durationSeconds)?  stopped,TResult? Function( double progress)?  compressing,TResult? Function( String filePath,  int fileSize,  int durationSeconds)?  compressed,TResult? Function( UploadProgress progress)?  uploading,TResult? Function( String publicUrl)?  complete,TResult? Function( String message)?  error,TResult? Function()?  permissionDenied,}) {final _that = this;
 switch (_that) {
 case VideoProofIdle() when idle != null:
 return idle();case VideoProofInitializing() when initializing != null:
 return initializing();case VideoProofReady() when ready != null:
 return ready(_that.controller);case VideoProofRecording() when recording != null:
 return recording(_that.controller,_that.elapsedSeconds);case VideoProofStopped() when stopped != null:
-return stopped(_that.filePath,_that.durationSeconds);case VideoProofBurning() when burning != null:
-return burning(_that.progress);case VideoProofCompressing() when compressing != null:
+return stopped(_that.filePath,_that.durationSeconds);case VideoProofCompressing() when compressing != null:
 return compressing(_that.progress);case VideoProofCompressed() when compressed != null:
 return compressed(_that.filePath,_that.fileSize,_that.durationSeconds);case VideoProofUploading() when uploading != null:
 return uploading(_that.progress);case VideoProofComplete() when complete != null:
@@ -491,72 +485,6 @@ class _$VideoProofStoppedCopyWithImpl<$Res>
 null == filePath ? _self.filePath : filePath // ignore: cast_nullable_to_non_nullable
 as String,null == durationSeconds ? _self.durationSeconds : durationSeconds // ignore: cast_nullable_to_non_nullable
 as int,
-  ));
-}
-
-
-}
-
-/// @nodoc
-
-
-class VideoProofBurning implements VideoProofState {
-  const VideoProofBurning(this.progress);
-  
-
- final  double progress;
-
-/// Create a copy of VideoProofState
-/// with the given fields replaced by the non-null parameter values.
-@JsonKey(includeFromJson: false, includeToJson: false)
-@pragma('vm:prefer-inline')
-$VideoProofBurningCopyWith<VideoProofBurning> get copyWith => _$VideoProofBurningCopyWithImpl<VideoProofBurning>(this, _$identity);
-
-
-
-@override
-bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoProofBurning&&(identical(other.progress, progress) || other.progress == progress));
-}
-
-
-@override
-int get hashCode => Object.hash(runtimeType,progress);
-
-@override
-String toString() {
-  return 'VideoProofState.burning(progress: $progress)';
-}
-
-
-}
-
-/// @nodoc
-abstract mixin class $VideoProofBurningCopyWith<$Res> implements $VideoProofStateCopyWith<$Res> {
-  factory $VideoProofBurningCopyWith(VideoProofBurning value, $Res Function(VideoProofBurning) _then) = _$VideoProofBurningCopyWithImpl;
-@useResult
-$Res call({
- double progress
-});
-
-
-
-
-}
-/// @nodoc
-class _$VideoProofBurningCopyWithImpl<$Res>
-    implements $VideoProofBurningCopyWith<$Res> {
-  _$VideoProofBurningCopyWithImpl(this._self, this._then);
-
-  final VideoProofBurning _self;
-  final $Res Function(VideoProofBurning) _then;
-
-/// Create a copy of VideoProofState
-/// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? progress = null,}) {
-  return _then(VideoProofBurning(
-null == progress ? _self.progress : progress // ignore: cast_nullable_to_non_nullable
-as double,
   ));
 }
 

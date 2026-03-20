@@ -156,16 +156,18 @@ class TagDetailScreen extends ConsumerWidget {
               ],
             ),
 
-          // Video proof button or badge
+          // Video proof section
           const SizedBox(height: 24),
           _buildVideoProofSection(context, ref, detail),
+
+          // Create Verification button
+          _buildMintSection(context, detail),
         ],
       ),
     );
   }
 
   Widget _buildVideoProofSection(BuildContext context, WidgetRef ref, TagDetail detail) {
-    // Check if a confirmed proof already exists
     final hasConfirmedProof = detail.events.any(
       (e) => e.scanType == 'proof_upload' && e.videoProofStatus == 'confirmed',
     );
@@ -193,7 +195,6 @@ class TagDetailScreen extends ConsumerWidget {
       );
     }
 
-    // Only show button if user is the tag owner and tag is in a valid state
     final authState = ref.watch(authNotifierProvider);
     final isOwner = authState.maybeWhen(
       authenticated: (user) => detail.tag.sellerId == user.id,
@@ -230,6 +231,43 @@ class TagDetailScreen extends ConsumerWidget {
             shadowColor: Colors.transparent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMintSection(BuildContext context, TagDetail detail) {
+    final hasConfirmedProof = detail.events.any(
+      (e) => e.scanType == 'proof_upload' && e.videoProofStatus == 'confirmed',
+    );
+    final alreadyMinted = detail.nft?.tokenId != null;
+
+    if (!hasConfirmedProof || alreadyMinted) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ElevatedButton.icon(
+            onPressed: () {
+              context.push('${RouteNames.mintConfirm}/${detail.tag.id}');
+            },
+            icon: const Icon(Icons.verified_outlined, color: Colors.white),
+            label: Text('Create Verification', style: AppTypography.labelLarge),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
         ),

@@ -15,7 +15,6 @@ abstract class VideoProof with _$VideoProof {
     String? uploadUrl,
     String? publicUrl,
     String? videoKey,
-    String? proofId,
   }) = _VideoProof;
 
   Duration get duration => Duration(milliseconds: durationMs);

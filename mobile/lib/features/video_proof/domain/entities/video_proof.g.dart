@@ -14,7 +14,6 @@ _VideoProof _$VideoProofFromJson(Map<String, dynamic> json) => _VideoProof(
   uploadUrl: json['uploadUrl'] as String?,
   publicUrl: json['publicUrl'] as String?,
   videoKey: json['videoKey'] as String?,
-  proofId: json['proofId'] as String?,
 );
 
 Map<String, dynamic> _$VideoProofToJson(_VideoProof instance) =>
@@ -26,5 +25,4 @@ Map<String, dynamic> _$VideoProofToJson(_VideoProof instance) =>
       'uploadUrl': instance.uploadUrl,
       'publicUrl': instance.publicUrl,
       'videoKey': instance.videoKey,
-      'proofId': instance.proofId,
     };

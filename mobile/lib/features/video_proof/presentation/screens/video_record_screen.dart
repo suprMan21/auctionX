@@ -77,7 +77,6 @@ class _VideoRecordScreenState extends ConsumerState<VideoRecordScreen> {
           recording: (controller, elapsed) =>
               _buildCamera(controller, elapsed, true),
           stopped: (_, __) => _buildLoading(),
-          burning: (_) => _buildLoading(),
           compressing: (_) => _buildLoading(),
           compressed: (_, __, ___) => _buildLoading(),
           uploading: (_) => _buildLoading(),

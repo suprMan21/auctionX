@@ -34,14 +34,6 @@ class VideoProofRemoteDatasource {
       uploadUrl: proofData['uploadUrl'] as String,
       publicUrl: proofData['publicUrl'] as String,
       videoKey: proofData['videoKey'] as String,
-      proofId: proofData['proofId'] as String,
-    );
-  }
-
-  Future<void> confirmUpload({required String proofId}) async {
-    await _client.post<Map<String, dynamic>>(
-      '/nfc/proof/confirm',
-      data: {'proofId': proofId},
     );
   }
 

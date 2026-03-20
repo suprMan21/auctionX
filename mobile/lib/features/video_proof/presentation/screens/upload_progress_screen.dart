@@ -38,7 +38,7 @@ class _UploadProgressScreenState extends ConsumerState<UploadProgressScreen> {
   void _startProcess() {
     ref
         .read(videoProofNotifierProvider.notifier)
-        .burnOverlay(widget.filePath, widget.tagUid);
+        .compressVideo(widget.filePath);
   }
 
   @override
@@ -72,8 +72,7 @@ class _UploadProgressScreenState extends ConsumerState<UploadProgressScreen> {
             initializing: () => _buildCompressing(0),
             ready: (_) => _buildCompressing(0),
             recording: (_, __) => _buildCompressing(0),
-            stopped: (_, __) => _buildBurning(0),
-            burning: (progress) => _buildBurning(progress),
+            stopped: (_, __) => _buildCompressing(0),
             compressing: (progress) => _buildCompressing(progress),
             compressed: (_, __, ___) => _buildCompressing(1.0),
             uploading: (progress) => _buildUploading(progress),
@@ -82,34 +81,6 @@ class _UploadProgressScreenState extends ConsumerState<UploadProgressScreen> {
             permissionDenied: () => _buildError('Permission denied'),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildBurning(double progress) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 100,
-            height: 100,
-            child: CircularProgressIndicator(
-              value: progress > 0 ? progress : null,
-              strokeWidth: 4,
-              color: AppColors.primary500,
-              backgroundColor: AppColors.glassBorder,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text('Adding verification overlay...', style: AppTypography.titleMedium),
-          const SizedBox(height: 8),
-          Text(
-            '${(progress * 100).toInt()}%',
-            style: AppTypography.bodyMedium
-                .copyWith(color: AppColors.textSecondary),
-          ),
-        ],
       ),
     );
   }

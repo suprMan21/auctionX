@@ -15,8 +15,4 @@ abstract class VideoProofRepository {
     required String filePath,
     required String contentType,
   });
-
-  Future<Either<Failure, void>> confirmUpload({
-    required String proofId,
-  });
 }

@@ -59,6 +59,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Authentic Materials needs camera access to record video proof of item authenticity.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Authentic Materials records audio as part of the video proof.</string>
 	<key>NFCReaderUsageDescription</key>
 	<string>AuctionX uses NFC to verify the authenticity of physical items</string>
 	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>

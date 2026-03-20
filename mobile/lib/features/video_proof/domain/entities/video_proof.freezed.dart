@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$VideoProof {
 
- String get tagId; String get localPath; int get fileSizeBytes; int get durationMs; String? get uploadUrl; String? get publicUrl; String? get videoKey; String? get proofId;
+ String get tagId; String get localPath; int get fileSizeBytes; int get durationMs; String? get uploadUrl; String? get publicUrl; String? get videoKey;
 /// Create a copy of VideoProof
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $VideoProofCopyWith<VideoProof> get copyWith => _$VideoProofCopyWithImpl<VideoPr
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoProof&&(identical(other.tagId, tagId) || other.tagId == tagId)&&(identical(other.localPath, localPath) || other.localPath == localPath)&&(identical(other.fileSizeBytes, fileSizeBytes) || other.fileSizeBytes == fileSizeBytes)&&(identical(other.durationMs, durationMs) || other.durationMs == durationMs)&&(identical(other.uploadUrl, uploadUrl) || other.uploadUrl == uploadUrl)&&(identical(other.publicUrl, publicUrl) || other.publicUrl == publicUrl)&&(identical(other.videoKey, videoKey) || other.videoKey == videoKey)&&(identical(other.proofId, proofId) || other.proofId == proofId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoProof&&(identical(other.tagId, tagId) || other.tagId == tagId)&&(identical(other.localPath, localPath) || other.localPath == localPath)&&(identical(other.fileSizeBytes, fileSizeBytes) || other.fileSizeBytes == fileSizeBytes)&&(identical(other.durationMs, durationMs) || other.durationMs == durationMs)&&(identical(other.uploadUrl, uploadUrl) || other.uploadUrl == uploadUrl)&&(identical(other.publicUrl, publicUrl) || other.publicUrl == publicUrl)&&(identical(other.videoKey, videoKey) || other.videoKey == videoKey));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,tagId,localPath,fileSizeBytes,durationMs,uploadUrl,publicUrl,videoKey,proofId);
+int get hashCode => Object.hash(runtimeType,tagId,localPath,fileSizeBytes,durationMs,uploadUrl,publicUrl,videoKey);
 
 @override
 String toString() {
-  return 'VideoProof(tagId: $tagId, localPath: $localPath, fileSizeBytes: $fileSizeBytes, durationMs: $durationMs, uploadUrl: $uploadUrl, publicUrl: $publicUrl, videoKey: $videoKey, proofId: $proofId)';
+  return 'VideoProof(tagId: $tagId, localPath: $localPath, fileSizeBytes: $fileSizeBytes, durationMs: $durationMs, uploadUrl: $uploadUrl, publicUrl: $publicUrl, videoKey: $videoKey)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $VideoProofCopyWith<$Res>  {
   factory $VideoProofCopyWith(VideoProof value, $Res Function(VideoProof) _then) = _$VideoProofCopyWithImpl;
 @useResult
 $Res call({
- String tagId, String localPath, int fileSizeBytes, int durationMs, String? uploadUrl, String? publicUrl, String? videoKey, String? proofId
+ String tagId, String localPath, int fileSizeBytes, int durationMs, String? uploadUrl, String? publicUrl, String? videoKey
 });
 
 
@@ -65,7 +65,7 @@ class _$VideoProofCopyWithImpl<$Res>
 
 /// Create a copy of VideoProof
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? tagId = null,Object? localPath = null,Object? fileSizeBytes = null,Object? durationMs = null,Object? uploadUrl = freezed,Object? publicUrl = freezed,Object? videoKey = freezed,Object? proofId = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? tagId = null,Object? localPath = null,Object? fileSizeBytes = null,Object? durationMs = null,Object? uploadUrl = freezed,Object? publicUrl = freezed,Object? videoKey = freezed,}) {
   return _then(_self.copyWith(
 tagId: null == tagId ? _self.tagId : tagId // ignore: cast_nullable_to_non_nullable
 as String,localPath: null == localPath ? _self.localPath : localPath // ignore: cast_nullable_to_non_nullable
@@ -74,7 +74,6 @@ as int,durationMs: null == durationMs ? _self.durationMs : durationMs // ignore:
 as int,uploadUrl: freezed == uploadUrl ? _self.uploadUrl : uploadUrl // ignore: cast_nullable_to_non_nullable
 as String?,publicUrl: freezed == publicUrl ? _self.publicUrl : publicUrl // ignore: cast_nullable_to_non_nullable
 as String?,videoKey: freezed == videoKey ? _self.videoKey : videoKey // ignore: cast_nullable_to_non_nullable
-as String?,proofId: freezed == proofId ? _self.proofId : proofId // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -160,10 +159,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String tagId,  String localPath,  int fileSizeBytes,  int durationMs,  String? uploadUrl,  String? publicUrl,  String? videoKey,  String? proofId)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String tagId,  String localPath,  int fileSizeBytes,  int durationMs,  String? uploadUrl,  String? publicUrl,  String? videoKey)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _VideoProof() when $default != null:
-return $default(_that.tagId,_that.localPath,_that.fileSizeBytes,_that.durationMs,_that.uploadUrl,_that.publicUrl,_that.videoKey,_that.proofId);case _:
+return $default(_that.tagId,_that.localPath,_that.fileSizeBytes,_that.durationMs,_that.uploadUrl,_that.publicUrl,_that.videoKey);case _:
   return orElse();
 
 }
@@ -181,10 +180,10 @@ return $default(_that.tagId,_that.localPath,_that.fileSizeBytes,_that.durationMs
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String tagId,  String localPath,  int fileSizeBytes,  int durationMs,  String? uploadUrl,  String? publicUrl,  String? videoKey,  String? proofId)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String tagId,  String localPath,  int fileSizeBytes,  int durationMs,  String? uploadUrl,  String? publicUrl,  String? videoKey)  $default,) {final _that = this;
 switch (_that) {
 case _VideoProof():
-return $default(_that.tagId,_that.localPath,_that.fileSizeBytes,_that.durationMs,_that.uploadUrl,_that.publicUrl,_that.videoKey,_that.proofId);case _:
+return $default(_that.tagId,_that.localPath,_that.fileSizeBytes,_that.durationMs,_that.uploadUrl,_that.publicUrl,_that.videoKey);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -201,10 +200,10 @@ return $default(_that.tagId,_that.localPath,_that.fileSizeBytes,_that.durationMs
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String tagId,  String localPath,  int fileSizeBytes,  int durationMs,  String? uploadUrl,  String? publicUrl,  String? videoKey,  String? proofId)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String tagId,  String localPath,  int fileSizeBytes,  int durationMs,  String? uploadUrl,  String? publicUrl,  String? videoKey)?  $default,) {final _that = this;
 switch (_that) {
 case _VideoProof() when $default != null:
-return $default(_that.tagId,_that.localPath,_that.fileSizeBytes,_that.durationMs,_that.uploadUrl,_that.publicUrl,_that.videoKey,_that.proofId);case _:
+return $default(_that.tagId,_that.localPath,_that.fileSizeBytes,_that.durationMs,_that.uploadUrl,_that.publicUrl,_that.videoKey);case _:
   return null;
 
 }
@@ -216,7 +215,7 @@ return $default(_that.tagId,_that.localPath,_that.fileSizeBytes,_that.durationMs
 @JsonSerializable()
 
 class _VideoProof extends VideoProof {
-  const _VideoProof({required this.tagId, required this.localPath, required this.fileSizeBytes, required this.durationMs, this.uploadUrl, this.publicUrl, this.videoKey, this.proofId}): super._();
+  const _VideoProof({required this.tagId, required this.localPath, required this.fileSizeBytes, required this.durationMs, this.uploadUrl, this.publicUrl, this.videoKey}): super._();
   factory _VideoProof.fromJson(Map<String, dynamic> json) => _$VideoProofFromJson(json);
 
 @override final  String tagId;
@@ -226,7 +225,6 @@ class _VideoProof extends VideoProof {
 @override final  String? uploadUrl;
 @override final  String? publicUrl;
 @override final  String? videoKey;
-@override final  String? proofId;
 
 /// Create a copy of VideoProof
 /// with the given fields replaced by the non-null parameter values.
@@ -241,16 +239,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VideoProof&&(identical(other.tagId, tagId) || other.tagId == tagId)&&(identical(other.localPath, localPath) || other.localPath == localPath)&&(identical(other.fileSizeBytes, fileSizeBytes) || other.fileSizeBytes == fileSizeBytes)&&(identical(other.durationMs, durationMs) || other.durationMs == durationMs)&&(identical(other.uploadUrl, uploadUrl) || other.uploadUrl == uploadUrl)&&(identical(other.publicUrl, publicUrl) || other.publicUrl == publicUrl)&&(identical(other.videoKey, videoKey) || other.videoKey == videoKey)&&(identical(other.proofId, proofId) || other.proofId == proofId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VideoProof&&(identical(other.tagId, tagId) || other.tagId == tagId)&&(identical(other.localPath, localPath) || other.localPath == localPath)&&(identical(other.fileSizeBytes, fileSizeBytes) || other.fileSizeBytes == fileSizeBytes)&&(identical(other.durationMs, durationMs) || other.durationMs == durationMs)&&(identical(other.uploadUrl, uploadUrl) || other.uploadUrl == uploadUrl)&&(identical(other.publicUrl, publicUrl) || other.publicUrl == publicUrl)&&(identical(other.videoKey, videoKey) || other.videoKey == videoKey));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,tagId,localPath,fileSizeBytes,durationMs,uploadUrl,publicUrl,videoKey,proofId);
+int get hashCode => Object.hash(runtimeType,tagId,localPath,fileSizeBytes,durationMs,uploadUrl,publicUrl,videoKey);
 
 @override
 String toString() {
-  return 'VideoProof(tagId: $tagId, localPath: $localPath, fileSizeBytes: $fileSizeBytes, durationMs: $durationMs, uploadUrl: $uploadUrl, publicUrl: $publicUrl, videoKey: $videoKey, proofId: $proofId)';
+  return 'VideoProof(tagId: $tagId, localPath: $localPath, fileSizeBytes: $fileSizeBytes, durationMs: $durationMs, uploadUrl: $uploadUrl, publicUrl: $publicUrl, videoKey: $videoKey)';
 }
 
 
@@ -261,7 +259,7 @@ abstract mixin class _$VideoProofCopyWith<$Res> implements $VideoProofCopyWith<$
   factory _$VideoProofCopyWith(_VideoProof value, $Res Function(_VideoProof) _then) = __$VideoProofCopyWithImpl;
 @override @useResult
 $Res call({
- String tagId, String localPath, int fileSizeBytes, int durationMs, String? uploadUrl, String? publicUrl, String? videoKey, String? proofId
+ String tagId, String localPath, int fileSizeBytes, int durationMs, String? uploadUrl, String? publicUrl, String? videoKey
 });
 
 
@@ -278,7 +276,7 @@ class __$VideoProofCopyWithImpl<$Res>
 
 /// Create a copy of VideoProof
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? tagId = null,Object? localPath = null,Object? fileSizeBytes = null,Object? durationMs = null,Object? uploadUrl = freezed,Object? publicUrl = freezed,Object? videoKey = freezed,Object? proofId = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? tagId = null,Object? localPath = null,Object? fileSizeBytes = null,Object? durationMs = null,Object? uploadUrl = freezed,Object? publicUrl = freezed,Object? videoKey = freezed,}) {
   return _then(_VideoProof(
 tagId: null == tagId ? _self.tagId : tagId // ignore: cast_nullable_to_non_nullable
 as String,localPath: null == localPath ? _self.localPath : localPath // ignore: cast_nullable_to_non_nullable
@@ -287,7 +285,6 @@ as int,durationMs: null == durationMs ? _self.durationMs : durationMs // ignore:
 as int,uploadUrl: freezed == uploadUrl ? _self.uploadUrl : uploadUrl // ignore: cast_nullable_to_non_nullable
 as String?,publicUrl: freezed == publicUrl ? _self.publicUrl : publicUrl // ignore: cast_nullable_to_non_nullable
 as String?,videoKey: freezed == videoKey ? _self.videoKey : videoKey // ignore: cast_nullable_to_non_nullable
-as String?,proofId: freezed == proofId ? _self.proofId : proofId // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }

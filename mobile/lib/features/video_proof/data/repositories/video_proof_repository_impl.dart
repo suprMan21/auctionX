@@ -52,18 +52,4 @@ class VideoProofRepositoryImpl implements VideoProofRepository {
       yield Left(ServerFailure(e.toString()));
     }
   }
-
-  @override
-  Future<Either<Failure, void>> confirmUpload({
-    required String proofId,
-  }) async {
-    try {
-      await _remote.confirmUpload(proofId: proofId);
-      return const Right(null);
-    } on DioException catch (e) {
-      return Left(ApiClient.mapError(e));
-    } catch (e) {
-      return Left(ServerFailure(e.toString()));
-    }
-  }
 }
