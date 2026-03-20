@@ -42,6 +42,16 @@ dependencies:
   # Connectivity
   connectivity_plus: ^6.1.3
 
+  # Video Proof
+  camera: ^0.11.0
+  video_compress: ^3.1.3
+  path_provider: ^2.1.5
+  permission_handler: ^11.3.1
+  video_player: ^2.9.2
+
+  # Sharing
+  share_plus: ^12.0.1
+
   # Deep Links
   app_links: ^6.4.0
 

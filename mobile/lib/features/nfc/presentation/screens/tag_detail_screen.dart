@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../routing/route_names.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/auth_state.dart';
 import '../../domain/entities/tag_detail.dart';
 import '../providers/nfc_scan_provider.dart';
 import '../widgets/verification_badge.dart';
@@ -50,13 +54,13 @@ class TagDetailScreen extends ConsumerWidget {
                       .copyWith(color: AppColors.textSecondary)),
             );
           }
-          return _buildDetail(detail);
+          return _buildDetail(context, ref, detail);
         },
       ),
     );
   }
 
-  Widget _buildDetail(TagDetail detail) {
+  Widget _buildDetail(BuildContext context, WidgetRef ref, TagDetail detail) {
     final status = switch (detail.tag.status) {
       'active' => VerificationStatus.active,
       'verified' => VerificationStatus.verified,
@@ -151,7 +155,122 @@ class TagDetailScreen extends ConsumerWidget {
                   ),
               ],
             ),
+
+          // Video proof section
+          const SizedBox(height: 24),
+          _buildVideoProofSection(context, ref, detail),
+
+          // Create Verification button
+          _buildMintSection(context, detail),
         ],
+      ),
+    );
+  }
+
+  Widget _buildVideoProofSection(BuildContext context, WidgetRef ref, TagDetail detail) {
+    final hasConfirmedProof = detail.events.any(
+      (e) => e.scanType == 'proof_upload' && e.videoProofStatus == 'confirmed',
+    );
+
+    if (hasConfirmedProof) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          color: AppColors.success.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.verified, color: AppColors.success, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Video Proof Recorded',
+              style: AppTypography.labelLarge.copyWith(color: AppColors.success),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final authState = ref.watch(authNotifierProvider);
+    final isOwner = authState.maybeWhen(
+      authenticated: (user) => detail.tag.sellerId == user.id,
+      orElse: () => false,
+    );
+
+    final validStatuses = {'registered', 'active', 'verified'};
+    final canRecord = isOwner && validStatuses.contains(detail.tag.status);
+
+    if (!canRecord) return const SizedBox.shrink();
+
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: AppColors.primaryGradient,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ElevatedButton.icon(
+          onPressed: () {
+            context.push(
+              RouteNames.videoRecord,
+              extra: {
+                'tagId': detail.tag.id,
+                'tagUid': detail.tag.tagUid,
+              },
+            );
+          },
+          icon: const Icon(Icons.videocam, color: Colors.white),
+          label: Text('Record Video Proof', style: AppTypography.labelLarge),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMintSection(BuildContext context, TagDetail detail) {
+    final hasConfirmedProof = detail.events.any(
+      (e) => e.scanType == 'proof_upload' && e.videoProofStatus == 'confirmed',
+    );
+    final alreadyMinted = detail.nft?.tokenId != null;
+
+    if (!hasConfirmedProof || alreadyMinted) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ElevatedButton.icon(
+            onPressed: () {
+              context.push('${RouteNames.mintConfirm}/${detail.tag.id}');
+            },
+            icon: const Icon(Icons.verified_outlined, color: Colors.white),
+            label: Text('Create Verification', style: AppTypography.labelLarge),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

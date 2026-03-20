@@ -52,6 +52,7 @@ _VerificationEvent _$VerificationEventFromJson(Map<String, dynamic> json) =>
       scanType: json['scanType'] as String,
       cmacValid: json['cmacValid'] as bool,
       createdAt: json['createdAt'] as String,
+      videoProofStatus: json['videoProofStatus'] as String?,
     );
 
 Map<String, dynamic> _$VerificationEventToJson(_VerificationEvent instance) =>
@@ -59,6 +60,7 @@ Map<String, dynamic> _$VerificationEventToJson(_VerificationEvent instance) =>
       'scanType': instance.scanType,
       'cmacValid': instance.cmacValid,
       'createdAt': instance.createdAt,
+      'videoProofStatus': instance.videoProofStatus,
     };
 
 _NftInfo _$NftInfoFromJson(Map<String, dynamic> json) => _NftInfo(

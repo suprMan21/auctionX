@@ -12,6 +12,12 @@ import '../features/nfc/presentation/screens/nfc_scan_screen.dart';
 import '../features/nfc/presentation/screens/tag_detail_screen.dart';
 import '../features/nfc/presentation/screens/scan_history_screen.dart';
 import '../features/nfc/presentation/providers/nfc_scan_provider.dart';
+import '../features/video_proof/presentation/screens/video_record_screen.dart';
+import '../features/video_proof/presentation/screens/video_preview_screen.dart';
+import '../features/video_proof/presentation/screens/upload_progress_screen.dart';
+import '../features/minting/presentation/screens/mint_confirmation_screen.dart';
+import '../features/minting/presentation/screens/minting_progress_screen.dart';
+import '../features/minting/presentation/screens/mint_success_screen.dart';
 import '../features/activity/presentation/screens/activity_screen.dart';
 import '../features/profile/presentation/screens/profile_screen.dart';
 import '../features/onboarding/presentation/screens/onboarding_screen.dart';
@@ -124,6 +130,58 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: RouteNames.scanHistory,
             builder: (context, state) => const ScanHistoryScreen(),
+          ),
+          GoRoute(
+            path: RouteNames.videoRecord,
+            builder: (context, state) {
+              final extra = state.extra as Map<String, String>;
+              return VideoRecordScreen(
+                tagId: extra['tagId']!,
+                tagUid: extra['tagUid']!,
+              );
+            },
+          ),
+          GoRoute(
+            path: RouteNames.videoPreview,
+            builder: (context, state) {
+              final extra = state.extra as Map<String, String>;
+              return VideoPreviewScreen(
+                tagId: extra['tagId']!,
+                tagUid: extra['tagUid']!,
+                filePath: extra['filePath']!,
+                durationSeconds: int.parse(extra['durationSeconds']!),
+              );
+            },
+          ),
+          GoRoute(
+            path: RouteNames.videoUpload,
+            builder: (context, state) {
+              final extra = state.extra as Map<String, String>;
+              return UploadProgressScreen(
+                tagId: extra['tagId']!,
+                tagUid: extra['tagUid']!,
+                filePath: extra['filePath']!,
+                durationSeconds: int.parse(extra['durationSeconds']!),
+              );
+            },
+          ),
+          GoRoute(
+            path: '${RouteNames.mintConfirm}/:tagId',
+            builder: (context, state) => MintConfirmationScreen(
+              tagId: state.pathParameters['tagId']!,
+            ),
+          ),
+          GoRoute(
+            path: '${RouteNames.minting}/:tagId',
+            builder: (context, state) => MintingProgressScreen(
+              tagId: state.pathParameters['tagId']!,
+            ),
+          ),
+          GoRoute(
+            path: '${RouteNames.mintSuccess}/:tagId',
+            builder: (context, state) => MintSuccessScreen(
+              tagId: state.pathParameters['tagId']!,
+            ),
           ),
           GoRoute(
             path: RouteNames.activity,

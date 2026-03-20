@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../routing/route_names.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/auth_state.dart';
 import '../../domain/entities/scan_result.dart';
 import '../../domain/entities/tag_detail.dart';
 import '../providers/nfc_scan_provider.dart';
@@ -198,6 +200,50 @@ class NfcScanScreen extends ConsumerWidget {
                 onPressed: () =>
                     context.push('${RouteNames.tagDetail}/${result.tagId}'),
               ),
+            if (detail != null) ...[
+              const SizedBox(height: 12),
+              Builder(
+                builder: (ctx) {
+                  final authState = ref.watch(authNotifierProvider);
+                  final currentUserId = authState.maybeWhen(
+                    authenticated: (user) => user.id,
+                    orElse: () => null,
+                  );
+                  final isSeller = currentUserId != null &&
+                      detail.tag.sellerId == currentUserId;
+                  if (!isSeller) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton.icon(
+                        onPressed: () => context.push(
+                          RouteNames.videoRecord,
+                          extra: {
+                            'tagId': result.tagId,
+                            'tagUid': detail.tag.tagUid,
+                          },
+                        ),
+                        icon: const Icon(Icons.videocam,
+                            color: AppColors.accent500),
+                        label: Text(
+                          'Add Video Proof',
+                          style: AppTypography.labelLarge
+                              .copyWith(color: AppColors.accent500),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.accent500),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
             const SizedBox(height: 12),
             TextButton(
               onPressed: () =>
