@@ -20,4 +20,9 @@ class RouteNames {
   static const mintConfirm = '/home/nfc/mint-confirm';
   static const minting = '/home/nfc/minting';
   static const mintSuccess = '/home/nfc/mint-success';
+  static const seller = '/home/seller';
+  static const sellerRegister = '/home/seller/register';
+  static const sellerBatchRegister = '/home/seller/batch-register';
+  static const sellerQr = '/home/seller/qr';
+  static const legal = '/home/legal';
 }

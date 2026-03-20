@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Auctionx Mobile</string>
+	<string>Authentic Materials</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -64,7 +64,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Authentic Materials records audio as part of the video proof.</string>
 	<key>NFCReaderUsageDescription</key>
-	<string>AuctionX uses NFC to verify the authenticity of physical items</string>
+	<string>Authentic Materials uses NFC to verify the authenticity of physical items.</string>
 	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
 	<array>
 		<string>D2760000850101</string>

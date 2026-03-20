@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../routing/route_names.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/auth_state.dart';
@@ -68,6 +70,12 @@ class ProfileScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   _SettingsTile(
+                    icon: Icons.storefront_outlined,
+                    title: 'Seller Tools',
+                    onTap: () => context.push(RouteNames.seller),
+                  ),
+                  const Divider(color: AppColors.glassBorder, height: 1),
+                  _SettingsTile(
                     icon: Icons.settings_outlined,
                     title: 'Settings',
                     onTap: () {},
@@ -77,6 +85,30 @@ class ProfileScreen extends ConsumerWidget {
                     icon: Icons.help_outline,
                     title: 'Help & Support',
                     onTap: () {},
+                  ),
+                  const Divider(color: AppColors.glassBorder, height: 1),
+                  _SettingsTile(
+                    icon: Icons.privacy_tip_outlined,
+                    title: 'Privacy Policy',
+                    onTap: () => context.push(
+                      RouteNames.legal,
+                      extra: {
+                        'title': 'Privacy Policy',
+                        'assetPath': 'assets/legal/privacy_policy.md',
+                      },
+                    ),
+                  ),
+                  const Divider(color: AppColors.glassBorder, height: 1),
+                  _SettingsTile(
+                    icon: Icons.description_outlined,
+                    title: 'Terms of Service',
+                    onTap: () => context.push(
+                      RouteNames.legal,
+                      extra: {
+                        'title': 'Terms of Service',
+                        'assetPath': 'assets/legal/terms_of_service.md',
+                      },
+                    ),
                   ),
                 ],
               ),

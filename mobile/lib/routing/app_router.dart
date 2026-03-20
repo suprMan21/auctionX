@@ -21,6 +21,11 @@ import '../features/minting/presentation/screens/mint_success_screen.dart';
 import '../features/activity/presentation/screens/activity_screen.dart';
 import '../features/profile/presentation/screens/profile_screen.dart';
 import '../features/onboarding/presentation/screens/onboarding_screen.dart';
+import '../features/seller/presentation/screens/seller_dashboard_screen.dart';
+import '../features/seller/presentation/screens/tag_registration_screen.dart';
+import '../features/seller/presentation/screens/batch_registration_screen.dart';
+import '../features/seller/presentation/screens/qr_generate_screen.dart';
+import '../features/seller/presentation/screens/legal_viewer_screen.dart';
 import '../shared/widgets/app_scaffold.dart';
 import 'route_names.dart';
 
@@ -194,6 +199,34 @@ final routerProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) => const NoTransitionPage(
               child: ProfileScreen(),
             ),
+          ),
+          GoRoute(
+            path: RouteNames.seller,
+            builder: (context, state) => const SellerDashboardScreen(),
+          ),
+          GoRoute(
+            path: RouteNames.sellerRegister,
+            builder: (context, state) => const TagRegistrationScreen(),
+          ),
+          GoRoute(
+            path: RouteNames.sellerBatchRegister,
+            builder: (context, state) => const BatchRegistrationScreen(),
+          ),
+          GoRoute(
+            path: '${RouteNames.sellerQr}/:tagId',
+            builder: (context, state) => QrGenerateScreen(
+              tagId: state.pathParameters['tagId']!,
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.legal,
+            builder: (context, state) {
+              final extra = state.extra as Map<String, String>;
+              return LegalViewerScreen(
+                title: extra['title']!,
+                assetPath: extra['assetPath']!,
+              );
+            },
           ),
         ],
       ),
