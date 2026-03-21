@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
@@ -7,11 +7,50 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { ErrorHandler, AppError, ErrorCode } from '@/lib/errors/ErrorHandler';
 import { api } from '@/lib/api';
+import { VerificationBanner } from '@/features/seller-verification/components/VerificationBanner';
+import type { VerificationStatus } from '@/features/seller-verification/types/sellerVerification';
 
 export function CreateListing() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
+  const [verificationLoading, setVerificationLoading] = useState(true);
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+
+  // Check seller verification status
+  useEffect(() => {
+    if (!user) return;
+    const checkVerification = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('seller_verification_status, seller_verification_rejection_reason')
+          .eq('id', user.id)
+          .single();
+        if (!error && data) {
+          setVerificationStatus((data.seller_verification_status || 'NONE') as VerificationStatus);
+          setRejectionReason(data.seller_verification_rejection_reason);
+        }
+      } catch {
+        // Default to showing the form if check fails
+        setVerificationStatus('APPROVED');
+      } finally {
+        setVerificationLoading(false);
+      }
+    };
+    checkVerification();
+  }, [user]);
+
+  // Show verification gate if not approved
+  if (!verificationLoading && verificationStatus && verificationStatus !== 'APPROVED') {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold text-white mb-6">Create Listing</h1>
+        <VerificationBanner status={verificationStatus} rejectionReason={rejectionReason} />
+      </div>
+    );
+  }
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [startingPrice, setStartingPrice] = useState('');

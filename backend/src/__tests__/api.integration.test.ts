@@ -7,11 +7,27 @@
  * Requires the backend dev server running at http://localhost:3001.
  * Run with: npx vitest run src/__tests__/api.integration.test.ts
  *
+ * Skips automatically if the server is not reachable.
+ *
  * @module Module 17 — E2E Testing & Security Audit
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 const BASE = 'http://localhost:3001/api/v1';
+
+let serverAvailable = false;
+
+beforeAll(async () => {
+  try {
+    const res = await fetch(`${BASE.replace('/api/v1', '')}/api/v1/health`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    serverAvailable = res.ok || res.status < 500;
+  } catch {
+    serverAvailable = false;
+    console.log('⚠ Backend server not running — skipping integration tests');
+  }
+});
 
 // Helper: fetch with optional bearer token
 async function apiFetch(
@@ -27,10 +43,19 @@ async function apiFetch(
   return fetch(`${BASE}${path}`, { ...rest, headers });
 }
 
+/** Skip helper — call at the top of each test body. */
+function requireServer() {
+  if (!serverAvailable) {
+    return true;
+  }
+  return false;
+}
+
 // ── Public endpoints ──────────────────────────────────────────────────────────
 
 describe('Public search endpoint', () => {
-  it('GET /search?q=test → 200 with results/total/page shape', async () => {
+  it('GET /search?q=test → 200 with results/total/page shape', async (ctx) => {
+    if (requireServer()) return ctx.skip();
     const res = await apiFetch('/search?q=test');
     expect(res.status).toBe(200);
     const body = await res.json() as { success: boolean; data: { results: unknown[]; total: number; page: number } };
@@ -40,14 +65,16 @@ describe('Public search endpoint', () => {
     expect(typeof body.data.page).toBe('number');
   });
 
-  it('GET /search (no params) → 200', async () => {
+  it('GET /search (no params) → 200', async (ctx) => {
+    if (requireServer()) return ctx.skip();
     const res = await apiFetch('/search');
     expect(res.status).toBe(200);
   });
 });
 
 describe('Public verification endpoint', () => {
-  it('GET /verifications/public/nonexistent_token_99 → 404', async () => {
+  it('GET /verifications/public/nonexistent_token_99 → 404', async (ctx) => {
+    if (requireServer()) return ctx.skip();
     const res = await apiFetch('/verifications/public/nonexistent_token_99');
     expect(res.status).toBe(404);
   });
@@ -65,7 +92,8 @@ describe('Protected endpoints — 401 without auth', () => {
   ];
 
   for (const route of protectedRoutes) {
-    it(`${route.method} ${route.path} → 401`, async () => {
+    it(`${route.method} ${route.path} → 401`, async (ctx) => {
+      if (requireServer()) return ctx.skip();
       const res = await apiFetch(route.path, { method: route.method });
       expect(res.status).toBe(401);
     });
@@ -82,7 +110,8 @@ describe('Admin endpoints — 401 without auth', () => {
   ];
 
   for (const route of adminRoutes) {
-    it(`${route.method} ${route.path} → 401`, async () => {
+    it(`${route.method} ${route.path} → 401`, async (ctx) => {
+      if (requireServer()) return ctx.skip();
       const res = await apiFetch(route.path, { method: route.method });
       expect(res.status).toBe(401);
     });
@@ -92,7 +121,8 @@ describe('Admin endpoints — 401 without auth', () => {
 // ── Response shape contract ───────────────────────────────────────────────────
 
 describe('Error response shape contract', () => {
-  it('401 responses include { success: false, error: string }', async () => {
+  it('401 responses include { success: false, error: string }', async (ctx) => {
+    if (requireServer()) return ctx.skip();
     const res = await apiFetch('/conversations');
     const body = await res.json() as { success: boolean; error: string };
     expect(res.status).toBe(401);

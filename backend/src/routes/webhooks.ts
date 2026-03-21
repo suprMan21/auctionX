@@ -144,4 +144,15 @@ router.post('/paymentcloud', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/v1/webhooks/seller-verification
+ * Stub for future IDV provider (Yoti) callback integration.
+ */
+router.post('/seller-verification', (_req, res) => {
+  res.status(501).json({
+    success: false,
+    error: 'IDV provider not configured. Manual review is active.',
+  });
+});
+
 export default router;

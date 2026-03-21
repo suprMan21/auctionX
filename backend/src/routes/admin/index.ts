@@ -6,6 +6,7 @@ import moderationRouter from './moderation';
 import auditLogsRouter from './auditLogs';
 import adminSettlementsRouter from './settlements';
 import disputesRouter from './disputes';
+import sellerVerificationRouter from './sellerVerification';
 import healthRouter from './health';
 
 const router = Router();
@@ -23,5 +24,6 @@ router.use('/moderation', moderationRouter);
 router.use('/audit-logs', auditLogsRouter);
 router.use('/auctions', adminSettlementsRouter);
 router.use('/disputes', disputesRouter);
+router.use('/seller-verification', sellerVerificationRouter);
 
 export default router;

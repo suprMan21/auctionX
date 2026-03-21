@@ -13,6 +13,8 @@ import type {
   AuditLogsResponse,
   HealthStatus,
   AdminActionResult,
+  SellerVerificationQueueItem,
+  SellerVerificationDetail,
 } from '../types/admin';
 
 const ADMIN_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1'}/admin`;
@@ -200,6 +202,44 @@ export const adminApi = {
     if (params?.admin) qs.set('admin', params.admin);
     const query = qs.toString() ? `?${qs}` : '';
     return adminFetch<AuditLogsResponse>(`/audit-logs${query}`);
+  },
+
+  // ─── Seller Verification Endpoints ─────────────────────────────────────────
+
+  getSellerVerificationQueue(params?: {
+    status?: string;
+    page?: number;
+  }): Promise<{ success: boolean; data: { queue: SellerVerificationQueueItem[]; pagination: { page: number; limit: number; total: number }; stats: { pendingCount: number } } }> {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.page) qs.set('page', String(params.page));
+    const query = qs.toString() ? `?${qs}` : '';
+    return adminFetch(`/seller-verification/queue${query}`);
+  },
+
+  getSellerVerificationDetail(userId: string): Promise<{ success: boolean; data: SellerVerificationDetail }> {
+    return adminFetch(`/seller-verification/${userId}`);
+  },
+
+  approveSellerVerification(userId: string, notes: string): Promise<AdminActionResult> {
+    return adminFetch<AdminActionResult>(`/seller-verification/${userId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    });
+  },
+
+  rejectSellerVerification(userId: string, reason: string, notes: string): Promise<AdminActionResult> {
+    return adminFetch<AdminActionResult>(`/seller-verification/${userId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, notes }),
+    });
+  },
+
+  revokeSellerVerification(userId: string, reason: string, notes: string): Promise<AdminActionResult> {
+    return adminFetch<AdminActionResult>(`/seller-verification/${userId}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, notes }),
+    });
   },
 
   // ─── Health Endpoint ────────────────────────────────────────────────────────

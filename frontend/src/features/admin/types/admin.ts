@@ -16,7 +16,8 @@ export type AdminPermission =
   | 'process_refunds'
   | 'view_analytics'
   | 'manage_admins'
-  | 'view_audit_logs';
+  | 'view_audit_logs'
+  | 'review_sellers';
 
 // ─── User Types ───────────────────────────────────────────────────────────────
 
@@ -186,4 +187,54 @@ export interface HealthStatus {
 export interface AdminActionResult {
   success: boolean;
   message: string;
+}
+
+// ─── Seller Verification Types ──────────────────────────────────────────────
+
+export interface SellerVerificationQueueItem {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  status: string;
+  submittedAt: string | null;
+  createdAt: string;
+  documentCount: number;
+}
+
+export interface SellerVerificationDocument {
+  id: string;
+  document_type: string;
+  file_url: string;
+  mime_type: string;
+  file_size_bytes: number | null;
+  status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface SellerVerificationReview {
+  id: string;
+  admin_id: string;
+  action: string;
+  notes: string;
+  previous_status: string;
+  new_status: string;
+  created_at: string;
+}
+
+export interface SellerVerificationDetail {
+  user: {
+    id: string;
+    email: string;
+    displayName: string | null;
+    status: string;
+    submittedAt: string | null;
+    reviewedAt: string | null;
+    rejectionReason: string | null;
+    sellerTier: string | null;
+    createdAt: string;
+  };
+  documents: SellerVerificationDocument[];
+  reviews: SellerVerificationReview[];
 }

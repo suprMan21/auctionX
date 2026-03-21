@@ -37,6 +37,8 @@ import { NotificationPreferencesPage } from './features/notifications/pages/Noti
 import { AgeGateGuard } from '@/components/AgeGate/AgeGateGuard';
 import { UnmentionablesBrowsePage } from '@/pages/UnmentionablesBrowsePage';
 import { Dashboard } from '@/pages/Dashboard';
+import { SellerVerificationPage } from '@/features/seller-verification/pages/SellerVerificationPage';
+import { AdminSellerVerificationPage } from '@/features/admin/pages/AdminSellerVerificationPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading, initialized } = useAuth();
@@ -130,6 +132,14 @@ function App() {
               <AgeGateGuard>
                 <UnmentionablesBrowsePage />
               </AgeGateGuard>
+            }
+          />
+          <Route
+            path="/seller-verification"
+            element={
+              <ProtectedRoute>
+                <SellerVerificationPage />
+              </ProtectedRoute>
             }
           />
           <Route
@@ -249,6 +259,7 @@ function App() {
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="users/:id" element={<AdminUserDetailPage />} />
               <Route path="moderation" element={<AdminModerationPage />} />
+              <Route path="seller-verification" element={<AdminSellerVerificationPage />} />
               <Route path="audit-logs" element={<AdminAuditLogPage />} />
               <Route path="health" element={<AdminHealthPage />} />
             </Route>
