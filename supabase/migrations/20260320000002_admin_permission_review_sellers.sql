@@ -1,5 +1,7 @@
 -- Phase 7A: Add review_sellers admin permission
 -- SEPARATE MIGRATION from table creation (lesson #3: enum + RLS same transaction).
+-- NOTE: The UPDATE to grant this permission to super_admin is in migration 000003
+-- because ADD VALUE cannot be used in the same transaction as a cast to the new value.
 
 -- Idempotent enum append
 DO $$
@@ -12,10 +14,3 @@ BEGIN
     ALTER TYPE public.admin_permission ADD VALUE 'review_sellers';
   END IF;
 END $$;
-
--- Grant review_sellers to super_admin role
--- Uses ::text cast to avoid enum reference issues (lesson #3)
-UPDATE public.admin_roles
-SET permissions = array_append(permissions, 'review_sellers'::admin_permission)
-WHERE role_name = 'super_admin'
-  AND NOT ('review_sellers'::text = ANY(SELECT unnest(permissions)::text));
