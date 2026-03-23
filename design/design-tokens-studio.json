@@ -1,0 +1,731 @@
+{
+  "description": "AuctionX / Authentic Materials Design Tokens — W3C DTCG format. Source of truth: frontend/tailwind.config.js + frontend/src/index.css",
+  "primitives": {
+    "color": {
+      "dark": {
+        "500": {
+          "value": "#2d2d3d",
+          "type": "color",
+          "description": "Highest elevation surface"
+        },
+        "600": {
+          "value": "#252533",
+          "type": "color",
+          "description": "Elevated surface"
+        },
+        "700": {
+          "value": "#1a1a24",
+          "type": "color",
+          "description": "Card / surface background"
+        },
+        "800": {
+          "value": "#13131a",
+          "type": "color",
+          "description": "Primary background (body)"
+        },
+        "900": {
+          "value": "#0a0a0f",
+          "type": "color",
+          "description": "Deepest background"
+        }
+      },
+      "primary": {
+        "400": {
+          "value": "#9333ea",
+          "type": "color",
+          "description": "Primary light"
+        },
+        "500": {
+          "value": "#7c3aed",
+          "type": "color",
+          "description": "Primary base — purple"
+        },
+        "600": {
+          "value": "#6d28d9",
+          "type": "color",
+          "description": "Primary dark"
+        },
+        "700": {
+          "value": "#5b21b6",
+          "type": "color",
+          "description": "Primary darkest"
+        }
+      },
+      "indigo": {
+        "500": {
+          "value": "#6366f1",
+          "type": "color",
+          "description": "Gradient midpoint"
+        }
+      },
+      "accent": {
+        "400": {
+          "value": "#60a5fa",
+          "type": "color",
+          "description": "Accent light — blue"
+        },
+        "500": {
+          "value": "#3b82f6",
+          "type": "color",
+          "description": "Accent base — blue"
+        },
+        "600": {
+          "value": "#2563eb",
+          "type": "color",
+          "description": "Accent dark"
+        }
+      },
+      "success": {
+        "500": {
+          "value": "#10b981",
+          "type": "color",
+          "description": "Success / positive"
+        },
+        "600": {
+          "value": "#059669",
+          "type": "color",
+          "description": "Success dark"
+        }
+      },
+      "error": {
+        "500": {
+          "value": "#ef4444",
+          "type": "color",
+          "description": "Error / destructive"
+        },
+        "600": {
+          "value": "#dc2626",
+          "type": "color",
+          "description": "Error dark"
+        }
+      },
+      "warning": {
+        "500": {
+          "value": "#f59e0b",
+          "type": "color",
+          "description": "Warning / caution"
+        },
+        "600": {
+          "value": "#d97706",
+          "type": "color",
+          "description": "Warning dark"
+        }
+      },
+      "unmentionables": {
+        "300": {
+          "value": "#fda4af",
+          "type": "color",
+          "description": "Unmentionables lightest"
+        },
+        "400": {
+          "value": "#fb7185",
+          "type": "color",
+          "description": "Unmentionables light"
+        },
+        "500": {
+          "value": "#e11d48",
+          "type": "color",
+          "description": "Unmentionables base — rose"
+        }
+      },
+      "white": {
+        "value": "#ffffff",
+        "type": "color"
+      },
+      "black": {
+        "value": "#000000",
+        "type": "color"
+      }
+    },
+    "typography": {
+      "fontFamily": {
+        "sans": {
+          "value": "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          "type": "fontFamily",
+          "description": "Primary typeface for all UI"
+        }
+      },
+      "fontSize": {
+        "xs": {
+          "value": "0.75rem",
+          "type": "dimension",
+          "description": "12px"
+        },
+        "sm": {
+          "value": "0.875rem",
+          "type": "dimension",
+          "description": "14px"
+        },
+        "base": {
+          "value": "1rem",
+          "type": "dimension",
+          "description": "16px"
+        },
+        "lg": {
+          "value": "1.125rem",
+          "type": "dimension",
+          "description": "18px"
+        },
+        "xl": {
+          "value": "1.25rem",
+          "type": "dimension",
+          "description": "20px"
+        },
+        "2xl": {
+          "value": "1.5rem",
+          "type": "dimension",
+          "description": "24px"
+        },
+        "3xl": {
+          "value": "1.875rem",
+          "type": "dimension",
+          "description": "30px"
+        },
+        "4xl": {
+          "value": "2.25rem",
+          "type": "dimension",
+          "description": "36px"
+        }
+      },
+      "fontWeight": {
+        "regular": {
+          "value": 400,
+          "type": "fontWeight"
+        },
+        "medium": {
+          "value": 500,
+          "type": "fontWeight"
+        },
+        "semibold": {
+          "value": 600,
+          "type": "fontWeight"
+        },
+        "bold": {
+          "value": 700,
+          "type": "fontWeight"
+        }
+      },
+      "lineHeight": {
+        "tight": {
+          "value": 1.25,
+          "type": "number"
+        },
+        "normal": {
+          "value": 1.5,
+          "type": "number"
+        },
+        "relaxed": {
+          "value": 1.625,
+          "type": "number"
+        }
+      }
+    },
+    "spacing": {
+      "0": {
+        "value": "0px",
+        "type": "dimension"
+      },
+      "1": {
+        "value": "4px",
+        "type": "dimension"
+      },
+      "2": {
+        "value": "8px",
+        "type": "dimension"
+      },
+      "3": {
+        "value": "12px",
+        "type": "dimension"
+      },
+      "4": {
+        "value": "16px",
+        "type": "dimension"
+      },
+      "5": {
+        "value": "20px",
+        "type": "dimension"
+      },
+      "6": {
+        "value": "24px",
+        "type": "dimension"
+      },
+      "8": {
+        "value": "32px",
+        "type": "dimension"
+      },
+      "10": {
+        "value": "40px",
+        "type": "dimension"
+      },
+      "12": {
+        "value": "48px",
+        "type": "dimension"
+      },
+      "16": {
+        "value": "64px",
+        "type": "dimension"
+      },
+      "20": {
+        "value": "80px",
+        "type": "dimension"
+      },
+      "24": {
+        "value": "96px",
+        "type": "dimension"
+      }
+    },
+    "borderRadius": {
+      "none": {
+        "value": "0px",
+        "type": "dimension"
+      },
+      "sm": {
+        "value": "4px",
+        "type": "dimension"
+      },
+      "md": {
+        "value": "8px",
+        "type": "dimension"
+      },
+      "lg": {
+        "value": "12px",
+        "type": "dimension"
+      },
+      "xl": {
+        "value": "16px",
+        "type": "dimension"
+      },
+      "2xl": {
+        "value": "20px",
+        "type": "dimension",
+        "description": "Cards — rounded-2xl"
+      },
+      "card": {
+        "value": "20px",
+        "type": "dimension",
+        "description": "Alias for card corners"
+      },
+      "btn": {
+        "value": "12px",
+        "type": "dimension",
+        "description": "Button corners"
+      },
+      "full": {
+        "value": "9999px",
+        "type": "dimension"
+      }
+    },
+    "breakpoints": {
+      "sm": {
+        "value": "640px",
+        "type": "dimension",
+        "description": "Small — mobile landscape"
+      },
+      "md": {
+        "value": "768px",
+        "type": "dimension",
+        "description": "Medium — tablet"
+      },
+      "lg": {
+        "value": "1024px",
+        "type": "dimension",
+        "description": "Large — desktop"
+      },
+      "xl": {
+        "value": "1280px",
+        "type": "dimension",
+        "description": "Extra large"
+      },
+      "2xl": {
+        "value": "1536px",
+        "type": "dimension",
+        "description": "Wide desktop"
+      }
+    }
+  },
+  "semantic": {
+    "surface": {
+      "base": {
+        "value": "{primitives.color.dark.800}",
+        "type": "color",
+        "description": "Body / page background"
+      },
+      "raised": {
+        "value": "{primitives.color.dark.700}",
+        "type": "color",
+        "description": "Cards, modals"
+      },
+      "overlay": {
+        "value": "{primitives.color.dark.600}",
+        "type": "color",
+        "description": "Dropdowns, popovers"
+      },
+      "highest": {
+        "value": "{primitives.color.dark.500}",
+        "type": "color",
+        "description": "Top-level elevated UI"
+      },
+      "sunken": {
+        "value": "{primitives.color.dark.900}",
+        "type": "color",
+        "description": "Inset / recessed areas"
+      }
+    },
+    "text": {
+      "primary": {
+        "value": "#ffffff",
+        "type": "color",
+        "description": "High-emphasis text — 100% white"
+      },
+      "secondary": {
+        "value": "rgba(255,255,255,0.70)",
+        "type": "color",
+        "description": "Medium-emphasis — 70% white"
+      },
+      "tertiary": {
+        "value": "rgba(255,255,255,0.50)",
+        "type": "color",
+        "description": "Low-emphasis — 50% white"
+      },
+      "disabled": {
+        "value": "rgba(255,255,255,0.30)",
+        "type": "color",
+        "description": "Disabled text — 30% white"
+      },
+      "inverse": {
+        "value": "#0a0a0f",
+        "type": "color",
+        "description": "Text on light surfaces"
+      }
+    },
+    "border": {
+      "subtle": {
+        "value": "rgba(255,255,255,0.08)",
+        "type": "color",
+        "description": "Default glass border"
+      },
+      "medium": {
+        "value": "rgba(255,255,255,0.14)",
+        "type": "color",
+        "description": "Hover / focus border"
+      },
+      "strong": {
+        "value": "rgba(255,255,255,0.20)",
+        "type": "color",
+        "description": "Active / selected border"
+      }
+    },
+    "glass": {
+      "level1": {
+        "background": {
+          "value": "rgba(255,255,255,0.04)",
+          "type": "color",
+          "description": "Standard glass — cards"
+        },
+        "border": {
+          "value": "rgba(255,255,255,0.08)",
+          "type": "color"
+        },
+        "blur": {
+          "value": "24px",
+          "type": "dimension",
+          "description": "backdrop-blur-xl"
+        }
+      },
+      "level2": {
+        "background": {
+          "value": "rgba(255,255,255,0.06)",
+          "type": "color",
+          "description": "Hover / interactive glass"
+        },
+        "border": {
+          "value": "rgba(255,255,255,0.14)",
+          "type": "color"
+        },
+        "blur": {
+          "value": "24px",
+          "type": "dimension"
+        }
+      },
+      "level3": {
+        "background": {
+          "value": "rgba(255,255,255,0.10)",
+          "type": "color",
+          "description": "Modals / prominent glass"
+        },
+        "border": {
+          "value": "rgba(255,255,255,0.20)",
+          "type": "color"
+        },
+        "blur": {
+          "value": "32px",
+          "type": "dimension",
+          "description": "backdrop-blur-2xl"
+        }
+      }
+    },
+    "interactive": {
+      "default": {
+        "value": "{primitives.color.primary.500}",
+        "type": "color"
+      },
+      "hover": {
+        "value": "{primitives.color.primary.400}",
+        "type": "color"
+      },
+      "active": {
+        "value": "{primitives.color.primary.600}",
+        "type": "color"
+      },
+      "disabled": {
+        "value": "{primitives.color.dark.500}",
+        "type": "color"
+      }
+    },
+    "status": {
+      "success": {
+        "value": "{primitives.color.success.500}",
+        "type": "color"
+      },
+      "error": {
+        "value": "{primitives.color.error.500}",
+        "type": "color"
+      },
+      "warning": {
+        "value": "{primitives.color.warning.500}",
+        "type": "color"
+      },
+      "info": {
+        "value": "{primitives.color.accent.500}",
+        "type": "color"
+      }
+    },
+    "shadow": {
+      "glow": {
+        "value": "0 4px 24px rgba(124, 58, 237, 0.25)",
+        "type": "shadow",
+        "description": "Standard purple glow"
+      },
+      "glowIntense": {
+        "value": "0 8px 32px rgba(124, 58, 237, 0.35)",
+        "type": "shadow",
+        "description": "Intense purple glow — hover / focus"
+      },
+      "glowUnmentionables": {
+        "value": "0 0 20px rgba(225, 29, 72, 0.3)",
+        "type": "shadow",
+        "description": "Rose glow for Unmentionables brand"
+      }
+    },
+    "gradient": {
+      "primary": {
+        "value": "linear-gradient(135deg, #7c3aed, #6366f1, #3b82f6)",
+        "type": "gradient",
+        "description": "Purple → Indigo → Blue — main brand gradient"
+      },
+      "unmentionables": {
+        "value": "linear-gradient(135deg, #e11d48 0%, #7c3aed 100%)",
+        "type": "gradient",
+        "description": "Rose → Purple — Unmentionables brand"
+      }
+    }
+  },
+  "component": {
+    "card": {
+      "background": {
+        "value": "{semantic.glass.level1.background}",
+        "type": "color"
+      },
+      "border": {
+        "value": "{semantic.glass.level1.border}",
+        "type": "color"
+      },
+      "borderRadius": {
+        "value": "{primitives.borderRadius.card}",
+        "type": "dimension"
+      },
+      "blur": {
+        "value": "{semantic.glass.level1.blur}",
+        "type": "dimension"
+      },
+      "padding": {
+        "value": "{primitives.spacing.6}",
+        "type": "dimension"
+      },
+      "hoverBackground": {
+        "value": "{semantic.glass.level2.background}",
+        "type": "color"
+      },
+      "hoverBorder": {
+        "value": "{semantic.glass.level2.border}",
+        "type": "color"
+      }
+    },
+    "button": {
+      "primary": {
+        "background": {
+          "value": "{semantic.gradient.primary}",
+          "type": "gradient"
+        },
+        "text": {
+          "value": "#ffffff",
+          "type": "color"
+        },
+        "borderRadius": {
+          "value": "{primitives.borderRadius.btn}",
+          "type": "dimension"
+        },
+        "paddingX": {
+          "value": "{primitives.spacing.6}",
+          "type": "dimension"
+        },
+        "paddingY": {
+          "value": "{primitives.spacing.3}",
+          "type": "dimension"
+        },
+        "fontWeight": {
+          "value": "{primitives.typography.fontWeight.semibold}",
+          "type": "fontWeight"
+        },
+        "fontSize": {
+          "value": "{primitives.typography.fontSize.sm}",
+          "type": "dimension"
+        },
+        "shadow": {
+          "value": "{semantic.shadow.glow}",
+          "type": "shadow"
+        },
+        "hoverShadow": {
+          "value": "{semantic.shadow.glowIntense}",
+          "type": "shadow"
+        }
+      },
+      "secondary": {
+        "background": {
+          "value": "{semantic.glass.level1.background}",
+          "type": "color"
+        },
+        "border": {
+          "value": "{semantic.glass.level1.border}",
+          "type": "color"
+        },
+        "text": {
+          "value": "#ffffff",
+          "type": "color"
+        },
+        "borderRadius": {
+          "value": "{primitives.borderRadius.btn}",
+          "type": "dimension"
+        },
+        "paddingX": {
+          "value": "{primitives.spacing.6}",
+          "type": "dimension"
+        },
+        "paddingY": {
+          "value": "{primitives.spacing.3}",
+          "type": "dimension"
+        },
+        "fontWeight": {
+          "value": "{primitives.typography.fontWeight.semibold}",
+          "type": "fontWeight"
+        },
+        "fontSize": {
+          "value": "{primitives.typography.fontSize.sm}",
+          "type": "dimension"
+        },
+        "hoverBackground": {
+          "value": "{semantic.glass.level2.background}",
+          "type": "color"
+        },
+        "hoverBorder": {
+          "value": "{semantic.glass.level2.border}",
+          "type": "color"
+        }
+      }
+    },
+    "input": {
+      "background": {
+        "value": "{primitives.color.dark.700}",
+        "type": "color"
+      },
+      "border": {
+        "value": "{semantic.border.subtle}",
+        "type": "color"
+      },
+      "borderRadius": {
+        "value": "{primitives.borderRadius.btn}",
+        "type": "dimension"
+      },
+      "text": {
+        "value": "{semantic.text.primary}",
+        "type": "color"
+      },
+      "placeholder": {
+        "value": "{semantic.text.tertiary}",
+        "type": "color"
+      },
+      "focusBorder": {
+        "value": "{primitives.color.primary.500}",
+        "type": "color"
+      },
+      "focusRing": {
+        "value": "rgba(124, 58, 237, 0.25)",
+        "type": "color"
+      },
+      "paddingX": {
+        "value": "{primitives.spacing.4}",
+        "type": "dimension"
+      },
+      "paddingY": {
+        "value": "{primitives.spacing.3}",
+        "type": "dimension"
+      },
+      "fontSize": {
+        "value": "{primitives.typography.fontSize.sm}",
+        "type": "dimension"
+      }
+    },
+    "badge": {
+      "background": {
+        "value": "rgba(124, 58, 237, 0.15)",
+        "type": "color"
+      },
+      "text": {
+        "value": "{primitives.color.primary.400}",
+        "type": "color"
+      },
+      "borderRadius": {
+        "value": "{primitives.borderRadius.full}",
+        "type": "dimension"
+      },
+      "paddingX": {
+        "value": "{primitives.spacing.3}",
+        "type": "dimension"
+      },
+      "paddingY": {
+        "value": "{primitives.spacing.1}",
+        "type": "dimension"
+      },
+      "fontSize": {
+        "value": "{primitives.typography.fontSize.xs}",
+        "type": "dimension"
+      },
+      "fontWeight": {
+        "value": "{primitives.typography.fontWeight.medium}",
+        "type": "fontWeight"
+      }
+    },
+    "touchTarget": {
+      "minimum": {
+        "value": "44px",
+        "type": "dimension",
+        "description": "WCAG 2.2 AA minimum touch target"
+      },
+      "comfortable": {
+        "value": "48px",
+        "type": "dimension",
+        "description": "Recommended touch target"
+      }
+    }
+  }
+}

@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+  <title>AuctionX Component Library</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Primitives */
+      --dark-900: #0a0a0f;
+      --dark-800: #13131a;
+      --dark-700: #1a1a24;
+      --dark-600: #252533;
+      --dark-500: #2d2d3d;
+      --primary-400: #9333ea;
+      --primary-500: #7c3aed;
+      --primary-600: #6d28d9;
+      --primary-700: #5b21b6;
+      --accent-500: #3b82f6;
+      --success-500: #10b981;
+      --error-500: #ef4444;
+      --warning-500: #f59e0b;
+      --unmentionables-500: #e11d48;
+
+      /* Semantic */
+      --text-primary: #ffffff;
+      --text-secondary: rgba(255,255,255,0.70);
+      --text-tertiary: rgba(255,255,255,0.50);
+      --text-disabled: rgba(255,255,255,0.30);
+      --border-subtle: rgba(255,255,255,0.08);
+      --border-medium: rgba(255,255,255,0.14);
+      --glass-l1-bg: rgba(255,255,255,0.04);
+      --glass-l1-border: rgba(255,255,255,0.08);
+      --glass-l2-bg: rgba(255,255,255,0.06);
+      --glass-l2-border: rgba(255,255,255,0.14);
+      --glass-l3-bg: rgba(255,255,255,0.10);
+      --glass-l3-border: rgba(255,255,255,0.20);
+
+      /* Gradients */
+      --gradient-primary: linear-gradient(135deg, #7c3aed, #6366f1, #3b82f6);
+      --gradient-unmentionables: linear-gradient(135deg, #e11d48 0%, #7c3aed 100%);
+
+      /* Shadows */
+      --shadow-glow: 0 4px 24px rgba(124, 58, 237, 0.25);
+      --shadow-glow-intense: 0 8px 32px rgba(124, 58, 237, 0.35);
+      --shadow-glow-unmentionables: 0 0 20px rgba(225, 29, 72, 0.3);
+
+      /* Radii */
+      --radius-card: 20px;
+      --radius-btn: 12px;
+      --radius-full: 9999px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--dark-800);
+      color: var(--text-primary);
+      padding: 64px;
+    }
+
+    .page-title {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .page-subtitle {
+      font-size: 16px;
+      color: var(--text-secondary);
+      margin-bottom: 64px;
+    }
+
+    .section {
+      margin-bottom: 64px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-tertiary);
+      margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .row {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .variant-label {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .variant-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ===== BUTTONS ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      padding: 12px 24px;
+      border-radius: var(--radius-btn);
+      transition: all 0.2s ease;
+      min-height: 44px;
+    }
+
+    .btn-primary {
+      background: var(--gradient-primary);
+      color: #ffffff;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .btn-primary:hover {
+      box-shadow: var(--shadow-glow-intense);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--glass-l1-bg);
+      color: #ffffff;
+      border: 1px solid var(--glass-l1-border);
+      backdrop-filter: blur(24px);
+    }
+
+    .btn-secondary:hover {
+      background: var(--glass-l2-bg);
+      border-color: var(--glass-l2-border);
+    }
+
+    .btn-destructive {
+      background: var(--error-500);
+      color: #ffffff;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+    }
+
+    .btn-ghost:hover {
+      background: var(--glass-l1-bg);
+      color: var(--text-primary);
+    }
+
+    .btn-sm {
+      padding: 8px 16px;
+      font-size: 13px;
+      min-height: 36px;
+    }
+
+    .btn-lg {
+      padding: 16px 32px;
+      font-size: 16px;
+      min-height: 52px;
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-unmentionables {
+      background: var(--gradient-unmentionables);
+      color: #ffffff;
+      box-shadow: var(--shadow-glow-unmentionables);
+    }
+
+    /* ===== CARDS ===== */
+    .card {
+      background: var(--glass-l1-bg);
+      border: 1px solid var(--glass-l1-border);
+      border-radius: var(--radius-card);
+      backdrop-filter: blur(24px);
+      padding: 24px;
+      transition: all 0.2s ease;
+    }
+
+    .card-hover:hover {
+      background: var(--glass-l2-bg);
+      border-color: var(--glass-l2-border);
+    }
+
+    .card-elevated {
+      background: var(--glass-l3-bg);
+      border-color: var(--glass-l3-border);
+      backdrop-filter: blur(32px);
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .card-description {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .card-footer {
+      margin-top: 20px;
+      display: flex;
+      gap: 12px;
+    }
+
+    /* ===== INPUTS ===== */
+    .input-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 280px;
+    }
+
+    .input-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .input {
+      font-family: inherit;
+      font-size: 14px;
+      background: var(--dark-700);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-btn);
+      color: var(--text-primary);
+      padding: 12px 16px;
+      outline: none;
+      transition: all 0.2s ease;
+      min-height: 44px;
+    }
+
+    .input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .input:focus {
+      border-color: var(--primary-500);
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
+    }
+
+    .input-error {
+      border-color: var(--error-500);
+    }
+
+    .input-error:focus {
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+    }
+
+    .input-helper {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    .input-error-text {
+      font-size: 12px;
+      color: var(--error-500);
+    }
+
+    .textarea {
+      font-family: inherit;
+      font-size: 14px;
+      background: var(--dark-700);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-btn);
+      color: var(--text-primary);
+      padding: 12px 16px;
+      outline: none;
+      transition: all 0.2s ease;
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    .textarea::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .textarea:focus {
+      border-color: var(--primary-500);
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
+    }
+
+    /* ===== BADGES ===== */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 12px;
+      border-radius: var(--radius-full);
+      white-space: nowrap;
+    }
+
+    .badge-primary {
+      background: rgba(124, 58, 237, 0.15);
+      color: var(--primary-400);
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success-500);
+    }
+
+    .badge-error {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--error-500);
+    }
+
+    .badge-warning {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning-500);
+    }
+
+    .badge-info {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent-500);
+    }
+
+    .badge-unmentionables {
+      background: rgba(225, 29, 72, 0.15);
+      color: var(--unmentionables-500);
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .badge-primary .badge-dot { background: var(--primary-400); }
+    .badge-success .badge-dot { background: var(--success-500); }
+    .badge-error .badge-dot { background: var(--error-500); }
+    .badge-warning .badge-dot { background: var(--warning-500); }
+
+    /* ===== STATUS INDICATORS ===== */
+    .status-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    /* ===== COLOR SWATCHES ===== */
+    .swatch-grid {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .swatch {
+      width: 64px;
+      height: 64px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 6px;
+    }
+
+    .swatch-label {
+      font-size: 10px;
+      color: var(--text-secondary);
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    .swatch-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ===== TYPOGRAPHY ===== */
+    .type-sample {
+      margin-bottom: 16px;
+    }
+
+    .type-meta {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 2px;
+    }
+
+    /* ===== AUCTION CARD (composite) ===== */
+    .auction-card {
+      background: var(--glass-l1-bg);
+      border: 1px solid var(--glass-l1-border);
+      border-radius: var(--radius-card);
+      backdrop-filter: blur(24px);
+      overflow: hidden;
+      width: 320px;
+      transition: all 0.2s ease;
+    }
+
+    .auction-card:hover {
+      border-color: var(--glass-l2-border);
+      box-shadow: var(--shadow-glow);
+      transform: translateY(-2px);
+    }
+
+    .auction-img {
+      width: 100%;
+      height: 200px;
+      background: var(--dark-600);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-tertiary);
+      font-size: 14px;
+    }
+
+    .auction-body {
+      padding: 20px;
+    }
+
+    .auction-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .auction-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .auction-seller {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    .auction-stats {
+      display: flex;
+      justify-content: space-between;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .auction-stat-label {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    .auction-stat-value {
+      font-size: 18px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    .auction-stat-value.gradient-text {
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .auction-timer {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--warning-500);
+    }
+
+    /* ===== GLASS LEVELS DEMO ===== */
+    .glass-demo {
+      display: flex;
+      gap: 24px;
+    }
+
+    .glass-box {
+      width: 200px;
+      height: 120px;
+      border-radius: var(--radius-card);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .glass-1 {
+      background: var(--glass-l1-bg);
+      border: 1px solid var(--glass-l1-border);
+      backdrop-filter: blur(24px);
+    }
+
+    .glass-2 {
+      background: var(--glass-l2-bg);
+      border: 1px solid var(--glass-l2-border);
+      backdrop-filter: blur(24px);
+    }
+
+    .glass-3 {
+      background: var(--glass-l3-bg);
+      border: 1px solid var(--glass-l3-border);
+      backdrop-filter: blur(32px);
+    }
+
+    .glass-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .glass-meta {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    /* ===== MODAL ===== */
+    .modal-backdrop {
+      width: 480px;
+      background: rgba(0,0,0,0.60);
+      border-radius: var(--radius-card);
+      padding: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal {
+      background: var(--dark-700);
+      border: 1px solid var(--glass-l3-border);
+      border-radius: var(--radius-card);
+      padding: 32px;
+      width: 100%;
+      backdrop-filter: blur(32px);
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .modal-description {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    /* ===== DIVIDER ===== */
+    .divider {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 48px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1 class="page-title">AuctionX / Authentic Materials</h1>
+  <p class="page-subtitle">Component Library &mdash; Design System v2.0</p>
+
+  <!-- ===== COLORS ===== -->
+  <div class="section">
+    <h2 class="section-title">Color Primitives</h2>
+
+    <div class="variant-label">Dark Surfaces</div>
+    <div class="swatch-grid" style="margin-bottom: 24px;">
+      <div class="swatch-group"><div class="swatch" style="background: #0a0a0f;"></div><span class="swatch-label">900</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #13131a;"></div><span class="swatch-label">800</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #1a1a24;"></div><span class="swatch-label">700</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #252533;"></div><span class="swatch-label">600</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #2d2d3d;"></div><span class="swatch-label">500</span></div>
+    </div>
+
+    <div class="variant-label">Brand Colors</div>
+    <div class="swatch-grid" style="margin-bottom: 24px;">
+      <div class="swatch-group"><div class="swatch" style="background: #9333ea;"></div><span class="swatch-label">Primary 400</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #7c3aed;"></div><span class="swatch-label">Primary 500</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #6d28d9;"></div><span class="swatch-label">Primary 600</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #5b21b6;"></div><span class="swatch-label">Primary 700</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #6366f1;"></div><span class="swatch-label">Indigo 500</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #3b82f6;"></div><span class="swatch-label">Accent 500</span></div>
+    </div>
+
+    <div class="variant-label">Status & Unmentionables</div>
+    <div class="swatch-grid">
+      <div class="swatch-group"><div class="swatch" style="background: #10b981;"></div><span class="swatch-label">Success</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #ef4444;"></div><span class="swatch-label">Error</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #f59e0b;"></div><span class="swatch-label">Warning</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #e11d48;"></div><span class="swatch-label">Unmen 500</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #fb7185;"></div><span class="swatch-label">Unmen 400</span></div>
+      <div class="swatch-group"><div class="swatch" style="background: #fda4af;"></div><span class="swatch-label">Unmen 300</span></div>
+    </div>
+  </div>
+
+  <!-- ===== TYPOGRAPHY ===== -->
+  <div class="section">
+    <h2 class="section-title">Typography</h2>
+    <div class="type-sample"><span style="font-size: 36px; font-weight: 700;">Heading 4XL — 36px Bold</span><div class="type-meta">Plus Jakarta Sans &middot; 700 &middot; 2.25rem</div></div>
+    <div class="type-sample"><span style="font-size: 30px; font-weight: 700;">Heading 3XL — 30px Bold</span><div class="type-meta">Plus Jakarta Sans &middot; 700 &middot; 1.875rem</div></div>
+    <div class="type-sample"><span style="font-size: 24px; font-weight: 600;">Heading 2XL — 24px Semibold</span><div class="type-meta">Plus Jakarta Sans &middot; 600 &middot; 1.5rem</div></div>
+    <div class="type-sample"><span style="font-size: 20px; font-weight: 600;">Heading XL — 20px Semibold</span><div class="type-meta">Plus Jakarta Sans &middot; 600 &middot; 1.25rem</div></div>
+    <div class="type-sample"><span style="font-size: 18px; font-weight: 600;">Heading LG — 18px Semibold</span><div class="type-meta">Plus Jakarta Sans &middot; 600 &middot; 1.125rem</div></div>
+    <div class="type-sample"><span style="font-size: 16px; font-weight: 400;">Body Base — 16px Regular</span><div class="type-meta">Plus Jakarta Sans &middot; 400 &middot; 1rem</div></div>
+    <div class="type-sample"><span style="font-size: 14px; font-weight: 400;">Body SM — 14px Regular</span><div class="type-meta">Plus Jakarta Sans &middot; 400 &middot; 0.875rem</div></div>
+    <div class="type-sample"><span style="font-size: 12px; font-weight: 500;">Caption XS — 12px Medium</span><div class="type-meta">Plus Jakarta Sans &middot; 500 &middot; 0.75rem</div></div>
+  </div>
+
+  <!-- ===== GLASSMORPHISM ===== -->
+  <div class="section">
+    <h2 class="section-title">Glassmorphism Levels</h2>
+    <div class="glass-demo">
+      <div class="glass-box glass-1"><span class="glass-label">Level 1</span><span class="glass-meta">Cards &middot; 4% white</span></div>
+      <div class="glass-box glass-2"><span class="glass-label">Level 2</span><span class="glass-meta">Hover &middot; 6% white</span></div>
+      <div class="glass-box glass-3"><span class="glass-label">Level 3</span><span class="glass-meta">Modals &middot; 10% white</span></div>
+    </div>
+  </div>
+
+  <!-- ===== BUTTONS ===== -->
+  <div class="section">
+    <h2 class="section-title">Buttons</h2>
+
+    <div class="variant-label">Variants</div>
+    <div class="row">
+      <div class="variant-group"><div class="variant-label">Primary</div><button class="btn btn-primary">Place Bid</button></div>
+      <div class="variant-group"><div class="variant-label">Secondary</div><button class="btn btn-secondary">View Details</button></div>
+      <div class="variant-group"><div class="variant-label">Ghost</div><button class="btn btn-ghost">Cancel</button></div>
+      <div class="variant-group"><div class="variant-label">Destructive</div><button class="btn btn-destructive">Delete</button></div>
+      <div class="variant-group"><div class="variant-label">Unmentionables</div><button class="btn btn-unmentionables">Subscribe</button></div>
+    </div>
+
+    <div class="variant-label">Sizes</div>
+    <div class="row" style="align-items: center;">
+      <div class="variant-group"><div class="variant-label">Small</div><button class="btn btn-primary btn-sm">Small</button></div>
+      <div class="variant-group"><div class="variant-label">Default</div><button class="btn btn-primary">Default</button></div>
+      <div class="variant-group"><div class="variant-label">Large</div><button class="btn btn-primary btn-lg">Large</button></div>
+    </div>
+
+    <div class="variant-label">States</div>
+    <div class="row" style="align-items: center;">
+      <div class="variant-group"><div class="variant-label">Disabled Primary</div><button class="btn btn-primary" disabled>Disabled</button></div>
+      <div class="variant-group"><div class="variant-label">Disabled Secondary</div><button class="btn btn-secondary" disabled>Disabled</button></div>
+    </div>
+  </div>
+
+  <!-- ===== BADGES ===== -->
+  <div class="section">
+    <h2 class="section-title">Badges</h2>
+    <div class="row" style="align-items: center;">
+      <span class="badge badge-primary"><span class="badge-dot"></span>Active</span>
+      <span class="badge badge-success"><span class="badge-dot"></span>Verified</span>
+      <span class="badge badge-error"><span class="badge-dot"></span>Expired</span>
+      <span class="badge badge-warning"><span class="badge-dot"></span>Ending Soon</span>
+      <span class="badge badge-info">New</span>
+      <span class="badge badge-unmentionables">18+</span>
+    </div>
+  </div>
+
+  <!-- ===== INPUTS ===== -->
+  <div class="section">
+    <h2 class="section-title">Form Inputs</h2>
+    <div class="row">
+      <div class="input-wrapper">
+        <label class="input-label">Email Address</label>
+        <input class="input" type="email" placeholder="you@example.com" />
+        <span class="input-helper">We'll never share your email</span>
+      </div>
+      <div class="input-wrapper">
+        <label class="input-label">Bid Amount</label>
+        <input class="input" type="text" value="$1,250.00" />
+      </div>
+      <div class="input-wrapper">
+        <label class="input-label">Username (error)</label>
+        <input class="input input-error" type="text" value="ab" />
+        <span class="input-error-text">Username must be at least 3 characters</span>
+      </div>
+    </div>
+    <div class="row" style="margin-top: 8px;">
+      <div class="input-wrapper">
+        <label class="input-label">Description</label>
+        <textarea class="textarea" placeholder="Describe your item..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CARDS ===== -->
+  <div class="section">
+    <h2 class="section-title">Cards</h2>
+    <div class="row">
+      <div class="card card-hover" style="width: 320px;">
+        <h3 class="card-title">Glass Card Level 1</h3>
+        <p class="card-description">Standard card with glassmorphism effect. Hover to see the interactive state transition.</p>
+        <div class="card-footer">
+          <button class="btn btn-primary btn-sm">Action</button>
+          <button class="btn btn-secondary btn-sm">Details</button>
+        </div>
+      </div>
+      <div class="card card-elevated" style="width: 320px;">
+        <h3 class="card-title">Elevated Card (Level 3)</h3>
+        <p class="card-description">Higher prominence glass surface. Used for modals, featured content, and important callouts.</p>
+        <div class="card-footer">
+          <button class="btn btn-primary btn-sm">Confirm</button>
+          <button class="btn btn-ghost btn-sm">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== AUCTION CARD (composite) ===== -->
+  <div class="section">
+    <h2 class="section-title">Auction Card (Composite Component)</h2>
+    <div class="row">
+      <div class="auction-card">
+        <div class="auction-img">320 x 200 — Item Image</div>
+        <div class="auction-body">
+          <div class="auction-header">
+            <div>
+              <div class="auction-title">Signed Rookie Card</div>
+              <div class="auction-seller">@collector_prime</div>
+            </div>
+            <span class="badge badge-success"><span class="badge-dot"></span>Live</span>
+          </div>
+          <div class="auction-stats">
+            <div>
+              <div class="auction-stat-label">Current Bid</div>
+              <div class="auction-stat-value gradient-text">$1,250</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="auction-stat-label">Time Left</div>
+              <div class="auction-timer">2h 34m</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="auction-card">
+        <div class="auction-img" style="background: linear-gradient(135deg, rgba(225,29,72,0.2), rgba(124,58,237,0.2));">320 x 200 — Item Image</div>
+        <div class="auction-body">
+          <div class="auction-header">
+            <div>
+              <div class="auction-title">Exclusive Package</div>
+              <div class="auction-seller">@creator_name</div>
+            </div>
+            <span class="badge badge-unmentionables">18+</span>
+          </div>
+          <div class="auction-stats">
+            <div>
+              <div class="auction-stat-label">Current Bid</div>
+              <div class="auction-stat-value" style="color: var(--unmentionables-500);">$890</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="auction-stat-label">Time Left</div>
+              <div class="auction-timer">5h 12m</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL ===== -->
+  <div class="section">
+    <h2 class="section-title">Modal</h2>
+    <div class="modal-backdrop">
+      <div class="modal">
+        <h3 class="modal-title">Confirm Your Bid</h3>
+        <p class="modal-description">You are about to place a bid of <strong>$1,250.00</strong> on "Signed Rookie Card". This action cannot be undone.</p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost btn-sm">Cancel</button>
+          <button class="btn btn-primary btn-sm">Confirm Bid</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== GRADIENTS ===== -->
+  <div class="section">
+    <h2 class="section-title">Gradients</h2>
+    <div class="row">
+      <div style="width: 280px; height: 80px; border-radius: var(--radius-card); background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; font-weight: 600;">Primary Gradient</div>
+      <div style="width: 280px; height: 80px; border-radius: var(--radius-card); background: var(--gradient-unmentionables); display: flex; align-items: center; justify-content: center; font-weight: 600;">Unmentionables Gradient</div>
+    </div>
+  </div>
+
+  <!-- ===== SHADOWS ===== -->
+  <div class="section">
+    <h2 class="section-title">Shadows / Glows</h2>
+    <div class="row">
+      <div style="width: 180px; height: 100px; border-radius: var(--radius-card); background: var(--dark-700); box-shadow: var(--shadow-glow); display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--text-secondary);">Standard Glow</div>
+      <div style="width: 180px; height: 100px; border-radius: var(--radius-card); background: var(--dark-700); box-shadow: var(--shadow-glow-intense); display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--text-secondary);">Intense Glow</div>
+      <div style="width: 180px; height: 100px; border-radius: var(--radius-card); background: var(--dark-700); box-shadow: var(--shadow-glow-unmentionables); display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--text-secondary);">Unmen Glow</div>
+    </div>
+  </div>
+
+  <!-- ===== SPACING ===== -->
+  <div class="section">
+    <h2 class="section-title">Spacing Scale</h2>
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 16px;"><span style="width: 40px; font-size: 12px; color: var(--text-tertiary); text-align: right;">4px</span><div style="height: 16px; width: 4px; background: var(--primary-500); border-radius: 2px;"></div></div>
+      <div style="display: flex; align-items: center; gap: 16px;"><span style="width: 40px; font-size: 12px; color: var(--text-tertiary); text-align: right;">8px</span><div style="height: 16px; width: 8px; background: var(--primary-500); border-radius: 2px;"></div></div>
+      <div style="display: flex; align-items: center; gap: 16px;"><span style="width: 40px; font-size: 12px; color: var(--text-tertiary); text-align: right;">12px</span><div style="height: 16px; width: 12px; background: var(--primary-500); border-radius: 2px;"></div></div>
+      <div style="display: flex; align-items: center; gap: 16px;"><span style="width: 40px; font-size: 12px; color: var(--text-tertiary); text-align: right;">16px</span><div style="height: 16px; width: 16px; background: var(--primary-500); border-radius: 2px;"></div></div>
+      <div style="display: flex; align-items: center; gap: 16px;"><span style="width: 40px; font-size: 12px; color: var(--text-tertiary); text-align: right;">24px</span><div style="height: 16px; width: 24px; background: var(--primary-500); border-radius: 2px;"></div></div>
+      <div style="display: flex; align-items: center; gap: 16px;"><span style="width: 40px; font-size: 12px; color: var(--text-tertiary); text-align: right;">32px</span><div style="height: 16px; width: 32px; background: var(--primary-500); border-radius: 2px;"></div></div>
+      <div style="display: flex; align-items: center; gap: 16px;"><span style="width: 40px; font-size: 12px; color: var(--text-tertiary); text-align: right;">48px</span><div style="height: 16px; width: 48px; background: var(--primary-500); border-radius: 2px;"></div></div>
+      <div style="display: flex; align-items: center; gap: 16px;"><span style="width: 40px; font-size: 12px; color: var(--text-tertiary); text-align: right;">64px</span><div style="height: 16px; width: 64px; background: var(--primary-500); border-radius: 2px;"></div></div>
+      <div style="display: flex; align-items: center; gap: 16px;"><span style="width: 40px; font-size: 12px; color: var(--text-tertiary); text-align: right;">96px</span><div style="height: 16px; width: 96px; background: var(--primary-500); border-radius: 2px;"></div></div>
+    </div>
+  </div>
+
+</body>
+</html>
