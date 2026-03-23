@@ -1,16 +1,14 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
-import { AMWordmark } from '@/components/landing/AMWordmark';
+import { LandingNav } from '@/components/landing/LandingNav';
 import { ProductToggle } from '@/components/landing/ProductToggle';
 import { SealPhaseAnimation } from '@/components/landing/SealPhaseAnimation';
 
 export const AMSealedPage = () => {
   return (
     <div className="bg-landing-dark min-h-screen">
-      {/* ── Wordmark ── */}
-      <div className="pt-10 pb-4 px-4 flex justify-center">
-        <AMWordmark size="sm" />
-      </div>
+      {/* ── Nav ── */}
+      <LandingNav />
 
       {/* ── Product Toggle ── */}
       <ProductToggle />

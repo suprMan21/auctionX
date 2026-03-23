@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
-import { AMWordmark } from '@/components/landing/AMWordmark';
+import { LandingNav } from '@/components/landing/LandingNav';
 import { WaitlistCapture } from '@/components/landing/WaitlistCapture';
 
 const steps = [
@@ -25,10 +25,12 @@ const steps = [
 export const CreatorLandingPage = () => {
   return (
     <div className="min-h-screen">
+      {/* ── Nav ── */}
+      <LandingNav />
+
       {/* ── Hero ── */}
       <section className="bg-landing-dark py-24 px-4">
         <div className="max-w-4xl mx-auto text-center flex flex-col items-center">
-          <AMWordmark size="lg" />
 
           <h1 className="mt-12 text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight">
             Your creation. Your stage.
