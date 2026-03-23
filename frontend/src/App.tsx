@@ -37,6 +37,10 @@ import { NotificationPreferencesPage } from './features/notifications/pages/Noti
 import { AgeGateGuard } from '@/components/AgeGate/AgeGateGuard';
 import { UnmentionablesBrowsePage } from '@/pages/UnmentionablesBrowsePage';
 import { Dashboard } from '@/pages/Dashboard';
+import { CollectorLandingPage } from '@/pages/CollectorLandingPage';
+import { CreatorLandingPage } from '@/pages/CreatorLandingPage';
+import { AMSealedPage } from '@/pages/AMSealedPage';
+import { AMProofPage } from '@/pages/AMProofPage';
 import { SellerVerificationPage } from '@/features/seller-verification/pages/SellerVerificationPage';
 import { AdminSellerVerificationPage } from '@/features/admin/pages/AdminSellerVerificationPage';
 
@@ -86,6 +90,12 @@ function App() {
         <div className="noise-overlay" aria-hidden="true" />
 
         <Routes>
+          {/* Landing pages -- static routes, no app header */}
+          <Route path="/collector" element={<CollectorLandingPage />} />
+          <Route path="/creator" element={<CreatorLandingPage />} />
+          <Route path="/am-sealed" element={<AMSealedPage />} />
+          <Route path="/am-proof" element={<AMProofPage />} />
+
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />

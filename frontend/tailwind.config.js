@@ -50,6 +50,10 @@ export default {
           border: 'rgba(255,255,255,0.08)',
           'border-hover': 'rgba(255,255,255,0.14)',
         },
+        landing: {
+          dark: '#0F0F0F',
+          light: '#F8F6F2',
+        },
       },
       fontFamily: {
         sans: [
