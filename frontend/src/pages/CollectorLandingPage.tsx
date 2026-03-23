@@ -83,7 +83,7 @@ export const CollectorLandingPage = () => {
             a story.
           </p>
 
-          <p className="mt-10 text-sm font-medium tracking-wide uppercase text-gray-500 text-center">
+          <p className="mt-10 text-sm font-medium tracking-wide uppercase text-gray-600 text-center">
             Real pieces. Real origins. The story sealed in.
           </p>
         </div>
@@ -123,7 +123,7 @@ export const CollectorLandingPage = () => {
       {/* ── How It Works ── */}
       <section className="bg-landing-light py-24 px-4">
         <div className="max-w-6xl mx-auto">
-          <p className="text-sm font-medium tracking-wide uppercase text-gray-500 text-center mb-4">
+          <p className="text-sm font-medium tracking-wide uppercase text-gray-600 text-center mb-4">
             Find the piece. Keep the story.
           </p>
 
@@ -158,7 +158,7 @@ export const CollectorLandingPage = () => {
       {/* ── Waitlist / CTA ── */}
       <div>
         <div className="bg-landing-dark pt-10 pb-0 px-4">
-          <p className="text-sm font-medium tracking-wide uppercase text-gray-500 text-center">
+          <p className="text-sm font-medium tracking-wide uppercase text-gray-400 text-center">
             Some collections are just stuff. Build something else.
           </p>
         </div>

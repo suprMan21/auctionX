@@ -97,7 +97,7 @@ export const AMSealedPage = () => {
             Looking for provenance documentation on a third-party collectible?{' '}
             <Link
               to="/am-proof"
-              className="text-primary-400 hover:text-primary-300 underline underline-offset-4 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-sm"
+              className="text-accent-400 hover:text-white underline underline-offset-4 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-sm"
             >
               See AM Proof
             </Link>

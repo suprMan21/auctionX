@@ -78,7 +78,7 @@ export const CreatorLandingPage = () => {
             run the timeline. The platform works around you.
           </p>
 
-          <p className="mt-10 text-sm font-medium tracking-wide uppercase text-gray-500 text-center">
+          <p className="mt-10 text-sm font-medium tracking-wide uppercase text-gray-600 text-center">
             Your creation. Their collection. Your name on it forever.
           </p>
         </div>
@@ -121,7 +121,7 @@ export const CreatorLandingPage = () => {
       {/* ── How It Works ── */}
       <section className="bg-landing-light py-24 px-4">
         <div className="max-w-6xl mx-auto">
-          <p className="text-sm font-medium tracking-wide uppercase text-gray-500 text-center mb-4">
+          <p className="text-sm font-medium tracking-wide uppercase text-gray-600 text-center mb-4">
             Build the hype. Start the bidding. Ride the wave.
           </p>
 
@@ -156,7 +156,7 @@ export const CreatorLandingPage = () => {
       {/* ── Waitlist / CTA ── */}
       <div>
         <div className="bg-landing-dark pt-10 pb-0 px-4">
-          <p className="text-sm font-medium tracking-wide uppercase text-gray-500 text-center">
+          <p className="text-sm font-medium tracking-wide uppercase text-gray-400 text-center">
             The pieces you release. The story they carry.
           </p>
         </div>
