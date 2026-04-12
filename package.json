@@ -5,6 +5,11 @@
     "test:e2e:headed": "cd frontend && npx playwright test --headed",
     "test:api": "cd backend && npx vitest run src/__tests__/api.integration.test.ts",
     "test:mechanics": "cd backend && npx vitest run src/lib/auction/__tests__/mechanics.test.ts",
-    "test:all": "npm run test:mechanics && npm run test:api && npm run test:e2e"
+    "test:all": "npm run test:mechanics && npm run test:api && npm run test:e2e",
+    "audit:frontend": "cd frontend && npm audit --audit-level=high",
+    "audit:backend": "cd backend && npm audit --audit-level=high",
+    "audit:contracts": "cd contracts && npm audit --audit-level=critical",
+    "audit:scripts": "cd scripts && npm audit --audit-level=high",
+    "audit:all": "npm run audit:frontend && npm run audit:backend && npm run audit:contracts && npm run audit:scripts"
   }
 }
