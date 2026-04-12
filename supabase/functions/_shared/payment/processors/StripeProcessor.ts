@@ -7,7 +7,7 @@
  *
  * @module StripeProcessor
  */
-import Stripe from 'npm:stripe@14.17.0';
+import Stripe from 'stripe';
 import { BaseProcessor } from '../BaseProcessor.ts';
 import type {
   PaymentProcessor,
@@ -59,6 +59,8 @@ export class StripeProcessor extends BaseProcessor implements PaymentProcessor {
       const paymentIntent = await this.stripe.paymentIntents.create({
         amount,
         currency: currency.toLowerCase(),
+        // Cast required: Stripe v17 types narrowed PaymentMethodData to exclude raw card
+        // details sub-objects, but the API still accepts them at runtime.
         payment_method_data: {
           type: 'card',
           card: {
@@ -71,7 +73,7 @@ export class StripeProcessor extends BaseProcessor implements PaymentProcessor {
             name: paymentMethod.billingName,
             email: paymentMethod.email,
           },
-        },
+        } as unknown as Stripe.PaymentIntentCreateParams.PaymentMethodData,
         confirm: true,
         metadata: stripeMetadata,
       });
@@ -137,9 +139,7 @@ export class StripeProcessor extends BaseProcessor implements PaymentProcessor {
     try {
       event = await this.stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
     } catch (err) {
-      logger.error('Stripe webhook signature verification failed', {
-        error: (err as Error).message,
-      });
+      logger.error('Stripe webhook signature verification failed', err as Error);
       return null;
     }
 
@@ -212,7 +212,7 @@ export class StripeProcessor extends BaseProcessor implements PaymentProcessor {
         refundId: refund.id,
         processor: this.processorName,
         amount: refund.amount,
-        status: refund.status,
+        status: refund.status ?? undefined,
       };
     } catch (error) {
       logger.error('Stripe refund failed', error as Error, {
