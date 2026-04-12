@@ -12,8 +12,7 @@
  *
  * @module payment-webhook
  */
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.93.1';
 import { ProcessorFactory } from '../_shared/payment/ProcessorFactory.ts';
 import { ProcessorType, PaymentStatus } from '../_shared/payment/types.ts';
 import { logger } from '../_shared/utils/logger.ts';
@@ -56,7 +55,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-nowpayments-sig, x-signature',
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });

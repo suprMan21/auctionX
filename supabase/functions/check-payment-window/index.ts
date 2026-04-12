@@ -17,7 +17,6 @@
  *
  * @module check-payment-window
  */
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logger } from '../_shared/utils/logger.ts';
 
@@ -47,7 +46,7 @@ const corsHeaders = {
 
 const PAYMENT_WINDOW_MS = 20 * 60 * 1000; // 20 minutes
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }

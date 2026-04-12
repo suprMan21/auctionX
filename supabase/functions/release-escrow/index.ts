@@ -10,7 +10,6 @@
  *
  * Intended to be called via pg_cron or an external scheduler every 5 minutes.
  */
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { calculatePayout } from '../_shared/payment/payoutCalculation.ts';
 import { logger } from '../_shared/utils/logger.ts';
@@ -39,7 +38,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-release-secret',
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
