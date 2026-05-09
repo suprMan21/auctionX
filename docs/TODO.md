@@ -1,6 +1,28 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-05-09 (Session D Close-Out -- waitlist migration applied, types regenerated, deployed)
+Last updated: 2026-05-09 (1Password secret management + Postmark migration)
+
+---
+
+## Infrastructure: 1Password + Postmark (2026-05-09)
+
+- [x] **DONE:** Migrate all dev secrets from plain `.env` files into 1Password `AM_Development` vault (kyniteinc.1password.ca business account)
+  - 8 new items: Supabase Staging, AWS AuctionX Media, Postmark API, Stripe, Pinata, Base Network, App Secrets, Third Party APIs
+  - Business-account isolation via `.op-account` file (gitignored) + explicit `--account` flag in all scripts
+- [x] **DONE:** Commit `.env.op` template files for backend/frontend/supabase/scripts (op:// references, no real secrets)
+- [x] **DONE:** Add `scripts/inject-secrets.sh` — populates real `.env` files from 1Password
+- [x] **DONE:** Wrap `npm run dev` (backend + frontend) with `op run --env-file .env.op` so secrets resolve at process start
+- [x] **DONE:** Replace email sender stub with Postmark (`postmark@4.0.7`) — `sendEmail()` now actually delivers
+- [x] **DONE:** `cc-auctionx` shell alias in `~/.zshrc` for launching Claude Code with secrets injected
+- [x] **DONE:** `.claude/settings.json` PreToolUse hook warns when `SUPABASE_URL` is missing
+- [x] **DONE:** Install Notion MCP at user scope (`https://mcp.notion.com/mcp`) — needs OAuth on next session start
+- [ ] **TODO (Boss):** Restart Claude Code + authenticate Notion MCP via OAuth in next session
+- [ ] **TODO (Boss):** Fill in 3 vault fields when values are available
+  - `Postmark API / server-token` (from Postmark dashboard) — needed for emails to actually send
+  - `Stripe / publishable-key` (from Stripe dashboard) — only if frontend Stripe Elements wired up
+  - `Third Party APIs / anthropic-api-key` — only if Boss creates Anthropic API account; not blocking
+- [ ] **TODO:** Send a real Postmark test email once server token is filled in (any auction outbid/won flow triggers `sendEmail`)
+- [ ] **TODO (next session):** Push Lessons Learned + Decisions entries to Notion (drafts in `docs/SESSION_2026-05-09_NOTION_DRAFTS.md`)
 
 ---
 
