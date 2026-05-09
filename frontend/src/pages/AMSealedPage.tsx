@@ -6,7 +6,7 @@ import { SealPhaseAnimation } from '@/components/landing/SealPhaseAnimation';
 
 export const AMSealedPage = () => {
   return (
-    <div className="bg-landing-dark min-h-screen">
+    <div className="bg-dark-900 min-h-screen">
       {/* ── Nav ── */}
       <LandingNav />
 
@@ -71,17 +71,17 @@ export const AMSealedPage = () => {
       {/* ── CTAs ── */}
       <section className="py-16 px-4">
         <div className="max-w-3xl mx-auto flex flex-col sm:flex-row gap-4 justify-center">
-          <Link
-            to="/register"
-            className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-btn"
+          <a
+            href="#waitlist"
+            className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-900 rounded-btn"
           >
             <Button variant="primary" size="lg" tabIndex={-1}>
               Start sealing your work
             </Button>
-          </Link>
+          </a>
           <Link
             to="/browse"
-            className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-btn"
+            className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-900 rounded-btn"
           >
             <Button variant="secondary" size="lg" tabIndex={-1}>
               Browse AM Sealed items
@@ -97,7 +97,7 @@ export const AMSealedPage = () => {
             Looking for provenance documentation on a third-party collectible?{' '}
             <Link
               to="/am-proof"
-              className="text-accent-400 hover:text-white underline underline-offset-4 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-sm"
+              className="text-accent-400 hover:text-white underline underline-offset-4 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 focus:ring-offset-dark-900 rounded-sm"
             >
               See AM Proof
             </Link>

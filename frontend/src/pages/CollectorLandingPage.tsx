@@ -24,12 +24,12 @@ const steps = [
 
 export const CollectorLandingPage = () => {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-dark-900">
       {/* ── Nav ── */}
       <LandingNav />
 
       {/* ── Hero ── */}
-      <section className="bg-landing-dark py-24 px-4">
+      <section className="bg-dark-900 py-24 px-4">
         <div className="max-w-4xl mx-auto text-center flex flex-col items-center">
 
           <h1 className="mt-12 text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight">
@@ -45,7 +45,7 @@ export const CollectorLandingPage = () => {
           <div className="mt-10 flex flex-col sm:flex-row gap-4">
             <Link
               to="/browse"
-              className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-btn"
+              className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-900 rounded-btn"
             >
               <Button variant="primary" size="lg" tabIndex={-1}>
                 Browse Collections
@@ -53,7 +53,7 @@ export const CollectorLandingPage = () => {
             </Link>
             <Link
               to="/browse"
-              className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-btn"
+              className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-900 rounded-btn"
             >
               <Button variant="secondary" size="lg" tabIndex={-1}>
                 See What's Live
@@ -64,13 +64,13 @@ export const CollectorLandingPage = () => {
       </section>
 
       {/* ── Core Content ── */}
-      <section className="bg-landing-light py-24 px-4">
+      <section className="bg-dark-700 py-24 px-4">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-white text-center">
             A collection of pieces. A record of moments.
           </h2>
 
-          <p className="mt-8 text-lg text-gray-700 leading-relaxed text-center max-w-3xl mx-auto">
+          <p className="mt-8 text-lg text-gray-300 leading-relaxed text-center max-w-3xl mx-auto">
             Objects do not have meaning on their own. The meaning comes from
             knowing where something was, who had it, what it cost them to let it
             go. Every piece here came from a real person with a real story. The
@@ -78,19 +78,19 @@ export const CollectorLandingPage = () => {
             sure none of it gets lost along the way.
           </p>
 
-          <p className="mt-6 text-lg text-gray-600 text-center">
+          <p className="mt-6 text-lg text-gray-400 text-center">
             Browse storefronts. Compete for what you actually want. Keep what has
             a story.
           </p>
 
-          <p className="mt-10 text-sm font-medium tracking-wide uppercase text-gray-600 text-center">
+          <p className="mt-10 text-sm font-medium tracking-wide uppercase text-gray-400 text-center">
             Real pieces. Real origins. The story sealed in.
           </p>
         </div>
       </section>
 
       {/* ── AM Proof ── */}
-      <section className="bg-landing-dark py-24 px-4">
+      <section className="bg-dark-800 py-24 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="glass rounded-2xl p-10 md:p-14">
             <h2 className="text-3xl md:text-4xl font-bold text-white text-center">
@@ -109,7 +109,7 @@ export const CollectorLandingPage = () => {
             <div className="mt-10 flex justify-center">
               <Link
                 to="/am-proof"
-                className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-btn"
+                className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 rounded-btn"
               >
                 <Button variant="secondary" size="lg" tabIndex={-1}>
                   How AM Proof works
@@ -121,13 +121,13 @@ export const CollectorLandingPage = () => {
       </section>
 
       {/* ── How It Works ── */}
-      <section className="bg-landing-light py-24 px-4">
+      <section className="bg-dark-700 py-24 px-4">
         <div className="max-w-6xl mx-auto">
-          <p className="text-sm font-medium tracking-wide uppercase text-gray-600 text-center mb-4">
+          <p className="text-sm font-medium tracking-wide uppercase text-gray-400 text-center mb-4">
             Find the piece. Keep the story.
           </p>
 
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 text-center mb-14">
+          <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-14">
             How It Works
           </h2>
 
@@ -135,18 +135,18 @@ export const CollectorLandingPage = () => {
             {steps.map((step) => (
               <div
                 key={step.number}
-                className="bg-white rounded-2xl shadow-lg p-8 text-center"
+                className="glass rounded-2xl p-8 text-center"
               >
                 <span
-                  className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-900 text-white text-xl font-bold mb-6"
+                  className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gradient-primary text-white text-xl font-bold mb-6"
                   aria-hidden="true"
                 >
                   {step.number}
                 </span>
-                <h3 className="text-xl font-semibold text-gray-900">
+                <h3 className="text-xl font-semibold text-white">
                   {step.title}
                 </h3>
-                <p className="mt-3 text-gray-600 leading-relaxed">
+                <p className="mt-3 text-gray-300 leading-relaxed">
                   {step.description}
                 </p>
               </div>
@@ -157,12 +157,12 @@ export const CollectorLandingPage = () => {
 
       {/* ── Waitlist / CTA ── */}
       <div>
-        <div className="bg-landing-dark pt-10 pb-0 px-4">
+        <div className="bg-dark-900 pt-10 pb-0 px-4">
           <p className="text-sm font-medium tracking-wide uppercase text-gray-400 text-center">
             Some collections are just stuff. Build something else.
           </p>
         </div>
-        <WaitlistCapture />
+        <WaitlistCapture source="collector" />
       </div>
     </div>
   );

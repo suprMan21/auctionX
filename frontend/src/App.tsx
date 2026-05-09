@@ -3,8 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from './features/auth/hooks/useAuth';
-import { LoginPage } from './features/auth/pages/LoginPage';
-import { SignupPage } from './features/auth/pages/SignupPage';
+// Auth pages kept for post-launch; currently routed to ComingSoonPage
+// import { LoginPage } from './features/auth/pages/LoginPage';
+// import { SignupPage } from './features/auth/pages/SignupPage';
 import { ForgotPasswordPage } from './features/auth/pages/ForgotPasswordPage';
 import { ProfilePage } from './features/profile/pages/ProfilePage';
 import { SellerProfilePage } from './features/profile/pages/SellerProfilePage';
@@ -41,6 +42,7 @@ import { CollectorLandingPage } from '@/pages/CollectorLandingPage';
 import { CreatorLandingPage } from '@/pages/CreatorLandingPage';
 import { AMSealedPage } from '@/pages/AMSealedPage';
 import { AMProofPage } from '@/pages/AMProofPage';
+import { ComingSoonPage } from '@/pages/ComingSoonPage';
 import { SellerVerificationPage } from '@/features/seller-verification/pages/SellerVerificationPage';
 import { AdminSellerVerificationPage } from '@/features/admin/pages/AdminSellerVerificationPage';
 
@@ -96,8 +98,8 @@ function App() {
           <Route path="/am-sealed" element={<AMSealedPage />} />
           <Route path="/am-proof" element={<AMProofPage />} />
 
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<SignupPage />} />
+          <Route path="/login" element={<ComingSoonPage />} />
+          <Route path="/register" element={<ComingSoonPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           
           <Route
@@ -260,7 +262,7 @@ function App() {
             }
           />
 
-          <Route path="/" element={<Navigate to="/my-listings" replace />} />
+          <Route path="/" element={<CollectorLandingPage />} />
 
           {/* Admin routes — protected by AdminProtectedRoute */}
           <Route path="/admin" element={<AdminProtectedRoute />}>
@@ -274,6 +276,9 @@ function App() {
               <Route path="health" element={<AdminHealthPage />} />
             </Route>
           </Route>
+
+          {/* Catch-all: unknown paths → landing page */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         
         <Toaster

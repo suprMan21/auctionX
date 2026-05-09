@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { LandingNav } from '@/components/landing/LandingNav';
 import { WaitlistCapture } from '@/components/landing/WaitlistCapture';
@@ -24,12 +23,12 @@ const steps = [
 
 export const CreatorLandingPage = () => {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-dark-900">
       {/* ── Nav ── */}
       <LandingNav />
 
       {/* ── Hero ── */}
-      <section className="bg-landing-dark py-24 px-4">
+      <section className="bg-dark-900 py-24 px-4">
         <div className="max-w-4xl mx-auto text-center flex flex-col items-center">
 
           <h1 className="mt-12 text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight">
@@ -42,34 +41,34 @@ export const CreatorLandingPage = () => {
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row gap-4">
-            <Link
-              to="/register"
-              className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-btn"
+            <a
+              href="#waitlist"
+              className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-900 rounded-btn"
             >
               <Button variant="primary" size="lg" tabIndex={-1}>
                 Start Your Storefront
               </Button>
-            </Link>
-            <Link
-              to="/register"
-              className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-btn"
+            </a>
+            <a
+              href="#waitlist"
+              className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-900 rounded-btn"
             >
               <Button variant="secondary" size="lg" tabIndex={-1}>
                 Apply as a Creator
               </Button>
-            </Link>
+            </a>
           </div>
         </div>
       </section>
 
       {/* ── Core Content ── */}
-      <section className="bg-landing-light py-24 px-4">
+      <section className="bg-dark-700 py-24 px-4">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-white text-center">
             What you have made has value. The video proves it.
           </h2>
 
-          <p className="mt-8 text-lg text-gray-700 leading-relaxed text-center max-w-3xl mx-auto">
+          <p className="mt-8 text-lg text-gray-300 leading-relaxed text-center max-w-3xl mx-auto">
             Your storefront stays open. Your auctions build moments. Every
             piece you release carries a short video from you -- the item in
             your hands, your words about where it came from. That video seals
@@ -78,14 +77,14 @@ export const CreatorLandingPage = () => {
             run the timeline. The platform works around you.
           </p>
 
-          <p className="mt-10 text-sm font-medium tracking-wide uppercase text-gray-600 text-center">
+          <p className="mt-10 text-sm font-medium tracking-wide uppercase text-gray-400 text-center">
             Your creation. Their collection. Your name on it forever.
           </p>
         </div>
       </section>
 
       {/* ── AM Sealed ── */}
-      <section className="bg-landing-dark py-24 px-4">
+      <section className="bg-dark-800 py-24 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="glass rounded-2xl p-10 md:p-14">
             <h2 className="text-3xl md:text-4xl font-bold text-white text-center">
@@ -105,27 +104,27 @@ export const CreatorLandingPage = () => {
             </p>
 
             <div className="mt-10 flex justify-center">
-              <Link
-                to="/am-sealed"
-                className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-btn"
+              <a
+                href="/am-sealed"
+                className="focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 rounded-btn"
               >
                 <Button variant="secondary" size="lg" tabIndex={-1}>
                   See how AM Sealed works
                 </Button>
-              </Link>
+              </a>
             </div>
           </div>
         </div>
       </section>
 
       {/* ── How It Works ── */}
-      <section className="bg-landing-light py-24 px-4">
+      <section className="bg-dark-700 py-24 px-4">
         <div className="max-w-6xl mx-auto">
-          <p className="text-sm font-medium tracking-wide uppercase text-gray-600 text-center mb-4">
+          <p className="text-sm font-medium tracking-wide uppercase text-gray-400 text-center mb-4">
             Build the hype. Start the bidding. Ride the wave.
           </p>
 
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 text-center mb-14">
+          <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-14">
             How It Works
           </h2>
 
@@ -133,18 +132,18 @@ export const CreatorLandingPage = () => {
             {steps.map((step) => (
               <div
                 key={step.number}
-                className="bg-white rounded-2xl shadow-lg p-8 text-center"
+                className="glass rounded-2xl p-8 text-center"
               >
                 <span
-                  className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-900 text-white text-xl font-bold mb-6"
+                  className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gradient-primary text-white text-xl font-bold mb-6"
                   aria-hidden="true"
                 >
                   {step.number}
                 </span>
-                <h3 className="text-xl font-semibold text-gray-900">
+                <h3 className="text-xl font-semibold text-white">
                   {step.title}
                 </h3>
-                <p className="mt-3 text-gray-600 leading-relaxed">
+                <p className="mt-3 text-gray-300 leading-relaxed">
                   {step.description}
                 </p>
               </div>
@@ -155,12 +154,12 @@ export const CreatorLandingPage = () => {
 
       {/* ── Waitlist / CTA ── */}
       <div>
-        <div className="bg-landing-dark pt-10 pb-0 px-4">
+        <div className="bg-dark-900 pt-10 pb-0 px-4">
           <p className="text-sm font-medium tracking-wide uppercase text-gray-400 text-center">
             The pieces you release. The story they carry.
           </p>
         </div>
-        <WaitlistCapture />
+        <WaitlistCapture source="creator" />
       </div>
     </div>
   );

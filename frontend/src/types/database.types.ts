@@ -1530,6 +1530,84 @@ export type Database = {
         }
         Relationships: []
       }
+      seller_verification_documents: {
+        Row: {
+          created_at: string
+          document_type: string
+          file_size_bytes: number | null
+          file_url: string
+          id: string
+          mime_type: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          s3_key: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_type: string
+          file_size_bytes?: number | null
+          file_url: string
+          id?: string
+          mime_type: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          s3_key: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          document_type?: string
+          file_size_bytes?: number | null
+          file_url?: string
+          id?: string
+          mime_type?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          s3_key?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      seller_verification_reviews: {
+        Row: {
+          action: string
+          admin_id: string
+          created_at: string
+          id: string
+          new_status: string
+          notes: string
+          previous_status: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          admin_id: string
+          created_at?: string
+          id?: string
+          new_status: string
+          notes: string
+          previous_status: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          admin_id?: string
+          created_at?: string
+          id?: string
+          new_status?: string
+          notes?: string
+          previous_status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       settlement_offers: {
         Row: {
           bidder_id: string
@@ -2029,6 +2107,27 @@ export type Database = {
           },
         ]
       }
+      waitlist_signups: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          source: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+          source?: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          source?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -2117,6 +2216,7 @@ export type Database = {
         | "view_analytics"
         | "manage_admins"
         | "view_audit_logs"
+        | "review_sellers"
       auction_status:
         | "DRAFT"
         | "SCHEDULED"
@@ -2356,6 +2456,7 @@ export const Constants = {
         "view_analytics",
         "manage_admins",
         "view_audit_logs",
+        "review_sellers",
       ],
       auction_status: [
         "DRAFT",

@@ -6,7 +6,7 @@ import { SealPhaseAnimation } from '@/components/landing/SealPhaseAnimation';
 
 export const AMProofPage = () => {
   return (
-    <div className="bg-landing-dark min-h-screen">
+    <div className="bg-dark-900 min-h-screen">
       {/* ── Nav ── */}
       <LandingNav />
 
@@ -72,7 +72,7 @@ export const AMProofPage = () => {
         <div className="max-w-3xl mx-auto flex justify-center">
           <Link
             to="/browse"
-            className="focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-btn"
+            className="focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 focus:ring-offset-dark-900 rounded-btn"
           >
             <Button variant="primary" size="lg" tabIndex={-1}>
               Browse AM Proof items
@@ -88,7 +88,7 @@ export const AMProofPage = () => {
             A creator selling something they made or wore? That is{' '}
             <Link
               to="/am-sealed"
-              className="text-accent-400 hover:text-accent-300 underline underline-offset-4 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 focus:ring-offset-landing-dark rounded-sm"
+              className="text-accent-400 hover:text-accent-300 underline underline-offset-4 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 focus:ring-offset-dark-900 rounded-sm"
             >
               AM Sealed
             </Link>
