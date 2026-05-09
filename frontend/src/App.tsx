@@ -7,6 +7,7 @@ import { useAuth } from './features/auth/hooks/useAuth';
 // import { LoginPage } from './features/auth/pages/LoginPage';
 // import { SignupPage } from './features/auth/pages/SignupPage';
 import { ForgotPasswordPage } from './features/auth/pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './features/auth/pages/ResetPasswordPage';
 import { ProfilePage } from './features/profile/pages/ProfilePage';
 import { SellerProfilePage } from './features/profile/pages/SellerProfilePage';
 import { CreateListing } from './pages/CreateListing';
@@ -102,6 +103,7 @@ function App() {
           <Route path="/login" element={<ComingSoonPage />} />
           <Route path="/register" element={<ComingSoonPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           
           <Route
             path="/profile"
