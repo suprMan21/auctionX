@@ -6,9 +6,12 @@
 --  3. pg_cron daily schedule that POSTs to /functions/v1/reconcile-escrow at 02:00 UTC
 --
 -- Notes:
---  - Per Lessons Learned #3 (enum + RLS same transaction): the RLS policy compares
---    'manage_escrow'::text against permissions::text[] so we don't cast to the new
---    enum value in the same transaction that adds it.
+--  - Per Lessons Learned #3 (enum + RLS same transaction): the RLS policy uses the
+--    project's existing `is_admin_with_permission(uuid, text)` helper which compares
+--    via text, so we don't cast to the new enum value in the same transaction that
+--    adds it. (admin_users in this project is keyed by admin_id, NOT user_id, and
+--    permissions live on admin_roles via role_id — going through the helper avoids
+--    coupling this migration to that join.)
 --  - pg_cron credentials read from Supabase Vault. Run vault.create_secret() for
 --    'supabase_url' and 'service_role_key' BEFORE applying this migration, otherwise
 --    the cron job will run but get NULL credentials.
@@ -47,18 +50,13 @@ CREATE INDEX IF NOT EXISTS idx_escrow_reconciliation_logs_run_at
 
 ALTER TABLE public.escrow_reconciliation_logs ENABLE ROW LEVEL SECURITY;
 
--- Admins with manage_escrow can read logs. Text comparison avoids the enum-cast
--- issue described in the header.
+-- Admins with manage_escrow can read logs. Reuses the existing
+-- is_admin_with_permission(uuid, text) helper to stay decoupled from the
+-- admin_users / admin_roles join shape and avoid the enum-cast pitfall.
 DROP POLICY IF EXISTS "admin_read_reconciliation_logs" ON public.escrow_reconciliation_logs;
 CREATE POLICY "admin_read_reconciliation_logs"
   ON public.escrow_reconciliation_logs FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.admin_users
-      WHERE user_id = auth.uid()
-        AND 'manage_escrow' = ANY(permissions::text[])
-    )
-  );
+  USING (is_admin_with_permission(auth.uid(), 'manage_escrow'));
 
 -- Service role bypasses RLS for inserts (the edge function uses the service key).
 -- No insert policy needed for clients — only the edge function writes here.

@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -439,6 +439,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      escrow_reconciliation_logs: {
+        Row: {
+          created_at: string
+          disputed_aged: number
+          errors: Json
+          id: string
+          orphaned_flagged: number
+          run_at: string
+          stuck_released: number
+          summary: string | null
+          total_checked: number
+        }
+        Insert: {
+          created_at?: string
+          disputed_aged?: number
+          errors?: Json
+          id?: string
+          orphaned_flagged?: number
+          run_at?: string
+          stuck_released?: number
+          summary?: string | null
+          total_checked?: number
+        }
+        Update: {
+          created_at?: string
+          disputed_aged?: number
+          errors?: Json
+          id?: string
+          orphaned_flagged?: number
+          run_at?: string
+          stuck_released?: number
+          summary?: string | null
+          total_checked?: number
+        }
+        Relationships: []
       }
       item_verifications: {
         Row: {
@@ -2217,6 +2253,7 @@ export type Database = {
         | "manage_admins"
         | "view_audit_logs"
         | "review_sellers"
+        | "manage_escrow"
       auction_status:
         | "DRAFT"
         | "SCHEDULED"
@@ -2457,6 +2494,7 @@ export const Constants = {
         "manage_admins",
         "view_audit_logs",
         "review_sellers",
+        "manage_escrow",
       ],
       auction_status: [
         "DRAFT",
