@@ -19,6 +19,7 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logger } from '../_shared/utils/logger.ts';
+import { sendEmail, emailRecipient } from '../_shared/postmark.ts';
 
 /** Insert a notification row silently — errors never block the main flow. */
 async function insertNotification(
@@ -267,6 +268,31 @@ Deno.serve(async (req) => {
           });
 
           cancelled++;
+        }
+
+        // ── PAYMENT_WINDOW_EXPIRING email to the expired bidder (non-fatal) ──
+        try {
+          const expiredEmail = await emailRecipient(supabase, offer.bidder_id, 'PAYMENT_WINDOW_EXPIRING');
+          if (expiredEmail) {
+            const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:5173';
+            await sendEmail({
+              to: expiredEmail,
+              subject: 'Payment window expired',
+              htmlBody: `
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#13131a;color:#fff;padding:24px;border-radius:12px;">
+                  <h2 style="color:#ef4444;margin:0 0 16px;">Payment Window Expired</h2>
+                  <p>Your 20-minute payment window for a recent auction expired before payment was completed. A penalty has been applied to your account.</p>
+                  <p>Repeated late payments lead to escalating restrictions. Please ensure timely payment on future wins.</p>
+                  <a href="${frontendUrl}/account" style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg,#7c3aed,#3b82f6);color:#fff;border-radius:8px;text-decoration:none;margin-top:16px;">View Account</a>
+                </div>
+              `,
+            });
+          }
+        } catch (emailErr) {
+          logger.warn('check-payment-window: PAYMENT_WINDOW_EXPIRING email failed (non-fatal)', {
+            offerId: offer.id,
+            error: emailErr instanceof Error ? emailErr.message : String(emailErr),
+          });
         }
 
         processed++;
