@@ -1,7 +1,7 @@
 /**
  * emailTemplates — minimal inline-CSS HTML email templates for each notification type.
  *
- * Each function returns a plain HTML string suitable for sending via Resend or any
+ * Each function returns a plain HTML string suitable for sending via Postmark or any
  * SMTP provider. All styles are inline to maximise email client compatibility.
  * No external dependencies are required.
  *
