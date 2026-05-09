@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "test": "vitest",
-    "dev": "tsx watch src/server.ts",
+    "dev": "op run --env-file .env.op --account $(cat ../.op-account) -- tsx watch src/server.ts",
+    "dev:injected": "tsx watch src/server.ts",
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "start": "node dist/server.js",
