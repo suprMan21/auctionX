@@ -34,19 +34,31 @@ SELECT net.http_post(url := vault.supabase_url || '/functions/v1/reconcile-escro
 
 Both paths confirmed; the daily 02:00 UTC cron will succeed.
 
-## Legacy JWT note (security trade-off)
+## Auth posture: shared-secret in-function (matches release-escrow / settle-auction)
 
-First attempt at the vault-credentialed call returned `401 UNAUTHORIZED_LEGACY_JWT`. Supabase has deprecated legacy `service_role` JWTs at the Edge Functions gateway when `verify_jwt: true`. The service-role key currently in 1Password (`AM_Development/Supabase Staging/service-role-key`) is one of these legacy keys and pg_cron's bearer using it gets 401'd before the function ever runs.
+The Edge Functions gateway with `verify_jwt: true` rejects every non-user bearer that's currently available:
+- Legacy `service_role` JWT → `401 UNAUTHORIZED_LEGACY_JWT`
+- New `sb_secret_…` keys (not JWT-format) → `401 UNAUTHORIZED_INVALID_JWT_FORMAT`
 
-**Resolved by flipping reconcile-escrow to `verify_jwt: false`.** The function is now publicly callable but the blast radius is bounded: it only acts on settlements past their `escrow_ends_at` window with `transactions.status = SUCCEEDED`, performs the same release the daily cron would do anyway, and writes one log row per call. No data exfiltration vector — no PII in any response, no read of arbitrary records.
+So `verify_jwt: true` is unreachable for any cron / server-to-server caller. **Adopted the established codebase pattern instead** — gateway is `verify_jwt: false`, function checks an `x-reconcile-secret` header against `RECONCILE_ESCROW_SECRET` env, returns 401 if missing/wrong. Same security guarantee as gateway JWT (caller must know a secret); matches the existing `RELEASE_ESCROW_SECRET` / `x-release-secret` and `SETTLE_SECRET` / `x-settle-secret` patterns.
 
-**Cleanup path (Boss, when convenient):**
-1. Issue a new "secret key" in [Dashboard → API Keys](https://supabase.com/dashboard/project/pmlofthmobglcfkqjtru/settings/api-keys) — the new keys aren't legacy-flagged.
-2. Replace the 1Password `service-role-key` field with the new value.
-3. Update the vault entry: `SELECT vault.update_secret(id, '<NEW_KEY>') FROM vault.secrets WHERE name='service_role_key';`
-4. Re-deploy reconcile-escrow without `--no-verify-jwt`: `supabase functions deploy reconcile-escrow --use-api --project-ref pmlofthmobglcfkqjtru`
+### Where the secret lives
+- `RECONCILE_ESCROW_SECRET` — Supabase Edge Function env (set via `supabase secrets set`); read by the function on each invocation.
+- `vault.secrets.reconcile_escrow_secret` — same value; read by pg_cron when constructing the `x-reconcile-secret` header.
 
-Same legacy-JWT issue may also bite future cron-scheduled functions (e.g., release-escrow if you ever wire up the planned 5-min cron from `20260301000001_auction_settlement.sql`). Plan to issue a new secret key before that work.
+Both must hold the same string. To rotate: generate a new value, set both, re-trigger the cron schedule body to confirm it still resolves.
+
+### End-to-end verification (2026-05-09 20:02 UTC)
+
+```
+[positive] vault-credentialed pg_net call mirroring the cron schedule body
+  → HTTP 200, body.ok=true, log row in escrow_reconciliation_logs
+
+[negative] curl POST without the x-reconcile-secret header
+  → HTTP 401 {"error":"Unauthorized"}
+```
+
+Reconciliation log row count: 3 (two from earlier verify_jwt:false smoke tests + one from this final verified call).
 
 ## Outstanding (Boss action)
 

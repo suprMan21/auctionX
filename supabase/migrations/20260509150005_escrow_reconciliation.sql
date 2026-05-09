@@ -12,9 +12,18 @@
 --    adds it. (admin_users in this project is keyed by admin_id, NOT user_id, and
 --    permissions live on admin_roles via role_id — going through the helper avoids
 --    coupling this migration to that join.)
---  - pg_cron credentials read from Supabase Vault. Run vault.create_secret() for
---    'supabase_url' and 'service_role_key' BEFORE applying this migration, otherwise
---    the cron job will run but get NULL credentials.
+--  - pg_cron auth uses an in-function shared secret (x-reconcile-secret header)
+--    instead of the gateway's verify_jwt path, matching the convention in
+--    release-escrow and settle-auction. Reason: Supabase has deprecated legacy
+--    service_role JWTs at the Edge Functions gateway (UNAUTHORIZED_LEGACY_JWT),
+--    and the new sb_secret_ keys aren't JWT-format (UNAUTHORIZED_INVALID_JWT_FORMAT),
+--    so verify_jwt:true is no longer reachable for any non-user caller.
+--  - Run these vault.create_secret() calls BEFORE applying this migration; the
+--    cron will run but get NULL secrets otherwise:
+--      SELECT vault.create_secret('https://<project>.supabase.co',  'supabase_url',            '');
+--      SELECT vault.create_secret('<random 64-hex>',                'reconcile_escrow_secret', '');
+--    Then `supabase secrets set RECONCILE_ESCROW_SECRET=<same value>` so the
+--    function's env matches the vault entry.
 
 -- ─── 1. Enable required extensions ─────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pg_cron;
@@ -73,10 +82,8 @@ BEGIN
   END IF;
 END $$;
 
--- Schedule the daily run at 02:00 UTC.
--- Vault secrets must exist beforehand:
---   SELECT vault.create_secret('https://pmlofthmobglcfkqjtru.supabase.co', 'supabase_url', '');
---   SELECT vault.create_secret('<SERVICE_ROLE_KEY>',                       'service_role_key', '');
+-- Schedule the daily run at 02:00 UTC. Auth via x-reconcile-secret header
+-- (function-level shared secret) instead of Bearer JWT — see header notes.
 SELECT cron.schedule(
   'reconcile-escrow-daily',
   '0 2 * * *',
@@ -85,8 +92,8 @@ SELECT cron.schedule(
       url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_url')
               || '/functions/v1/reconcile-escrow',
       headers := jsonb_build_object(
-        'Content-Type',  'application/json',
-        'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key')
+        'Content-Type',       'application/json',
+        'x-reconcile-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'reconcile_escrow_secret')
       ),
       body := '{}'::jsonb
     ) AS request_id;

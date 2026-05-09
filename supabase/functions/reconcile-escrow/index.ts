@@ -31,7 +31,7 @@ const DISPUTED_SLA_DAYS = 7;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-reconcile-secret',
 };
 
 interface ReconciliationStats {
@@ -45,6 +45,28 @@ interface ReconciliationStats {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  // Shared-secret authentication. Edge Functions deploys with --no-verify-jwt
+  // because Supabase's new sb_secret_ keys aren't JWTs and legacy service_role
+  // JWTs now 401 at the gateway. We enforce auth in-function instead, matching
+  // the convention release-escrow and settle-auction already use.
+  const reconcileSecret = Deno.env.get('RECONCILE_ESCROW_SECRET');
+  if (!reconcileSecret) {
+    logger.error('reconcile-escrow: RECONCILE_ESCROW_SECRET not configured');
+    return new Response(
+      JSON.stringify({ error: 'Server misconfiguration' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
+  const providedSecret = req.headers.get('x-reconcile-secret');
+  if (providedSecret !== reconcileSecret) {
+    logger.warn('reconcile-escrow: invalid or missing x-reconcile-secret');
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
