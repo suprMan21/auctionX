@@ -39,3 +39,10 @@ firestore-debug.log.*
 *.bak
 
 .env.source
+
+# 1Password account shorthand (each dev sets their own)
+.op-account
+
+# Allow .env.op template files (safe: contain op:// references, not real secrets)
+!.env.op
+!.env.local.op
