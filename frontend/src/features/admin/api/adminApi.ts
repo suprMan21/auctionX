@@ -242,6 +242,40 @@ export const adminApi = {
     });
   },
 
+  // ─── Escrow Endpoints ───────────────────────────────────────────────────────
+
+  /** GET /admin/escrow/summary — dashboard counts/totals + last 10 reconciliation logs. */
+  getEscrowSummary(): Promise<EscrowSummaryResponse> {
+    return adminFetch<EscrowSummaryResponse>('/escrow/summary');
+  },
+
+  /** GET /admin/escrow?status=...&page=...&limit=... — paginated settlements. */
+  listEscrowSettlements(params?: {
+    status?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<EscrowListResponse> {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString() ? `?${qs}` : '';
+    return adminFetch<EscrowListResponse>(`/escrow${query}`);
+  },
+
+  /** GET /admin/escrow/reconciliation-logs?limit=... — recent watchdog runs. */
+  listEscrowReconciliationLogs(limit = 50): Promise<EscrowLogsResponse> {
+    return adminFetch<EscrowLogsResponse>(`/escrow/reconciliation-logs?limit=${limit}`);
+  },
+
+  /** POST /admin/escrow/:id/release — manual release of a stuck or disputed settlement. */
+  manualReleaseEscrow(settlementId: string): Promise<EscrowReleaseResponse> {
+    return adminFetch<EscrowReleaseResponse>(`/escrow/${settlementId}/release`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
   // ─── Health Endpoint ────────────────────────────────────────────────────────
 
   /**
@@ -253,3 +287,64 @@ export const adminApi = {
     return adminFetch<HealthStatus>('/health');
   },
 };
+
+// ─── Escrow Response Types ──────────────────────────────────────────────────
+
+export interface EscrowSettlement {
+  id: string;
+  status: string;
+  gross_amount_cents: number | null;
+  net_amount_cents: number | null;
+  platform_fee_cents: number | null;
+  escrow_ends_at: string | null;
+  escrow_released_at: string | null;
+  dispute_opened_at: string | null;
+  dispute_reason: string | null;
+  created_at: string;
+  seller_id: string;
+  buyer_id: string | null;
+  transaction_id: string | null;
+  auction_id: string | null;
+}
+
+export interface EscrowReconciliationLog {
+  run_at: string;
+  total_checked: number;
+  stuck_released: number;
+  orphaned_flagged: number;
+  disputed_aged: number;
+  summary?: string | null;
+  errors?: unknown;
+}
+
+export interface EscrowSummaryResponse {
+  success: true;
+  data: {
+    escrowHold: { count: number; totalCents: number };
+    disputed: { count: number };
+    released30d: { totalCents: number };
+    recentReconciliationLogs: EscrowReconciliationLog[];
+  };
+}
+
+export interface EscrowListResponse {
+  success: true;
+  data: {
+    settlements: EscrowSettlement[];
+    total: number;
+    page: number;
+    limit: number;
+  };
+}
+
+export interface EscrowLogsResponse {
+  success: true;
+  data: EscrowReconciliationLog[];
+}
+
+export interface EscrowReleaseResponse {
+  success: true;
+  settlementId: string;
+  status: 'RELEASED';
+  payoutCreated: boolean;
+}
