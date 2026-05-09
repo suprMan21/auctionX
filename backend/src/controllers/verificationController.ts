@@ -328,6 +328,36 @@ export const getVerificationByToken = async (req: VerificationRequest, res: Resp
       ? await supabase.from('users').select('username').eq('id', verif.current_owner_id).maybeSingle()
       : { data: null };
 
+    const { data: tagRecord } = verif.nfc_tag_uid
+      ? await supabase
+          .from('nfc_tags')
+          .select('id')
+          .eq('tag_uid', verif.nfc_tag_uid)
+          .maybeSingle()
+      : { data: null };
+
+    const { data: nftData } = tagRecord
+      ? await supabase
+          .from('nft_metadata')
+          .select('chain, contract_address, token_id, mint_tx_hash, metadata_uri')
+          .eq('tag_id', tagRecord.id)
+          .maybeSingle()
+      : { data: null };
+
+    const transferUserIds = [...new Set([
+      ...(verif.ownership_transfers ?? []).map((t: { from_user_id: string | null }) => t.from_user_id).filter(Boolean) as string[],
+      ...(verif.ownership_transfers ?? []).map((t: { to_user_id: string }) => t.to_user_id),
+    ])];
+
+    const userMap: Record<string, string> = {};
+    if (transferUserIds.length > 0) {
+      const { data: transferUsers } = await supabase
+        .from('users')
+        .select('id, username')
+        .in('id', transferUserIds);
+      (transferUsers ?? []).forEach((u: { id: string; username: string }) => { userMap[u.id] = u.username; });
+    }
+
     logger.info('verification_viewed', { tokenName, verificationId: verif.id });
 
     return res.json({
@@ -336,6 +366,19 @@ export const getVerificationByToken = async (req: VerificationRequest, res: Resp
         ...verif,
         seller: seller ?? null,
         current_owner: currentOwner ?? null,
+        nft: nftData ?? null,
+        ownership_transfers: (verif.ownership_transfers ?? []).map((t: {
+          id: string;
+          from_user_id: string | null;
+          to_user_id: string;
+          transfer_type: string;
+          settlement_id: string | null;
+          transferred_at: string;
+        }) => ({
+          ...t,
+          from_username: t.from_user_id ? (userMap[t.from_user_id] ?? null) : null,
+          to_username: userMap[t.to_user_id] ?? null,
+        })),
       },
     });
   } catch (error) {

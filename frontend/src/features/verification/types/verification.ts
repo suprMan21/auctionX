@@ -26,6 +26,14 @@ export interface Verification {
   updated_at: string;
 }
 
+export interface NftData {
+  chain: string;
+  contract_address: string;
+  token_id: string;
+  mint_tx_hash: string;
+  metadata_uri: string | null;
+}
+
 export interface OwnershipTransfer {
   id: string;
   verification_id: string;
@@ -34,6 +42,8 @@ export interface OwnershipTransfer {
   transfer_type: TransferType;
   settlement_id: string | null;
   transferred_at: string;
+  from_username: string | null;
+  to_username: string | null;
 }
 
 export interface VerificationDetail extends Verification {
@@ -45,4 +55,5 @@ export interface VerificationDetail extends Verification {
   ownership_transfers: OwnershipTransfer[];
   seller: { username: string } | null;
   current_owner: { username: string } | null;
+  nft: NftData | null;
 }

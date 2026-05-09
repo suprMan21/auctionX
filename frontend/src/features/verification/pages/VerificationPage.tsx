@@ -1,16 +1,11 @@
-/**
- * VerificationPage — Public chain-of-custody page for verified items.
- *
- * Route: /verify/:tokenName (no auth required)
- * Calls: api.getVerificationByToken + api.incrementScan on mount
- * Sets document.title for SEO
- *
- * @module Module 13 — NFC Verification
- */
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api';
 import type { VerificationDetail, VerificationStatus } from '../types/verification';
+import { AuthWidget } from '../components/AuthWidget';
+import { QrCodeCard } from '../components/QrCodeCard';
+import { NftSection } from '../components/NftSection';
+import { OgTags } from '../components/OgTags';
 
 function StatusBadge({ status }: { status: VerificationStatus }) {
   const colors: Record<VerificationStatus, string> = {
@@ -45,7 +40,6 @@ export function VerificationPage() {
         if (!mounted) return;
         setVerif(data);
         document.title = `${data.token_name} — Verified by @${data.seller?.username ?? 'unknown'} | Authentic Materials`;
-        // Non-blocking scan increment
         api.incrementScan(tokenName);
       })
       .catch((err) => {
@@ -93,11 +87,25 @@ export function VerificationPage() {
     (a, b) => new Date(b.transferred_at).getTime() - new Date(a.transferred_at).getTime(),
   );
 
+  const pageUrl = window.location.href;
+  const ogTitle = `${verif.token_name} — Verified by @${verif.seller?.username ?? 'unknown'} | Authentic Materials`;
+  const ogDescription = 'This item is NFC-authenticated and blockchain-verified. View the full chain of custody.';
+
   return (
     <div className="min-h-screen bg-dark-800 py-8 px-4">
+      <OgTags
+        title={ogTitle}
+        description={ogDescription}
+        imageUrl={primaryImage?.url ?? null}
+        pageUrl={pageUrl}
+      />
+
       <div className="max-w-2xl mx-auto space-y-6">
 
-        {/* ── Header ─────────────────────────────────────────────────────── */}
+        {/* ── Animated Auth Widget ─────────────────────────────────────── */}
+        <AuthWidget status={verif.status} tokenName={verif.token_name} />
+
+        {/* ── Header ──────────────────────────────────────────────────── */}
         <div className="glass rounded-2xl p-6 flex items-start justify-between gap-4">
           <div>
             <p className="text-gray-400 text-sm mb-1">Verification Token</p>
@@ -110,7 +118,7 @@ export function VerificationPage() {
           <StatusBadge status={verif.status} />
         </div>
 
-        {/* ── Item Section ────────────────────────────────────────────────── */}
+        {/* ── Item Section ─────────────────────────────────────────────── */}
         {verif.listing && (
           <div className="glass rounded-2xl overflow-hidden">
             {primaryImage && (
@@ -129,7 +137,7 @@ export function VerificationPage() {
           </div>
         )}
 
-        {/* ── Possession-Proof Video ──────────────────────────────────────── */}
+        {/* ── Possession-Proof Video ───────────────────────────────────── */}
         {verif.video_url && (
           <div className="glass rounded-2xl overflow-hidden">
             <div className="px-6 pt-6 pb-3">
@@ -146,7 +154,7 @@ export function VerificationPage() {
           </div>
         )}
 
-        {/* ── Ownership Timeline ──────────────────────────────────────────── */}
+        {/* ── Chain of Custody ─────────────────────────────────────────── */}
         <div className="glass rounded-2xl p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Chain of Custody</h2>
           {sortedTransfers.length === 0 ? (
@@ -162,9 +170,13 @@ export function VerificationPage() {
                 <li key={transfer.id} className="flex items-center gap-3 text-sm">
                   <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
                   <span className="text-gray-300">
-                    {transfer.from_user_id ? `@${transfer.from_user_id.slice(0, 8)}` : 'Original seller'}
+                    {transfer.from_username
+                      ? `@${transfer.from_username}`
+                      : transfer.from_user_id
+                        ? `@${transfer.from_user_id.slice(0, 8)}`
+                        : 'Original seller'}
                     {' → '}
-                    @{transfer.to_user_id.slice(0, 8)}
+                    @{transfer.to_username ?? transfer.to_user_id.slice(0, 8)}
                   </span>
                   <span className="ml-auto text-gray-400 shrink-0">
                     {new Date(transfer.transferred_at).toLocaleDateString()}
@@ -178,7 +190,7 @@ export function VerificationPage() {
           )}
         </div>
 
-        {/* ── NFC Authentication ─────────────────────────────────────────── */}
+        {/* ── NFC Authentication ───────────────────────────────────────── */}
         {verif.nfc_tag_uid && (
           <div className="glass rounded-2xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">NFC Authentication</h2>
@@ -209,7 +221,10 @@ export function VerificationPage() {
           </div>
         )}
 
-        {/* ── Engagement Stats ────────────────────────────────────────────── */}
+        {/* ── On-Chain NFT Proof ───────────────────────────────────────── */}
+        <NftSection nft={verif.nft ?? null} />
+
+        {/* ── Engagement Stats ─────────────────────────────────────────── */}
         <div className="glass rounded-2xl p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Engagement</h2>
           <div className="grid grid-cols-3 gap-4 text-center">
@@ -228,15 +243,18 @@ export function VerificationPage() {
           </div>
         </div>
 
-        {/* ── CTA ─────────────────────────────────────────────────────────── */}
+        {/* ── QR Code ──────────────────────────────────────────────────── */}
+        <QrCodeCard url={pageUrl} tokenName={verif.token_name} />
+
+        {/* ── CTA ──────────────────────────────────────────────────────── */}
         <div className="glass rounded-2xl p-6 flex flex-col sm:flex-row gap-3">
           <button
             onClick={() => {
               navigator.share?.({
                 title: `${verif.token_name} — Verified Item`,
-                url: window.location.href,
+                url: pageUrl,
               }).catch(() => {
-                navigator.clipboard.writeText(window.location.href).catch(() => {});
+                navigator.clipboard.writeText(pageUrl).catch(() => {});
               });
             }}
             className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium transition-colors text-center"
@@ -244,12 +262,13 @@ export function VerificationPage() {
             Share
           </button>
           <Link
-            to={`/browse`}
+            to="/browse"
             className="flex-1 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 hover:opacity-90 text-white font-semibold transition-colors text-center"
           >
             Browse More
           </Link>
         </div>
+
       </div>
     </div>
   );
