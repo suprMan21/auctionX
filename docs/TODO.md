@@ -1,6 +1,6 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-03-23 (Design Session D -- Landing Pages + AM Sealed + AM Proof)
+Last updated: 2026-05-09 (Session D Close-Out -- waitlist migration applied, types regenerated, deployed)
 
 ---
 
@@ -12,12 +12,10 @@ Last updated: 2026-03-23 (Design Session D -- Landing Pages + AM Sealed + AM Pro
 - [x] **DONE (Session D):** Build `/am-proof` product page -- four-phase animation, ProductToggle
 - [x] **DONE (Session D):** LandingNav component with page links + login/signup
 - [x] **DONE (Session D):** WaitlistCapture email capture component
-- [ ] **TODO:** Wire WaitlistCapture to backend endpoint or Supabase table
-  - Context: Currently stores email in local state only. Needs a `waitlist_emails` table or API endpoint.
-  - Priority: MEDIUM -- needed before launch
-- [ ] **TODO:** Deploy landing pages to staging
-  - Context: Code merged to `dev`, needs `npm run build` + S3 sync + CloudFront invalidation
-  - Priority: HIGH
+- [x] **DONE (Session D close-out):** Wire WaitlistCapture to Supabase `waitlist_signups` table
+  - Migration applied, types regenerated, `waitlist.ts` uses typed client
+- [x] **DONE (Session D close-out):** Deploy landing pages to staging
+  - Built + synced to S3 + CloudFront invalidated (2026-05-09)
 - [ ] **TODO:** WCAG 2.2 AA axe scan on all four landing pages
   - Context: Built with proper contrast, focus rings, and semantic HTML but not yet scanned with axe
   - Priority: HIGH -- required per session checklist
