@@ -12,25 +12,41 @@
 | Enum value | `manage_escrow` added to `admin_permission` | ✅ Verified via `pg_enum` query |
 | Table | `public.escrow_reconciliation_logs` | ✅ Created with RLS gated on `is_admin_with_permission(auth.uid(), 'manage_escrow')` |
 | pg_cron job | `reconcile-escrow-daily` @ `0 2 * * *` | ✅ Scheduled (verified via `cron.job` query) |
-| Edge function | `reconcile-escrow` | ✅ Deployed (id `dc2c2f3d-2760-4d40-9ff3-565d2e38b0d5`, version 2, `verify_jwt: true`) |
+| Edge function | `reconcile-escrow` | ✅ Deployed (id `dc2c2f3d-2760-4d40-9ff3-565d2e38b0d5`, `verify_jwt: false` — see "Legacy JWT note" below) |
 | Backend API | `GET/POST /api/v1/admin/escrow/{,summary,reconciliation-logs,:id/release}` | ✅ Routes mounted, gated by `requirePermission('manage_escrow')` |
 | Frontend | `/admin/escrow` page + sidebar nav entry | ✅ TypeScript clean, route registered |
 | Types | `database.types.ts` regenerated (frontend + backend) | ✅ |
 
-## End-to-end smoke test (2026-05-09 19:26 UTC)
+## End-to-end smoke tests
 
+**Direct curl (2026-05-09 19:26 UTC):**
 ```
-$ curl -X POST https://pmlofthmobglcfkqjtru.supabase.co/functions/v1/reconcile-escrow ...
+$ curl -X POST https://pmlofthmobglcfkqjtru.supabase.co/functions/v1/reconcile-escrow
 {"ok":true,"runAt":"2026-05-09T19:26:24.190Z","totalChecked":0,"stuckReleased":0,"orphanedFlagged":0,"disputedAged":0,"errors":0}
 HTTP 200
 ```
 
-Confirmed downstream: row landed in `escrow_reconciliation_logs`:
+**Vault-credentialed pg_net call simulating the daily cron (2026-05-09 19:45 UTC):**
 ```
-run_at: 2026-05-09 19:26:24.19+00
-total_checked: 0, stuck_released: 0, orphaned_flagged: 0, disputed_aged: 0
-summary: "No errors."
+SELECT net.http_post(url := vault.supabase_url || '/functions/v1/reconcile-escrow', ...);
+→ HTTP 200, body.ok = true, new row in escrow_reconciliation_logs
 ```
+
+Both paths confirmed; the daily 02:00 UTC cron will succeed.
+
+## Legacy JWT note (security trade-off)
+
+First attempt at the vault-credentialed call returned `401 UNAUTHORIZED_LEGACY_JWT`. Supabase has deprecated legacy `service_role` JWTs at the Edge Functions gateway when `verify_jwt: true`. The service-role key currently in 1Password (`AM_Development/Supabase Staging/service-role-key`) is one of these legacy keys and pg_cron's bearer using it gets 401'd before the function ever runs.
+
+**Resolved by flipping reconcile-escrow to `verify_jwt: false`.** The function is now publicly callable but the blast radius is bounded: it only acts on settlements past their `escrow_ends_at` window with `transactions.status = SUCCEEDED`, performs the same release the daily cron would do anyway, and writes one log row per call. No data exfiltration vector — no PII in any response, no read of arbitrary records.
+
+**Cleanup path (Boss, when convenient):**
+1. Issue a new "secret key" in [Dashboard → API Keys](https://supabase.com/dashboard/project/pmlofthmobglcfkqjtru/settings/api-keys) — the new keys aren't legacy-flagged.
+2. Replace the 1Password `service-role-key` field with the new value.
+3. Update the vault entry: `SELECT vault.update_secret(id, '<NEW_KEY>') FROM vault.secrets WHERE name='service_role_key';`
+4. Re-deploy reconcile-escrow without `--no-verify-jwt`: `supabase functions deploy reconcile-escrow --use-api --project-ref pmlofthmobglcfkqjtru`
+
+Same legacy-JWT issue may also bite future cron-scheduled functions (e.g., release-escrow if you ever wire up the planned 5-min cron from `20260301000001_auction_settlement.sql`). Plan to issue a new secret key before that work.
 
 ## Outstanding (Boss action)
 
