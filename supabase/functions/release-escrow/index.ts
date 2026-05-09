@@ -13,6 +13,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { calculatePayout } from '../_shared/payment/payoutCalculation.ts';
 import { logger } from '../_shared/utils/logger.ts';
+import { sendEmail, emailRecipient } from '../_shared/postmark.ts';
 
 /** Insert a notification row silently — errors never block the main flow. */
 async function insertNotification(
@@ -270,6 +271,47 @@ Deno.serve(async (req) => {
           `${frontendUrl}/payouts`,
           { payoutId: payoutRecord.id, netPayoutCents: payout.netPayoutCents },
         );
+
+        // ── ESCROW_RELEASED emails (non-fatal, preference-aware) ────────────
+        try {
+          const sellerAmount = `$${(payout.netPayoutCents / 100).toFixed(2)}`;
+          const sellerEmail = await emailRecipient(supabase, settlement.seller_id, 'ESCROW_RELEASED');
+          if (sellerEmail) {
+            await sendEmail({
+              to: sellerEmail,
+              subject: 'Escrow released — your payout is processing',
+              htmlBody: `
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#13131a;color:#fff;padding:24px;border-radius:12px;">
+                  <h2 style="color:#22c55e;margin:0 0 16px;">Payout Processing</h2>
+                  <p>The escrow for your sale has been released. Your payout of <strong>${sellerAmount}</strong> is now being processed and should arrive in your account within 2–5 business days.</p>
+                  <a href="${frontendUrl}/payouts" style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg,#7c3aed,#3b82f6);color:#fff;border-radius:8px;text-decoration:none;margin-top:16px;">View Payouts</a>
+                </div>
+              `,
+            });
+          }
+
+          if (settlementRecord.buyer_id) {
+            const buyerEmail = await emailRecipient(supabase, settlementRecord.buyer_id, 'ESCROW_RELEASED');
+            if (buyerEmail) {
+              await sendEmail({
+                to: buyerEmail,
+                subject: 'Your purchase is confirmed',
+                htmlBody: `
+                  <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#13131a;color:#fff;padding:24px;border-radius:12px;">
+                    <h2 style="color:#22c55e;margin:0 0 16px;">Purchase Confirmed</h2>
+                    <p>The escrow period has ended and your transaction is complete. The seller has been paid; expect shipping updates soon.</p>
+                    <a href="${settlementUrl}" style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg,#7c3aed,#3b82f6);color:#fff;border-radius:8px;text-decoration:none;margin-top:16px;">View Order</a>
+                  </div>
+                `,
+              });
+            }
+          }
+        } catch (emailErr) {
+          logger.warn('release-escrow: ESCROW_RELEASED email failed (non-fatal)', {
+            settlementId: settlement.id,
+            error: emailErr instanceof Error ? emailErr.message : String(emailErr),
+          });
+        }
 
         stats.released++;
 

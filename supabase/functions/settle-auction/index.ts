@@ -18,6 +18,7 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { logger } from '../_shared/utils/logger.ts';
+import { sendEmail, emailRecipient } from '../_shared/postmark.ts';
 
 /** Insert a notification row silently — errors never block the main flow. */
 async function insertNotification(
@@ -257,6 +258,32 @@ Deno.serve(async (req) => {
       `${frontendUrl}/settlements/${settlement.id}`,
       { settlementId: settlement.id, auctionId, priceCents: grossAmountCents },
     );
+
+    // Send AUCTION_WON email to winner (non-fatal, preference-aware)
+    try {
+      const recipient = await emailRecipient(supabase, winnerId, 'AUCTION_WON');
+      if (recipient) {
+        const priceFormatted = `$${(grossAmountCents / 100).toFixed(2)}`;
+        const deadline = new Date(paymentWindowExpiresAt).toLocaleString();
+        await sendEmail({
+          to: recipient,
+          subject: 'You won the auction!',
+          htmlBody: `
+            <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#13131a;color:#fff;padding:24px;border-radius:12px;">
+              <h1 style="background:linear-gradient(135deg,#7c3aed,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:0 0 16px;">You Won!</h1>
+              <p>Congratulations — you placed the winning bid for <strong>${priceFormatted}</strong>.</p>
+              <p>Complete your payment by <strong>${deadline}</strong> (20 minutes from now) to secure your item.</p>
+              <a href="${frontendUrl}/settlements/${settlement.id}" style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg,#7c3aed,#3b82f6);color:#fff;border-radius:8px;text-decoration:none;margin-top:16px;">Complete Payment</a>
+            </div>
+          `,
+        });
+      }
+    } catch (emailErr) {
+      logger.warn('settle-auction: AUCTION_WON email failed (non-fatal)', {
+        error: emailErr instanceof Error ? emailErr.message : String(emailErr),
+        winnerId,
+      });
+    }
 
     logger.info('settle-auction: Settlement created successfully', {
       auctionId,
