@@ -21,7 +21,7 @@ The Node-side Postmark integration was already merged in commit `8534036` from a
 - All four edge functions redeployed to staging via `supabase functions deploy --use-api`. No Docker dependency. (Default Docker-bundled deploy hung silently — `--use-api` is the recommended path for headless / CI environments.)
 - `supabase secrets list` confirms POSTMARK_* digests present.
 - A real outbid/win/expire flow was not exercised in this session (would require placing a live test bid + winning + cron firing). Recommended Boss verification:
-  1. Place a bid as `test@authenticmaterials.com`, get outbid from another account → AUCTION_OUTBID email arrives (already wired via `bidController` + Node-side `notificationService`).
+  1. Place a bid as `test@authentic-materials.com`, get outbid from another account → AUCTION_OUTBID email arrives (already wired via `bidController` + Node-side `notificationService`).
   2. Trigger a password reset → arrives via Postmark SMTP **once Boss has finished the SMTP config below**.
   3. Settle a test auction → AUCTION_WON email to winner.
   4. Wait 72h on a successful purchase → ESCROW_RELEASED emails to both parties.
@@ -42,7 +42,7 @@ The Node-side Postmark integration was already merged in commit `8534036` from a
           → SMTP auth accepted, recovery email handed off to Postmark
 ```
 
-Confirmation pending in `test@authenticmaterials.com` inbox + Postmark Activity dashboard. If the message lands in Postmark Activity but not the inbox, that's a DKIM/SPF sender-signature issue at Postmark, not Supabase.
+Confirmation pending in `test@authentic-materials.com` inbox + Postmark Activity dashboard. If the message lands in Postmark Activity but not the inbox, that's a DKIM/SPF sender-signature issue at Postmark, not Supabase.
 
 ## Remaining nice-to-have items
 

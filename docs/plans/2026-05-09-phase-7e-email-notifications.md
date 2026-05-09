@@ -508,7 +508,7 @@ Enable Custom SMTP and fill in:
 
 - [ ] **Step 3: Test with a password reset**
 
-Log out of the staging test account (`test@authenticmaterials.com`) and trigger a password reset. Verify email arrives in inbox.
+Log out of the staging test account (`test@authentic-materials.com`) and trigger a password reset. Verify email arrives in inbox.
 
 - [ ] **Step 4: Commit a verification note**
 
@@ -542,7 +542,7 @@ Expected: all tests pass.
 - [ ] **Step 3: Test backend email path manually**
 
 With the backend running locally (`cd backend && npm run dev`):
-1. Log in as `test@authenticmaterials.com`
+1. Log in as `test@authentic-materials.com`
 2. Place a bid that gets outbid — verify AUCTION_OUTBID email arrives in inbox
 3. Check server logs for `[email]` entries confirming Postmark responses
 

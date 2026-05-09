@@ -9,7 +9,7 @@
  */
 import { Page } from '@playwright/test';
 
-const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL ?? 'test@authenticmaterials.com';
+const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL ?? 'test@authentic-materials.com';
 const TEST_USER_PASSWORD = process.env.TEST_USER_PASSWORD ?? '';
 const TEST_ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL ?? 'chris.lafleche@cravingcorp.com';
 const TEST_ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? '';
