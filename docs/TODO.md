@@ -1,8 +1,18 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-05-09 (post-deploy reconciliation + drift fixes)
+Last updated: 2026-05-10 (escrow C+D shipped + JWT rotation audit produced)
 
-> **🔄 Reconciliation note (2026-05-09):** The TODO entries below for "Apply DB migration and regenerate types" in Modules 12, 13, 14, 15 are STALE. Verified via `mcp__plugin_supabase_supabase__list_migrations` — all migration files in `supabase/migrations/` are already applied to `pmlofthmobglcfkqjtru`. Zero schema drift. The TS casts (`as never`/`as any`) listed in those entries can be removed and types regenerated. Edge function deploys for `process-payment`, `payment-webhook`, and `release-escrow` are also LIVE (v17/v18/v6) — the only remaining gate for real Stripe processing is the env vars in Supabase dashboard. See `PAYMENT_DEPLOY_CHECKLIST.md` banner.
+> **🔄 Reconciliation note (2026-05-09):** The TODO entries below for "Apply DB migration and regenerate types" in Modules 12, 13, 14, 15 are STALE. Verified via `mcp__plugin_supabase_supabase__list_migrations` — all migration files in `supabase/migrations/` are already applied to `pmlofthmobglcfkqjtru`. Zero schema drift. The TS casts (`as never`/`as any`) listed in those entries can be removed and types regenerated. Edge function deploys for `process-payment`, `payment-webhook`, and `release-escrow` are also LIVE — the only remaining gate for real Stripe processing is the env vars in Supabase dashboard. See `PAYMENT_DEPLOY_CHECKLIST.md` banner.
+
+---
+
+## Pre-prod (cross-cutting)
+
+- [ ] **TODO (Boss directive 2026-05-10):** Rotate ALL secrets at the prod cutover. Includes: `RELEASE_ESCROW_SECRET` (Edge Function env + matching `release_escrow_secret` vault entry); `SUPABASE_SERVICE_ROLE_KEY` (App Runner + 1Password `cli-admin-ops` and `service-role-key` items); `SUPABASE_ANON_KEY` (Vercel + frontend `.env.op` + 1Password `anon-key`); Stripe `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_CONNECT_WEBHOOK_SECRET` (live keys); Postmark `POSTMARK_SERVER_TOKEN`; payment-processor live keys when approved (PaymentCloud, Signature, CCBill, NOWPayments).
+  - Priority: HIGH — production safety
+  - Depends on: `docs/audits/2026-05-10-supabase-jwt-rotation-audit.md` for the Supabase rotation order
+- [ ] **TODO (next session):** Execute Stages 0–4 of the JWT rotation plan in `docs/audits/2026-05-10-supabase-jwt-rotation-audit.md`. Stage 1 (staging probe) is the unblocker for the Session K mystery — must capture HTTP traces. Don't proceed past Stage 1 without a green light or a documented fix.
+- [ ] **TODO (next session — sandbox/test verification):** From this session's audit, all current Stripe / processor configs are templated to 1Password references — actual mode (test vs live) cannot be confirmed without inspecting vault values. Boss should confirm in 1Password that `Stripe/secret-key` is `sk_test_*` and Stripe Connect onboarding is in test mode before any live customer traffic.
 
 ---
 
@@ -84,6 +94,7 @@ Last updated: 2026-05-09 (post-deploy reconciliation + drift fixes)
   - Also fixed: `AWS_REGION` typo (`s-east-2` → `us-east-2`) in App Runner env
   - Updated local `backend/.env` and App Runner env vars via `aws apprunner update-service`
   - Admin dashboard, Users, Audit Logs all verified working on staging
+  - **2026-05-10 audit follow-up:** No smoking gun found in code for why the rotation broke — see `docs/audits/2026-05-10-supabase-jwt-rotation-audit.md` §1 hypotheses. Most likely contributor is the conflated `AWS_REGION` typo fix; secondary is unverified SDK behaviour with `sb_secret_*`. Next rotation attempt MUST capture failing-endpoint traces on staging before touching prod.
 
 ---
 
@@ -177,10 +188,12 @@ Last updated: 2026-05-09 (post-deploy reconciliation + drift fixes)
   - Priority: HIGH — required before payouts feature works
   - Depends on: Supabase CLI + project credentials
 
-- [ ] **TODO:** Set up pg_cron for release-escrow (every 5 min)
-  - Context: `supabase/functions/release-escrow/index.ts` is a cron-style function that finds expired ESCROW_HOLD settlements. Needs pg_cron + pg_net enabled in Supabase, or an external scheduler (e.g. Vercel cron). Call via POST with `x-release-secret` header.
-  - Priority: HIGH — without this, escrow is never released automatically
-  - Depends on: `RELEASE_ESCROW_SECRET` env var configured in Supabase edge function settings
+- [x] **DONE (2026-05-10):** pg_cron schedule for release-escrow live — `release-escrow-tick` jobid=3, `*/15 * * * *`, vault-based secret pattern (mirrors `reconcile-escrow-daily`). End-to-end pipeline verified: cron → vault lookup → http_post → gateway (verify_jwt:false) → function (x-release-secret match) → settlements query → 200 with empty-result stats. Real-data test deferred — prod has 0 settlements; needs purchase-flow fixtures in a separate session.
+  - Bump cadence to `*/5 * * * *` once load + timing are confirmed safe.
+- [x] **DONE (2026-05-10) Phase 7B:** Buyer delivery confirmation as escrow-release trigger.
+  - Migration `20260509120200_delivery_confirmation.sql` adds `delivery_confirmed_at` + `delivery_confirmed_by` columns + partial index to `settlements`.
+  - `POST /api/v1/delivery/:settlementId/confirm-delivery` endpoint (service-role, idempotent on re-confirm, requires `ESCROW_HOLD`).
+  - `release-escrow` v10 ACTIVE — query widened with `.or(escrow_ends_at.lte.<now>,delivery_confirmed_at.not.is.null)`. `verify_jwt: false` pinned via `release-escrow/config.toml`.
 
 - [x] **DONE (Phase 7D, 2026-05-09):** Implement actual Stripe Connect Transfer in release-escrow
   - `release-escrow` v7 ACTIVE — calls `stripe.transfers.create()` with idempotencyKey=`payout_${id}` when `successful_processor === 'STRIPE'` AND seller has `stripe_connect_account_id` + `stripe_connect_payouts_enabled`. Other processors / non-onboarded sellers leave payout PENDING (truth, not stub).
