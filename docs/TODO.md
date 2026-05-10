@@ -1,6 +1,8 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-05-09 (1Password secret management + Postmark migration)
+Last updated: 2026-05-09 (post-deploy reconciliation + drift fixes)
+
+> **🔄 Reconciliation note (2026-05-09):** The TODO entries below for "Apply DB migration and regenerate types" in Modules 12, 13, 14, 15 are STALE. Verified via `mcp__plugin_supabase_supabase__list_migrations` — all migration files in `supabase/migrations/` are already applied to `pmlofthmobglcfkqjtru`. Zero schema drift. The TS casts (`as never`/`as any`) listed in those entries can be removed and types regenerated. Edge function deploys for `process-payment`, `payment-webhook`, and `release-escrow` are also LIVE (v17/v18/v6) — the only remaining gate for real Stripe processing is the env vars in Supabase dashboard. See `PAYMENT_DEPLOY_CHECKLIST.md` banner.
 
 ---
 
@@ -256,10 +258,11 @@ Last updated: 2026-05-09 (1Password secret management + Postmark migration)
   - Added: `ProcessorResult`, `RefundResult`, `HealthCheckResult`, `PaymentProcessor`, `PaymentIntent`
   - Were imported by `StripeProcessor.ts`, `BaseProcessor.ts`, `PaymentCloudProcessor.ts` but never defined
 
-- [ ] **TODO:** Deploy process-payment and payment-webhook Edge Functions
-  - Context: Functions are hardened and ready. Blocked on: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET env vars in Supabase dashboard.
-  - Priority: HIGH
-  - Depends on: See docs/PAYMENT_DEPLOY_CHECKLIST.md
+- [x] **DONE (2026-05-09):** Deploy process-payment and payment-webhook Edge Functions
+  - `process-payment` v17 ACTIVE (`verify_jwt: true`)
+  - `payment-webhook` v18 ACTIVE (`verify_jwt: false`)
+  - `release-escrow` v6 ACTIVE (`verify_jwt: true`, uses `x-release-secret` header)
+  - Outstanding gate for real card processing: STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET in Supabase dashboard. Code is ready and waiting.
 
 ## Module 06: Browse & Search
 

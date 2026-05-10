@@ -1,8 +1,13 @@
 # Payment Edge Function — Deploy Checklist
 
-Last updated: 2026-03-01 (Module 09)
+Last updated: 2026-05-09 (post-deploy reconciliation)
 
-**DO NOT deploy until all Phase 1 items are checked.** Phase 2+ are informational for future processor setup.
+> **🚀 DEPLOY STATUS (as of 2026-05-09):** All three payment edge functions are LIVE on `pmlofthmobglcfkqjtru`:
+> - `process-payment` — v17, ACTIVE, `verify_jwt: true`
+> - `payment-webhook` — v18, ACTIVE, `verify_jwt: false` (signatures verified by processor)
+> - `release-escrow` — v6, ACTIVE, `verify_jwt: true` (uses `x-release-secret` shared-secret header instead)
+>
+> **The only remaining gate for real card processing is the Stripe env vars** (Phase 1 below). Code is hardened, deployed, and waiting.
 
 ---
 
@@ -10,11 +15,11 @@ Last updated: 2026-03-01 (Module 09)
 
 ### Environment Variables (set in Supabase dashboard → Edge Functions → Secrets)
 
-- [ ] `STRIPE_SECRET_KEY` — Stripe live secret key (sk_live_...)
-- [ ] `STRIPE_WEBHOOK_SECRET` — From Stripe dashboard → Webhooks → signing secret (whsec_...)
-- [ ] `SUPABASE_URL` — Auto-provided by Supabase Edge runtime
-- [ ] `SUPABASE_ANON_KEY` — Auto-provided
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` — Set manually (required for service-role DB ops)
+- [ ] `STRIPE_SECRET_KEY` — Stripe live secret key (sk_live_...) **← OUTSTANDING**
+- [ ] `STRIPE_WEBHOOK_SECRET` — From Stripe dashboard → Webhooks → signing secret (whsec_...) **← OUTSTANDING**
+- [x] `SUPABASE_URL` — Auto-provided by Supabase Edge runtime
+- [x] `SUPABASE_ANON_KEY` — Auto-provided
+- [x] `SUPABASE_SERVICE_ROLE_KEY` — Set (rotated to `sb_secret_` format 2026-05-09)
 
 ### Stripe Dashboard Setup
 
@@ -40,9 +45,12 @@ Last updated: 2026-03-01 (Module 09)
 ```bash
 cd unmentionables/Unmen/
 
-# Deploy Edge Functions (run from project root)
-supabase functions deploy process-payment --project-ref pmlofthmobglcfkqjtru
-supabase functions deploy payment-webhook --project-ref pmlofthmobglcfkqjtru
+# Deploy Edge Functions (run from project root) — ALWAYS pass --use-api
+# Without --use-api the CLI hangs waiting for Docker; with it, deploy goes
+# direct to the platform API.
+supabase functions deploy process-payment --use-api --project-ref pmlofthmobglcfkqjtru
+supabase functions deploy payment-webhook --use-api --project-ref pmlofthmobglcfkqjtru
+supabase functions deploy release-escrow --use-api --project-ref pmlofthmobglcfkqjtru
 ```
 
 ### Post-Deploy Smoke Test
