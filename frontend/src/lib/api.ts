@@ -522,4 +522,44 @@ export const api = {
     const json = await response.json();
     return json.data;
   },
+
+  // ── Phase 7D: Stripe Connect onboarding ──────────────────────────────────────
+
+  stripeConnect: {
+    /** Read the seller's current Connect onboarding state. */
+    async getStatus(): Promise<StripeConnectStatus> {
+      const headers = await getAuthHeader();
+      const response = await fetch(`${API_URL}/stripe-connect/status`, { headers });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error((error as { error?: string }).error || 'Failed to fetch Connect status');
+      }
+      const json = await response.json();
+      return json.data as StripeConnectStatus;
+    },
+
+    /** Create (or reuse) a Stripe Express account and return a fresh onboarding URL. */
+    async createOnboardingLink(): Promise<{ url: string }> {
+      const headers = await getAuthHeader();
+      const response = await fetch(`${API_URL}/stripe-connect/onboarding-link`, {
+        method: 'POST',
+        headers,
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error((error as { error?: string }).error || 'Failed to start Stripe onboarding');
+      }
+      const json = await response.json();
+      return json.data as { url: string };
+    },
+  },
 };
+
+export interface StripeConnectStatus {
+  status: 'not_started' | 'pending' | 'active' | 'restricted';
+  accountId: string | null;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  disabledReason: string | null;
+  onboardingStartedAt: string | null;
+}

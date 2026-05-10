@@ -16,6 +16,8 @@ import { sellerVerificationRoutes } from './routes/sellerVerification';
 import searchRoutes from './routes/search';
 import messageRoutes from './routes/messages';
 import notificationRoutes from './routes/notifications';
+import stripeConnectRoutes from './routes/stripeConnect';
+import stripeAccountWebhookRoutes from './routes/stripeAccountWebhook';
 
 dotenv.config();
 
@@ -29,6 +31,14 @@ app.use(cors({
   credentials: true
 }));
 
+// Stripe Connect webhook MUST be mounted with raw body BEFORE the global
+// JSON parser so signature verification can read the unparsed payload.
+app.use(
+  '/api/v1/webhooks/stripe-account',
+  express.raw({ type: 'application/json' }),
+  stripeAccountWebhookRoutes,
+);
+
 app.use(express.json());
 
 app.use('/api/v1', healthRoutes);
@@ -36,6 +46,7 @@ app.use('/api/v1', healthRoutes);
 app.use('/api/v1/auctions', auctionRoutes);
 app.use('/api/v1/settlements', settlementRoutes);
 app.use('/api/v1/payouts', payoutRoutes);
+app.use('/api/v1/stripe-connect', stripeConnectRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/search', searchRoutes);
