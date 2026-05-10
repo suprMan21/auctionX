@@ -275,6 +275,31 @@ Last updated: 2026-05-09 (post-deploy reconciliation + drift fixes)
   - Priority: LOW
   - Depends on: Standalone
 
+## Phase 5C: NFC Frontend Stub Completion (2026-05-09 follow-ups)
+
+- [ ] **TODO:** Promote `confirmProofRaw` helper to `api.nfcConfirmProof(proofId)` in `frontend/src/lib/api.ts`
+  - Context: Lane A subagent had to add an inline helper in `NfcTagDetailPage.tsx` because the api.ts client doesn't expose `POST /nfc/proof/confirm`. Backend route exists and is wired; just missing client surface.
+  - Also: `nfcUploadProof` return type omits `proofId` even though the backend returns it (controller line 326). Add it.
+  - Priority: MEDIUM — workaround works but breaks the encapsulation pattern.
+  - File: `frontend/src/lib/api.ts`, `frontend/src/features/verification/pages/NfcTagDetailPage.tsx` (remove inline helper after promotion)
+
+- [ ] **TODO:** Add `refetch()` to `useNfcTagDetail` hook
+  - Context: Lane A's success paths (transfer, mint) currently use `window.location.reload()` because the hook has no in-place refetch. Cleaner UX after these mutations.
+  - Priority: LOW — works, just ugly.
+  - File: `frontend/src/features/verification/hooks/useNfcTags.ts`
+
+- [ ] **TODO:** Include `last_scanned_at` on `GET /verify/:tokenName` response
+  - Context: `VerificationPage.tsx` has a TODO comment in the scan telemetry section. The verification_events table has scan timestamps; this would surface them.
+  - Priority: LOW — telemetry already shows `scan_count` and `view_count`.
+  - File: `backend/src/controllers/verificationController.ts`
+
+- [ ] **TODO:** Stream IPFS pin → mint stage progress from backend
+  - Context: Lane A's mint UX flips "Pinning… → Minting…" labels on a 1.5s timer; not actually tied to backend stages. SSE or polling would make this real.
+  - Priority: LOW — purely cosmetic for user trust during the ~5-30s mint window.
+  - File: `backend/src/controllers/nfcController.ts` (mint endpoint), `frontend/src/features/verification/pages/NfcTagDetailPage.tsx`
+
+---
+
 ## Module 13: NFC Verification
 
 - [ ] **TODO:** Apply DB migration and regenerate types

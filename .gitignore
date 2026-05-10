@@ -49,3 +49,6 @@ firestore-debug.log.*
 
 # Supabase CLI cache leaked into frontend dir (auto-generated)
 frontend/supabase/
+
+# Claude Code worktrees + transient state
+.claude/worktrees/
