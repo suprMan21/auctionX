@@ -73,8 +73,11 @@ Deno.serve(async (req) => {
   try {
     // Query releasable settlements:
     // - status = ESCROW_HOLD (not DISPUTED — disputes keep status as DISPUTED, not ESCROW_HOLD)
-    // - escrow_ends_at <= NOW() (window has expired)
+    // - either:
+    //     escrow_ends_at <= NOW() (the 72h window has expired), OR
+    //     delivery_confirmed_at IS NOT NULL (Phase 7B: buyer confirmed receipt)
     // - JOIN transactions to get the successful_processor
+    const nowIso = new Date().toISOString();
     const { data: settlements, error: queryError } = await supabase
       .from('settlements')
       .select(`
@@ -84,6 +87,7 @@ Deno.serve(async (req) => {
         gross_amount_cents,
         platform_fee_cents,
         escrow_ends_at,
+        delivery_confirmed_at,
         transaction_id,
         auction_id,
         transactions!inner(
@@ -93,7 +97,7 @@ Deno.serve(async (req) => {
         )
       `)
       .eq('status', 'ESCROW_HOLD')
-      .lte('escrow_ends_at', new Date().toISOString())
+      .or(`escrow_ends_at.lte.${nowIso},delivery_confirmed_at.not.is.null`)
       .eq('transactions.status', 'SUCCEEDED');
 
     if (queryError) {
