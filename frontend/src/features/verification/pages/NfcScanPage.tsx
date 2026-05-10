@@ -122,7 +122,7 @@ export function NfcScanPage() {
               {tagDetail.seller && (
                 <div className="flex justify-between">
                   <span className="text-gray-400">Seller</span>
-                  <span className="text-white">@{tagDetail.seller.username}</span>
+                  <span className="text-white">{tagDetail.seller.display_name ?? 'Unknown'}</span>
                 </div>
               )}
             </div>

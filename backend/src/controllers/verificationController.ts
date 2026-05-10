@@ -316,16 +316,16 @@ export const getVerificationByToken = async (req: VerificationRequest, res: Resp
       .update({ view_count: (verif.view_count ?? 0) + 1 })
       .eq('id', verif.id);
 
-    // Fetch seller username
+    // Fetch seller display name
     const { data: seller } = await supabase
       .from('users')
-      .select('username')
+      .select('display_name')
       .eq('id', verif.seller_id)
       .maybeSingle();
 
-    // Fetch current owner username
+    // Fetch current owner display name
     const { data: currentOwner } = verif.current_owner_id
-      ? await supabase.from('users').select('username').eq('id', verif.current_owner_id).maybeSingle()
+      ? await supabase.from('users').select('display_name').eq('id', verif.current_owner_id).maybeSingle()
       : { data: null };
 
     const { data: tagRecord } = verif.nfc_tag_uid
@@ -353,9 +353,11 @@ export const getVerificationByToken = async (req: VerificationRequest, res: Resp
     if (transferUserIds.length > 0) {
       const { data: transferUsers } = await supabase
         .from('users')
-        .select('id, username')
+        .select('id, display_name')
         .in('id', transferUserIds);
-      (transferUsers ?? []).forEach((u: { id: string; username: string }) => { userMap[u.id] = u.username; });
+      (transferUsers ?? []).forEach((u: { id: string; display_name: string | null }) => {
+        userMap[u.id] = u.display_name ?? u.id.slice(0, 8);
+      });
     }
 
     logger.info('verification_viewed', { tokenName, verificationId: verif.id });
@@ -376,8 +378,8 @@ export const getVerificationByToken = async (req: VerificationRequest, res: Resp
           transferred_at: string;
         }) => ({
           ...t,
-          from_username: t.from_user_id ? (userMap[t.from_user_id] ?? null) : null,
-          to_username: userMap[t.to_user_id] ?? null,
+          from_display_name: t.from_user_id ? (userMap[t.from_user_id] ?? null) : null,
+          to_display_name: userMap[t.to_user_id] ?? null,
         })),
       },
     });

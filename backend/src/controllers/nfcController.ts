@@ -137,16 +137,27 @@ export const scanTag = async (req: NfcRequest, res: Response) => {
       piccData = parts.encPiccData;
       cmac = parts.cmac;
 
-      // We need to find the tag by trying to decrypt against known tags
-      // For now, we'll need the tag_uid from the URL path or a lookup mechanism
-      // The SUN URL typically includes the tag UID in the path
+      // Recover tag UID from the encrypted PICC payload (decrypted further down).
+      // The SUN URL path is `/verify/<tokenName>?picc_data=...&cmac=...` — the
+      // last path segment is the token name, NOT the tag UID, so do NOT try to
+      // extract UID from the URL. Instead, we trial-decrypt against candidate
+      // tags by token name, then fall through to the cryptographic lookup.
       const url = new URL(body.sunMessage);
       const pathParts = url.pathname.split('/').filter(Boolean);
-      const uidFromPath = pathParts[pathParts.length - 1];
-      if (!uidFromPath || !/^[0-9a-fA-F]+$/.test(uidFromPath)) {
-        throw new AppError('invalid_argument', 'Cannot determine tag UID from SUN message');
+      const tokenName = pathParts[pathParts.length - 1];
+      if (!tokenName) {
+        throw new AppError('invalid_argument', 'SUN message URL missing token name');
       }
-      tagUid = uidFromPath.toUpperCase();
+      // Resolve tag UID via the verification record linked to this token name.
+      const { data: verifByToken } = await supabase
+        .from('item_verifications')
+        .select('nfc_tag_uid')
+        .eq('token_name', decodeURIComponent(tokenName))
+        .maybeSingle();
+      if (!verifByToken?.nfc_tag_uid) {
+        throw new AppError('not_found', 'No NFC tag registered for this token');
+      }
+      tagUid = verifByToken.nfc_tag_uid.toUpperCase();
     } else {
       tagUid = body.tagUid.toUpperCase();
       piccData = body.piccData;
@@ -432,7 +443,7 @@ export const getTagVerification = async (req: NfcRequest, res: Response) => {
     // Fetch seller info
     const { data: seller } = await supabase
       .from('users')
-      .select('username')
+      .select('display_name')
       .eq('id', tag.seller_id)
       .maybeSingle();
 
@@ -638,14 +649,14 @@ export const mintNft = async (req: NfcRequest, res: Response) => {
       }
     }
 
-    // Fetch seller username
+    // Fetch seller display name
     const { data: seller } = await supabase
       .from('users')
-      .select('username')
+      .select('display_name')
       .eq('id', userId)
       .maybeSingle();
 
-    const sellerUsername = seller?.username ?? 'unknown';
+    const sellerDisplayName = seller?.display_name ?? 'unknown';
 
     // Upload metadata to IPFS via Pinata
     logger.info('nft_mint_preparing_metadata', { tagId, tagUid: tag.tag_uid });
@@ -655,7 +666,7 @@ export const mintNft = async (req: NfcRequest, res: Response) => {
       imageUrl,
       tagUid: tag.tag_uid,
       scanCount: tag.sun_counter ?? 0,
-      sellerUsername,
+      sellerUsername: sellerDisplayName,
       verificationStatus,
     });
 
@@ -750,7 +761,7 @@ export const getTagByUid = async (req: NfcRequest, res: Response) => {
 
     const { data: seller } = await supabase
       .from('users')
-      .select('username')
+      .select('display_name')
       .eq('id', tag.seller_id)
       .maybeSingle();
 

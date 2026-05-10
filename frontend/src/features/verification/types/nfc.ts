@@ -66,7 +66,7 @@ export interface NfcTagDetail {
       listing_media: Array<{ url: string; type: string; sort_order: number }>;
     } | null;
   } | null;
-  seller: { username: string } | null;
+  seller: { display_name: string | null } | null;
 }
 
 // ── Scan result from POST /nfc/scan ────────────────────────────────────────

@@ -58,7 +58,7 @@ function ConversationRow({
   isActive: boolean;
   onClick: () => void;
 }) {
-  const displayName = conv.other_participant?.username ?? 'Unknown user';
+  const displayName = conv.other_participant?.display_name ?? 'Unknown user';
   const avatar = conv.other_participant?.avatar_url;
 
   return (
@@ -142,7 +142,7 @@ function MessageThread({
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const displayName = conv.other_participant?.username ?? 'Unknown user';
+  const displayName = conv.other_participant?.display_name ?? 'Unknown user';
   const listingTitle = getListingTitle(conv);
 
   // Fetch initial messages

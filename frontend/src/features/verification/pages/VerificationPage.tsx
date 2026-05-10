@@ -39,7 +39,7 @@ export function VerificationPage() {
       .then((data) => {
         if (!mounted) return;
         setVerif(data);
-        document.title = `${data.token_name} — Verified by @${data.seller?.username ?? 'unknown'} | Authentic Materials`;
+        document.title = `${data.token_name} — Verified by ${data.seller?.display_name ?? 'unknown'} | Authentic Materials`;
         api.incrementScan(tokenName);
       })
       .catch((err) => {
@@ -88,7 +88,7 @@ export function VerificationPage() {
   );
 
   const pageUrl = window.location.href;
-  const ogTitle = `${verif.token_name} — Verified by @${verif.seller?.username ?? 'unknown'} | Authentic Materials`;
+  const ogTitle = `${verif.token_name} — Verified by ${verif.seller?.display_name ?? 'unknown'} | Authentic Materials`;
   const ogDescription = 'This item is NFC-authenticated and blockchain-verified. View the full chain of custody.';
 
   return (
@@ -112,7 +112,7 @@ export function VerificationPage() {
             <h1 className="text-2xl font-bold text-white font-mono">{verif.token_name}</h1>
             <p className="text-gray-400 text-sm mt-1">
               by{' '}
-              <span className="text-white">@{verif.seller?.username ?? verif.seller_id}</span>
+              <span className="text-white">{verif.seller?.display_name ?? verif.seller_id.slice(0, 8)}</span>
             </p>
           </div>
           <StatusBadge status={verif.status} />
@@ -143,7 +143,7 @@ export function VerificationPage() {
             <div className="px-6 pt-6 pb-3">
               <h2 className="text-lg font-semibold text-white">Possession-Proof Video</h2>
               <p className="text-gray-400 text-xs mt-1">
-                Recorded by @{verif.seller?.username ?? 'seller'} · {verif.video_duration_seconds}s
+                Recorded by {verif.seller?.display_name ?? 'seller'} · {verif.video_duration_seconds}s
               </p>
             </div>
             <video
@@ -161,7 +161,7 @@ export function VerificationPage() {
             <div className="text-center py-4">
               <p className="text-gray-400 text-sm">
                 Current owner:{' '}
-                <span className="text-white">@{verif.current_owner?.username ?? verif.current_owner_id ?? 'original seller'}</span>
+                <span className="text-white">{verif.current_owner?.display_name ?? (verif.current_owner_id ? verif.current_owner_id.slice(0, 8) : 'original seller')}</span>
               </p>
             </div>
           ) : (
@@ -170,13 +170,13 @@ export function VerificationPage() {
                 <li key={transfer.id} className="flex items-center gap-3 text-sm">
                   <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
                   <span className="text-gray-300">
-                    {transfer.from_username
-                      ? `@${transfer.from_username}`
+                    {transfer.from_display_name
+                      ? transfer.from_display_name
                       : transfer.from_user_id
-                        ? `@${transfer.from_user_id.slice(0, 8)}`
+                        ? transfer.from_user_id.slice(0, 8)
                         : 'Original seller'}
                     {' → '}
-                    @{transfer.to_username ?? transfer.to_user_id.slice(0, 8)}
+                    {transfer.to_display_name ?? transfer.to_user_id.slice(0, 8)}
                   </span>
                   <span className="ml-auto text-gray-400 shrink-0">
                     {new Date(transfer.transferred_at).toLocaleDateString()}

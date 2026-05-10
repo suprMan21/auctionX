@@ -42,8 +42,8 @@ export interface OwnershipTransfer {
   transfer_type: TransferType;
   settlement_id: string | null;
   transferred_at: string;
-  from_username: string | null;
-  to_username: string | null;
+  from_display_name: string | null;
+  to_display_name: string | null;
 }
 
 export interface VerificationDetail extends Verification {
@@ -53,7 +53,7 @@ export interface VerificationDetail extends Verification {
     listing_media: Array<{ url: string; type: string; sort_order: number }>;
   } | null;
   ownership_transfers: OwnershipTransfer[];
-  seller: { username: string } | null;
-  current_owner: { username: string } | null;
+  seller: { display_name: string | null } | null;
+  current_owner: { display_name: string | null } | null;
   nft: NftData | null;
 }

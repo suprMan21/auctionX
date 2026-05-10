@@ -103,7 +103,7 @@ export const listConversations = async (req: ConversationRequest, res: Response)
     // Fetch other participants' profiles
     const { data: otherUsers, error: usersError } = await supabase
       .from('users')
-      .select('id, username, avatar_url')
+      .select('id, display_name, avatar_url')
       .in('id', uniqueOtherIds);
 
     if (usersError) {
