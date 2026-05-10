@@ -46,3 +46,6 @@ firestore-debug.log.*
 # Allow .env.op template files (safe: contain op:// references, not real secrets)
 !.env.op
 !.env.local.op
+
+# Supabase CLI cache leaked into frontend dir (auto-generated)
+frontend/supabase/

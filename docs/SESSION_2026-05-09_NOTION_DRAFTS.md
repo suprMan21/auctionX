@@ -1,7 +1,7 @@
 # Notion Drafts — 2026-05-09 Session
 # 1Password Secret Management + Postmark Migration
 
-> Paste these into the corresponding Notion DBs once Notion MCP OAuth is complete (or do it manually via browser).
+> ✅ **PUSHED TO NOTION 2026-05-09 18:11** via Claude Code after Notion MCP OAuth completed. All 5 lessons + 3 decisions are live. Older duplicate "Use Supabase MCP apply_migration when db push is blocked..." (16:22) was marked Still Applies = NO with a superseded callout. Postmark decision kept alongside the March 2026 strategic Postmark decision (flagged in Librarian Log). This file retained for history — do not re-push.
 > Workspace IDs: Lessons `collection://dae3b391-3163-4fd0-9eee-586d923415d1` · Decisions `collection://83f2eb51-f6a0-49ee-9541-3a93ce857c24`
 
 ---
