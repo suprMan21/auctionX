@@ -9,6 +9,7 @@ import auctionRoutes from './routes/auctions';
 import webhookRoutes from './routes/webhooks';
 import adminRoutes from './routes/admin/index';
 import settlementRoutes from './routes/settlements';
+import deliveryRoutes from './routes/delivery';
 import payoutRoutes from './routes/payouts';
 import { verificationRoutes, publicVerificationRoutes } from './routes/verifications';
 import { nfcRoutes } from './routes/nfc';
@@ -45,6 +46,7 @@ app.use('/api/v1', healthRoutes);
 
 app.use('/api/v1/auctions', auctionRoutes);
 app.use('/api/v1/settlements', settlementRoutes);
+app.use('/api/v1/delivery', deliveryRoutes);
 app.use('/api/v1/payouts', payoutRoutes);
 app.use('/api/v1/stripe-connect', stripeConnectRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
