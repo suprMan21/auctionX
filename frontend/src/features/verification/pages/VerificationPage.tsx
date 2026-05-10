@@ -190,6 +190,24 @@ export function VerificationPage() {
           )}
         </div>
 
+        {/* ── Scan Telemetry ──────────────────────────────────────────── */}
+        {/* TODO: backend currently does not expose last_scanned_at on
+            GET /verify/:tokenName — add a `last_scan_at` field on the
+            verification response and surface it here. */}
+        <div className="glass rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">Scan Telemetry</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="glass rounded-xl p-4 text-center">
+              <p className="text-3xl font-bold text-white">{verif.scan_count}</p>
+              <p className="text-gray-400 text-xs mt-1">NFC Scans</p>
+            </div>
+            <div className="glass rounded-xl p-4 text-center">
+              <p className="text-3xl font-bold text-white">{verif.view_count}</p>
+              <p className="text-gray-400 text-xs mt-1">Page Views</p>
+            </div>
+          </div>
+        </div>
+
         {/* ── NFC Authentication ───────────────────────────────────────── */}
         {verif.nfc_tag_uid && (
           <div className="glass rounded-2xl p-6">
