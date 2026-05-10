@@ -130,34 +130,53 @@ export const scanTag = async (req: NfcRequest, res: Response) => {
     let cmac: string | null = null;
 
     if ('sunMessage' in body) {
-      // Parse SUN URL to extract piccData and cmac
+      // Parse SUN URL → encrypted PICC payload + truncated CMAC.
       const parts = parseSunMessage(body.sunMessage);
       if (!parts) throw new AppError('invalid_argument', 'Invalid SUN message URL');
       sunMessage = body.sunMessage;
       piccData = parts.encPiccData;
       cmac = parts.cmac;
 
-      // Recover tag UID from the encrypted PICC payload (decrypted further down).
-      // The SUN URL path is `/verify/<tokenName>?picc_data=...&cmac=...` — the
-      // last path segment is the token name, NOT the tag UID, so do NOT try to
-      // extract UID from the URL. Instead, we trial-decrypt against candidate
-      // tags by token name, then fall through to the cryptographic lookup.
-      const url = new URL(body.sunMessage);
-      const pathParts = url.pathname.split('/').filter(Boolean);
-      const tokenName = pathParts[pathParts.length - 1];
-      if (!tokenName) {
-        throw new AppError('invalid_argument', 'SUN message URL missing token name');
+      // Recover the tag by trial decryption against candidate tags. We do NOT
+      // extract a tag UID or token name from the URL path — physical NTAG 424
+      // DNA chips embed a fixed verification URL at provisioning time, and we
+      // cannot rely on its path segments to identify the tag. The encrypted
+      // PICC payload itself is the only authoritative discriminator.
+      //
+      // decryptPiccData() returns null when byte 0 of the decrypted block is
+      // not 0xC7, which only happens (with overwhelming probability) when the
+      // AES key matches the chip. CMAC verification is the second gate.
+      const { data: candidates, error: candidatesError } = await supabase
+        .from('nfc_tags')
+        .select('id, tag_uid, aes_key_enc, sun_counter, verification_id, status')
+        .in('status', ['registered', 'active'])
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .limit(500);
+
+      if (candidatesError) {
+        logger.error('nfc_scan_candidate_query_failed', { error: candidatesError });
+        throw new AppError('internal', 'Tag lookup failed');
       }
-      // Resolve tag UID via the verification record linked to this token name.
-      const { data: verifByToken } = await supabase
-        .from('item_verifications')
-        .select('nfc_tag_uid')
-        .eq('token_name', decodeURIComponent(tokenName))
-        .maybeSingle();
-      if (!verifByToken?.nfc_tag_uid) {
-        throw new AppError('not_found', 'No NFC tag registered for this token');
+      if (!candidates || candidates.length === 0) {
+        throw new AppError('not_found', 'No NFC tag matched the scan');
       }
-      tagUid = verifByToken.nfc_tag_uid.toUpperCase();
+
+      let matched: typeof candidates[number] | null = null;
+      for (const candidate of candidates) {
+        const decrypted = decryptPiccData(piccData, candidate.aes_key_enc);
+        if (!decrypted) continue;
+        if (decrypted.uid !== candidate.tag_uid.toUpperCase()) continue;
+        if (!verifyCmac(piccData, candidate.aes_key_enc, cmac)) continue;
+        matched = candidate;
+        break;
+      }
+
+      if (!matched) {
+        logger.warn('nfc_scan_no_match', { piccDataPrefix: piccData.slice(0, 8) });
+        throw new AppError('not_found', 'No NFC tag matched the scan');
+      }
+
+      tagUid = matched.tag_uid;
     } else {
       tagUid = body.tagUid.toUpperCase();
       piccData = body.piccData;
