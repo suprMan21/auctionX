@@ -15,6 +15,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import type { Verification } from '../types/verification';
+import { tagUidSchema } from '../types/nfc';
 
 type Step = 'intro' | 'record' | 'upload' | 'nfc' | 'success';
 
@@ -67,6 +68,8 @@ export function TokenCreationPage() {
   // NFC state
   const [nfcStatus, setNfcStatus] = useState<'idle' | 'scanning' | 'writing' | 'done' | 'error'>('idle');
   const [nfcError, setNfcError] = useState<string | null>(null);
+  const [manualUid, setManualUid] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
 
   // Load verification on mount
   useEffect(() => {
@@ -249,6 +252,28 @@ export function TokenCreationPage() {
   async function handleSkipNfc() {
     // Allow proceeding to success without NFC (tag can be programmed later)
     setStep('success');
+  }
+
+  async function handleManualUidSubmit() {
+    if (!verificationId) return;
+    setNfcError(null);
+
+    const parsed = tagUidSchema.safeParse(manualUid.trim());
+    if (!parsed.success) {
+      setNfcError(parsed.error.issues[0]?.message ?? 'Invalid tag UID');
+      return;
+    }
+
+    setManualSubmitting(true);
+    try {
+      await api.registerNfc(verificationId, parsed.data);
+      setNfcStatus('done');
+      setStep('success');
+    } catch (err) {
+      setNfcError(err instanceof Error ? err.message : 'Failed to register tag');
+    } finally {
+      setManualSubmitting(false);
+    }
   }
 
   function copyLink() {
@@ -466,7 +491,7 @@ export function TokenCreationPage() {
                 )}
               </>
             ) : (
-              <>
+              <div className="space-y-4">
                 <p className="text-gray-300 text-sm">
                   {isIOSDevice
                     ? 'iOS does not support Web NFC. Use the NFC Tools app to write this URL to your tag:'
@@ -475,10 +500,49 @@ export function TokenCreationPage() {
                 <code className="block text-primary-300 text-xs bg-dark-700 rounded-xl p-3 break-all">
                   {window.location.origin}/verify/{verification.token_name}
                 </code>
-                <p className="text-gray-400 text-xs">
-                  After programming the tag, come back and tap Skip below.
-                </p>
-              </>
+                {isIOSDevice && (
+                  <a
+                    href="https://apps.apple.com/app/nfc-tools/id1252962749"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold text-center transition-colors"
+                  >
+                    Open NFC Tools in App Store
+                  </a>
+                )}
+
+                <div className="border-t border-white/10 pt-4 space-y-3 text-left">
+                  <label htmlFor="manual-uid" className="block text-sm font-medium text-gray-300">
+                    Already programmed your tag? Enter its UID:
+                  </label>
+                  <input
+                    id="manual-uid"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={manualUid}
+                    onChange={(e) => setManualUid(e.target.value)}
+                    placeholder="e.g. 04A1B2C3D4E5F6"
+                    className="w-full min-h-[44px] px-4 py-3 rounded-xl bg-dark-700 text-white font-mono text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    aria-describedby="manual-uid-help"
+                  />
+                  <p id="manual-uid-help" className="text-gray-400 text-xs">
+                    The 8–14 character hex UID printed on your NTAG 424 DNA chip.
+                  </p>
+                  {nfcError && (
+                    <p className="text-red-400 text-sm" role="alert">{nfcError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleManualUidSubmit}
+                    disabled={manualSubmitting || !manualUid.trim()}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 hover:opacity-90 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {manualSubmitting ? 'Linking…' : 'Link Tag UID'}
+                  </button>
+                </div>
+              </div>
             )}
 
             <button
