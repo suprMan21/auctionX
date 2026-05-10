@@ -182,10 +182,11 @@ Last updated: 2026-05-09 (post-deploy reconciliation + drift fixes)
   - Priority: HIGH — without this, escrow is never released automatically
   - Depends on: `RELEASE_ESCROW_SECRET` env var configured in Supabase edge function settings
 
-- [ ] **TODO:** Implement actual Stripe Connect Transfer in release-escrow
-  - Context: `release-escrow` creates a payout record and marks it PROCESSING but doesn't call Stripe's Transfer API. Requires seller's Stripe Connect account ID stored on their user profile.
-  - Priority: HIGH — payouts currently never actually reach sellers
-  - Depends on: Stripe Connect onboarding flow (future module)
+- [x] **DONE (Phase 7D, 2026-05-09):** Implement actual Stripe Connect Transfer in release-escrow
+  - `release-escrow` v7 ACTIVE — calls `stripe.transfers.create()` with idempotencyKey=`payout_${id}` when `successful_processor === 'STRIPE'` AND seller has `stripe_connect_account_id` + `stripe_connect_payouts_enabled`. Other processors / non-onboarded sellers leave payout PENDING (truth, not stub).
+  - Schema: `stripe_connect_account_id`, `_onboarding_started_at`, `_charges_enabled`, `_payouts_enabled` on `users`; `stripe_transfer_id` on `payouts`. Migration `20260510000001_stripe_connect.sql` applied to `pmlofthmobglcfkqjtru`.
+  - Onboarding: `POST /api/v1/stripe-connect/onboarding-link` (creates Express account, returns Account Link URL), `GET /api/v1/stripe-connect/status`, `POST /api/v1/webhooks/stripe-account` for `account.updated`. UI at `/settings/payouts`.
+  - **Remaining TODO (Boss):** Fill `op://AM_Development/Stripe/connect-webhook-secret` after registering Connected accounts webhook in Stripe dashboard at `https://vw7zy9mkyg.us-east-2.awsapprunner.com/api/v1/webhooks/stripe-account`.
 
 - [x] **DONE:** Implement admin dispute resolution (approve → refund, reject → release)
   - `POST /api/v1/admin/disputes/:id/approve` → DISPUTED → REFUNDED (with notes)

@@ -1351,6 +1351,7 @@ export type Database = {
           seller_id: string
           settlement_id: string
           status: string
+          stripe_transfer_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1371,6 +1372,7 @@ export type Database = {
           seller_id: string
           settlement_id: string
           status?: string
+          stripe_transfer_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1391,6 +1393,7 @@ export type Database = {
           seller_id?: string
           settlement_id?: string
           status?: string
+          stripe_transfer_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1994,6 +1997,10 @@ export type Database = {
           seller_verification_reviewed_at: string | null
           seller_verification_status: Database["public"]["Enums"]["verification_status"]
           seller_verification_submitted_at: string | null
+          stripe_connect_account_id: string | null
+          stripe_connect_charges_enabled: boolean
+          stripe_connect_onboarding_started_at: string | null
+          stripe_connect_payouts_enabled: boolean
           suspended_at: string | null
           suspended_until: string | null
           suspension_reason: string | null
@@ -2030,6 +2037,10 @@ export type Database = {
           seller_verification_reviewed_at?: string | null
           seller_verification_status?: Database["public"]["Enums"]["verification_status"]
           seller_verification_submitted_at?: string | null
+          stripe_connect_account_id?: string | null
+          stripe_connect_charges_enabled?: boolean
+          stripe_connect_onboarding_started_at?: string | null
+          stripe_connect_payouts_enabled?: boolean
           suspended_at?: string | null
           suspended_until?: string | null
           suspension_reason?: string | null
@@ -2066,6 +2077,10 @@ export type Database = {
           seller_verification_reviewed_at?: string | null
           seller_verification_status?: Database["public"]["Enums"]["verification_status"]
           seller_verification_submitted_at?: string | null
+          stripe_connect_account_id?: string | null
+          stripe_connect_charges_enabled?: boolean
+          stripe_connect_onboarding_started_at?: string | null
+          stripe_connect_payouts_enabled?: boolean
           suspended_at?: string | null
           suspended_until?: string | null
           suspension_reason?: string | null

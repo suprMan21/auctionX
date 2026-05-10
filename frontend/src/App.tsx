@@ -36,6 +36,7 @@ import { AdminAuditLogPage } from '@/features/admin/pages/AdminAuditLogPage';
 import { AdminHealthPage } from '@/features/admin/pages/AdminHealthPage';
 import { NotificationsPage } from './features/notifications/pages/NotificationsPage';
 import { NotificationPreferencesPage } from './features/notifications/pages/NotificationPreferencesPage';
+import { SettingsPayoutsPage } from './pages/SettingsPayoutsPage';
 import { AgeGateGuard } from '@/components/AgeGate/AgeGateGuard';
 import { UnmentionablesBrowsePage } from '@/pages/UnmentionablesBrowsePage';
 import { Dashboard } from '@/pages/Dashboard';
@@ -261,6 +262,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <NotificationPreferencesPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/settings/payouts"
+            element={
+              <ProtectedRoute>
+                <SettingsPayoutsPage />
               </ProtectedRoute>
             }
           />

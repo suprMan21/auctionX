@@ -14,6 +14,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { calculatePayout } from '../_shared/payment/payoutCalculation.ts';
 import { logger } from '../_shared/utils/logger.ts';
 import { sendEmail, emailRecipient } from '../_shared/postmark.ts';
+import { getStripe } from '../_shared/payment/stripeClient.ts';
 
 /** Insert a notification row silently — errors never block the main flow. */
 async function insertNotification(
@@ -165,30 +166,95 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Mark payout PROCESSING — Stripe Transfer stub
-        // TODO: Implement actual Stripe Connect Transfer API call
-        const { error: payoutUpdateError } = await supabase
-          .from('payouts')
-          .update({
-            status: 'PROCESSING',
-            initiated_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', payoutRecord.id);
+        // ── Stripe Connect Transfer (real, gated on processor + onboarding) ─
+        // Only fires when the buyer-side charge settled on Stripe AND the seller
+        // has completed Connect onboarding to the point that payouts are enabled.
+        // Other processors (NOWPayments, PaymentCloud, Signature, CCBill) leave
+        // the payout in PENDING for a future processor-specific payout flow.
+        const { data: sellerRow } = await supabase
+          .from('users')
+          .select('stripe_connect_account_id, stripe_connect_payouts_enabled')
+          .eq('id', settlement.seller_id)
+          .maybeSingle();
 
-        if (payoutUpdateError) {
-          logger.warn('release-escrow: Failed to mark payout PROCESSING', {
+        const seller = sellerRow as {
+          stripe_connect_account_id: string | null;
+          stripe_connect_payouts_enabled: boolean | null;
+        } | null;
+
+        if (
+          processor === 'STRIPE' &&
+          seller?.stripe_connect_account_id &&
+          seller.stripe_connect_payouts_enabled
+        ) {
+          try {
+            const stripe = getStripe();
+            const transfer = await stripe.transfers.create(
+              {
+                amount: payout.netPayoutCents,
+                currency: 'cad',
+                destination: seller.stripe_connect_account_id,
+                transfer_group: `settlement_${settlement.id}`,
+                metadata: {
+                  settlement_id: settlement.id,
+                  payout_id: payoutRecord.id,
+                  seller_id: settlement.seller_id,
+                },
+              },
+              { idempotencyKey: `payout_${payoutRecord.id}` },
+            );
+
+            const { error: payoutUpdateError } = await supabase
+              .from('payouts')
+              .update({
+                status: 'PROCESSING',
+                stripe_transfer_id: transfer.id,
+                initiated_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', payoutRecord.id);
+
+            if (payoutUpdateError) {
+              logger.warn('release-escrow: Failed to mark payout PROCESSING', {
+                payoutId: payoutRecord.id,
+                stripeTransferId: transfer.id,
+                error: payoutUpdateError,
+              });
+              // Non-fatal — Stripe transfer is already created; reconcile via webhook later
+            }
+
+            logger.info('release-escrow: Stripe Transfer initiated', {
+              payoutId: payoutRecord.id,
+              sellerId: settlement.seller_id,
+              stripeTransferId: transfer.id,
+              netPayoutCents: payout.netPayoutCents,
+            });
+          } catch (transferErr) {
+            logger.error('release-escrow: Stripe Transfer failed', {
+              payoutId: payoutRecord.id,
+              sellerId: settlement.seller_id,
+              error: transferErr instanceof Error ? transferErr.message : String(transferErr),
+            });
+            await supabase
+              .from('payouts')
+              .update({
+                status: 'FAILED',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', payoutRecord.id);
+            stats.errors++;
+          }
+        } else {
+          logger.info('release-escrow: Transfer skipped — pending processor or onboarding', {
             payoutId: payoutRecord.id,
-            error: payoutUpdateError,
+            sellerId: settlement.seller_id,
+            processor,
+            hasConnectAccount: !!seller?.stripe_connect_account_id,
+            payoutsEnabled: !!seller?.stripe_connect_payouts_enabled,
           });
-          // Non-fatal — settlement is already RELEASED; payout remains PENDING
+          // Payout row remains PENDING (its insert default) — surfaces in admin UI
+          // for manual handling or future processor-specific payout flow.
         }
-
-        logger.info('release-escrow: Stripe Transfer stub — would initiate transfer', {
-          payoutId: payoutRecord.id,
-          sellerId: settlement.seller_id,
-          netPayoutCents: payout.netPayoutCents,
-        });
 
         // ── NFC Ownership Transfer (non-fatal) ──────────────────────────
         try {
