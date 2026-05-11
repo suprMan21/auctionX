@@ -148,3 +148,62 @@ All synthetic fixture rows (listing, auction, transaction, settlement, payout, r
 - Production-mode (live Stripe keys) requires re-running this setup against live Stripe: re-register webhook with live signing secret, swap `STRIPE_SECRET_KEY` to `sk_live_*`, re-activate Connect platform in live mode. Tracked under Decisions DB "Rotate ALL secrets at prod cutover".
 - `account.application.deauthorized` webhook is not subscribed yet (seller-revoke flow). Add when needed.
 
+---
+
+## Real-Data E2E Attempt 2026-05-11 (session 18 — blocked, deferred)
+
+**Goal:** Run the full upstream chain (listing → bid → settle-auction → process-payment → ESCROW_HOLD → confirm-delivery → release-escrow → Transfer → emails) on prod with Stripe in test mode. This was the gap left from 2026-05-10/11 — synthetic-fixture verification confirmed the tail (release-escrow → Transfer) but the upstream chain had never executed.
+
+**Outcome:** Blocked at the bid step and the settle-auction step. Postmark wire-up confirmed in 1Password + Edge Function secrets (no live send tested). Real-data E2E carried forward to next session.
+
+### Test fixture created on prod (still present, awaiting morning decision)
+
+| Row | ID / Key |
+|---|---|
+| `listings` | `619519f4-e325-4896-97fc-809173bc927a` — title `[E2E-TEST-2026-05-11] Test Item`, status `ACTIVE`, $10 CAD, Baseball category |
+| `auctions` | `49ac2a1f-cd5c-4ca6-97c0-15c9ac07a688` — status `ENDED`, current_price_cents `1000`, winner_id = test buyer |
+| `bids` | `d89882bb-d0e2-4776-bf31-af540070786f` — bidder = test buyer, amount_cents `1100`, max_bid_cents `1100`. Inserted directly via Supabase MCP; `trigger_proxy_bid` populated `auction.high_bidder_id` + `high_bidder_max_cents`. |
+| `users` | Test buyer `0b211aed-3cf9-4729-818d-f0ed88dd68b8` — `display_name` set from NULL to `'Test Buyer'` (one-time prereq for public token flows) |
+
+No transactions or settlements rows were created — settle-auction never ran.
+
+### Blockers surfaced
+
+1. **`ViewListing.tsx:195` "Place Bid" button has no onClick handler.** The deployed staging frontend renders the button but does nothing on click. There is no bid modal, no form submit, no `bids` API call. This is a frontend UX bug that blocks any real-buyer bid flow today. The synthetic INSERT above was the only way to populate `bids` tonight.
+
+2. **`SETTLE_SECRET` drift between 1Password and Edge Function env.** `settle-auction` returned `401 {"error":"Unauthorized"}` for every invocation tonight despite using `op://AM_Development/App Secrets/settle-secret` (64 hex chars, no whitespace, verified). The function's secret check (line 59 of `supabase/functions/settle-auction/index.ts`) rejected the header, meaning the value deployed as `SETTLE_SECRET` in the function's env differs from what's in 1Password. Visible in Edge Function logs as three 401s on function `c2af9ce8-8399-4edd-9704-dc9360c12748` v17. Must reconcile (read deployed value from Supabase Dashboard → Edge Functions → settle-auction → Secrets, and either update 1Password or rotate the function env to match) before any settle-auction invocation can succeed from outside the cron.
+
+3. **`SETTLE_SECRET` is not in Supabase Vault.** Cron-style invocation (`net.http_post` from Postgres) is unavailable for settle-auction the way it works for release-escrow / reconcile-escrow. Once the secret is reconciled, recommend adding `settle_secret` to `vault.secrets` for parity.
+
+4. **Edge Function gateway rejects sb_secret_ keys as JWTs.** New-format `sb_secret_*` keys (e.g. `op://AM_Development/Supabase Staging/cli-admin-ops`) return `UNAUTHORIZED_INVALID_JWT_FORMAT` at the gateway when `verify_jwt:true`. To call settle-auction (which keeps `verify_jwt:true`) from outside cron, must mint a real user JWT via `POST /auth/v1/token?grant_type=password` (using the sb_secret_ value as `apikey`) and pass that as `Authorization: Bearer`. Confirmed working in tonight's session — the gateway accepted the admin JWT, only the function's own secret check failed.
+
+5. **Process-payment requires UI interaction or a Stripe payment_method token.** No headless path to push a Stripe test card through `process-payment` without either (a) the buyer typing card details in the staging UI or (b) constructing a Stripe payment_method server-side and invoking the function with it. Out of scope for this session.
+
+### Postmark — Boss-confirmed but not live-tested
+
+- `POSTMARK_SERVER_TOKEN`, `POSTMARK_FROM_EMAIL` confirmed populated in 1Password and Supabase Edge Function secrets (Boss verified verbally — `notesPlain`/dashboard not inspected by Claude).
+- No real email was sent tonight (no ESCROW_HOLD → RELEASED transition fired). Edge Function logs show no recent `postmark.send` entries to grep against.
+- Live verification deferred: first real ESCROW_RELEASED send will happen when the real-data E2E completes. If Postmark is misconfigured the function logs will show either `postmark.send skipped` (token unset) or a `postmark.send failed` (auth / sender domain). Cheap to diagnose then.
+
+### Carry-over for next session
+
+Priority order:
+1. **Reconcile `SETTLE_SECRET`** between Edge Function env and 1Password (5 min).
+2. **Decide on test fixture** — either resume with the existing `[E2E-TEST-2026-05-11]` listing + bid + ENDED auction, or DELETE the rows and start clean. Resuming saves 5 min.
+3. **Run settle-auction** with the reconciled secret + admin JWT (curl pattern documented in tonight's chat history; reusable).
+4. **Either build a Stripe-test-card curl path for process-payment** (cleaner, no UI dependency) **or fix the `ViewListing.tsx` "Place Bid" UX bug** (forward-progress) and run process-payment via the staging frontend.
+5. **Continue chain:** confirm-delivery → release-escrow (cron-pattern http_post) → verify settlement RELEASED, payouts row + Stripe Transfer + Postmark Activity.
+
+### Test fixture cleanup SQL (if not resuming)
+
+```sql
+-- Run in reverse FK order. Wrap in transaction.
+BEGIN;
+DELETE FROM bids   WHERE id = 'd89882bb-d0e2-4776-bf31-af540070786f';
+DELETE FROM auctions WHERE id = '49ac2a1f-cd5c-4ca6-97c0-15c9ac07a688';
+DELETE FROM listings WHERE id = '619519f4-e325-4896-97fc-809173bc927a';
+-- Optional: revert test buyer display_name if Boss wants
+-- UPDATE users SET display_name = NULL WHERE id = '0b211aed-3cf9-4729-818d-f0ed88dd68b8';
+COMMIT;
+```
+

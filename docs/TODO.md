@@ -1,6 +1,6 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-05-11 (Phase 7D live-verified end-to-end on prod Stripe test mode; App Runner migration tracker added)
+Last updated: 2026-05-11 (session 18 partial — Postmark wire-up confirmed, real-data E2E blocked on SETTLE_SECRET drift + Place Bid UX bug; carry-over to session 19)
 
 > **🔄 Reconciliation note (2026-05-09):** The TODO entries below for "Apply DB migration and regenerate types" in Modules 12, 13, 14, 15 are STALE. Verified via `mcp__plugin_supabase_supabase__list_migrations` — all migration files in `supabase/migrations/` are already applied to `pmlofthmobglcfkqjtru`. Zero schema drift. The TS casts (`as never`/`as any`) listed in those entries can be removed and types regenerated. Edge function deploys for `process-payment`, `payment-webhook`, and `release-escrow` are also LIVE — the only remaining gate for real Stripe processing is the env vars in Supabase dashboard. See `PAYMENT_DEPLOY_CHECKLIST.md` banner.
 
@@ -18,7 +18,17 @@ Last updated: 2026-05-11 (Phase 7D live-verified end-to-end on prod Stripe test 
   - Priority: HIGH — production safety
   - Depends on: `docs/audits/2026-05-10-supabase-jwt-rotation-audit.md` for the Supabase rotation order
 - [ ] **TODO (next session):** Execute Stages 0–4 of the JWT rotation plan in `docs/audits/2026-05-10-supabase-jwt-rotation-audit.md`. Stage 1 (staging probe) is the unblocker for the Session K mystery — must capture HTTP traces. Don't proceed past Stage 1 without a green light or a documented fix.
-- [ ] **TODO (next session — sandbox/test verification):** From this session's audit, all current Stripe / processor configs are templated to 1Password references — actual mode (test vs live) cannot be confirmed without inspecting vault values. Boss should confirm in 1Password that `Stripe/secret-key` is `sk_test_*` and Stripe Connect onboarding is in test mode before any live customer traffic.
+- [x] **DONE (session 18, 2026-05-11):** Stripe sandbox mode confirmed — `op://AM_Development/Stripe/secret-key` starts with `sk_test_`.
+
+- [ ] **TODO (session 19 — real-data E2E carry-over):** Resume Phase 7D real-data E2E from where session 18 stopped. Existing test fixtures on prod:
+  - `listings` `619519f4-e325-4896-97fc-809173bc927a` (`[E2E-TEST-2026-05-11]`, ACTIVE)
+  - `auctions` `49ac2a1f-cd5c-4ca6-97c0-15c9ac07a688` (ENDED, winner = test buyer)
+  - `bids` `d89882bb-d0e2-4776-bf31-af540070786f` (test buyer, 1100¢)
+  - Test buyer `display_name` set to `'Test Buyer'`
+  - Decide at session start: resume vs cleanup (cleanup SQL in `MODULE_7D_VERIFICATION.md` "Test fixture cleanup SQL").
+- [ ] **TODO (session 19 — must fix before settle-auction can run):** Reconcile `SETTLE_SECRET` between Supabase Edge Function env (deployed `settle-auction`, version 17) and 1Password `op://AM_Development/App Secrets/settle-secret`. Function 401s with `Unauthorized` on every external invocation today; auto-cron does not exist for settle-auction, so external invocation is the only path. Recommended: also stash `settle_secret` in `vault.secrets` for parity with `release_escrow_secret` / `reconcile_escrow_secret`.
+- [ ] **TODO (session 19 — frontend bug):** `frontend/src/pages/ViewListing.tsx:195` "Place Bid" button has no onClick handler — no bid modal, no API call. Blocks any real-buyer bid flow today. Either wire it to a bid modal calling `POST /api/v1/auctions/:id/bids`, or build a curl path for the bid endpoint as a backup.
+- [ ] **TODO (session 19 — side menu UX, lower priority):** Boss reported the side menu renders very small and won't fully open on staging. Capture screenshot, repro, fix.
 
 ---
 
@@ -35,11 +45,11 @@ Last updated: 2026-05-11 (Phase 7D live-verified end-to-end on prod Stripe test 
 - [x] **DONE:** `.claude/settings.json` PreToolUse hook warns when `SUPABASE_URL` is missing
 - [x] **DONE:** Install Notion MCP at user scope (`https://mcp.notion.com/mcp`) — needs OAuth on next session start
 - [ ] **TODO (Boss):** Restart Claude Code + authenticate Notion MCP via OAuth in next session
-- [ ] **TODO (Boss):** Fill in 3 vault fields when values are available
-  - `Postmark API / server-token` (from Postmark dashboard) — needed for emails to actually send
+- [x] **DONE (session 18, 2026-05-11):** Postmark server token + from-email populated in 1Password + Supabase Edge Function secrets (Boss-confirmed). Live test send still pending — first real ESCROW_RELEASED fire of session 19's E2E will validate.
+- [ ] **TODO (Boss):** Fill in 2 remaining vault fields when values are available
   - `Stripe / publishable-key` (from Stripe dashboard) — only if frontend Stripe Elements wired up
   - `Third Party APIs / anthropic-api-key` — only if Boss creates Anthropic API account; not blocking
-- [ ] **TODO:** Send a real Postmark test email once server token is filled in (any auction outbid/won flow triggers `sendEmail`)
+- [ ] **TODO (session 19 carryover):** Live-verify Postmark send via the real-data E2E ESCROW_RELEASED emails.
 - [ ] **TODO (next session):** Push Lessons Learned + Decisions entries to Notion (drafts in `docs/SESSION_2026-05-09_NOTION_DRAFTS.md`)
 
 ---
