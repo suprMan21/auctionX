@@ -2,8 +2,8 @@
 
 **Date:** 2026-05-09
 **Phase:** 7D — Stripe Connect Express onboarding + real Transfer execution
-**Status:** CODE COMPLETE — pending Stripe dashboard webhook + 1Password secret population for live test
-**Branch:** `feature/phase-7d-stripe-connect`
+**Status:** ✅ LIVE-VERIFIED on prod (Stripe test mode) — 2026-05-11. See "Live Verification 2026-05-11" section at the bottom.
+**Branch:** `feature/phase-7d-stripe-connect` (merged to `dev` as commit `9fe4993` / merge `abeac53`)
 
 ---
 
@@ -95,3 +95,56 @@ Steps:
 - Lesson: [supabase MCP generate_typescript_types returns JSON-wrapped output](https://www.notion.so/35c3baf6966481f6b209cb0148ad1881)
 - Lesson: [supabase MCP deploy_edge_function: bundle shared deps with project-relative paths](https://www.notion.so/35c3baf69664816dbfd3fbc0dc3bc021)
 - Decision: [Phase 7D — Stripe Connect Express for marketplace seller payouts](https://www.notion.so/35c3baf6966481d6a61cdd4a9e1fe036)
+
+---
+
+## Live Verification 2026-05-11
+
+Phase 7D moved from CODE COMPLETE to LIVE-VERIFIED on prod (Stripe test mode) tonight. Full end-to-end:
+
+### Setup completed in this session
+- Stripe Dashboard → Connect activated as Express platform.
+- Webhook destination created for `account.updated` (Connected accounts) → `https://vw7zy9mkyg.us-east-2.awsapprunner.com/api/v1/webhooks/stripe-account`.
+- `STRIPE_CONNECT_WEBHOOK_SECRET` populated in both 1Password (`op://AM_Development/Stripe/connect-webhook-secret`) and AWS App Runner env (via AWS console).
+- Frontend redeployed to staging — staging frontend bundle pre-dated Phase 7D; rebuilt + `aws s3 sync` + CloudFront invalidation `I9KUV4RLRD4PZNY6LLYLT6ONRQ`.
+- `/login` and `/register` temporarily restored from `ComingSoonPage` to the real `LoginPage` / `SignupPage` to permit the test. **Whether to re-lock before launch is open** — see TODO.md.
+
+### Onboarding flow verified
+- Logged into staging frontend as Chris admin (`2b3f1532-9345-4720-8fac-55d07517c78b`).
+- `/settings/payouts` → onboarding button → Stripe-hosted Express flow.
+- Stripe test data submitted; account `acct_1TVh4OD6nDeZ83D4` created.
+- Two webhook deliveries observed (initial onboarding + post-review activation), both 200 from App Runner.
+- DB confirmed: `stripe_connect_account_id` populated, `stripe_connect_charges_enabled=true`, eventually `stripe_connect_payouts_enabled=true` after Stripe test-mode review cleared at 01:19:54 UTC.
+
+### Live Transfer test (synthetic fixture → real Stripe Transfer)
+
+Synthetic chain inserted on prod (Stripe test mode):
+| Row | Key | Value |
+|---|---|---|
+| `listings` | title | `[TEST-7D-2026-05-11] Phase 7D Transfer gate` |
+| `auctions` | status | `SETTLED`, current_price 1000¢ |
+| `transactions` | id | `be46013a-3f3d-4c9e-a9ab-1c611ce60219`, status SUCCEEDED, processor STRIPE |
+| `settlements` | id | `82786465-a345-4c7c-a9fc-d33caf93ab99`, status ESCROW_HOLD, escrow_ends_at = NOW()-1h |
+
+Invocation: `SELECT net.http_post(...)` mirroring the cron pattern (vault → URL + secret).
+
+Response: `{"success":true,"processed":1,"released":1,"errors":0}` (HTTP 200).
+
+Post-invocation DB state:
+| Field | Value |
+|---|---|
+| `settlements.status` | `RELEASED` |
+| `settlements.escrow_released_at` | `2026-05-11 01:31:33 UTC` |
+| `payouts.status` | `PROCESSING` |
+| `payouts.net_payout_cents` | `771` (= 1000 − 200 platform − 29 Stripe processor) |
+| `payouts.stripe_transfer_id` | **`tr_1TVih0D8XmCocfaEczXpPKTf`** ← real Stripe Transfer fired |
+| `payouts.initiated_at` | `2026-05-11 01:31:34 UTC` |
+
+All synthetic fixture rows (listing, auction, transaction, settlement, payout, related notifications) were deleted after verification. The Stripe Transfer `tr_1TVih0D8XmCocfaEczXpPKTf` persists in Stripe's test-mode history as a harmless test artifact (Stripe does not support Transfer deletion).
+
+### Caveats / still pending
+
+- Real-data E2E (full bid → settle → ESCROW_HOLD → confirm-delivery → cron tick → RELEASED) is still untested. Tonight's invocation called release-escrow directly via the cron-pattern http_post rather than waiting for the scheduled 15-min tick.
+- Production-mode (live Stripe keys) requires re-running this setup against live Stripe: re-register webhook with live signing secret, swap `STRIPE_SECRET_KEY` to `sk_live_*`, re-activate Connect platform in live mode. Tracked under Decisions DB "Rotate ALL secrets at prod cutover".
+- `account.application.deauthorized` webhook is not subscribed yet (seller-revoke flow). Add when needed.
+

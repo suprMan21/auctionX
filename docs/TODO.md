@@ -1,12 +1,18 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-05-10 (escrow C+D shipped + JWT rotation audit produced)
+Last updated: 2026-05-11 (Phase 7D live-verified end-to-end on prod Stripe test mode; App Runner migration tracker added)
 
 > **🔄 Reconciliation note (2026-05-09):** The TODO entries below for "Apply DB migration and regenerate types" in Modules 12, 13, 14, 15 are STALE. Verified via `mcp__plugin_supabase_supabase__list_migrations` — all migration files in `supabase/migrations/` are already applied to `pmlofthmobglcfkqjtru`. Zero schema drift. The TS casts (`as never`/`as any`) listed in those entries can be removed and types regenerated. Edge function deploys for `process-payment`, `payment-webhook`, and `release-escrow` are also LIVE — the only remaining gate for real Stripe processing is the env vars in Supabase dashboard. See `PAYMENT_DEPLOY_CHECKLIST.md` banner.
 
 ---
 
 ## Pre-prod (cross-cutting)
+
+- [ ] **TODO (Infra, 2026-05-11):** Migrate backend off AWS App Runner.
+  - Context: App Runner is **closed to new customers** as of 2026; existing customers (Boss) can keep running it but AWS has stated no new features will land. No hard EOL date published. Recommended target is **Amazon ECS Express Mode** (Fargate) — single API call provisions ECS service + ALB + auto-scaling + networking. AWS migration guide: https://docs.aws.amazon.com/apprunner/latest/dg/apprunner-availability-change.html
+  - Recommended approach: blue/green with Route 53 weighted routing — both services run simultaneously while traffic shifts gradually.
+  - Priority: MEDIUM — not blocking launch, but should ship before any major scaling event or before App Runner removes a feature we depend on.
+  - Risk: source-based App Runner deploys need a containerization step (Dockerfile + ECR push) before migrating. Check whether current App Runner config is image-based or source-based; if source-based, factor in the Dockerfile work.
 
 - [ ] **TODO (Boss directive 2026-05-10):** Rotate ALL secrets at the prod cutover. Includes: `RELEASE_ESCROW_SECRET` (Edge Function env + matching `release_escrow_secret` vault entry); `SUPABASE_SERVICE_ROLE_KEY` (App Runner + 1Password `cli-admin-ops` and `service-role-key` items); `SUPABASE_ANON_KEY` (Vercel + frontend `.env.op` + 1Password `anon-key`); Stripe `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_CONNECT_WEBHOOK_SECRET` (live keys); Postmark `POSTMARK_SERVER_TOKEN`; payment-processor live keys when approved (PaymentCloud, Signature, CCBill, NOWPayments).
   - Priority: HIGH — production safety
@@ -195,11 +201,13 @@ Last updated: 2026-05-10 (escrow C+D shipped + JWT rotation audit produced)
   - `POST /api/v1/delivery/:settlementId/confirm-delivery` endpoint (service-role, idempotent on re-confirm, requires `ESCROW_HOLD`).
   - `release-escrow` v10 ACTIVE — query widened with `.or(escrow_ends_at.lte.<now>,delivery_confirmed_at.not.is.null)`. `verify_jwt: false` pinned via `release-escrow/config.toml`.
 
-- [x] **DONE (Phase 7D, 2026-05-09):** Implement actual Stripe Connect Transfer in release-escrow
-  - `release-escrow` v7 ACTIVE — calls `stripe.transfers.create()` with idempotencyKey=`payout_${id}` when `successful_processor === 'STRIPE'` AND seller has `stripe_connect_account_id` + `stripe_connect_payouts_enabled`. Other processors / non-onboarded sellers leave payout PENDING (truth, not stub).
-  - Schema: `stripe_connect_account_id`, `_onboarding_started_at`, `_charges_enabled`, `_payouts_enabled` on `users`; `stripe_transfer_id` on `payouts`. Migration `20260510000001_stripe_connect.sql` applied to `pmlofthmobglcfkqjtru`.
-  - Onboarding: `POST /api/v1/stripe-connect/onboarding-link` (creates Express account, returns Account Link URL), `GET /api/v1/stripe-connect/status`, `POST /api/v1/webhooks/stripe-account` for `account.updated`. UI at `/settings/payouts`.
-  - **Remaining TODO (Boss):** Fill `op://AM_Development/Stripe/connect-webhook-secret` after registering Connected accounts webhook in Stripe dashboard at `https://vw7zy9mkyg.us-east-2.awsapprunner.com/api/v1/webhooks/stripe-account`.
+- [x] **DONE (Phase 7D, live-verified 2026-05-11):** Stripe Connect Express + real Transfer end-to-end on prod (Stripe test mode).
+  - `release-escrow` v10 ACTIVE (`verify_jwt: false`, vault-based cron secret). Transfer gate verified: Stripe Transfer `tr_1TVih0D8XmCocfaEczXpPKTf` fired against onboarded seller; payout transitioned `PENDING → PROCESSING` with `stripe_transfer_id` populated.
+  - Schema: `stripe_connect_account_id`, `_onboarding_started_at`, `_charges_enabled`, `_payouts_enabled` on `users`; `stripe_transfer_id` on `payouts`. Migration `20260510000001_stripe_connect.sql` applied.
+  - Webhook destination registered in Stripe Dashboard → Connect → Connected accounts (`account.updated`). `STRIPE_CONNECT_WEBHOOK_SECRET` populated in both 1Password and App Runner env.
+  - Onboarding: `POST /api/v1/stripe-connect/onboarding-link`, `GET /status`, `POST /webhooks/stripe-account`. UI at `/settings/payouts`.
+  - See `docs/MODULE_7D_VERIFICATION.md` "Live Verification 2026-05-11" section for full evidence.
+  - **Remaining for prod launch:** rotate Stripe live keys + re-register webhook with live signing secret + re-activate Connect platform in live mode (tracked under "Rotate ALL secrets at prod cutover").
 
 - [x] **DONE:** Implement admin dispute resolution (approve → refund, reject → release)
   - `POST /api/v1/admin/disputes/:id/approve` → DISPUTED → REFUNDED (with notes)
