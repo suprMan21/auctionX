@@ -3,9 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from './features/auth/hooks/useAuth';
-// Auth pages kept for post-launch; currently routed to ComingSoonPage
-// import { LoginPage } from './features/auth/pages/LoginPage';
-// import { SignupPage } from './features/auth/pages/SignupPage';
+import { LoginPage } from './features/auth/pages/LoginPage';
+import { SignupPage } from './features/auth/pages/SignupPage';
 import { ForgotPasswordPage } from './features/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './features/auth/pages/ResetPasswordPage';
 import { ProfilePage } from './features/profile/pages/ProfilePage';
@@ -44,7 +43,6 @@ import { CollectorLandingPage } from '@/pages/CollectorLandingPage';
 import { CreatorLandingPage } from '@/pages/CreatorLandingPage';
 import { AMSealedPage } from '@/pages/AMSealedPage';
 import { AMProofPage } from '@/pages/AMProofPage';
-import { ComingSoonPage } from '@/pages/ComingSoonPage';
 import { SellerVerificationPage } from '@/features/seller-verification/pages/SellerVerificationPage';
 import { AdminSellerVerificationPage } from '@/features/admin/pages/AdminSellerVerificationPage';
 import { AdminEscrowPage } from '@/features/admin/pages/AdminEscrowPage';
@@ -101,8 +99,8 @@ function App() {
           <Route path="/am-sealed" element={<AMSealedPage />} />
           <Route path="/am-proof" element={<AMProofPage />} />
 
-          <Route path="/login" element={<ComingSoonPage />} />
-          <Route path="/register" element={<ComingSoonPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           
