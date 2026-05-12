@@ -111,6 +111,13 @@ Last updated: 2026-05-11 (session 18 partial — Postmark wire-up confirmed, rea
   - Updated local `backend/.env` and App Runner env vars via `aws apprunner update-service`
   - Admin dashboard, Users, Audit Logs all verified working on staging
   - **2026-05-10 audit follow-up:** No smoking gun found in code for why the rotation broke — see `docs/audits/2026-05-10-supabase-jwt-rotation-audit.md` §1 hypotheses. Most likely contributor is the conflated `AWS_REGION` typo fix; secondary is unverified SDK behaviour with `sb_secret_*`. Next rotation attempt MUST capture failing-endpoint traces on staging before touching prod.
+- [x] **DONE (Session 18 bonus, 2026-05-11):** Admin dashboard storage tile fixed (was reporting `degraded`).
+  - Root cause: four different env var names in play for one logical setting — App Runner + `.env.op` use `S3_BUCKET_NAME`, but `src/lib/s3.ts` + `verificationController.ts` read `S3_BUCKET`, and the health check read yet another phantom `AWS_S3_BUCKET`. Uploads worked only because of a hard-coded `|| 'auctionx-media-prod-cl'` fallback that happens to match the real bucket name.
+  - First commit `f555630` aligned health → `S3_BUCKET` (still unset; tile remained degraded).
+  - Second commit `97498ab` aligned all 3 files → `S3_BUCKET_NAME` (canonical name). Deployed via App Runner auto-deploy on push to `dev` (Op `9b841dbf...`). Boss verified storage tile is now green.
+- [ ] **TODO (follow-up to 2026-05-11 fix):** Replace env-var-presence check in `backend/src/routes/admin/health.ts:40-45` with a real S3 connectivity test (`HeadBucket` with timeout). Current logic only verifies config is present, not that S3 is reachable — a green tile is not yet a true health signal.
+- [ ] **TODO (follow-up to 2026-05-11 fix):** `backend/src/lib/s3.ts:4` defaults `AWS_REGION` to `'us-east-1'`, but the bucket lives in `us-east-2`. Not breaking today (App Runner has `AWS_REGION` set), but the default is misleading — change to `'us-east-2'`.
+- [ ] **TODO (security hygiene, surfaced 2026-05-11):** All non-publishable secrets in `aws apprunner describe-service` for `auctionX_backend_staging` are stored in `RuntimeEnvironmentVariables` (plaintext) rather than `RuntimeEnvironmentSecrets` (empty). Includes AWS access key, Stripe test-keys + connect webhook secret, Supabase service-role JWT, MINTER_PRIVATE_KEY, SETTLE_SECRET, RELEASE_ESCROW_SECRET, Pinata JWT. Migrate to Secrets Manager references before prod cutover; align with the cutover-time rotation TODO above.
 
 ---
 
