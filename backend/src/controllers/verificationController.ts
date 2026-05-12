@@ -157,7 +157,7 @@ export const confirmVideoUpload = async (req: VerificationRequest, res: Response
       throw new AppError('invalid_argument', 'Video must be between 15 and 30 seconds');
     }
 
-    const bucket = process.env.S3_BUCKET || 'auctionx-media-prod-cl';
+    const bucket = process.env.S3_BUCKET_NAME || 'auctionx-media-prod-cl';
     if (!videoUrl.includes(bucket)) {
       throw new AppError('invalid_argument', 'Invalid video URL');
     }
