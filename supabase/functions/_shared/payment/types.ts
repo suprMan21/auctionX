@@ -16,8 +16,14 @@ export enum PaymentStatus {
 
 export interface PaymentMethod {
   type: 'CARD' | 'BANK' | 'CRYPTO' | 'OTHER';
-  
-  // Card details
+
+  // Tokenized payment method id (Stripe pm_*, etc.). When set, processors use
+  // it directly and skip raw-card fields. Required by Stripe in prod; in test
+  // mode Stripe also accepts predefined tokens like 'pm_card_visa'.
+  paymentMethodId?: string;
+
+  // Card details (legacy raw-card path; Stripe rejects unless raw card access
+  // is enabled on the account)
   cardNumber?: string;
   cardExpiry?: string;
   cardCvv?: string;

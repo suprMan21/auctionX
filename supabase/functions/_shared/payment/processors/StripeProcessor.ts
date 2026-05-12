@@ -7,7 +7,7 @@
  *
  * @module StripeProcessor
  */
-import Stripe from 'stripe';
+import Stripe from 'npm:stripe@17.5.0';
 import { BaseProcessor } from '../BaseProcessor.ts';
 import type {
   PaymentProcessor,
@@ -56,27 +56,43 @@ export class StripeProcessor extends BaseProcessor implements PaymentProcessor {
         sellerId:      (metadata['sellerId'] as string) ?? '',
       };
 
-      const paymentIntent = await this.stripe.paymentIntents.create({
-        amount,
-        currency: currency.toLowerCase(),
-        // Cast required: Stripe v17 types narrowed PaymentMethodData to exclude raw card
-        // details sub-objects, but the API still accepts them at runtime.
-        payment_method_data: {
-          type: 'card',
-          card: {
-            number: paymentMethod.cardNumber!,
-            exp_month: parseInt(paymentMethod.cardExpiry!.split('/')[0]),
-            exp_year: parseInt('20' + paymentMethod.cardExpiry!.split('/')[1]),
-            cvc: paymentMethod.cardCvv!,
-          },
-          billing_details: {
-            name: paymentMethod.billingName,
-            email: paymentMethod.email,
-          },
-        } as unknown as Stripe.PaymentIntentCreateParams.PaymentMethodData,
-        confirm: true,
-        metadata: stripeMetadata,
-      });
+      // Prefer tokenized PaymentMethod (Stripe's required path in prod;
+      // test-mode tokens like pm_card_visa also work). Fall back to raw card
+      // data only when no token is supplied (requires raw-card access on the
+      // Stripe account, which is disabled by default).
+      const createParams: Stripe.PaymentIntentCreateParams = paymentMethod.paymentMethodId
+        ? {
+            amount,
+            currency: currency.toLowerCase(),
+            payment_method: paymentMethod.paymentMethodId,
+            confirm: true,
+            automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+            metadata: stripeMetadata,
+          }
+        : {
+            amount,
+            currency: currency.toLowerCase(),
+            // Cast required: Stripe v17 types narrowed PaymentMethodData to exclude raw card
+            // details sub-objects, but the API still accepts them at runtime.
+            payment_method_data: {
+              type: 'card',
+              card: {
+                number: paymentMethod.cardNumber!,
+                exp_month: parseInt(paymentMethod.cardExpiry!.split('/')[0]),
+                exp_year: parseInt('20' + paymentMethod.cardExpiry!.split('/')[1]),
+                cvc: paymentMethod.cardCvv!,
+              },
+              billing_details: {
+                name: paymentMethod.billingName,
+                email: paymentMethod.email,
+              },
+            } as unknown as Stripe.PaymentIntentCreateParams.PaymentMethodData,
+            confirm: true,
+            automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+            metadata: stripeMetadata,
+          };
+
+      const paymentIntent = await this.stripe.paymentIntents.create(createParams);
 
       if (paymentIntent.status === 'succeeded') {
         return {

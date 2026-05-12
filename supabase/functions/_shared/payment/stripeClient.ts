@@ -1,4 +1,4 @@
-import Stripe from 'stripe';
+import Stripe from 'npm:stripe@17.5.0';
 
 let cached: Stripe | null = null;
 
