@@ -39,9 +39,9 @@ router.get('/', async (_req: Request, res: Response) => {
 
   // Storage check (S3 bucket configured?)
   components.storage = {
-    status: process.env.AWS_S3_BUCKET ? 'ok' : 'degraded',
+    status: process.env.S3_BUCKET ? 'ok' : 'degraded',
     latencyMs: 0,
-    ...(process.env.AWS_S3_BUCKET ? {} : { message: 'AWS_S3_BUCKET not configured' }),
+    ...(process.env.S3_BUCKET ? {} : { message: 'S3_BUCKET not configured' }),
   };
 
   // Overall status
