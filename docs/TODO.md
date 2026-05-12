@@ -1,6 +1,6 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-05-11 (session 18 partial — Postmark wire-up confirmed, real-data E2E blocked on SETTLE_SECRET drift + Place Bid UX bug; carry-over to session 19)
+Last updated: 2026-05-12 (session 18 COMPLETE — Phase 7D real-data E2E live-verified upstream-to-downstream including Stripe Transfer + Postmark delivery; remaining gaps documented for session 19)
 
 > **🔄 Reconciliation note (2026-05-09):** The TODO entries below for "Apply DB migration and regenerate types" in Modules 12, 13, 14, 15 are STALE. Verified via `mcp__plugin_supabase_supabase__list_migrations` — all migration files in `supabase/migrations/` are already applied to `pmlofthmobglcfkqjtru`. Zero schema drift. The TS casts (`as never`/`as any`) listed in those entries can be removed and types regenerated. Edge function deploys for `process-payment`, `payment-webhook`, and `release-escrow` are also LIVE — the only remaining gate for real Stripe processing is the env vars in Supabase dashboard. See `PAYMENT_DEPLOY_CHECKLIST.md` banner.
 
@@ -20,15 +20,14 @@ Last updated: 2026-05-11 (session 18 partial — Postmark wire-up confirmed, rea
 - [ ] **TODO (next session):** Execute Stages 0–4 of the JWT rotation plan in `docs/audits/2026-05-10-supabase-jwt-rotation-audit.md`. Stage 1 (staging probe) is the unblocker for the Session K mystery — must capture HTTP traces. Don't proceed past Stage 1 without a green light or a documented fix.
 - [x] **DONE (session 18, 2026-05-11):** Stripe sandbox mode confirmed — `op://AM_Development/Stripe/secret-key` starts with `sk_test_`.
 
-- [ ] **TODO (session 19 — real-data E2E carry-over):** Resume Phase 7D real-data E2E from where session 18 stopped. Existing test fixtures on prod:
-  - `listings` `619519f4-e325-4896-97fc-809173bc927a` (`[E2E-TEST-2026-05-11]`, ACTIVE)
-  - `auctions` `49ac2a1f-cd5c-4ca6-97c0-15c9ac07a688` (ENDED, winner = test buyer)
-  - `bids` `d89882bb-d0e2-4776-bf31-af540070786f` (test buyer, 1100¢)
-  - Test buyer `display_name` set to `'Test Buyer'`
-  - Decide at session start: resume vs cleanup (cleanup SQL in `MODULE_7D_VERIFICATION.md` "Test fixture cleanup SQL").
-- [ ] **TODO (session 19 — must fix before settle-auction can run):** Reconcile `SETTLE_SECRET` between Supabase Edge Function env (deployed `settle-auction`, version 17) and 1Password `op://AM_Development/App Secrets/settle-secret`. Function 401s with `Unauthorized` on every external invocation today; auto-cron does not exist for settle-auction, so external invocation is the only path. Recommended: also stash `settle_secret` in `vault.secrets` for parity with `release_escrow_secret` / `reconcile_escrow_secret`.
+- [x] **DONE (session 18, 2026-05-12):** Phase 7D real-data E2E completed. Real Stripe charge `pi_3TW645D8XmCocfaE0uyzH7Nl` → real Stripe Connect Transfer `tr_1TW6GUD8XmCocfaEFXRoUvZC` → real Postmark email delivered to buyer (DKIM-verified). Code fixes shipped: `npm:stripe@17.5.0` import pinning, `paymentMethodId` support, `allow_redirects:'never'`. See `MODULE_7D_VERIFICATION.md` "Real-Data E2E COMPLETE 2026-05-12" for full evidence.
+- [x] **DONE (session 18, 2026-05-12):** `SETTLE_SECRET` rotated and synced between Edge Function env and 1Password.
+- [ ] **TODO (session 19 — stash settle_secret in vault):** Recommended follow-up: add `settle_secret` to `vault.secrets` for parity with `release_escrow_secret` / `reconcile_escrow_secret`. Lets future settle invocations go via pg `net.http_post` without op/curl.
+- [ ] **TODO (session 19 — register Stripe payment-webhook):** Stripe Dashboard → Developers → Webhooks → add endpoint `https://pmlofthmobglcfkqjtru.supabase.co/functions/v1/payment-webhook` with events `payment_intent.succeeded` + `payment_intent.payment_failed`. Currently the settlement transition (PENDING_PAYMENT → ESCROW_HOLD) is unwired — session 18 applied it via SQL UPDATE mirroring `payment-webhook/index.ts:290-338`.
 - [ ] **TODO (session 19 — frontend bug):** `frontend/src/pages/ViewListing.tsx:195` "Place Bid" button has no onClick handler — no bid modal, no API call. Blocks any real-buyer bid flow today. Either wire it to a bid modal calling `POST /api/v1/auctions/:id/bids`, or build a curl path for the bid endpoint as a backup.
+- [ ] **TODO (session 19 — delivery confirmation UI):** No frontend route invokes `POST /api/v1/delivery/:id/confirm-delivery`. Buyer can't trigger ESCROW_HOLD → RELEASED themselves. Build a settlement-detail page with a "Confirm delivery" CTA for ESCROW_HOLD settlements.
 - [ ] **TODO (session 19 — side menu UX, lower priority):** Boss reported the side menu renders very small and won't fully open on staging. Capture screenshot, repro, fix.
+- [ ] **TODO (session 19 — test fixture cleanup):** Decide whether to keep the `[E2E-TEST-2026-05-11]` rows (listing/auction/bid/settlement/transaction/payout) on prod as a real-data sample, or run the cleanup SQL in `MODULE_7D_VERIFICATION.md` "Cleanup SQL (post-verification)".
 
 ---
 
@@ -49,7 +48,7 @@ Last updated: 2026-05-11 (session 18 partial — Postmark wire-up confirmed, rea
 - [ ] **TODO (Boss):** Fill in 2 remaining vault fields when values are available
   - `Stripe / publishable-key` (from Stripe dashboard) — only if frontend Stripe Elements wired up
   - `Third Party APIs / anthropic-api-key` — only if Boss creates Anthropic API account; not blocking
-- [ ] **TODO (session 19 carryover):** Live-verify Postmark send via the real-data E2E ESCROW_RELEASED emails.
+- [x] **DONE (session 18, 2026-05-12):** Postmark live-verified via real ESCROW_RELEASED email delivery to test buyer inbox. DKIM signatures from both `pm.mtasv.net` and `authentic-materials.com` verified.
 - [ ] **TODO (next session):** Push Lessons Learned + Decisions entries to Notion (drafts in `docs/SESSION_2026-05-09_NOTION_DRAFTS.md`)
 
 ---

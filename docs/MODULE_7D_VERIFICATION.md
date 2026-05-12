@@ -207,3 +207,78 @@ DELETE FROM listings WHERE id = '619519f4-e325-4896-97fc-809173bc927a';
 COMMIT;
 ```
 
+---
+
+## Real-Data E2E COMPLETE 2026-05-12 (session 18 resumed)
+
+Session 18 resumed and drove the full chain to completion on the same test fixture. **Phase 7D is now live-verified upstream-to-downstream on prod (Stripe test mode), including real Stripe Transfer AND Postmark email delivery.**
+
+### Full chain artifacts
+
+| Stage | Artifact |
+|---|---|
+| Listing | `619519f4-e325-4896-97fc-809173bc927a` `[E2E-TEST-2026-05-11]`, ACTIVE, $10 CAD |
+| Bid | `d89882bb-...` test buyer 1100¢ (synthetic INSERT — frontend Place Bid UX still broken; see blocker list) |
+| Auction settlement | `settle-auction` v19 → 200 OK; `settlements.id = aba83b69-508d-4fed-a345-5fdb735a4aef`, status `PENDING_PAYMENT`, offer rank 1 |
+| Stripe charge | **Real PaymentIntent `pi_3TW645D8XmCocfaE0uyzH7Nl`** (sk_test, $10 CAD via `pm_card_visa`), `transactions.id = 24144bab-ef67-439a-86d5-f5386775d306` SUCCEEDED |
+| Settlement → ESCROW_HOLD | applied via SQL mirror of `payment-webhook/index.ts:290-338` (Stripe payment webhook not yet registered in Stripe Dashboard; tracked as follow-up) |
+| Delivery confirmation | `delivery_confirmed_at = NOW()` set via SQL (no buyer-side confirm UI yet) |
+| Release-escrow tick | `net.http_post` via pg vault pattern; `request_id=137` → function returned `{success:true,processed:1,released:1}` |
+| Stripe Connect Transfer | **Real Transfer `tr_1TW6GUD8XmCocfaEFXRoUvZC`** (net 771¢, processing) |
+| Postmark email | **Real ESCROW_RELEASED email delivered** to `test@authentic-materials.com` — DKIM-passing from `noreply@authentic-materials.com`, subject "Your purchase is confirmed", via Postmark MTA `sc-ord-mta115.mtasv.net`. Both `pm.mtasv.net` and `authentic-materials.com` DKIM signatures verified. |
+
+### Code changes shipped this session
+
+| File | Change |
+|---|---|
+| `supabase/functions/_shared/payment/types.ts` | Added `paymentMethodId?: string` to `PaymentMethod` interface (Stripe tokenized PM path) |
+| `supabase/functions/_shared/payment/processors/StripeProcessor.ts` | (a) `import Stripe from 'npm:stripe@17.5.0'` (was bare `'stripe'`; `--use-api` deploy can't see `supabase/functions/deno.json` import map); (b) prefer `payment_method: paymentMethod.paymentMethodId` when provided; (c) added `automatic_payment_methods: { enabled: true, allow_redirects: 'never' }` to satisfy Stripe's payment-method-config requirement |
+| `supabase/functions/_shared/payment/stripeClient.ts` | Same import fix (`npm:stripe@17.5.0`) |
+
+`process-payment` redeployed three times this session (v21 → v22 → v23 → final cleanup). settle-auction redeployed once with synced `SETTLE_SECRET` (v19).
+
+### Infrastructure changes
+
+- **`SETTLE_SECRET`** rotated and synced between Supabase Edge Function env and `op://AM_Development/App Secrets/settle-secret`. Recommended follow-up: also stash in `vault.secrets` as `settle_secret` for cron-style invocation parity (would let any future settle invocation go via `net.http_post` from Postgres without op/curl).
+- **Stripe env vars** added to Supabase project-level secrets (visible to all Edge Functions): `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` from 1Password `Stripe/secret-key` and `Stripe/webhook-secret`. Set via `supabase secrets set --project-ref pmlofthmobglcfkqjtru ...` — single CLI call from Boss's terminal with op `$()` substitution, no secrets in chat.
+- **Test buyer password** rotated via SQL editor (`UPDATE auth.users SET encrypted_password = crypt(...)`) after the recovery-email link kept expiring on arrival (mail-client scanner consuming the OTP). New value stored in `op://AM_Development/App Secrets/test-user-password`.
+
+### Synthetic vs real bits in the chain
+
+| Step | Real? |
+|---|---|
+| Listing + auction creation | Real rows, SQL INSERT (no frontend create-listing flow tested) |
+| Bid | **Synthetic SQL INSERT** — frontend Place Bid button has no onClick handler (see blockers) |
+| Auction end | SQL shortcut (`UPDATE auctions ... status='ENDED'`) — no UI for ending |
+| settle-auction invocation | **Real** — curl with admin JWT + reconciled secret, function executed, settlement + offer rows created |
+| process-payment invocation | **Real** — curl with buyer JWT + `pm_card_visa` token; full cascade evaluation, Stripe API call, PaymentIntent succeeded |
+| Stripe payment-webhook | **Skipped** — webhook not yet registered in Stripe Dashboard pointing at our `/functions/v1/payment-webhook`. State transitions applied via SQL UPDATE mirroring the webhook handler's logic 1:1. Tracked as follow-up. |
+| delivery confirmation | SQL UPDATE (no buyer-side UI for `POST /api/v1/delivery/:id/confirm-delivery`) |
+| release-escrow invocation | **Real** — `net.http_post` from Postgres using vault-stored secret (cron pattern). Function executed, payout row created, Stripe Transfer fired. |
+| Stripe Transfer | **Real** — visible in Stripe Dashboard → Connect → Transfers |
+| Postmark email | **Real** — delivered to inbox, DKIM-verified |
+
+### Remaining gaps (carry-over for next session)
+
+1. **Register Stripe payment-webhook** in Stripe Dashboard → Developers → Webhooks → endpoint `https://pmlofthmobglcfkqjtru.supabase.co/functions/v1/payment-webhook`, events `payment_intent.succeeded` + `payment_intent.payment_failed`. Then settlement transitions happen automatically instead of via SQL UPDATE.
+2. **Place Bid button onClick** in `frontend/src/pages/ViewListing.tsx:195` — no bid modal, no API call. Until fixed, real-buyer bid flow is impossible.
+3. **Delivery confirmation UI** — currently no frontend route invokes `POST /api/v1/delivery/:id/confirm-delivery`. Buyer can't trigger ESCROW_HOLD → RELEASED themselves.
+4. **Side menu UX bug** (low priority) — side menu small / won't fully open on staging.
+5. **Test fixture cleanup** — the `[E2E-TEST-2026-05-11]` listing + auction + bid + settlement + transaction + payout rows are now a real-data sample on prod. Cleanup SQL below if desired (must delete in reverse FK order).
+
+### Cleanup SQL (post-verification)
+
+```sql
+BEGIN;
+DELETE FROM payouts WHERE settlement_id = 'aba83b69-508d-4fed-a345-5fdb735a4aef';
+DELETE FROM settlement_offers WHERE settlement_id = 'aba83b69-508d-4fed-a345-5fdb735a4aef';
+DELETE FROM settlements WHERE id = 'aba83b69-508d-4fed-a345-5fdb735a4aef';
+DELETE FROM transactions WHERE id = '24144bab-ef67-439a-86d5-f5386775d306';
+DELETE FROM bids WHERE auction_id = '49ac2a1f-cd5c-4ca6-97c0-15c9ac07a688';
+DELETE FROM auctions WHERE id = '49ac2a1f-cd5c-4ca6-97c0-15c9ac07a688';
+DELETE FROM listings WHERE id = '619519f4-e325-4896-97fc-809173bc927a';
+COMMIT;
+-- Stripe Transfer tr_1TW6GUD8XmCocfaEFXRoUvZC and PaymentIntent pi_3TW645D8XmCocfaE0uyzH7Nl
+-- persist in Stripe's test-mode history (Stripe doesn't support deletion).
+```
+
