@@ -154,6 +154,25 @@ export const api = {
     }
   },
 
+  async confirmDelivery(settlementId: string): Promise<{
+    settlementId: string;
+    deliveryConfirmedAt: string;
+    deliveryConfirmedBy: string;
+    status: string;
+  }> {
+    const headers = await getAuthHeader();
+    const response = await fetch(`${API_URL}/delivery/${settlementId}/confirm-delivery`, {
+      method: 'POST',
+      headers,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to confirm delivery');
+    }
+    const json = await response.json();
+    return json.data;
+  },
+
   async createVerification(listingId: string): Promise<Verification> {
     const headers = await getAuthHeader();
     const response = await fetch(`${API_URL}/verifications/create`, {

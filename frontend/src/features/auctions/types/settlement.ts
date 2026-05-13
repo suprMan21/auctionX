@@ -35,6 +35,8 @@ export interface Settlement {
   escrow_released_at: string | null;
   dispute_reason: string | null;
   dispute_opened_at: string | null;
+  delivery_confirmed_at: string | null;
+  delivery_confirmed_by: string | null;
   auction?: {
     id: string;
     listing_id: string;

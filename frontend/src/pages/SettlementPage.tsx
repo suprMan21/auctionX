@@ -31,17 +31,27 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function BuyerView({ settlement, onDisputeOpened }: { settlement: Settlement; onDisputeOpened: () => void }) {
+function BuyerView({
+  settlement,
+  onDisputeOpened,
+  onDeliveryConfirmed,
+}: {
+  settlement: Settlement;
+  onDisputeOpened: () => void;
+  onDeliveryConfirmed: (confirmedAt: string, confirmedBy: string) => void;
+}) {
   const currency = settlement.auction?.currency ?? 'USD';
   const activeOffer = settlement.offers?.find((o) => o.status === 'PENDING_PAYMENT') ?? null;
   const [disputeReason, setDisputeReason] = useState('');
   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+  const [confirmingDelivery, setConfirmingDelivery] = useState(false);
 
   const SUPABASE_FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_URL
     ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
     : null;
 
   const canPay = !!SUPABASE_FUNCTIONS_URL && settlement.status === 'PENDING_PAYMENT';
+  const deliveryConfirmed = !!settlement.delivery_confirmed_at;
 
   const handleOpenDispute = async () => {
     if (disputeReason.trim().length < 20) {
@@ -57,6 +67,23 @@ function BuyerView({ settlement, onDisputeOpened }: { settlement: Settlement; on
       toast.error(err instanceof Error ? err.message : 'Failed to open dispute');
     } finally {
       setDisputeSubmitting(false);
+    }
+  };
+
+  const handleConfirmDelivery = async () => {
+    const ok = window.confirm(
+      'Confirm delivery? This releases the escrowed funds to the seller within ~15 minutes. Only do this after you have received and inspected your item.',
+    );
+    if (!ok) return;
+    setConfirmingDelivery(true);
+    try {
+      const result = await api.confirmDelivery(settlement.id);
+      onDeliveryConfirmed(result.deliveryConfirmedAt, result.deliveryConfirmedBy);
+      toast.success('Delivery confirmed — funds will release within 15 minutes.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to confirm delivery');
+    } finally {
+      setConfirmingDelivery(false);
     }
   };
 
@@ -124,35 +151,64 @@ function BuyerView({ settlement, onDisputeOpened }: { settlement: Settlement; on
             </p>
           </div>
 
-          <div className="glass rounded-2xl p-6 border border-orange-500/20">
-            <h2 className="text-lg font-semibold text-orange-300 mb-3">Open a Dispute</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              If you have not received your item or there is a problem, you can open a dispute within the escrow window.
-              An admin will review your case.
-            </p>
-            <label htmlFor="dispute-reason" className="block text-sm text-gray-300 mb-2">
-              Describe the issue <span className="text-gray-400">(min. 20 characters)</span>
-            </label>
-            <textarea
-              id="dispute-reason"
-              rows={4}
-              value={disputeReason}
-              onChange={(e) => setDisputeReason(e.target.value)}
-              placeholder="Describe the problem in detail…"
-              className="w-full rounded-xl bg-white/5 border border-white/10 text-white text-sm px-3 py-2
-                         placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
-            />
-            <p className="text-xs text-gray-400 mt-1 mb-3">{disputeReason.trim().length} / 20 minimum</p>
-            <button
-              type="button"
-              onClick={handleOpenDispute}
-              disabled={disputeSubmitting || disputeReason.trim().length < 20}
-              className="w-full bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed
-                         text-white font-semibold py-3 px-6 rounded-xl transition-all"
-            >
-              {disputeSubmitting ? 'Submitting…' : 'Open Dispute'}
-            </button>
-          </div>
+          {deliveryConfirmed ? (
+            <div className="glass rounded-2xl p-6 border border-emerald-500/20">
+              <h2 className="text-lg font-semibold text-emerald-300 mb-2">Delivery Confirmed</h2>
+              <p className="text-gray-400 text-sm">
+                Thanks — you confirmed delivery on{' '}
+                {new Date(settlement.delivery_confirmed_at!).toLocaleString()}. Funds will release to the seller within ~15 minutes.
+              </p>
+            </div>
+          ) : (
+            <div className="glass rounded-2xl p-6 border border-emerald-500/20">
+              <h2 className="text-lg font-semibold text-emerald-300 mb-2">Confirm Delivery</h2>
+              <p className="text-gray-400 text-sm mb-4">
+                Received your item and happy with it? Confirm delivery to release the funds to the seller immediately
+                (otherwise escrow auto-releases at the end of the hold window).
+              </p>
+              <button
+                type="button"
+                onClick={handleConfirmDelivery}
+                disabled={confirmingDelivery}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed
+                           text-white font-semibold py-3 px-6 rounded-xl transition-all"
+              >
+                {confirmingDelivery ? 'Confirming…' : 'Confirm Delivery'}
+              </button>
+            </div>
+          )}
+
+          {!deliveryConfirmed && (
+            <div className="glass rounded-2xl p-6 border border-orange-500/20">
+              <h2 className="text-lg font-semibold text-orange-300 mb-3">Open a Dispute</h2>
+              <p className="text-gray-400 text-sm mb-4">
+                If you have not received your item or there is a problem, you can open a dispute within the escrow window.
+                An admin will review your case.
+              </p>
+              <label htmlFor="dispute-reason" className="block text-sm text-gray-300 mb-2">
+                Describe the issue <span className="text-gray-400">(min. 20 characters)</span>
+              </label>
+              <textarea
+                id="dispute-reason"
+                rows={4}
+                value={disputeReason}
+                onChange={(e) => setDisputeReason(e.target.value)}
+                placeholder="Describe the problem in detail…"
+                className="w-full rounded-xl bg-white/5 border border-white/10 text-white text-sm px-3 py-2
+                           placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+              />
+              <p className="text-xs text-gray-400 mt-1 mb-3">{disputeReason.trim().length} / 20 minimum</p>
+              <button
+                type="button"
+                onClick={handleOpenDispute}
+                disabled={disputeSubmitting || disputeReason.trim().length < 20}
+                className="w-full bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed
+                           text-white font-semibold py-3 px-6 rounded-xl transition-all"
+              >
+                {disputeSubmitting ? 'Submitting…' : 'Open Dispute'}
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -378,6 +434,13 @@ export function SettlementPage() {
             settlement={settlement}
             onDisputeOpened={() =>
               setSettlement((prev) => prev ? { ...prev, status: 'DISPUTED' as const } : null)
+            }
+            onDeliveryConfirmed={(confirmedAt, confirmedBy) =>
+              setSettlement((prev) =>
+                prev
+                  ? { ...prev, delivery_confirmed_at: confirmedAt, delivery_confirmed_by: confirmedBy }
+                  : null,
+              )
             }
           />
         ) : (

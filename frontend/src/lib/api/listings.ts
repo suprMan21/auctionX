@@ -129,7 +129,7 @@ export const listingsApi = {
   async getById(id: string) {
     const { data, error } = await supabase
       .from('listings')
-      .select('*, listing_media(*), users!seller_id(id, display_name, photo_url, seller_tier)')
+      .select('*, listing_media(*), users!seller_id(id, display_name, photo_url, seller_tier), auctions(*)')
       .eq('id', id)
       .single();
 

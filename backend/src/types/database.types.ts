@@ -1713,6 +1713,8 @@ export type Database = {
           auction_id: string
           buyer_id: string | null
           created_at: string
+          delivery_confirmed_at: string | null
+          delivery_confirmed_by: string | null
           dispute_opened_at: string | null
           dispute_reason: string | null
           escrow_ends_at: string | null
@@ -1738,6 +1740,8 @@ export type Database = {
           auction_id: string
           buyer_id?: string | null
           created_at?: string
+          delivery_confirmed_at?: string | null
+          delivery_confirmed_by?: string | null
           dispute_opened_at?: string | null
           dispute_reason?: string | null
           escrow_ends_at?: string | null
@@ -1763,6 +1767,8 @@ export type Database = {
           auction_id?: string
           buyer_id?: string | null
           created_at?: string
+          delivery_confirmed_at?: string | null
+          delivery_confirmed_by?: string | null
           dispute_opened_at?: string | null
           dispute_reason?: string | null
           escrow_ends_at?: string | null
@@ -1788,6 +1794,13 @@ export type Database = {
           {
             foreignKeyName: "settlements_buyer_id_fkey"
             columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_delivery_confirmed_by_fkey"
+            columns: ["delivery_confirmed_by"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]

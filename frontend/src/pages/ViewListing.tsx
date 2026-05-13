@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { listingsApi } from '../lib/api/listings';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { CountdownTimer } from '@/features/auctions/components/CountdownTimer';
 
 export function ViewListing() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const [listing, setListing] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,14 +135,36 @@ export function ViewListing() {
                 </div>
               </div>
 
-              {listing.reserve_price_cents > 0 && (
-                <div className="border-t border-b border-white/10 py-4">
-                  <p className="text-sm text-gray-400">Reserve Price</p>
-                  <p className="text-3xl font-bold text-white">
-                    ${(listing.reserve_price_cents / 100).toFixed(2)} {listing.currency}
-                  </p>
-                </div>
-              )}
+              {(() => {
+                const auction = Array.isArray(listing.auctions) ? listing.auctions[0] : listing.auctions;
+                if (!auction) return null;
+                const reserveMet =
+                  listing.reserve_price_cents > 0 &&
+                  auction.current_price_cents >= listing.reserve_price_cents;
+                return (
+                  <div className="border-t border-b border-white/10 py-4 space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-400">Current Bid</p>
+                      <p className="text-3xl font-bold text-white">
+                        ${(auction.current_price_cents / 100).toFixed(2)} {listing.currency}
+                      </p>
+                      {listing.reserve_price_cents > 0 && (
+                        <p className={`text-xs mt-1 ${reserveMet ? 'text-emerald-400' : 'text-gray-400'}`}>
+                          {reserveMet
+                            ? 'Reserve met'
+                            : `Reserve not met (reserve: $${(listing.reserve_price_cents / 100).toFixed(2)})`}
+                        </p>
+                      )}
+                    </div>
+                    {auction.status === 'ACTIVE' && auction.end_time && (
+                      <div>
+                        <p className="text-sm text-gray-400 mb-1">Time Remaining</p>
+                        <CountdownTimer endTime={auction.end_time} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div>
                 <h2 className="text-lg font-semibold text-white mb-2">Description</h2>
@@ -191,11 +216,52 @@ export function ViewListing() {
                 </div>
               )}
 
-              {listing.status === 'ACTIVE' && (
-                <button className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-accent-500 text-white rounded-xl font-medium hover:opacity-90 shadow-glow transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800">
-                  Place Bid
-                </button>
-              )}
+              {(() => {
+                const auction = Array.isArray(listing.auctions) ? listing.auctions[0] : listing.auctions;
+                const isActive = listing.status === 'ACTIVE' && auction && auction.status === 'ACTIVE';
+                const isSeller = !!user && user.id === listing.seller_id;
+
+                if (!isActive) {
+                  return (
+                    <div className="w-full px-6 py-3 bg-dark-700 text-gray-400 rounded-xl font-medium text-center border border-white/10">
+                      {auction?.status === 'ENDED' || auction?.status === 'SETTLED'
+                        ? 'Auction ended'
+                        : 'Bidding unavailable'}
+                    </div>
+                  );
+                }
+
+                if (isSeller) {
+                  return (
+                    <Link
+                      to={`/auctions/${auction.id}`}
+                      className="block w-full px-6 py-3 rounded-xl text-center font-medium border border-white/10 text-gray-300 hover:bg-white/5 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+                    >
+                      View Auction →
+                    </Link>
+                  );
+                }
+
+                if (!user) {
+                  return (
+                    <Link
+                      to={`/login?return=/listings/${id}`}
+                      className="block w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-accent-500 text-white rounded-xl font-medium text-center hover:opacity-90 shadow-glow transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+                    >
+                      Sign in to bid
+                    </Link>
+                  );
+                }
+
+                return (
+                  <Link
+                    to={`/auctions/${auction.id}`}
+                    className="block w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-accent-500 text-white rounded-xl font-medium text-center hover:opacity-90 shadow-glow transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+                  >
+                    Place Bid →
+                  </Link>
+                );
+              })()}
             </div>
           </div>
         </div>
