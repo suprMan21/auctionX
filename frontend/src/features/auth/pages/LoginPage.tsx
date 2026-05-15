@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
@@ -9,8 +9,16 @@ import { supabase } from '@/lib/supabase';
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { signIn, checkProfileComplete, loading, error, clearError } = useAuth();
+  const { signIn, checkProfileComplete, loading, error, clearError, user, initialized } = useAuth();
   const navigate = useNavigate();
+
+  // If a returning visitor hits /login while their session cookie is still good,
+  // bounce them straight to the authenticated landing instead of forcing a relogin.
+  useEffect(() => {
+    if (initialized && user) {
+      navigate('/my-listings', { replace: true });
+    }
+  }, [initialized, user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

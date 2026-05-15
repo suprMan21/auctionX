@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
@@ -10,8 +10,16 @@ export function SignupPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState('');
-  const { signUp, loading, error, clearError } = useAuth();
+  const { signUp, loading, error, clearError, user, initialized } = useAuth();
   const navigate = useNavigate();
+
+  // Already authenticated → no reason to show a signup form. Send them to their
+  // authenticated landing instead.
+  useEffect(() => {
+    if (initialized && user) {
+      navigate('/my-listings', { replace: true });
+    }
+  }, [initialized, user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
