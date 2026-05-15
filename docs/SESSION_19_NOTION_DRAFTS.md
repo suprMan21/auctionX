@@ -50,7 +50,34 @@ Drafts for syncing to Notion DBs at session close. Notion MCP auth pending; once
   - Real-buyer E2E test still requires curl with `pm_card_visa` for the payment step (session-18 pattern continues).
   - Boss must populate `op://AM_Development/Stripe/publishable-key` before Session 20.
 
-### Decision 2 — Place Bid button uses navigation, not a modal
+### Decision 2 — Identity verification provider: Yoti
+
+- **Status:** Locked
+- **Category:** Technical / Trust & Safety / Compliance
+- **Impact:** Cross-cutting — seller verification, age-gating for NSFW (Authentic Materials), KYC posture, user trust
+- **Review Priority:** Every Session (any session touching seller verification, age gating, or NSFW listing routing)
+- **Decision:** Identity verification across both storefronts (AuctionX SFW + Authentic Materials NSFW) will be powered by **Yoti**. Replaces the current manual document-upload + admin-review pipeline (`DocumentUploader` + `AdminSellerVerificationPage`).
+- **Rationale:**
+  - **Age estimation feature** directly serves the Authentic Materials NSFW age-gate requirement — single integration covers ID verification AND age verification, no separate provider for each gate.
+  - **Reusable Yoti-app digital ID** matches the brand's privacy-forward positioning; users verify once and reuse across services.
+  - **GDPR / privacy posture** is strongest in the industry — material differentiator for a personal-items marketplace.
+  - **UK-based regulatory familiarity** with adult-content platforms (Yoti is already deployed on age-gated platforms like Pornhub via UK Online Safety Act compliance work).
+  - Avoids the duplicate-source-of-truth issue with running both Stripe Identity (auto-triggered via Connect) and a manual document pipeline — Yoti becomes the single canonical identity record.
+- **Alternatives Considered:**
+  - **Stripe Identity** — natural fit since we're already on Stripe Connect; cheaper per verification (~$1.50 US); but lacks age-estimation, and ID data would be siloed in Stripe (no portable user-side identity).
+  - **Persona** — best customization/UX, $0.50-5 tier pricing; lacks Yoti-app's reusable identity story.
+  - **Plaid Identity Verification** — strong US coverage, ties to bank linking; not relevant for the dual-brand model and doesn't help age-gating.
+  - **Onfido** — enterprise/AML focus, expensive (~$5+); overkill for marketplace KYC.
+  - **Continue manual review** — won't scale, doesn't solve age-gating, no portable identity for users.
+- **Implications:**
+  - Seller verification flow must be rebuilt around Yoti's API (their hosted session URL or embedded SDK).
+  - `users.seller_verification_status` becomes a derived flag from Yoti webhook events (`session.completed`, `session.failed`, etc.).
+  - Age gate on Authentic Materials listing browse / detail pages should call Yoti's age-estimation endpoint at first visit (or piggyback on existing Yoti session).
+  - 1Password secrets needed: `op://AM_Development/Yoti/sdk-id`, `op://AM_Development/Yoti/pem-key` (PEM private key for signing requests).
+  - Stripe Connect onboarding still happens separately for payouts, but its ID-verification step now duplicates Yoti — investigate whether Yoti can satisfy Stripe Connect's KYC requirements directly (Stripe Connect Custom accounts support pre-collected KYC via API), or whether sellers need to verify in both.
+  - New `AdminYotiSessionsPage` (or fold into existing AdminSellerVerificationPage) for admins to review session results, override approvals, and re-trigger verifications.
+
+### Decision 3 — Place Bid button uses navigation, not a modal
 
 - **Status:** Locked
 - **Category:** Technical / UX
