@@ -1,6 +1,44 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-05-13 (session 19 code COMPLETE — Place Bid + Confirm Delivery wired in UI; Stripe payment-webhook dashboard registration + browser E2E pending Boss; Stripe Elements deferred to session 20)
+Last updated: 2026-05-16 (session 19 code + auth fixes + CreateListing rebuild shipped; Yoti chosen as identity provider; browser test + merge + Stripe webhook reg + Notion sync still pending Boss)
+
+---
+
+## ⏱ Session 19 close-out — pending Boss action
+
+In order:
+
+- [ ] **Push the feature branch** — 4 commits sitting local: `9e5d17e` (CreateListing rebuild), `8deef13` (session 20 brief), `4f0c1cb` (LandingNav auth chrome + /login redirect), `5f0c068` (Yoti decision draft):
+  ```bash
+  git push origin feature/phase-7e-real-buyer-loop
+  ```
+- [ ] **Browser smoke-test the full loop on staging** — see `docs/SESSION_19_VERIFICATION.md` "Manual Smoke Test". Walk: Create Listing → Place Bid (as test buyer) → Confirm Delivery (if ESCROW_HOLD exists) → auth chrome on `/` (logged in + logged out) → `/login` redirect when authenticated.
+- [ ] **If testing buyer flows as the test account requires seller approval**, run:
+  ```sql
+  UPDATE users SET seller_verification_status='APPROVED' WHERE id='0b211aed-3cf9-4729-818d-f0ed88dd68b8';
+  ```
+  Revert with `'NONE'` later.
+- [ ] **Merge feature → dev** (after smoke test passes):
+  ```bash
+  git checkout dev && git pull origin dev && git merge feature/phase-7e-real-buyer-loop && git push origin dev
+  ```
+- [ ] **Register Stripe `payment-webhook`** in Stripe Dashboard → Developers → Webhooks. URL `https://pmlofthmobglcfkqjtru.supabase.co/functions/v1/payment-webhook`, events `payment_intent.succeeded` + `payment_intent.payment_failed`. Update `op://AM_Development/Stripe/webhook-secret`, then:
+  ```bash
+  supabase secrets set STRIPE_WEBHOOK_SECRET="$(op read 'op://AM_Development/Stripe/webhook-secret')" --project-ref pmlofthmobglcfkqjtru
+  ```
+  Closes the last synthetic SQL step from session 18.
+- [ ] **Authenticate Notion MCP next time you start Claude Code** — auth flow was started but Boss closed before completing. Once authed, lessons + decisions in `docs/SESSION_19_NOTION_DRAFTS.md` push to the Lessons Learned DB (2 lessons) + Decisions DB (3 decisions including Yoti).
+- [ ] **CLAUDE.md v28** local update needs to sync to Notion (Project Documentation DB → CLAUDE.md page). Bump version + Last Updated. Notion currently at v27 from session 18.
+
+---
+
+## 🎯 Next sessions (briefs ready or scoped)
+
+- [ ] **Session 20 — Admin Listings/Auctions management** — brief at `docs/SESSION_20_BRIEF_ADMIN_LISTINGS_AUCTIONS.md`. Self-contained, ready to hand to claude.ai. Includes `/admin/auctions` list + detail pages, end/cancel/force-settle actions, AdminLayout nav entry, backend list/detail/action endpoints, audit logging. Branch: `feature/session-20-admin-auctions`. Scope is tight: ONE session.
+- [ ] **Session 21 — Stripe Elements / Payment Element on SettlementPage Pay Now** — replaces the `alert()` stub on `frontend/src/pages/SettlementPage.tsx:98-106`. Pre-req: drop `pk_test_*` into `op://AM_Development/Stripe/publishable-key`. Estimated 3-4h focused work. After this lands, real buyer can complete bid → pay → confirm → release entirely through clicks on staging. No brief written yet — flag when ready and I'll scope it.
+- [ ] **Session 22+ — Yoti integration** — decision locked (`SESSION_19_NOTION_DRAFTS.md` Decision 2). Rebuild seller verification flow around Yoti's hosted session API; derive `users.seller_verification_status` from Yoti webhook events; add Yoti age-estimation gate on Authentic Materials browse/detail (covers NSFW age requirement). Pre-reqs: `op://AM_Development/Yoti/sdk-id` + `op://AM_Development/Yoti/pem-key` populated, decision made on whether to migrate Stripe Connect Express → Custom (to push pre-collected Yoti KYC and avoid double-verification). No brief yet.
+
+---
 
 > **🔄 Reconciliation note (2026-05-09):** The TODO entries below for "Apply DB migration and regenerate types" in Modules 12, 13, 14, 15 are STALE. Verified via `mcp__plugin_supabase_supabase__list_migrations` — all migration files in `supabase/migrations/` are already applied to `pmlofthmobglcfkqjtru`. Zero schema drift. The TS casts (`as never`/`as any`) listed in those entries can be removed and types regenerated. Edge function deploys for `process-payment`, `payment-webhook`, and `release-escrow` are also LIVE — the only remaining gate for real Stripe processing is the env vars in Supabase dashboard. See `PAYMENT_DEPLOY_CHECKLIST.md` banner.
 
