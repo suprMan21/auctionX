@@ -4,6 +4,8 @@
  * @module Module 10 — Admin Dashboard
  */
 
+import type { Database } from '@/types/database.types';
+
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 /** Permission keys matching the admin_permission DB enum and backend requirePermission() checks. */
@@ -222,6 +224,129 @@ export interface SellerVerificationReview {
   new_status: string;
   created_at: string;
 }
+
+// ─── Admin Auctions Types ────────────────────────────────────────────────────
+
+export type AuctionStatus = Database['public']['Enums']['auction_status'];
+export type ListingStatus = Database['public']['Enums']['listing_status'];
+export type BrandType = Database['public']['Enums']['brand_type'];
+
+/** One row in the /admin/auctions list — flattened summary of auction + listing + seller. */
+export interface AdminAuctionRow {
+  auction_id: string;
+  listing_id: string | null;
+  title: string | null;
+  brand: BrandType | null;
+  category_id: string | null;
+  listing_status: ListingStatus | null;
+  is_nsfw: boolean;
+  status: AuctionStatus;
+  current_price_cents: number;
+  reserve_price_cents: number | null;
+  currency: string;
+  start_time: string;
+  end_time: string;
+  created_at: string;
+  seller_id: string;
+  seller_display_name: string | null;
+  bid_count: number;
+  thumbnail_url: string | null;
+}
+
+export interface AdminAuctionsListData {
+  results: AdminAuctionRow[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export interface AdminAuctionsListResponse {
+  success: true;
+  data: AdminAuctionsListData;
+}
+
+/** Detail payload for /admin/auctions/:id. Embeds nested listing/seller/winner via PostgREST relations. */
+type AuctionRow = Database['public']['Tables']['auctions']['Row'];
+type ListingRow = Database['public']['Tables']['listings']['Row'];
+type BidRow = Database['public']['Tables']['bids']['Row'];
+
+export interface AdminAuctionUserRef {
+  id: string;
+  display_name: string | null;
+  email?: string | null;
+}
+
+export interface AdminAuctionDetailAuction extends AuctionRow {
+  listing: Pick<
+    ListingRow,
+    | 'id'
+    | 'title'
+    | 'description'
+    | 'brand'
+    | 'category_id'
+    | 'condition'
+    | 'status'
+    | 'is_nsfw'
+    | 'is_featured'
+    | 'location_city'
+    | 'location_country'
+    | 'location_region'
+    | 'requires_age_verification'
+    | 'reserve_price_cents'
+    | 'created_at'
+    | 'updated_at'
+  > | null;
+  seller: AdminAuctionUserRef | null;
+  high_bidder: AdminAuctionUserRef | null;
+  winner: AdminAuctionUserRef | null;
+}
+
+export interface AdminAuctionMedia {
+  id: string;
+  type: string;
+  url: string;
+  thumbnail_url: string | null;
+  sort_order: number;
+  width: number | null;
+  height: number | null;
+}
+
+export interface AdminAuctionBid extends Pick<BidRow, 'id' | 'amount_cents' | 'max_bid_cents' | 'is_auto_bid' | 'created_at' | 'bidder_id'> {
+  bidder: AdminAuctionUserRef | null;
+}
+
+export interface AdminAuctionSettlementSummary {
+  id: string;
+  status: string;
+  gross_amount_cents: number;
+  net_amount_cents: number;
+  platform_fee_cents: number;
+  escrow_ends_at: string | null;
+  escrow_released_at: string | null;
+  delivery_confirmed_at: string | null;
+  dispute_opened_at: string | null;
+  settled_at: string | null;
+  created_at: string;
+}
+
+export interface AdminAuctionDetailData {
+  auction: AdminAuctionDetailAuction;
+  media: AdminAuctionMedia[];
+  bids: AdminAuctionBid[];
+  settlement: AdminAuctionSettlementSummary | null;
+}
+
+export interface AdminAuctionDetailResponse {
+  success: true;
+  data: AdminAuctionDetailData;
+}
+
+export interface AdminAuctionActionResponse {
+  success: true;
+  data: unknown;
+}
+
+// ─── Seller Verification Types (existing) ───────────────────────────────────
 
 export interface SellerVerificationDetail {
   user: {

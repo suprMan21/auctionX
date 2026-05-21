@@ -46,6 +46,8 @@ import { AMProofPage } from '@/pages/AMProofPage';
 import { SellerVerificationPage } from '@/features/seller-verification/pages/SellerVerificationPage';
 import { AdminSellerVerificationPage } from '@/features/admin/pages/AdminSellerVerificationPage';
 import { AdminEscrowPage } from '@/features/admin/pages/AdminEscrowPage';
+import { AdminAuctionsPage } from '@/features/admin/pages/AdminAuctionsPage';
+import { AdminAuctionDetailPage } from '@/features/admin/pages/AdminAuctionDetailPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading, initialized } = useAuth();
@@ -282,6 +284,8 @@ function App() {
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="users/:id" element={<AdminUserDetailPage />} />
               <Route path="moderation" element={<AdminModerationPage />} />
+              <Route path="auctions" element={<AdminAuctionsPage />} />
+              <Route path="auctions/:id" element={<AdminAuctionDetailPage />} />
               <Route path="seller-verification" element={<AdminSellerVerificationPage />} />
               <Route path="escrow" element={<AdminEscrowPage />} />
               <Route path="audit-logs" element={<AdminAuditLogPage />} />

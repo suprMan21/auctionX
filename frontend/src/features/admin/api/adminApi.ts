@@ -15,6 +15,9 @@ import type {
   AdminActionResult,
   SellerVerificationQueueItem,
   SellerVerificationDetail,
+  AdminAuctionsListResponse,
+  AdminAuctionDetailResponse,
+  AdminAuctionActionResponse,
 } from '../types/admin';
 
 const ADMIN_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1'}/admin`;
@@ -271,6 +274,61 @@ export const adminApi = {
   /** POST /admin/escrow/:id/release — manual release of a stuck or disputed settlement. */
   manualReleaseEscrow(settlementId: string): Promise<EscrowReleaseResponse> {
     return adminFetch<EscrowReleaseResponse>(`/escrow/${settlementId}/release`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  // ─── Auctions Endpoints ────────────────────────────────────────────────────
+
+  /** GET /admin/auctions — paginated/filterable list of auctions joined with listing + seller. */
+  listAuctions(params?: {
+    page?: number;
+    limit?: number;
+    status?: string[];
+    brand?: string;
+    category?: string;
+    seller?: string;
+    search?: string;
+    sort?: 'end_time_asc' | 'end_time_desc' | 'current_price_desc' | 'created_at_desc';
+  }): Promise<AdminAuctionsListResponse> {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.status && params.status.length > 0) qs.set('status', params.status.join(','));
+    if (params?.brand) qs.set('brand', params.brand);
+    if (params?.category) qs.set('category', params.category);
+    if (params?.seller) qs.set('seller', params.seller);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.sort) qs.set('sort', params.sort);
+    const query = qs.toString() ? `?${qs}` : '';
+    return adminFetch<AdminAuctionsListResponse>(`/auctions${query}`);
+  },
+
+  /** GET /admin/auctions/:id — full detail with bid history + settlement summary. */
+  getAuctionDetail(id: string): Promise<AdminAuctionDetailResponse> {
+    return adminFetch<AdminAuctionDetailResponse>(`/auctions/${id}`);
+  },
+
+  /** POST /admin/auctions/:id/end — force-end ACTIVE auction. */
+  endAuction(id: string): Promise<AdminAuctionActionResponse> {
+    return adminFetch<AdminAuctionActionResponse>(`/auctions/${id}/end`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  /** POST /admin/auctions/:id/cancel — cancel auction + its listing. Reason required. */
+  cancelAuction(id: string, reason: string): Promise<AdminAuctionActionResponse> {
+    return adminFetch<AdminAuctionActionResponse>(`/auctions/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  /** POST /admin/auctions/:id/settle — force-settle ENDED auction (delegates to Edge Function). */
+  triggerSettle(id: string): Promise<AdminAuctionActionResponse> {
+    return adminFetch<AdminAuctionActionResponse>(`/auctions/${id}/settle`, {
       method: 'POST',
       body: JSON.stringify({}),
     });
