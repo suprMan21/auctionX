@@ -1,34 +1,28 @@
 # AuctionX — TODO Tracker
 
-Last updated: 2026-05-16 (session 19 code + auth fixes + CreateListing rebuild shipped; Yoti chosen as identity provider; browser test + merge + Stripe webhook reg + Notion sync still pending Boss)
+Last updated: 2026-05-21 (session 19 close-out in flight: smoke tested + lessons/decisions in Notion + CLAUDE.md bumped to v29 in Notion + local merge complete; push to origin + Stripe webhook registration still pending Boss)
 
 ---
 
-## ⏱ Session 19 close-out — pending Boss action
+## ⏱ Session 19 close-out — status (2026-05-21)
 
-In order:
-
-- [ ] **Push the feature branch** — 4 commits sitting local: `9e5d17e` (CreateListing rebuild), `8deef13` (session 20 brief), `4f0c1cb` (LandingNav auth chrome + /login redirect), `5f0c068` (Yoti decision draft):
-  ```bash
-  git push origin feature/phase-7e-real-buyer-loop
-  ```
-- [ ] **Browser smoke-test the full loop on staging** — see `docs/SESSION_19_VERIFICATION.md` "Manual Smoke Test". Walk: Create Listing → Place Bid (as test buyer) → Confirm Delivery (if ESCROW_HOLD exists) → auth chrome on `/` (logged in + logged out) → `/login` redirect when authenticated.
-- [ ] **If testing buyer flows as the test account requires seller approval**, run:
-  ```sql
-  UPDATE users SET seller_verification_status='APPROVED' WHERE id='0b211aed-3cf9-4729-818d-f0ed88dd68b8';
-  ```
-  Revert with `'NONE'` later.
-- [ ] **Merge feature → dev** (after smoke test passes):
-  ```bash
-  git checkout dev && git pull origin dev && git merge feature/phase-7e-real-buyer-loop && git push origin dev
-  ```
+- [x] **Feature branch pushed to origin** — `feature/phase-7e-real-buyer-loop` has all 7 commits on remote (was incorrectly listed as "local-only" — branch was already pushed before close-out resumed).
+- [x] **Staging smoke test (Playwright)** — 15/16 tests pass on `https://d1bwev65w7rqzl.cloudfront.net` (public routes, auth-gated redirects, backend health, CORS, 404 all green). 1 test failed: auth-flow login → bad credentials. Diagnosis: stale 1Password mapping — `op://AM_Development/App Secrets/test-user-password` doesn't match the no-hyphen `test@authenticmaterials.com` account on staging. LoginPage rendered + validated correctly (inline "Invalid credentials" error visible in screenshot). **NOT a session-19 regression.** See `scripts/reports/test-artifacts/smoke-Auth-flow-Login-→-dashboard-→-logout-smoke/test-failed-1.png`.
+- [x] **Lessons + Decisions pushed to Notion** — 2 lessons in Lessons Learned DB (`<claude-code-hint>` plugin tag + Check related routes), 3 decisions in Decisions DB (Stripe Elements deferral, Yoti, Place Bid navigation). All Locked/Active. Decision dates landed in body text due to a Notion API quirk (Decisions DB "Decision Date" column has embedded colons in its name → expanded date format ambiguous).
+- [x] **CLAUDE.md bumped to v29 in Notion** — Notion was already at v28 (Deep Research Queue, 2026-05-16) so session 19 work landed as v29 instead of overwriting v28. Updated: Version property, Last Updated (2026-05-21), Current State date, Current branch row, Next-up row, new v29 history table entry.
+- [x] **Local merge `feature/phase-7e-real-buyer-loop` → `dev`** — clean fast-forward, 998 insertions / 117 deletions across 15 files. Local `dev` now 7 commits ahead of `origin/dev`. No push yet (see next).
+- [ ] **Push local `dev` to `origin/dev`** — **BLOCKED on Boss**. `git fetch / push` fails with `Permission denied (publickey)` against `git@github.com:`. Current `SSH_AUTH_SOCK` points at a non-1Password agent (`/Users/chris/.ssh/agent/s.lYoJevTwUt...`) that has one ED25519 key but it's not the GitHub one. Boss action: re-export `SSH_AUTH_SOCK` to the 1Password SSH agent socket OR `ssh-add` the GitHub key, then `git push origin dev`. After push, App Runner auto-deploys; verify https://vw7zy9mkyg.us-east-2.awsapprunner.com/api/v1/health returns healthy.
 - [ ] **Register Stripe `payment-webhook`** in Stripe Dashboard → Developers → Webhooks. URL `https://pmlofthmobglcfkqjtru.supabase.co/functions/v1/payment-webhook`, events `payment_intent.succeeded` + `payment_intent.payment_failed`. Update `op://AM_Development/Stripe/webhook-secret`, then:
   ```bash
   supabase secrets set STRIPE_WEBHOOK_SECRET="$(op read 'op://AM_Development/Stripe/webhook-secret')" --project-ref pmlofthmobglcfkqjtru
   ```
   Closes the last synthetic SQL step from session 18.
-- [ ] **Authenticate Notion MCP next time you start Claude Code** — auth flow was started but Boss closed before completing. Once authed, lessons + decisions in `docs/SESSION_19_NOTION_DRAFTS.md` push to the Lessons Learned DB (2 lessons) + Decisions DB (3 decisions including Yoti).
-- [ ] **CLAUDE.md v28** local update needs to sync to Notion (Project Documentation DB → CLAUDE.md page). Bump version + Last Updated. Notion currently at v27 from session 18.
+
+## Close-out follow-ups surfaced 2026-05-21
+
+- [ ] **1Password test buyer credential mismatch** — `op://AM_Development/App Secrets/test-user-password` is set but doesn't authenticate the no-hyphen `test@authenticmaterials.com` account on staging. Either (a) reset the no-hyphen account's password and update the vault entry, or (b) the vault entry is for the hyphenated legacy account and the no-hyphen account needs its own vault entry. Affects: Playwright auth-flow test, any automated buyer-flow E2E.
+- [ ] **Decisions DB date property has embedded colons in its name** — breaks the API expanded date format (`date:<column>:start`). Either rename the column to a clean name (e.g., "Decision Date") or document the workaround (date in body text). Affects any future agent pushing Decisions via the API. Surfaced 2026-05-21 while pushing the Yoti decision.
+- [ ] **`scripts/.env.op` points at localhost** (`PLAYWRIGHT_BASE_URL=http://localhost:5173`, `PLAYWRIGHT_BACKEND_URL=http://localhost:3001`) — fine for local dev but breaks `op run --env-file .env.op -- playwright test` against staging without a per-run override. Consider splitting into `.env.op.local` + `.env.op.staging` or adding a `STAGING=1` env switch. Workaround for now: `sed` a temp file before invoking `op run`.
 
 ---
 
