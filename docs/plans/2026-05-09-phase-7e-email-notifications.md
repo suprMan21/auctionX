@@ -20,7 +20,7 @@
 - **Branch:** Create `feature/phase-7e-email-notifications` off `dev`
 - **Current state (2026-05-09):** emailSender.ts at `backend/src/lib/notifications/emailSender.ts` is a real Postmark `ServerClient` implementation. 10 complete HTML email templates exist in `backend/src/lib/notifications/emailTemplates.ts`. notificationService.ts is fully wired with preference checks. Four controllers (bid, payout, verification, messaging) already call `notificationService.send()` for transactional events.
 - **Key constraint:** Edge functions (Deno runtime) cannot use Node.js npm packages — use Postmark REST API via fetch instead.
-- **Postmark note:** You'll need a Postmark server token. The account uses stream separation: use the `outbound` message stream for transactional emails. The FROM address should be `noreply@authentic-materials.com` (or `noreply@collectxmrkt.com` for AuctionX). Get the actual server token from Boss.
+- **Postmark note:** You'll need a Postmark server token. The account uses stream separation: use the `outbound` message stream for transactional emails. FROM address is `noreply@authentic-materials.com`. (Historical note: an alternate `noreply@collectxmrkt.com` sender was contemplated but the AuctionX / CollectX brand is retired and that domain was never provisioned.) Get the actual server token from Boss.
 
 ---
 

@@ -1,4 +1,5 @@
 import { Header } from '@/components/navigation/Header';
+import { BRAND_LABEL } from '@/constants/branding';
 
 export function UnmentionablesBrowsePage() {
   return (
@@ -14,9 +15,9 @@ export function UnmentionablesBrowsePage() {
 
           <div className="max-w-4xl mx-auto text-center relative z-10">
             <h1 className="text-5xl sm:text-6xl font-bold text-gradient-unmentionables mb-2">
-              Unmentionables
+              {BRAND_LABEL.UNMENTIONABLES}
             </h1>
-            <p className="text-gray-400 text-lg mb-8">by Authentic Materials</p>
+            <p className="text-gray-400 text-lg mb-8">by {BRAND_LABEL.AUCTIONX}</p>
             <p className="text-gray-300 text-xl max-w-xl mx-auto">
               The exclusive marketplace for personal items and creator collectibles. Coming soon.
             </p>

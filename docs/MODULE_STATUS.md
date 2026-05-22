@@ -1,4 +1,4 @@
-# AuctionX Module Status (Post-Audit)
+# Authentic Materials — Module Status (Post-Audit)
 
 **Last Updated:** March 7, 2026 (DB migrations verified, types regenerated)
 **Audit Date:** February 28, 2026

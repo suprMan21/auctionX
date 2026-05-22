@@ -1,4 +1,4 @@
-# AuctionX Development Checklist
+# Authentic Materials — Development Checklist
 
 **Track module completion and project progress.**
 

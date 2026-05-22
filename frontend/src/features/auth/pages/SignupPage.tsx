@@ -4,6 +4,7 @@ import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '../hooks/useAuth';
+import { BRAND_LABEL } from '@/constants/branding';
 
 export function SignupPage() {
   const [email, setEmail] = useState('');
@@ -63,7 +64,7 @@ export function SignupPage() {
             Create your account
           </h1>
           <p className="text-gray-400 mb-8">
-            Join Authentic Materials and start bidding on exclusive items.
+            Join {BRAND_LABEL.AUCTIONX} and start bidding on exclusive items.
           </p>
 
           <form onSubmit={handleSubmit} aria-label="Signup form" className="space-y-6">

@@ -6,6 +6,7 @@ import { AuthWidget } from '../components/AuthWidget';
 import { QrCodeCard } from '../components/QrCodeCard';
 import { NftSection } from '../components/NftSection';
 import { OgTags } from '../components/OgTags';
+import { BRAND_LABEL } from '@/constants/branding';
 
 function StatusBadge({ status }: { status: VerificationStatus }) {
   const colors: Record<VerificationStatus, string> = {
@@ -39,7 +40,7 @@ export function VerificationPage() {
       .then((data) => {
         if (!mounted) return;
         setVerif(data);
-        document.title = `${data.token_name} — Verified by ${data.seller?.display_name ?? 'unknown'} | Authentic Materials`;
+        document.title = `${data.token_name} — Verified by ${data.seller?.display_name ?? 'unknown'} | ${BRAND_LABEL.AUCTIONX}`;
         api.incrementScan(tokenName);
       })
       .catch((err) => {
@@ -88,7 +89,7 @@ export function VerificationPage() {
   );
 
   const pageUrl = window.location.href;
-  const ogTitle = `${verif.token_name} — Verified by ${verif.seller?.display_name ?? 'unknown'} | Authentic Materials`;
+  const ogTitle = `${verif.token_name} — Verified by ${verif.seller?.display_name ?? 'unknown'} | ${BRAND_LABEL.AUCTIONX}`;
   const ogDescription = 'This item is NFC-authenticated and blockchain-verified. View the full chain of custody.';
 
   return (

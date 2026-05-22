@@ -18,7 +18,7 @@
 
 ## Overview
 
-NFC verification is AuctionX's core authenticity differentiator. Sellers attach NTAG 424 DNA tags to items, record a 15–30 second possession-proof video, and program the tag with a unique verify URL. Buyers scan the tag to view the item's full chain of custody.
+NFC verification is Authentic Materials' core authenticity differentiator. Sellers attach NTAG 424 DNA tags to items, record a 15–30 second possession-proof video, and program the tag with a unique verify URL. Buyers scan the tag to view the item's full chain of custody.
 
 ---
 

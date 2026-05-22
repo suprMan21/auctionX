@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { BRAND_LABEL } from '@/constants/branding';
 
 interface AMWordmarkProps {
   size?: 'sm' | 'md' | 'lg';
@@ -14,12 +15,12 @@ export const AMWordmark = ({ size = 'md' }: AMWordmarkProps) => {
   const s = sizeMap[size];
 
   return (
-    <Link to="/" className={`inline-flex flex-col ${s.gap} no-underline`} aria-label="Authentic Materials home">
+    <Link to="/" className={`inline-flex flex-col ${s.gap} no-underline`} aria-label={`${BRAND_LABEL.AUCTIONX} home`}>
       <span className={`${s.am} font-extrabold tracking-tight text-gradient`}>
         AM
       </span>
       <span className={`${s.full} font-medium tracking-[0.2em] uppercase text-gray-400`}>
-        Authentic Materials
+        {BRAND_LABEL.AUCTIONX}
       </span>
     </Link>
   );

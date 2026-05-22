@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { cn } from '@/lib/cn';
+import { BRAND_LABEL } from '@/constants/branding';
 
 interface NavItem {
   /** Route path relative to /admin */
@@ -99,7 +100,7 @@ export const AdminLayout = () => {
       {/* Logo */}
       <div className="p-6 border-b border-white/10">
         <span className="text-lg font-bold bg-gradient-to-r from-primary-400 to-accent-400 bg-clip-text text-transparent">
-          Authentic Materials Admin
+          {BRAND_LABEL.AUCTIONX} Admin
         </span>
       </div>
 
@@ -174,7 +175,7 @@ export const AdminLayout = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="text-sm font-semibold text-white">Authentic Materials Admin</span>
+          <span className="text-sm font-semibold text-white">{BRAND_LABEL.AUCTIONX} Admin</span>
         </header>
 
         <main className="flex-1 p-6 lg:p-8">

@@ -1,4 +1,4 @@
-# AuctionX - Master Project Context
+# Authentic Materials — Master Project Context
 
 **Use this prompt when starting the MAIN project management chat.**
 
@@ -6,9 +6,11 @@
 
 ## Project Overview
 
-You are helping build **AuctionX**, a dual-brand auction marketplace platform for parasocial commerce:
-- **AuctionX:** Mainstream sports memorabilia (SFW)
-- **Unmentionables:** Personal items including adult content (NSFW)
+You are helping build **Authentic Materials**, the public-facing brand of The Craving Company Inc.'s dual-brand auction marketplace platform for parasocial commerce:
+- **Authentic Materials:** Public-facing SFW collectibles — memorabilia, autographs, creator merch, fan collectibles. Domain: authentic-materials.com.
+- **Unmentionables:** Age-gated NSFW property — personal items, intimate content. Owned but not yet built; never publicly marketed.
+
+> Internal note: "AuctionX" is the retired prior name for the SFW marketplace; it persists only as the schema-locked DB enum value (`brand_type = 'AUCTIONX'`) and AWS resource prefixes — not user-facing.
 
 **Tech Stack:**
 - Backend: Firebase Functions (Node.js 20, TypeScript)
@@ -133,8 +135,8 @@ VITE_BRAND=AUCTIONX
 - Max 10 media items per listing
 
 **Payment Routing:**
-- AuctionX brand → Stripe Connect
-- Unmentionables brand → Segpay
+- Authentic Materials (SFW) → Stripe-first cascade (see CONTENT_FLAG_GUIDELINES.md)
+- Unmentionables (NSFW) → Signature → CCBill (adult-eligible only)
 
 ---
 

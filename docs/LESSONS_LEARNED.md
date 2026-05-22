@@ -1,4 +1,4 @@
-# AuctionX — Lessons Learned (Per-Module Archive)
+# Authentic Materials — Lessons Learned (Per-Module Archive)
 
 > **This file is a historical archive of per-module implementation lessons.**
 > For the consolidated, actionable reference used before every module, see

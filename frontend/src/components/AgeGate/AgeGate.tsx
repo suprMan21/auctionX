@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAgeVerification } from './useAgeVerification';
+import { BRAND_LABEL } from '@/constants/branding';
 
 export function AgeGate() {
   const navigate = useNavigate();
@@ -67,8 +68,8 @@ export function AgeGate() {
           </svg>
         </div>
 
-        <h1 className="text-3xl font-bold text-gradient-unmentionables mb-1">Unmentionables</h1>
-        <p className="text-gray-400 text-sm mb-6">by Authentic Materials</p>
+        <h1 className="text-3xl font-bold text-gradient-unmentionables mb-1">{BRAND_LABEL.UNMENTIONABLES}</h1>
+        <p className="text-gray-400 text-sm mb-6">by {BRAND_LABEL.AUCTIONX}</p>
         <p className="text-gray-300 text-sm mb-6">
           This section contains age-restricted content. Please verify your date of birth to continue.
         </p>

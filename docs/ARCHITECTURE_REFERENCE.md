@@ -1,4 +1,4 @@
-# AuctionX Architecture Reference
+# Authentic Materials — Architecture Reference
 
 **Purpose:** Deep technical reference. Claude Code should read this when working on specific subsystems.
 
@@ -72,7 +72,9 @@ currency_code: CAD, USD
 
 ## Payment Cascade Architecture
 
-### Content Flag → Risk Level Mapping
+Routing is content-flagged and brand-aligned. The product surface presents two buckets (SFW / NSFW); the backend cascade is keyed off the `content_risk_level` enum (LOW/MEDIUM/HIGH), which remains the persisted source of truth. See docs/CONTENT_FLAG_GUIDELINES.md for the SFW/NSFW bucket → flag mapping.
+
+### Content Flag → Risk Level Mapping (DB enum, unchanged)
 ```
 LOW (Score 0-2):  CONCERT_GEAR, MEMORABILIA, AUTOGRAPHED, SPORTS_EQUIPMENT, FAN_MERCHANDISE
 MEDIUM (Score 3-5): CREATOR_MERCH, COSPLAY, GAMING, SWIMWEAR, LINGERIE, PERSONAL_ITEM
@@ -80,11 +82,11 @@ HIGH (Score 6+):  ADULT_CONTENT, EXPLICIT, FETISH, NSFW, 18_PLUS, INTIMATE_ITEMS
 ```
 
 ### Cascade Order by Risk
-| Risk | Order | Max Retries/Processor | Cascade Delay |
-|------|-------|----------------------|---------------|
-| LOW | Stripe → PaymentCloud → Signature → CCBill | 2 | 5s |
-| MEDIUM | PaymentCloud → Signature → CCBill | 2 | 5s |
-| HIGH | Signature → CCBill | 2 | 5s |
+| Risk | Bucket | Order | Max Retries/Processor | Cascade Delay |
+|------|--------|-------|----------------------|---------------|
+| LOW | SFW (Authentic Materials) | Stripe → PaymentCloud → Signature → CCBill | 2 | 5s |
+| MEDIUM | SFW (Either-branded) or NSFW (Unmentionables-branded) | PaymentCloud → Signature → CCBill | 2 | 5s |
+| HIGH | NSFW (Unmentionables) | Signature → CCBill | 2 | 5s |
 
 ### Processor Fee Comparison
 | Processor | Rate | Per-Txn | Best For |

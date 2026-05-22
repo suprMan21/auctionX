@@ -1,4 +1,4 @@
-# AuctionX Platform - Master Specification
+# Authentic Materials Platform — Master Specification
 **Version:** 1.0.0  
 **Date:** January 21, 2026  
 **Status:** FROZEN

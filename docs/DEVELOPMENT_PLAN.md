@@ -1,4 +1,4 @@
-# AuctionX Development Plan — Post-Stabilization
+# Authentic Materials — Development Plan — Post-Stabilization
 
 **Date:** 2026-03-01
 **Baseline:** Phase 0 complete (4 passes). 0 TS errors. Clean builds. Security patched.

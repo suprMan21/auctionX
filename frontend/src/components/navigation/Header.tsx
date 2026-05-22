@@ -4,6 +4,7 @@ import { Button } from '@/components/common/Button';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { NotificationBell } from '@/features/notifications/components/NotificationBell';
+import { BRAND_LABEL } from '@/constants/branding';
 
 function useIsAdmin(userId: string | undefined) {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -162,9 +163,9 @@ export function Header() {
               to="/"
               className="text-2xl font-bold text-gradient
                          focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800 rounded"
-              aria-label="Authentic Materials home"
+              aria-label={`${BRAND_LABEL.AUCTIONX} home`}
             >
-              Authentic Materials
+              {BRAND_LABEL.AUCTIONX}
             </Link>
 
             {/* Unmentionables context badge */}

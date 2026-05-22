@@ -1,4 +1,4 @@
-# AuctionX — Master Lessons Learned
+# Authentic Materials — Master Lessons Learned
 
 **Mandatory review before every module. Last updated: 2026-03-07**
 

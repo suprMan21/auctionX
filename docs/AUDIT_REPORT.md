@@ -1,4 +1,4 @@
-# AuctionX / Authentic Materials — Codebase Audit Report
+# Authentic Materials — Codebase Audit Report
 
 **Date:** February 28, 2026
 **Audited by:** Claude Sonnet 4.6

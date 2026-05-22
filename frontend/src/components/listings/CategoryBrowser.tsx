@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { BRAND_LABEL } from '@/constants/branding';
 
 interface Category {
   id: string;
@@ -147,7 +148,7 @@ export function CategoryBrowser({ selectedCategoryId, onSelect }: CategoryBrowse
                 : 'glass text-gray-300 hover:bg-white/10'
             }`}
           >
-            AuctionX
+            {BRAND_LABEL.AUCTIONX}
           </button>
           <button
             onClick={() => setBrandFilter('UNMENTIONABLES')}
@@ -157,7 +158,7 @@ export function CategoryBrowser({ selectedCategoryId, onSelect }: CategoryBrowse
                 : 'glass text-gray-300 hover:bg-white/10'
             }`}
           >
-            Unmentionables
+            {BRAND_LABEL.UNMENTIONABLES}
           </button>
         </div>
       </div>

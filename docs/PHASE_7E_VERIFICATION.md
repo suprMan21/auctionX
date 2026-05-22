@@ -51,12 +51,12 @@ Confirmation pending in `test@authentic-materials.com` inbox + Postmark Activity
 ## Notable decisions
 
 - **Single Deno helper for all 3 edge functions** — `_shared/postmark.ts` exports both `sendEmail` (low-level REST) and `emailRecipient(supabase, userId, type)` (preference-aware lookup that mirrors the backend `PREF_COLUMN_MAP`). Saves ~120 lines of duplicated preference-check logic across the three functions.
-- **Inline HTML templates** in each edge function — Deno can't import the backend `emailTemplates.ts` (npm + Node-only). Templates are tiny inline glassmorphic-styled HTML matching the AuctionX dark theme. If templates start drifting between Node and Deno, future work could extract them to a shared `_shared/emailTemplates.ts` (Deno-friendly, no Node deps).
+- **Inline HTML templates** in each edge function — Deno can't import the backend `emailTemplates.ts` (npm + Node-only). Templates are tiny inline glassmorphic-styled HTML matching the Authentic Materials dark theme. If templates start drifting between Node and Deno, future work could extract them to a shared `_shared/emailTemplates.ts` (Deno-friendly, no Node deps).
 - **Non-fatal sends** — every email path is wrapped in try/catch with a `logger.warn`. Notification failures must never block a settlement or a payout flow (existing convention from `insertNotification` helper).
 - **`emailRecipient` returns `null` if the user has no email** or has opted out — the caller's only check is `if (recipient) await sendEmail(...)`. Keeps each call site small.
 
 ## Deferred
 
-- AuctionX-branded variant of the same templates (collectxmrkt.com sender, sports memorabilia copy). Currently all emails use the Authentic Materials sender + brand voice.
+- Separate template variants per brand are no longer planned — AuctionX / collectxmrkt.com is retired. All emails use the Authentic Materials sender + brand voice. If NSFW (Unmentionables) email is ever wired up, it will reuse the same template module with brand-token swaps, not a forked template set.
 - Postmark click/open tracking, suppression-list management.
 - Migrating the inline HTML in edge functions to a Deno-importable shared template module.
