@@ -6,9 +6,10 @@ Last updated: 2026-05-21 (session 20 code complete on `feature/session-20-admin-
 
 ## ⏱ Session 20 close-out — status (2026-05-21)
 
-- [x] **Code complete on `feature/session-20-admin-auctions`** — commit `a332d84`. 11 files, +1715/-12. Brief at `docs/SESSION_20_BRIEF_ADMIN_LISTINGS_AUCTIONS.md` fully covered. Verification dossier at `docs/SESSION_20_VERIFICATION.md`.
-- [x] **Local verification green** — backend `npx tsc --noEmit` exit 0, frontend `npx tsc --noEmit` exit 0, `npx vitest run` 20 passed / 21 skipped (pre-existing integration skips), `npm run build` clean.
-- [x] **New backend tests** — 8 specs in `backend/src/__tests__/adminAuctions.test.ts` covering end/cancel happy paths, precondition rejections, settlement guard, rollback.
+- [x] **Code complete on `feature/session-20-admin-auctions`** — 3 commits (`a332d84` + `77d8bfb` + `2f6f3a6`); local `dev` aligned to the same tip. Brief at `docs/SESSION_20_BRIEF_ADMIN_LISTINGS_AUCTIONS.md` fully covered + 3 Boss mid-session additions (restart action, tightened nav, brand relabel). Verification dossier at `docs/SESSION_20_VERIFICATION.md`.
+- [x] **Local verification green** — backend `npx tsc --noEmit` exit 0, frontend `npx tsc --noEmit` exit 0, `npx vitest run` 26 passed / 21 skipped (pre-existing integration skips), `npm run build` clean.
+- [x] **New backend tests** — 14 specs in `backend/src/__tests__/adminAuctions.test.ts` covering end + cancel + restart happy paths, precondition rejects on each, settlement guard, durationHours bounds, listing-update rollback.
+- [ ] **Open: brand-rename project-wide sweep** — UI now reads "Authentic Materials" / "Unmentionables", but the `brand_type` DB enum is still `AUCTIONX | UNMENTIONABLES`. A real rename (migration + backend + frontend + landing pages + tests) needs a Decision DB entry + dedicated session. Flag when ready to scope.
 - [ ] **BLOCKED on Boss — SSH push to origin** — same gate as session 19. Once resolved: merge feature → dev, push, App Runner auto-deploys backend, then run frontend deploy block in `SESSION_20_VERIFICATION.md` "Staging verification" section. I did NOT ship the frontend alone because the new admin/auctions UI would 404 against the unchanged backend.
 - [ ] **Staging smoke test (Boss, post-deploy)** — 7-step checklist in `SESSION_20_VERIFICATION.md`. As admin (`2b3f1532-9345-4720-8fac-55d07517c78b`): list loads, filters/pagination/URL sync, row click → detail, End auction (ACTIVE), Cancel auction (with reason), Force-settle (ENDED), 412 on bad-state transitions.
 - [ ] **Bump CLAUDE.md to v30** — both local file and Notion. Update Current State (Phase row + branch row + next-up row), append v30 history table entry.

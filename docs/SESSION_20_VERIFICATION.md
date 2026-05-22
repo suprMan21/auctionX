@@ -1,8 +1,8 @@
 # Session 20 — Admin Auctions Management — Verification
 
 **Date:** 2026-05-21
-**Branch:** `feature/session-20-admin-auctions` (1 commit: `a332d84`)
-**Scope source:** `docs/SESSION_20_BRIEF_ADMIN_LISTINGS_AUCTIONS.md`
+**Branch:** `feature/session-20-admin-auctions` (3 commits: `a332d84` + `77d8bfb` + `2f6f3a6`). Local `dev` is currently aligned to the same tip — a stray checkout mid-session put the third commit on `dev` directly; the feature branch was fast-forwarded to match so the two refs are equal. No content lost, no destructive history surgery needed.
+**Scope source:** `docs/SESSION_20_BRIEF_ADMIN_LISTINGS_AUCTIONS.md` + Boss directives mid-session (restart action, tightened nav, brand relabel).
 
 ---
 
@@ -26,11 +26,12 @@
 ### Endpoint surface (under `/api/v1/admin/auctions`)
 | Method | Path | Action |
 |--------|------|--------|
-| GET    | `/`             | Paginated list |
-| GET    | `/:id`          | Auction detail |
-| POST   | `/:id/end`      | Force-end (ACTIVE only) |
-| POST   | `/:id/cancel`   | Cancel auction + listing (body `{ reason }`) |
-| POST   | `/:id/settle`   | Reuse of existing triggerSettlement |
+| GET    | `/`              | Paginated list |
+| GET    | `/:id`           | Auction detail |
+| POST   | `/:id/end`       | Force-end (ACTIVE only) |
+| POST   | `/:id/cancel`    | Cancel auction + listing (body `{ reason }`) |
+| POST   | `/:id/restart`   | Hard restart from ENDED/CANCELLED (body `{ reason, durationHours }`) — wipes bids, resets `current_price` to `starting_price`, re-activates listing |
+| POST   | `/:id/settle`    | Reuse of existing `triggerSettlement` |
 
 Response envelope: canonical `{ success, data, error?, code? }` — does **not** mirror the legacy `{ users, pagination }` shape from `routes/admin/users.ts`. Pre-existing inconsistency, fixed forward in new endpoints.
 
@@ -42,7 +43,7 @@ Response envelope: canonical `{ success, data, error?, code? }` — does **not**
 |-------|--------|
 | `cd backend && npx tsc --noEmit`  | ✅ exit 0 |
 | `cd frontend && npx tsc --noEmit` | ✅ exit 0 |
-| `cd backend && npx vitest run`    | ✅ 20 passed / 21 skipped (skips are pre-existing integration tests that require live backend) |
+| `cd backend && npx vitest run`    | ✅ 26 passed / 21 skipped (14 specs in `adminAuctions.test.ts` cover end + cancel + restart + their precondition rejects + rollback) |
 | `cd frontend && npm run build`    | ✅ built in 1.38s (only the pre-existing bundle-size warning) |
 
 New tests added — all green:
@@ -71,9 +72,8 @@ Once Boss has resolved SSH:
 ```bash
 cd /Volumes/myDev_Drive/Dev/dev/projectClaude/unmentionables/Unmen/
 
-# 1. Merge feature branch into dev (clean fast-forward expected)
-git checkout dev && git pull origin dev
-git merge feature/session-20-admin-auctions
+# 1. Push dev to origin (feature branch is already aligned to dev — no merge step needed)
+git checkout dev
 git push origin dev      # backend redeploys via App Runner on push to dev
 
 # 2. Frontend deploy
@@ -88,9 +88,20 @@ aws cloudfront create-invalidation --distribution-id E3JOPXHI8DB4BE --paths "/*"
 #    c. Click a row → /admin/auctions/:id renders with bid history + settlement (if any)
 #    d. End auction on an ACTIVE auction → flips to ENDED, audit_logs row written
 #    e. Cancel (with reason) on an ACTIVE → both flip to CANCELLED, audit_logs row written
-#    f. Force-settle on an ENDED → Edge Function invoked
-#    g. Try ending a CANCELLED auction → 412 failed_precondition
+#    f. Restart (with reason + duration) on an ENDED or CANCELLED → status → ACTIVE,
+#       bids wiped, current_price = starting_price, listing → ACTIVE, audit_logs row written
+#    g. Force-settle on an ENDED → Edge Function invoked
+#    h. Try ending a CANCELLED auction → 412 failed_precondition
+#    i. Brand filter dropdown reads "Authentic Materials" + "Unmentionables" (UI-only relabel)
 ```
+
+---
+
+## Mid-session additions (Boss direction)
+
+1. **Restart action** — full restart semantics (wipe bids, reset to starting price, listing → ACTIVE). Allowed from ENDED or CANCELLED only; settlement-exists guard preserved. `durationHours` bounded 1–720. New row in audit log.
+2. **Tightened navigation** — list-page title is now plain text; row click is the only way into the admin detail. From the admin detail, a single "View active auction" link points at `/auctions/:id`. The list never links to public/active auction pages.
+3. **Brand labels (UI-only)** — `AUCTIONX` → "Authentic Materials", `UNMENTIONABLES` → "Unmentionables". Backing DB enum unchanged. A schema-level rename (renaming the `AUCTIONX` enum value or migrating to a new `AUTHENTIC_MATERIALS` value) is **not** in scope here — would need a Decision DB entry + migration + project-wide sweep.
 
 ---
 
