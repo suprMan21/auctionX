@@ -1,4 +1,4 @@
-# AuctionX / Authentic Materials — Figma Component Spec
+# Authentic Materials — Figma Component Spec
 
 > **Handoff document for UX designers.** Import `design-tokens.json` via Tokens Studio, then build components following this spec.
 
@@ -10,7 +10,7 @@
 1. Install **Tokens Studio** plugin in Figma
 2. Create a new token set → Import JSON → select `design-tokens.json`
 3. Apply the token set to your Figma file
-4. Tokens will appear as Figma Variables under the `AuctionX` collection
+4. Tokens will appear as Figma Variables under the `AuctionX` collection (legacy identifier kept to match the schema-locked `brand_type = 'AUCTIONX'` DB enum that drives the Authentic Materials SFW stream — do not rename in Figma without coordinating a token-set migration)
 
 ### Typography
 - Install **Plus Jakarta Sans** from Google Fonts (weights: 400, 500, 600, 700)
@@ -214,9 +214,8 @@ Recommended pages:
 | **Creator** | Seller of items (not "seller" in UI) |
 | **Collector** | Buyer of items (not "buyer" in UI) |
 | **AM Proof** | NFC + NFT authentication certificate |
-| **AuctionX** | SFW brand — sports memorabilia, creator merch |
-| **Authentic Materials** | NSFW brand — personal items, age-gated |
-| **Unmentionables** | Internal codename for Authentic Materials |
-| **CollectX** | Short brand name used in logos |
+| **Authentic Materials** | Public-facing **SFW** brand — memorabilia, autographs, creator merch, fan collectibles. Domain: authentic-materials.com. Operated by The Craving Company Inc. |
+| **Unmentionables** | Age-gated **NSFW** property — personal items, intimate content. Owned but not yet built; never publicly marketed. |
+| **AuctionX** | Retired brand name. Persists ONLY as the locked DB enum value (`brand_type = 'AUCTIONX'`) identifying the Authentic Materials stream, and as AWS resource prefixes. Not user-facing. |
 | **Trust Badge** | NFC verification indicator |
-| **Content Flag** | Risk level (LOW/MEDIUM/HIGH) for payment routing |
+| **Content Flag** | Risk level (LOW/MEDIUM/HIGH) for payment routing — see CONTENT_FLAG_GUIDELINES.md for SFW/NSFW bucket mapping |

@@ -1,4 +1,4 @@
-# AuctionX — TODO Tracker
+# Authentic Materials — TODO Tracker
 
 Last updated: 2026-05-21 (session 20 code complete on `feature/session-20-admin-auctions` — local tsc/vitest/build all green; staging deploy still gated on SSH push to origin/dev. Session 19 push gate also still open.)
 
@@ -42,7 +42,7 @@ Last updated: 2026-05-21 (session 20 code complete on `feature/session-20-admin-
 
 - [ ] **Session 20 — Admin Listings/Auctions management** — brief at `docs/SESSION_20_BRIEF_ADMIN_LISTINGS_AUCTIONS.md`. Self-contained, ready to hand to claude.ai. Includes `/admin/auctions` list + detail pages, end/cancel/force-settle actions, AdminLayout nav entry, backend list/detail/action endpoints, audit logging. Branch: `feature/session-20-admin-auctions`. Scope is tight: ONE session.
 - [ ] **Session 21 — Stripe Elements / Payment Element on SettlementPage Pay Now** — replaces the `alert()` stub on `frontend/src/pages/SettlementPage.tsx:98-106`. Pre-req: drop `pk_test_*` into `op://AM_Development/Stripe/publishable-key`. Estimated 3-4h focused work. After this lands, real buyer can complete bid → pay → confirm → release entirely through clicks on staging. No brief written yet — flag when ready and I'll scope it.
-- [ ] **Session 22+ — Yoti integration** — decision locked (`SESSION_19_NOTION_DRAFTS.md` Decision 2). Rebuild seller verification flow around Yoti's hosted session API; derive `users.seller_verification_status` from Yoti webhook events; add Yoti age-estimation gate on Authentic Materials browse/detail (covers NSFW age requirement). Pre-reqs: `op://AM_Development/Yoti/sdk-id` + `op://AM_Development/Yoti/pem-key` populated, decision made on whether to migrate Stripe Connect Express → Custom (to push pre-collected Yoti KYC and avoid double-verification). No brief yet.
+- [ ] **Session 22+ — Yoti integration** — decision locked (`SESSION_19_NOTION_DRAFTS.md` Decision 2). Rebuild seller verification flow around Yoti's hosted session API; derive `users.seller_verification_status` from Yoti webhook events; add Yoti age-estimation gate on Unmentionables (NSFW) browse/detail. Pre-reqs: `op://AM_Development/Yoti/sdk-id` + `op://AM_Development/Yoti/pem-key` populated, decision made on whether to migrate Stripe Connect Express → Custom (to push pre-collected Yoti KYC and avoid double-verification). No brief yet.
 
 ---
 

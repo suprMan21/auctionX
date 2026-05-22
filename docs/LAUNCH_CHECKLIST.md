@@ -1,4 +1,4 @@
-# AuctionX — Pre-Launch Checklist
+# Authentic Materials — Pre-Launch Checklist
 
 **Last Updated:** 2026-03-03 (Module 18)
 **Status:** Draft — work through all items before going live
@@ -142,7 +142,7 @@
 
 - [ ] Privacy policy page at `/privacy`
 - [ ] Terms of service page at `/terms`
-- [ ] Age verification flow for Authentic Materials NSFW content
+- [ ] Age verification flow for Unmentionables (NSFW) content
 - [ ] DMCA contact info and takedown process documented
 - [ ] Cookie consent banner (if serving EU users)
 - [ ] `og-image.png` asset created and uploaded to `/public/og-image.png`

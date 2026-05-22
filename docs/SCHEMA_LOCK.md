@@ -1,4 +1,4 @@
-# Schema Lock - AuctionX
+# Schema Lock — Authentic Materials
 
 **Version:** 1.0.0  
 **Date:** January 21, 2026  

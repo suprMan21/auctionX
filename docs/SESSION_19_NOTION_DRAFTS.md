@@ -54,11 +54,11 @@ Drafts for syncing to Notion DBs at session close. Notion MCP auth pending; once
 
 - **Status:** Locked
 - **Category:** Technical / Trust & Safety / Compliance
-- **Impact:** Cross-cutting — seller verification, age-gating for NSFW (Authentic Materials), KYC posture, user trust
+- **Impact:** Cross-cutting — seller verification, age-gating for NSFW (Unmentionables), KYC posture, user trust
 - **Review Priority:** Every Session (any session touching seller verification, age gating, or NSFW listing routing)
-- **Decision:** Identity verification across both storefronts (AuctionX SFW + Authentic Materials NSFW) will be powered by **Yoti**. Replaces the current manual document-upload + admin-review pipeline (`DocumentUploader` + `AdminSellerVerificationPage`).
+- **Decision:** Identity verification across both brand streams (Authentic Materials SFW + Unmentionables NSFW) will be powered by **Yoti**. Replaces the current manual document-upload + admin-review pipeline (`DocumentUploader` + `AdminSellerVerificationPage`).
 - **Rationale:**
-  - **Age estimation feature** directly serves the Authentic Materials NSFW age-gate requirement — single integration covers ID verification AND age verification, no separate provider for each gate.
+  - **Age estimation feature** directly serves the Unmentionables (NSFW) age-gate requirement — single integration covers ID verification AND age verification, no separate provider for each gate.
   - **Reusable Yoti-app digital ID** matches the brand's privacy-forward positioning; users verify once and reuse across services.
   - **GDPR / privacy posture** is strongest in the industry — material differentiator for a personal-items marketplace.
   - **UK-based regulatory familiarity** with adult-content platforms (Yoti is already deployed on age-gated platforms like Pornhub via UK Online Safety Act compliance work).

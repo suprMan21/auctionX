@@ -1,4 +1,4 @@
-# Security Audit — AuctionX / Authentic Materials
+# Security Audit — Authentic Materials
 
 **Date:** 2026-03-03
 **Auditor:** Module 17 automated review

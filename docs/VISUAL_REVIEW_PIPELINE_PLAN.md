@@ -162,7 +162,7 @@ interface PageAssessment {
 
 ### Skill Prompt Template (for each screenshot)
 ```
-You are reviewing a screenshot of the AuctionX web application.
+You are reviewing a screenshot of the Authentic Materials web application.
 
 ## Design System Rules
 - Dark mode only: bg #13131a (dark-800), #1a1a24 (dark-700)

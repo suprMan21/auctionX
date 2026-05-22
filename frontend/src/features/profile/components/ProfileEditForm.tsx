@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useUpdateProfile } from "../hooks/useProfile";
 import type { Database } from "@/types/database.types";
+import { BRAND_LABEL } from "@/constants/branding";
 
 type User = Database["public"]["Tables"]["users"]["Row"];
 type BrandType = Database["public"]["Enums"]["brand_type"];
@@ -124,8 +125,8 @@ export function ProfileEditForm({
           onChange={(e) => setPreferredBrand(e.target.value as BrandType)}
           className="mt-1 block w-full rounded-xl bg-dark-700 border border-white/10 text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
-          <option value="AUCTIONX">AuctionX</option>
-          <option value="UNMENTIONABLES">Unmentionables</option>
+          <option value="AUCTIONX">{BRAND_LABEL.AUCTIONX}</option>
+          <option value="UNMENTIONABLES">{BRAND_LABEL.UNMENTIONABLES}</option>
         </select>
       </div>
 

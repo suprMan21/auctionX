@@ -24,7 +24,7 @@ Located in `/mnt/project/`:
 
 ### Step 2: Set Module Context
 ```
-I'm working on [MODULE_NAME] for AuctionX.
+I'm working on [MODULE_NAME] for Authentic Materials.
 
 Current status:
 - Completed modules: [list]
@@ -174,11 +174,11 @@ npm run test
 
 When creating a new module chat:
 ```
-You are helping build [MODULE_NAME] for AuctionX, a dual-brand auction marketplace.
+You are helping build [MODULE_NAME] for Authentic Materials, a dual-brand auction marketplace operated by The Craving Company Inc.
 
 PROJECT CONTEXT:
-- Tech: React 18, Firebase Functions, Firestore, S3
-- Brand: AUCTIONX (SFW) + UNMENTIONABLES (NSFW)  
+- Tech: React 19, Express 5, Supabase, S3
+- Brand: Authentic Materials (SFW, public) + Unmentionables (NSFW, age-gated). Underlying DB enum: `brand_type` = AUCTIONX (Authentic Materials stream, schema-locked legacy identifier) or UNMENTIONABLES.
 - Status: [list completed modules]
 
 LOCKED COMPONENTS:

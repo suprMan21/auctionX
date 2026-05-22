@@ -1,4 +1,5 @@
 import { VerificationStatus } from '../types/verification';
+import { BRAND_LABEL } from '@/constants/branding';
 
 interface AuthWidgetProps {
   status: VerificationStatus;
@@ -157,7 +158,7 @@ export const AuthWidget = ({ status, tokenName }: AuthWidgetProps) => {
 
       <div className="flex flex-col items-center gap-1 text-center">
         <span className="bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent text-xs tracking-widest font-semibold uppercase">
-          Authentic Materials
+          {BRAND_LABEL.AUCTIONX}
         </span>
         <span className={`text-2xl font-bold ${statusTextColor}`}>{config.label}</span>
         <span className="font-mono text-sm text-gray-300">{tokenName}</span>

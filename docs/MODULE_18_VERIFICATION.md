@@ -60,7 +60,7 @@
 - [ ] `curl http://localhost:3001/api/v1/health`
   - Expected: `{"status":"healthy","timestamp":"...","uptime":...,"database":"connected","responseTime":...,"version":"1.0.0"}`
 - [ ] Start frontend: `cd frontend && npm run dev`
-- [ ] Visit `http://localhost:5173` — verify page title is "AuctionX — Verified Auction Marketplace"
+- [ ] Visit `http://localhost:5173` — verify page title is "Authentic Materials — Verified Auction Marketplace"
 - [ ] View page source — verify OG and Twitter card meta tags are present
 - [ ] Visit `http://localhost:5173/robots.txt` — verify crawler rules are present
 - [ ] Trigger an unhandled promise rejection in browser console:

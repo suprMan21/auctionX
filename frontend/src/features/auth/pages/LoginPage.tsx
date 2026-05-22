@@ -5,6 +5,7 @@ import { Input } from '@/components/common/Input';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { BRAND_LABEL } from '@/constants/branding';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -54,7 +55,7 @@ export function LoginPage() {
       <div className="min-h-screen bg-dark-800 flex items-center justify-center p-4">
         <main id="main-content" className="glass rounded-2xl p-8 max-w-md w-full">
           <h1 className="text-3xl font-bold text-white mb-2">
-            Log in to Authentic Materials
+            Log in to {BRAND_LABEL.AUCTIONX}
           </h1>
           <p className="text-gray-400 mb-8">
             Welcome back! Enter your credentials to continue.

@@ -7,7 +7,7 @@ import type {
   AuctionStatus,
   BrandType,
 } from '../types/admin';
-import { brandLabel } from '../types/admin';
+import { brandLabel, BRAND_LABEL } from '../types/admin';
 
 const AUCTION_STATUSES: ReadonlyArray<AuctionStatus> = [
   'DRAFT',
@@ -268,8 +268,8 @@ export const AdminAuctionsPage = () => {
                        focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
           >
             <option value="">All brands</option>
-            <option value="AUCTIONX">Authentic Materials</option>
-            <option value="UNMENTIONABLES">Unmentionables</option>
+            <option value="AUCTIONX">{BRAND_LABEL.AUCTIONX}</option>
+            <option value="UNMENTIONABLES">{BRAND_LABEL.UNMENTIONABLES}</option>
           </select>
           <select
             value={sort}
