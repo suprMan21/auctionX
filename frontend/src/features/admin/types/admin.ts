@@ -231,6 +231,19 @@ export type AuctionStatus = Database['public']['Enums']['auction_status'];
 export type ListingStatus = Database['public']['Enums']['listing_status'];
 export type BrandType = Database['public']['Enums']['brand_type'];
 
+/**
+ * UI-facing labels for the two brand streams. The underlying DB enum still uses AUCTIONX
+ * (legacy) for the Authentic Materials stream. If the brand is rebranded at the schema level,
+ * update the enum migration and remove this mapping.
+ */
+export const BRAND_LABEL: Record<BrandType, string> = {
+  AUCTIONX: 'Authentic Materials',
+  UNMENTIONABLES: 'Unmentionables',
+};
+
+export const brandLabel = (brand: BrandType | null | undefined): string =>
+  brand ? BRAND_LABEL[brand] : '—';
+
 /** One row in the /admin/auctions list — flattened summary of auction + listing + seller. */
 export interface AdminAuctionRow {
   auction_id: string;

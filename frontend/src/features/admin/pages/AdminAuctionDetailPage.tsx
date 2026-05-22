@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { adminApi } from '../api/adminApi';
 import type { AdminAuctionDetailData, AuctionStatus } from '../types/admin';
+import { brandLabel } from '../types/admin';
 
 const statusClass = (status: AuctionStatus): string => {
   switch (status) {
@@ -99,6 +100,39 @@ export const AdminAuctionDetailPage = () => {
     }
   };
 
+  const onRestart = async () => {
+    if (!id || !data) return;
+    const durationStr = window.prompt(
+      'Restart this auction for how many hours? (1–720)',
+      '24',
+    );
+    if (durationStr === null) return;
+    const durationHours = Number(durationStr);
+    if (!Number.isFinite(durationHours) || durationHours < 1 || durationHours > 720) {
+      toast.error('durationHours must be a number between 1 and 720');
+      return;
+    }
+    const reason = window.prompt('Restart reason (required, logged to audit):');
+    if (!reason || !reason.trim()) {
+      if (reason !== null) toast.error('A reason is required to restart.');
+      return;
+    }
+    const ok = window.confirm(
+      `Restart this auction?\n\nThis will:\n  • clear all existing bids for this auction\n  • reset current bid to the starting price\n  • set a new end time ${durationHours}h from now\n  • re-activate the listing\n\nReason: ${reason.trim()}`,
+    );
+    if (!ok) return;
+    setActing(true);
+    try {
+      await adminApi.restartAuction(id, reason.trim(), durationHours);
+      toast.success('Auction restarted.');
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to restart auction');
+    } finally {
+      setActing(false);
+    }
+  };
+
   const onSettle = async () => {
     if (!id || !data) return;
     const ok = window.confirm(
@@ -143,6 +177,7 @@ export const AdminAuctionDetailPage = () => {
   const canEnd = status === 'ACTIVE';
   const canCancel = status !== 'SETTLED' && status !== 'CANCELLED' && !settlement;
   const canSettle = status === 'ENDED';
+  const canRestart = (status === 'ENDED' || status === 'CANCELLED') && !settlement;
 
   return (
     <div className="space-y-6">
@@ -161,7 +196,7 @@ export const AdminAuctionDetailPage = () => {
                 {status}
               </span>
               {listing?.brand && (
-                <span className="text-gray-500">{listing.brand}</span>
+                <span className="text-gray-500">{brandLabel(listing.brand)}</span>
               )}
               {seller && (
                 <Link
@@ -171,16 +206,14 @@ export const AdminAuctionDetailPage = () => {
                   Seller: {seller.display_name ?? seller.email ?? seller.id.slice(0, 8)}
                 </Link>
               )}
-              {listing?.id && (
-                <a
-                  href={`/listings/${listing.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary-400 hover:text-primary-300"
-                >
-                  View public listing ↗
-                </a>
-              )}
+              <a
+                href={`/auctions/${auction.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary-400 hover:text-primary-300"
+              >
+                View active auction ↗
+              </a>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
@@ -199,6 +232,14 @@ export const AdminAuctionDetailPage = () => {
               className="px-4 py-2 rounded-xl text-sm font-medium bg-error-500/20 text-error-500 border border-error-500/40 hover:bg-error-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Cancel auction
+            </button>
+            <button
+              type="button"
+              onClick={onRestart}
+              disabled={!canRestart || acting}
+              className="px-4 py-2 rounded-xl text-sm font-medium bg-primary-500/20 text-primary-300 border border-primary-500/40 hover:bg-primary-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Restart auction
             </button>
             <button
               type="button"

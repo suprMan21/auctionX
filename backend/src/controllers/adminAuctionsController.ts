@@ -364,6 +364,109 @@ export const endAuction = async (req: Request & RequestWithId, res: Response) =>
 };
 
 /**
+ * POST /api/v1/admin/auctions/:id/restart
+ *
+ * Hard-restart an ENDED or CANCELLED auction (no settlement allowed). Wipes the bid history,
+ * resets current_price to starting_price, clears high_bidder + winner fields, sets status=ACTIVE
+ * with a new end_time = now() + durationHours, and re-activates the listing if it was cancelled.
+ *
+ * Body: { reason: string, durationHours: number }
+ *   durationHours: bounded to 1..720 (30 days max). Required.
+ */
+export const restartAuction = async (req: Request & RequestWithId, res: Response) => {
+  const logger = withLogContext({ requestId: req.requestId, route: req.path });
+  try {
+    const id = req.params.id;
+    if (typeof id !== 'string' || !id) throw new AppError('invalid_argument', 'auction id is required');
+
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (!reason) throw new AppError('invalid_argument', 'reason is required');
+
+    const durationHours = Number(req.body?.durationHours);
+    if (!Number.isFinite(durationHours) || durationHours < 1 || durationHours > 720) {
+      throw new AppError('invalid_argument', 'durationHours must be a number between 1 and 720');
+    }
+
+    const supabase = getServiceClient();
+
+    const { data: existing, error: getErr } = await supabase
+      .from('auctions')
+      .select('id, status, listing_id, starting_price_cents')
+      .eq('id', id)
+      .single();
+    if (getErr || !existing) throw new AppError('not_found', 'Auction not found');
+    if (existing.status !== 'ENDED' && existing.status !== 'CANCELLED') {
+      throw new AppError('failed_precondition', `Cannot restart auction in status ${existing.status}`);
+    }
+
+    const { data: settlement, error: settleErr } = await supabase
+      .from('settlements')
+      .select('id')
+      .eq('auction_id', id)
+      .limit(1);
+    if (settleErr) throw settleErr;
+    if ((settlement?.length ?? 0) > 0) {
+      throw new AppError('failed_precondition', 'Cannot restart an auction with an existing settlement');
+    }
+
+    const now = new Date();
+    const newEndTime = new Date(now.getTime() + durationHours * 3_600_000);
+    const nowIso = now.toISOString();
+
+    // Step 1: reset auction. Clearing winning_bid_id frees the FK before we delete bids.
+    const { data: auctionUpd, error: auctionUpdErr } = await supabase
+      .from('auctions')
+      .update({
+        status: 'ACTIVE',
+        start_time: nowIso,
+        end_time: newEndTime.toISOString(),
+        current_price_cents: existing.starting_price_cents,
+        high_bidder_id: null,
+        high_bidder_max_cents: null,
+        winner_id: null,
+        winning_bid_id: null,
+        second_highest_max_cents: null,
+        updated_at: nowIso,
+      })
+      .eq('id', id)
+      .select('id, status, start_time, end_time, current_price_cents, updated_at')
+      .single();
+    if (auctionUpdErr || !auctionUpd) throw new AppError('internal', 'Failed to reset auction row');
+
+    // Step 2: wipe bids for this auction.
+    const { error: bidsDelErr } = await supabase
+      .from('bids')
+      .delete()
+      .eq('auction_id', id);
+    if (bidsDelErr) {
+      logger.error('admin_restart_auction_bids_delete_failed', { auctionId: id, err: String(bidsDelErr) });
+      throw new AppError('internal', 'Auction reset, but failed to clear old bids — manual cleanup needed');
+    }
+
+    // Step 3: re-activate the listing (no-op if already ACTIVE).
+    const { data: listingUpd, error: listingUpdErr } = await supabase
+      .from('listings')
+      .update({ status: 'ACTIVE', updated_at: nowIso })
+      .eq('id', existing.listing_id)
+      .select('id, status')
+      .single();
+    if (listingUpdErr || !listingUpd) {
+      logger.error('admin_restart_auction_listing_update_failed', { auctionId: id, listingId: existing.listing_id, err: String(listingUpdErr) });
+      throw new AppError('internal', 'Auction restarted, but failed to re-activate listing — manual cleanup needed');
+    }
+
+    logger.info('admin_restart_auction', { auctionId: id, listingId: existing.listing_id, durationHours, reason });
+
+    return res.json({
+      success: true,
+      data: { auction: auctionUpd, listing: listingUpd, reason, durationHours },
+    });
+  } catch (error) {
+    return handleError(res, error, 'Failed to restart auction');
+  }
+};
+
+/**
  * POST /api/v1/admin/auctions/:id/cancel
  * Cancels an auction + its listing. Body: { reason: string }.
  *

@@ -7,6 +7,7 @@ import type {
   AuctionStatus,
   BrandType,
 } from '../types/admin';
+import { brandLabel } from '../types/admin';
 
 const AUCTION_STATUSES: ReadonlyArray<AuctionStatus> = [
   'DRAFT',
@@ -267,8 +268,8 @@ export const AdminAuctionsPage = () => {
                        focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
           >
             <option value="">All brands</option>
-            <option value="AUCTIONX">AuctionX</option>
-            <option value="UNMENTIONABLES">Authentic Materials</option>
+            <option value="AUCTIONX">Authentic Materials</option>
+            <option value="UNMENTIONABLES">Unmentionables</option>
           </select>
           <select
             value={sort}
@@ -352,20 +353,14 @@ export const AdminAuctionsPage = () => {
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {row.listing_id ? (
-                          <a
-                            href={`/listings/${row.listing_id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-white hover:text-primary-300 max-w-[260px] truncate inline-block align-middle"
-                            title={row.title ?? ''}
-                          >
-                            {row.title ?? 'Untitled'}
-                          </a>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
+                        <span
+                          className="text-white max-w-[260px] truncate inline-block align-middle"
+                          title={row.title ?? ''}
+                        >
+                          {row.title ?? 'Untitled'}
+                        </span>
                         {row.brand && (
-                          <div className="text-xs text-gray-500 mt-0.5">{row.brand}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{brandLabel(row.brand)}</div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">

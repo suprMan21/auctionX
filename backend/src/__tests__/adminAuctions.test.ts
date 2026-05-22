@@ -83,6 +83,7 @@ process.env['SUPABASE_SERVICE_ROLE_KEY'] = 'test-service-role-key';
 import {
   endAuction,
   cancelAuction,
+  restartAuction,
 } from '../controllers/adminAuctionsController';
 
 function makeRes() {
@@ -233,5 +234,108 @@ describe('cancelAuction', () => {
     );
     expect(res._status).toBe(500);
     expect(res._json).toMatchObject({ success: false, code: 'internal' });
+  });
+});
+
+// ── restartAuction ────────────────────────────────────────────────────────────
+
+describe('restartAuction', () => {
+  it('requires reason and a valid durationHours', async () => {
+    const res = makeRes();
+    await restartAuction(makeReq({ body: { reason: 'do over' } }) as Request & { requestId: string }, res);
+    expect(res._status).toBe(400);
+    expect(res._json).toMatchObject({ success: false, code: 'invalid_argument' });
+  });
+
+  it('rejects durationHours > 720', async () => {
+    const res = makeRes();
+    await restartAuction(
+      makeReq({ body: { reason: 'do over', durationHours: 1000 } }) as Request & { requestId: string },
+      res,
+    );
+    expect(res._status).toBe(400);
+    expect(res._json).toMatchObject({ success: false, code: 'invalid_argument' });
+  });
+
+  it('rejects restarting an ACTIVE auction', async () => {
+    enqueue('auctions', () => ({ data: { id: 'a-1', status: 'ACTIVE', listing_id: 'L-1', starting_price_cents: 5000 }, error: null }));
+    const res = makeRes();
+    await restartAuction(
+      makeReq({ body: { reason: 'oops', durationHours: 24 } }) as Request & { requestId: string },
+      res,
+    );
+    expect(res._status).toBe(412);
+    expect(res._json).toMatchObject({ success: false, code: 'failed_precondition' });
+  });
+
+  it('rejects restart when a settlement row already exists', async () => {
+    enqueue('auctions', () => ({ data: { id: 'a-1', status: 'ENDED', listing_id: 'L-1', starting_price_cents: 5000 }, error: null }));
+    enqueue('settlements', () => ({ data: [{ id: 's-1' }], error: null }));
+    const res = makeRes();
+    await restartAuction(
+      makeReq({ body: { reason: 'too late', durationHours: 24 } }) as Request & { requestId: string },
+      res,
+    );
+    expect(res._status).toBe(412);
+    expect(res._json).toMatchObject({ success: false, code: 'failed_precondition' });
+  });
+
+  it('restarts an ENDED auction: resets fields, wipes bids, re-activates listing', async () => {
+    enqueue('auctions', () => ({ data: { id: 'a-1', status: 'ENDED', listing_id: 'L-1', starting_price_cents: 5000 }, error: null }));
+    enqueue('settlements', () => ({ data: [], error: null }));
+    // Step 1: auction reset.
+    enqueue('auctions', () => ({
+      data: {
+        id: 'a-1',
+        status: 'ACTIVE',
+        start_time: '2026-05-21T00:00:00Z',
+        end_time: '2026-05-22T00:00:00Z',
+        current_price_cents: 5000,
+        updated_at: '2026-05-21T00:00:00Z',
+      },
+      error: null,
+    }));
+    // Step 2: bids delete (await on chain — no terminator).
+    enqueue('bids', () => ({ data: null, error: null }));
+    // Step 3: listing update.
+    enqueue('listings', () => ({ data: { id: 'L-1', status: 'ACTIVE' }, error: null }));
+
+    const res = makeRes();
+    await restartAuction(
+      makeReq({ body: { reason: 'extending visibility', durationHours: 24 } }) as Request & { requestId: string },
+      res,
+    );
+    expect(res._status).toBeUndefined();
+    expect(res._json).toEqual({
+      success: true,
+      data: expect.objectContaining({
+        auction: expect.objectContaining({ status: 'ACTIVE', current_price_cents: 5000 }),
+        listing: expect.objectContaining({ status: 'ACTIVE' }),
+        reason: 'extending visibility',
+        durationHours: 24,
+      }),
+    });
+    // The most-recent update payload was the listing one; assert the auction reset payload was
+    // captured at the right step by checking the auction return data above.
+    expect(lastUpdatePayload).toMatchObject({ status: 'ACTIVE' });
+  });
+
+  it('restarts a CANCELLED auction (same path)', async () => {
+    enqueue('auctions', () => ({ data: { id: 'a-1', status: 'CANCELLED', listing_id: 'L-1', starting_price_cents: 1000 }, error: null }));
+    enqueue('settlements', () => ({ data: [], error: null }));
+    enqueue('auctions', () => ({
+      data: { id: 'a-1', status: 'ACTIVE', current_price_cents: 1000 },
+      error: null,
+    }));
+    enqueue('bids', () => ({ data: null, error: null }));
+    enqueue('listings', () => ({ data: { id: 'L-1', status: 'ACTIVE' }, error: null }));
+
+    const res = makeRes();
+    await restartAuction(
+      makeReq({ body: { reason: 'wrongly cancelled', durationHours: 48 } }) as Request & { requestId: string },
+      res,
+    );
+    expect(res._status).toBeUndefined();
+    expect(res._json).toMatchObject({ success: true });
   });
 });

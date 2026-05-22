@@ -326,6 +326,18 @@ export const adminApi = {
     });
   },
 
+  /**
+   * POST /admin/auctions/:id/restart — hard restart of an ENDED or CANCELLED auction.
+   * Wipes bids, resets current_price to starting_price, status → ACTIVE, listing → ACTIVE.
+   * Allowed durationHours: 1..720.
+   */
+  restartAuction(id: string, reason: string, durationHours: number): Promise<AdminAuctionActionResponse> {
+    return adminFetch<AdminAuctionActionResponse>(`/auctions/${id}/restart`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, durationHours }),
+    });
+  },
+
   /** POST /admin/auctions/:id/settle — force-settle ENDED auction (delegates to Edge Function). */
   triggerSettle(id: string): Promise<AdminAuctionActionResponse> {
     return adminFetch<AdminAuctionActionResponse>(`/auctions/${id}/settle`, {
