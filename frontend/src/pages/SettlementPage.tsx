@@ -4,6 +4,8 @@ import { api } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { CountdownTimer } from '@/features/auctions/components/CountdownTimer';
+import { Modal } from '@/components/common/Modal';
+import { PaymentForm } from '@/components/PaymentForm';
 import type { Settlement } from '@/features/auctions/types/settlement';
 import toast from 'react-hot-toast';
 
@@ -45,12 +47,13 @@ function BuyerView({
   const [disputeReason, setDisputeReason] = useState('');
   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
   const [confirmingDelivery, setConfirmingDelivery] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
 
-  const SUPABASE_FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_URL
-    ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
-    : null;
-
-  const canPay = !!SUPABASE_FUNCTIONS_URL && settlement.status === 'PENDING_PAYMENT';
+  const hasPaymentConfig =
+    !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+  const listingId = settlement.auction?.listing_id ?? null;
+  const canPay =
+    hasPaymentConfig && settlement.status === 'PENDING_PAYMENT' && !!listingId;
   const deliveryConfirmed = !!settlement.delivery_confirmed_at;
 
   const handleOpenDispute = async () => {
@@ -120,14 +123,11 @@ function BuyerView({
 
       <div className="glass rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-white mb-4">Payment</h2>
-        {canPay ? (
+        {canPay && listingId ? (
           <div className="space-y-3">
             <button
               className="w-full bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-500 hover:to-blue-400 text-white font-semibold py-3 px-6 rounded-xl transition-all"
-              onClick={() => {
-                // TODO: Initiate process-payment Edge Function call
-                alert('Payment flow — connect to process-payment Edge Function when API keys are configured.');
-              }}
+              onClick={() => setPaymentOpen(true)}
             >
               Pay Now — {centsToDisplay(settlement.gross_amount_cents, currency)}
             </button>
@@ -141,6 +141,27 @@ function BuyerView({
           </div>
         )}
       </div>
+
+      {canPay && listingId && (
+        <Modal
+          isOpen={paymentOpen}
+          onClose={() => setPaymentOpen(false)}
+          title={`Pay ${centsToDisplay(settlement.gross_amount_cents, currency)}`}
+        >
+          <PaymentForm
+            amountCents={settlement.gross_amount_cents}
+            currency={currency}
+            listingId={listingId}
+            onSuccess={() => {
+              setPaymentOpen(false);
+              toast.success('Payment received — awaiting escrow confirmation.');
+              // Realtime subscription on settlements table will push the
+              // PENDING_PAYMENT → ESCROW_HOLD transition once the Stripe webhook fires.
+            }}
+            onCancel={() => setPaymentOpen(false)}
+          />
+        </Modal>
+      )}
 
       {settlement.status === 'ESCROW_HOLD' && (
         <>

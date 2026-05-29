@@ -77,7 +77,7 @@ fi
 
 # Persist for the EXIT trap function (must outlive script return)
 _op_amcode_account="$_op_account"
-_op_amcode_github_ref='op://AM_Development/qvtkkfrb5f7zfdpmnsiqpjqcju/private key?ssh-format=openssh'
+_op_amcode_github_ref='op://AM_Development/GitHub_AM/private key?ssh-format=openssh'
 
 # Re-source safety: kill any agent we previously spawned in this shell
 if [[ -n "${SSH_AGENT_PID:-}" ]] && kill -0 "$SSH_AGENT_PID" 2>/dev/null; then

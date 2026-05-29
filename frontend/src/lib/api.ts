@@ -173,6 +173,55 @@ export const api = {
     return json.data;
   },
 
+  /**
+   * Charge the buyer via the process-payment Supabase Edge Function.
+   * The frontend tokenizes via Stripe Elements (returning a `pm_xxx`); the Edge Function
+   * creates+confirms the PaymentIntent server-side with `automatic_payment_methods.allow_redirects: 'never'`.
+   * On `payment_intent.succeeded`, the payment-webhook drives settlement → ESCROW_HOLD.
+   */
+  async processPayment(input: {
+    amountCents: number;
+    currency: string;
+    paymentMethodId: string;
+    listingId: string;
+  }): Promise<{ success: true; transactionId: string; processor: string }> {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !anonKey) {
+      throw new Error('Supabase config missing — cannot reach process-payment Edge Function');
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/process-payment`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: anonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: input.amountCents,
+        currency: input.currency,
+        paymentMethod: { type: 'CARD', paymentMethodId: input.paymentMethodId },
+        metadata: { listingId: input.listingId },
+      }),
+    });
+
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || !json.success) {
+      const msg =
+        (json as { error?: string; errorMessage?: string }).error ??
+        (json as { errorMessage?: string }).errorMessage ??
+        `Payment failed (${response.status})`;
+      throw new Error(msg);
+    }
+    return json;
+  },
+
   async createVerification(listingId: string): Promise<Verification> {
     const headers = await getAuthHeader();
     const response = await fetch(`${API_URL}/verifications/create`, {
