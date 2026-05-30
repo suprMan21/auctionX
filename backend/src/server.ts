@@ -19,6 +19,8 @@ import messageRoutes from './routes/messages';
 import notificationRoutes from './routes/notifications';
 import stripeConnectRoutes from './routes/stripeConnect';
 import stripeAccountWebhookRoutes from './routes/stripeAccountWebhook';
+import yotiVerificationRoutes from './routes/yotiVerification';
+import yotiWebhookRoutes from './routes/yotiWebhook';
 
 dotenv.config();
 
@@ -40,6 +42,14 @@ app.use(
   stripeAccountWebhookRoutes,
 );
 
+// Yoti webhook — same raw-body pattern. Same reason: HMAC verification needs
+// the unparsed bytes.
+app.use(
+  '/api/v1/webhooks/yoti',
+  express.raw({ type: 'application/json' }),
+  yotiWebhookRoutes,
+);
+
 app.use(express.json());
 
 app.use('/api/v1', healthRoutes);
@@ -55,6 +65,7 @@ app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/verifications', verificationRoutes);
 app.use('/api/v1/verify', publicVerificationRoutes);
 app.use('/api/v1/seller-verification', sellerVerificationRoutes);
+app.use('/api/v1/verification', yotiVerificationRoutes);
 app.use('/api/v1/nfc', nfcRoutes);
 app.use('/api/v1/conversations', messageRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
