@@ -8,6 +8,7 @@ import adminAuctionsRouter from './auctions';
 import disputesRouter from './disputes';
 import escrowRouter from './escrow';
 import sellerVerificationRouter from './sellerVerification';
+import yotiVerificationsRouter from './verifications';
 import healthRouter from './health';
 
 const router = Router();
@@ -27,5 +28,6 @@ router.use('/auctions', adminAuctionsRouter);
 router.use('/disputes', disputesRouter);
 router.use('/escrow', escrowRouter);
 router.use('/seller-verification', sellerVerificationRouter);
+router.use('/verifications', yotiVerificationsRouter);
 
 export default router;
