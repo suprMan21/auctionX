@@ -31,6 +31,7 @@ import {
   type YotiSessionPurpose,
   type YotiWebhookEnvelope,
 } from '../lib/yoti';
+import { notificationService } from '../lib/notifications/notificationService';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -372,14 +373,26 @@ export const applyYotiWebhookEnvelope = async (
     ageVerified: userPatch.age_verified ?? null,
   });
 
-  // S23 wires real Postmark — for now stub the calls with TODOs so they're
-  // discoverable when S23 lands.
+  // Post-state-transition notifications (S23). notificationService is
+  // preference-aware, idempotent at the persistence layer, and never throws —
+  // safe to fire-and-await here without wrapping in try/catch.
   if (userStatusOverride === 'VERIFIED') {
-    // TODO(S23): wire postmark.send('seller_verification_approved', { userId })
-    logger.info('postmark_stub_seller_verification_approved', { userId });
+    await notificationService.send(supabase, {
+      userId,
+      type: 'SELLER_VERIFICATION_APPROVED',
+      title: 'Your seller verification is approved',
+      body: 'Your identity check came back clean — seller tools are unlocked on your account.',
+    });
   } else if (userStatusOverride === 'REJECTED') {
-    // TODO(S23): wire postmark.send('seller_verification_rejected', { userId, rejectionReason })
-    logger.info('postmark_stub_seller_verification_rejected', { userId });
+    await notificationService.send(supabase, {
+      userId,
+      type: 'SELLER_VERIFICATION_REJECTED',
+      title: 'Action needed: seller verification could not be completed',
+      body: rejectionReason
+        ? `We weren't able to verify your identity. Reason: ${rejectionReason}.`
+        : "We weren't able to verify your identity. You can retry from your account settings.",
+      metadata: rejectionReason ? { rejectionReason } : undefined,
+    });
   }
 
   return { applied: true };

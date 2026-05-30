@@ -211,3 +211,43 @@ export function disputeOpenedEmail(opts: {
     `),
   };
 }
+
+/** Notification: seller identity verification (Yoti) succeeded. */
+export function sellerVerificationApprovedEmail(opts: {
+  username?: string | null;
+  dashboardUrl: string;
+}): { subject: string; html: string } {
+  const greeting = opts.username ? `Hi ${opts.username},` : 'Hi there,';
+  return {
+    subject: `Your seller verification is approved`,
+    html: wrap('Seller Verification Approved', `
+      <h2 style="font-size:20px;margin:24px 0 8px;">You're verified — welcome aboard.</h2>
+      <p style="color:#9ca3af;margin:0 0 12px;">${greeting}</p>
+      <p style="color:#9ca3af;margin:0 0 16px;">Your identity check came back clean. Seller tools are now unlocked on your account — you can list items, accept bids, and receive payouts.</p>
+      ${btn(opts.dashboardUrl, 'Open Seller Dashboard')}
+    `),
+  };
+}
+
+/** Notification: seller identity verification (Yoti) was rejected. */
+export function sellerVerificationRejectedEmail(opts: {
+  username?: string | null;
+  rejectionReason?: string | null;
+  supportUrl: string;
+}): { subject: string; html: string } {
+  const greeting = opts.username ? `Hi ${opts.username},` : 'Hi there,';
+  const reasonBlock = opts.rejectionReason
+    ? `<p style="color:#9ca3af;margin:0 0 4px;">Reason: <strong style="color:#e5e7eb;">${opts.rejectionReason}</strong></p>`
+    : '';
+  return {
+    subject: `Action needed: seller verification could not be completed`,
+    html: wrap('Seller Verification — Action Needed', `
+      <h2 style="font-size:20px;margin:24px 0 8px;">We weren't able to verify your identity.</h2>
+      <p style="color:#9ca3af;margin:0 0 12px;">${greeting}</p>
+      <p style="color:#9ca3af;margin:0 0 16px;">Our identity provider could not complete the check. This is usually a document-quality issue (blurry image, glare, expired ID) and is fixable on a retry.</p>
+      ${reasonBlock}
+      <p style="color:#9ca3af;margin:16px 0;">If you believe this was an error, our support team can review your case.</p>
+      ${btn(opts.supportUrl, 'Contact Support')}
+    `),
+  };
+}

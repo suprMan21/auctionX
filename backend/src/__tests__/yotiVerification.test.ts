@@ -171,6 +171,21 @@ vi.mock('../lib/logger', () => ({
   withLogContext: () => ({ debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }),
 }));
 
+// Spy on notificationService.send so applyYotiWebhookEnvelope's post-transition
+// emails are observable and don't try to read notification_preferences/users
+// from the supabase mock (which is pre-loaded for the state-machine path only).
+// vi.hoisted so the spies are visible to both the vi.mock factory and the specs.
+const { notificationSendSpy, notificationSendBatchSpy } = vi.hoisted(() => ({
+  notificationSendSpy: vi.fn().mockResolvedValue(undefined),
+  notificationSendBatchSpy: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../lib/notifications/notificationService', () => ({
+  notificationService: {
+    send: (...args: unknown[]) => notificationSendSpy(...args),
+    sendBatch: (...args: unknown[]) => notificationSendBatchSpy(...args),
+  },
+}));
+
 process.env['SUPABASE_URL'] = 'http://localhost:54321';
 process.env['SUPABASE_SERVICE_ROLE_KEY'] = 'test-service-role-key';
 process.env['NODE_ENV'] = 'test';
@@ -227,6 +242,8 @@ beforeEach(() => {
   yotiSdkMock.lastGetSessionId = null;
   yotiSdkMock.createSessionResult = { sessionId: 'live_sess_abc', sessionToken: 'tok_live_abc' };
   yotiSdkMock.getSessionResult = { sessionId: 'live_sess_abc', state: 'ONGOING' };
+  notificationSendSpy.mockClear();
+  notificationSendBatchSpy.mockClear();
   delete process.env.FEATURE_YOTI_ENABLED;
 });
 
@@ -556,6 +573,69 @@ describe('applyYotiWebhookEnvelope — rejection path', () => {
       seller_verification_status: 'REJECTED',
       seller_verification_rejection_reason: 'document_unreadable',
     });
+  });
+});
+
+describe('applyYotiWebhookEnvelope — post-transition notifications (S23)', () => {
+  it('fires SELLER_VERIFICATION_APPROVED notification on VERIFIED transition', async () => {
+    enqueue('yoti_sessions', () => ({
+      data: { id: 's-1', user_id: 'user-1', last_event_type: 'session.created', status: 'created', purpose: 'both' },
+      error: null,
+    }));
+    enqueue('yoti_sessions', () => ({ data: null, error: null }));
+    enqueue('users', () => ({ data: null, error: null }));
+
+    const payload: YotiWebhookEnvelope = {
+      event_type: 'session.completed',
+      session_id: 'mock_sess_abc',
+      outcome: 'completed_verified',
+      age_estimate: 30,
+    };
+    await applyYotiWebhookEnvelope(payload);
+    expect(notificationSendSpy).toHaveBeenCalledTimes(1);
+    const [, sentPayload] = notificationSendSpy.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(sentPayload).toMatchObject({
+      userId: 'user-1',
+      type: 'SELLER_VERIFICATION_APPROVED',
+    });
+  });
+
+  it('fires SELLER_VERIFICATION_REJECTED with rejection_reason in metadata', async () => {
+    enqueue('yoti_sessions', () => ({
+      data: { id: 's-1', user_id: 'user-1', last_event_type: 'session.in_progress', status: 'in_progress', purpose: 'seller_kyc' },
+      error: null,
+    }));
+    enqueue('yoti_sessions', () => ({ data: null, error: null }));
+    enqueue('users', () => ({ data: null, error: null }));
+
+    const payload: YotiWebhookEnvelope = {
+      event_type: 'session.completed',
+      session_id: 'mock_sess_abc',
+      outcome: 'completed_rejected',
+      rejection_reason: 'document_unreadable',
+    };
+    await applyYotiWebhookEnvelope(payload);
+    expect(notificationSendSpy).toHaveBeenCalledTimes(1);
+    const [, sentPayload] = notificationSendSpy.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(sentPayload).toMatchObject({
+      userId: 'user-1',
+      type: 'SELLER_VERIFICATION_REJECTED',
+      metadata: { rejectionReason: 'document_unreadable' },
+    });
+  });
+
+  it('does not fire any notification on a duplicate event (idempotency short-circuit)', async () => {
+    enqueue('yoti_sessions', () => ({
+      data: { id: 's-1', user_id: 'user-1', last_event_type: 'session.completed', status: 'completed', purpose: 'seller_kyc' },
+      error: null,
+    }));
+    const payload: YotiWebhookEnvelope = {
+      event_type: 'session.completed',
+      session_id: 'mock_sess_abc',
+      outcome: 'completed_verified',
+    };
+    await applyYotiWebhookEnvelope(payload);
+    expect(notificationSendSpy).not.toHaveBeenCalled();
   });
 });
 

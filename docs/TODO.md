@@ -30,9 +30,7 @@ This file tracks **live, actionable items only**. Full per-session history is in
 
 ## 🟡 NEXT SESSIONS (ready to plan)
 
-- [ ] **S23 — Postmark / SMTP** — fully unblocked, parallel-wave with S22 per Roadmap v3. Replaces `// TODO(S23): wire postmark.send(...)` stubs in `applyYotiWebhookEnvelope` + Supabase SMTP config. No brief yet — flag when ready.
-
-- [ ] **S22.5 — Yoti live wiring** — closer now (sandbox creds populated 2026-05-30). Remaining gate: Yoti business-account verification. Scope: drop 2 `NotImplementedError` throws in `LiveYotiClient` + wire `@getyoti/sdk-node` + register webhook URL in Yoti dashboard + flip `Features` flag values + App Runner env rotation + sandbox E2E.
+- [ ] **S23 — Postmark / SMTP** — in progress (started 2026-05-30, immediately after S22.5 shipped). Wire `TODO(S23)` stubs in `backend/src/controllers/yotiVerificationController.ts:378,381`, sweep other unwired notification call sites, populate Postmark env on App Runner staging, DKIM-verify sender domain, vitest coverage for the new send paths.
 
 - [ ] **Unmentionables-frontend scaffold** — Feature Backlog entry. Per 2026-05-29 Locked decision: separate Vite + S3 + CloudFront + domain; shared backend. Blocks any Unmentionables UI work (age-gate, NSFW browse).
 

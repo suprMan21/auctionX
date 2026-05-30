@@ -21,6 +21,10 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { sendEmail } from './emailSender';
+import {
+  sellerVerificationApprovedEmail,
+  sellerVerificationRejectedEmail,
+} from './emailTemplates';
 
 /** Shape of a notification to deliver. */
 export interface NotificationPayload {
@@ -37,16 +41,18 @@ export interface NotificationPayload {
  * Types not listed here are treated as always-enabled.
  */
 const PREF_COLUMN_MAP: Record<string, string> = {
-  AUCTION_WON:              'auction_won',
-  AUCTION_OUTBID:           'auction_outbid',
-  PAYMENT_RECEIVED:         'payment_received',
-  PAYOUT_COMPLETED:         'payout_completed',
-  ESCROW_RELEASED:          'escrow_released',
-  MESSAGE_RECEIVED:         'message_received',
-  ITEM_SCANNED:             'item_scanned',
-  SETTLEMENT_CASCADE:       'settlement_cascade',
-  PAYMENT_WINDOW_EXPIRING:  'payment_window_expiring',
-  DISPUTE_OPENED:           'dispute_opened',
+  AUCTION_WON:                    'auction_won',
+  AUCTION_OUTBID:                 'auction_outbid',
+  PAYMENT_RECEIVED:               'payment_received',
+  PAYOUT_COMPLETED:               'payout_completed',
+  ESCROW_RELEASED:                'escrow_released',
+  MESSAGE_RECEIVED:               'message_received',
+  ITEM_SCANNED:                   'item_scanned',
+  SETTLEMENT_CASCADE:             'settlement_cascade',
+  PAYMENT_WINDOW_EXPIRING:        'payment_window_expiring',
+  DISPUTE_OPENED:                 'dispute_opened',
+  SELLER_VERIFICATION_APPROVED:   'seller_verification_approved',
+  SELLER_VERIFICATION_REJECTED:   'seller_verification_rejected',
 };
 
 type PrefsRow = Record<string, boolean | string | null>;
@@ -100,6 +106,42 @@ function isEnabled(prefs: PrefsRow, channel: 'in_app' | 'email', type: string): 
   return prefs[typeKey] !== false;
 }
 
+// Frontend base for action URLs in dedicated templates; mirrors emailTemplates' wrap().
+const frontendBaseUrl = (): string => process.env.FRONTEND_URL || 'http://localhost:5173';
+
+// Dispatch a NotificationPayload to its rich HTML template if one exists; fall
+// back to the generic inline body for types that don't have a dedicated template.
+function renderEmail(
+  payload: NotificationPayload,
+  username: string | null,
+): { subject: string; html: string } {
+  switch (payload.type) {
+    case 'SELLER_VERIFICATION_APPROVED':
+      return sellerVerificationApprovedEmail({
+        username,
+        dashboardUrl: payload.actionUrl ?? `${frontendBaseUrl()}/seller`,
+      });
+    case 'SELLER_VERIFICATION_REJECTED': {
+      const rejectionReason =
+        typeof payload.metadata?.rejectionReason === 'string'
+          ? (payload.metadata.rejectionReason as string)
+          : null;
+      return sellerVerificationRejectedEmail({
+        username,
+        rejectionReason,
+        supportUrl: payload.actionUrl ?? `${frontendBaseUrl()}/support`,
+      });
+    }
+    default:
+      return {
+        subject: payload.title,
+        html: `<p>${payload.body}</p>${payload.actionUrl
+          ? `<p><a href="${payload.actionUrl}">View details</a></p>`
+          : ''}`,
+      };
+  }
+}
+
 class NotificationService {
   /**
    * Send a single notification to one user.
@@ -131,21 +173,22 @@ class NotificationService {
 
       // ── Email notification ───────────────────────────────────────────────
       if (isEnabled(prefs, 'email', payload.type)) {
-        // Fetch user's email
+        // Fetch user's email + username (username feeds richly-templated types
+        // like SELLER_VERIFICATION_*; safe to read for any type — single round-trip).
         const { data: user } = await supabase
           .from('users')
-          .select('email')
+          .select('email, username')
           .eq('id', payload.userId)
           .maybeSingle();
 
-        const userEmail = (user as { email?: string } | null)?.email;
+        const userRow = user as { email?: string; username?: string | null } | null;
+        const userEmail = userRow?.email;
         if (userEmail) {
+          const rendered = renderEmail(payload, userRow?.username ?? null);
           await sendEmail({
             to: userEmail,
-            subject: payload.title,
-            html: `<p>${payload.body}</p>${payload.actionUrl
-              ? `<p><a href="${payload.actionUrl}">View details</a></p>`
-              : ''}`,
+            subject: rendered.subject,
+            html: rendered.html,
           }).catch((err: unknown) => {
             console.error('[notificationService] email send error:', err);
           });
