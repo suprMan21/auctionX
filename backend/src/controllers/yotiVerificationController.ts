@@ -47,19 +47,12 @@ const startSchema = z.object({
   return_url: z.string().url().optional(),
 });
 
-const webhookSchema = z.object({
-  event_type: z.enum([
-    'session.created',
-    'session.in_progress',
-    'session.completed',
-    'session.failed',
-    'session.expired',
-  ]),
+// Raw payload Yoti IDV POSTs to our webhook endpoint — just session_id + topic.
+// The webhook handler resolves the topic into a YotiWebhookEnvelope (and calls
+// yotiClient.getSession on SESSION_COMPLETION to read the actual outcome).
+const notificationSchema = z.object({
   session_id: z.string().min(1),
-  outcome: z.enum(['completed_verified', 'completed_rejected']).nullish(),
-  age_estimate: z.number().int().min(0).max(120).nullish(),
-  rejection_reason: z.string().nullish(),
-  occurred_at: z.number().int().nonnegative().optional(),
+  topic: z.enum(['session_completion', 'check_completion', 'task_completion', 'resource_update']),
 });
 
 const formatError = (res: Response, error: unknown, fallback: string, requestId: string) => {
@@ -393,39 +386,54 @@ export const applyYotiWebhookEnvelope = async (
 };
 
 /**
+ * Map a Yoti notification topic to our internal event_type. Only
+ * SESSION_COMPLETION carries enough signal to drive a final state transition;
+ * other topics get treated as in-progress noise and acknowledged without DB
+ * writes (S22.6 can wire CHECK_COMPLETION → progress updates if useful).
+ */
+const TOPIC_TO_EVENT: Record<string, 'session.completed' | 'session.in_progress'> = {
+  session_completion: 'session.completed',
+  check_completion: 'session.in_progress',
+  task_completion: 'session.in_progress',
+  resource_update: 'session.in_progress',
+};
+
+/**
  * POST /api/v1/webhooks/yoti
- * Raw-body route. Reject 401 on signature failure. Always return JSON.
+ *
+ * Raw-body route. Yoti IDV POSTs `{ session_id, topic }` with
+ * `Authorization: Bearer <YOTI_WEBHOOK_SECRET>`. Reject 401 on bad token,
+ * 400 on bad shape. On SESSION_COMPLETION we call `yoti.getSession()` to
+ * read the actual outcome + rejection reason, then run it through the
+ * existing state machine.
  */
 export const yotiWebhook = async (req: AuthRequest & RequestWithId, res: Response) => {
   const logger = withLogContext({ requestId: req.requestId, route: '/api/v1/webhooks/yoti' });
   try {
     const yoti = getYotiClient();
-    const signature = (req.headers['x-yoti-hmac'] as string | undefined)
-      || (req.headers['x-yoti-signature'] as string | undefined);
+    const authHeader = req.headers['authorization'] as string | undefined;
     const rawBody = req.body as Buffer | undefined;
     if (!rawBody || !Buffer.isBuffer(rawBody)) {
-      // express.raw() should always give us a Buffer; if not, something is
-      // mounted wrong upstream.
       logger.error('yoti_webhook_missing_raw_body');
       return res.status(400).json({ success: false, error: { code: 'invalid_argument', message: 'Missing raw body', requestId: req.requestId } });
     }
 
     let verified;
     try {
-      verified = yoti.verifyWebhookSignature(rawBody, signature);
+      verified = yoti.verifyWebhookAuth(rawBody, authHeader);
     } catch (err) {
-      logger.warn('yoti_webhook_signature_invalid', { err: err instanceof Error ? err.message : String(err) });
+      logger.warn('yoti_webhook_auth_invalid', { err: err instanceof Error ? err.message : String(err) });
       return res.status(401).json({
         success: false,
         error: {
-          code: 'YOTI_WEBHOOK_SIGNATURE_INVALID',
-          message: 'Invalid webhook signature',
+          code: 'YOTI_WEBHOOK_AUTH_INVALID',
+          message: 'Invalid webhook token',
           requestId: req.requestId,
         },
       });
     }
 
-    const parsed = webhookSchema.safeParse(verified.payload);
+    const parsed = notificationSchema.safeParse(verified.payload);
     if (!parsed.success) {
       logger.warn('yoti_webhook_payload_invalid', { issues: parsed.error.issues });
       return res.status(400).json({
@@ -434,11 +442,43 @@ export const yotiWebhook = async (req: AuthRequest & RequestWithId, res: Respons
       });
     }
 
-    const result = await applyYotiWebhookEnvelope(parsed.data as YotiWebhookEnvelope, {
+    const { session_id, topic } = parsed.data;
+    const eventType = TOPIC_TO_EVENT[topic];
+
+    // For SESSION_COMPLETION, call getSession to read the actual outcome —
+    // the notification itself doesn't carry it. For in-progress topics, we
+    // ack without DB writes.
+    let envelope: YotiWebhookEnvelope;
+    if (eventType === 'session.completed') {
+      let detail;
+      try {
+        detail = await yoti.getSession(session_id);
+      } catch (err) {
+        logger.error('yoti_webhook_get_session_failed', {
+          sessionId: session_id,
+          err: err instanceof Error ? err.message : String(err),
+        });
+        throw new AppError('internal', 'YOTI_SESSION_READ_FAILED');
+      }
+      envelope = {
+        event_type: 'session.completed',
+        session_id,
+        outcome: detail.outcome,
+        age_estimate: detail.ageEstimate,
+        rejection_reason: detail.rejectionReason,
+      };
+    } else {
+      envelope = {
+        event_type: eventType,
+        session_id,
+      };
+    }
+
+    const result = await applyYotiWebhookEnvelope(envelope, {
       requestId: req.requestId,
     });
 
-    return res.json({ success: true, data: { received: true, ...result } });
+    return res.json({ success: true, data: { received: true, topic, ...result } });
   } catch (error) {
     return formatError(res, error, 'Failed to process Yoti webhook', req.requestId);
   }

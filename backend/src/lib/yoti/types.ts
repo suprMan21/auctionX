@@ -41,7 +41,15 @@ export interface YotiSessionDetail {
   rejectionReason: string | null;
 }
 
-/** Verified webhook envelope (after HMAC). Subset of Yoti's actual webhook payload. */
+/**
+ * Internal envelope shape used by the state machine in
+ * `applyYotiWebhookEnvelope`. NOT the raw shape Yoti sends — Yoti IDV
+ * webhooks deliver only `{ session_id, topic }`. The webhook handler calls
+ * `yotiClient.getSession(session_id)` on `SESSION_COMPLETION` to read the
+ * actual outcome + checks, then synthesizes this envelope before running it
+ * through the state machine. Pre-S22.5 MockYotiClient tests also build this
+ * shape directly (no network).
+ */
 export interface YotiWebhookEnvelope {
   event_type: YotiEventType;
   session_id: string;
@@ -52,9 +60,21 @@ export interface YotiWebhookEnvelope {
   occurred_at?: number;
 }
 
-/** Result of `verifyWebhookSignature`. */
+/** Raw payload Yoti IDV POSTs to our webhook endpoint. */
+export type YotiNotificationTopic =
+  | 'session_completion'
+  | 'check_completion'
+  | 'task_completion'
+  | 'resource_update';
+
+export interface YotiNotificationPayload {
+  session_id: string;
+  topic: YotiNotificationTopic;
+}
+
+/** Result of `verifyWebhookAuth`. */
 export interface VerifiedWebhook {
-  payload: YotiWebhookEnvelope;
+  payload: YotiNotificationPayload;
 }
 
 /** Minimum age (years) required for age-gate verification. Boss-locked. */

@@ -15,7 +15,6 @@
  *  - admin override writes seller_verification_reviews row + flips user status
  */
 
-import crypto from 'node:crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
 
@@ -118,6 +117,14 @@ vi.mock('yoti', () => {
     builder.withSuccessUrl = (u: unknown) => { state.successUrl = u; return builder; };
     builder.withErrorUrl = (u: unknown) => { state.errorUrl = u; return builder; };
     builder.forStaticLiveness = () => { state.staticLiveness = true; return builder; };
+    builder.withNotifications = (n: unknown) => { state.notifications = n; return builder; };
+    builder.withEndpoint = (u: unknown) => { state.endpoint = u; return builder; };
+    builder.withAuthTypeBearer = () => { state.authType = 'BEARER'; return builder; };
+    builder.withAuthToken = (t: unknown) => { state.authToken = t; return builder; };
+    builder.forSessionCompletion = () => {
+      state.topics = ((state.topics as unknown[]) ?? []).concat('SESSION_COMPLETION');
+      return builder;
+    };
     builder.build = () => ({ ...state });
     return builder;
   };
@@ -152,6 +159,7 @@ vi.mock('yoti', () => {
     RequestedDocumentAuthenticityCheckBuilder: builderClass({ kind: 'doc_authenticity' }),
     RequestedFaceMatchCheckBuilder: builderClass({ kind: 'face_match' }),
     RequestedLivenessCheckBuilder: builderClass({ kind: 'liveness' }),
+    NotificationConfigBuilder: builderClass({ kind: 'notifications' }),
   };
 });
 
@@ -173,6 +181,7 @@ import {
 } from '../controllers/yotiVerificationController';
 import { overrideVerification } from '../controllers/adminYotiVerificationController';
 import {
+  getYotiClient,
   LiveYotiClient,
   MockYotiClient,
   __resetYotiSdkCache,
@@ -224,12 +233,16 @@ describe('LiveYotiClient', () => {
     YOTI_SDK_ID: 'sandbox-sdk-id',
     YOTI_PEM_KEY: '-----BEGIN PRIVATE KEY-----\nMIITESTKEY\n-----END PRIVATE KEY-----',
     YOTI_BASE_URL: 'https://api.yoti.com/idverify/v1',
+    YOTI_WEBHOOK_URL: 'https://staging.test/api/v1/webhooks/yoti',
+    YOTI_WEBHOOK_SECRET: 'live-yoti-test-webhook-secret',
   } as const;
   const setLiveEnv = () => Object.assign(process.env, LIVE_ENV);
   const clearLiveEnv = () => {
     delete process.env.YOTI_SDK_ID;
     delete process.env.YOTI_PEM_KEY;
     delete process.env.YOTI_BASE_URL;
+    delete process.env.YOTI_WEBHOOK_URL;
+    delete process.env.YOTI_WEBHOOK_SECRET;
   };
 
   it('createSession returns { sessionId, sessionUrl } and routes through the Yoti SDK builders', async () => {
@@ -318,43 +331,42 @@ describe('LiveYotiClient', () => {
     }
   });
 
-  describe('verifyWebhookSignature (wired 2026-05-30)', () => {
+  describe('verifyWebhookAuth (Bearer, wired S22.5)', () => {
     const TEST_SECRET = 'live-yoti-test-webhook-secret';
 
-    it('accepts a valid HMAC-SHA256 signed against YOTI_WEBHOOK_SECRET', () => {
+    it('accepts a valid Bearer token matching YOTI_WEBHOOK_SECRET', () => {
       process.env.YOTI_WEBHOOK_SECRET = TEST_SECRET;
       try {
         const c = new LiveYotiClient();
         const body = Buffer.from(
-          JSON.stringify({ event_type: 'session.completed', session_id: 'sess_live_1' }),
+          JSON.stringify({ session_id: 'sess_live_1', topic: 'session_completion' }),
         );
-        const sig = crypto.createHmac('sha256', TEST_SECRET).update(body).digest('hex');
-        const verified = c.verifyWebhookSignature(body, sig);
+        const verified = c.verifyWebhookAuth(body, `Bearer ${TEST_SECRET}`);
         expect(verified.payload.session_id).toBe('sess_live_1');
-        expect(verified.payload.event_type).toBe('session.completed');
+        expect(verified.payload.topic).toBe('session_completion');
       } finally {
         delete process.env.YOTI_WEBHOOK_SECRET;
       }
     });
 
-    it('throws unauthenticated AppError on bad signature', () => {
+    it('throws unauthenticated AppError on bad Bearer token', () => {
       process.env.YOTI_WEBHOOK_SECRET = TEST_SECRET;
       try {
         const c = new LiveYotiClient();
         expect(() =>
-          c.verifyWebhookSignature(Buffer.from('{"x":1}'), 'deadbeef'.repeat(8)),
-        ).toThrow(/Invalid webhook signature/);
+          c.verifyWebhookAuth(Buffer.from('{"x":1}'), 'Bearer wrong-token-value-here'),
+        ).toThrow(/Invalid webhook token/);
       } finally {
         delete process.env.YOTI_WEBHOOK_SECRET;
       }
     });
 
-    it('throws unauthenticated AppError on missing signature header', () => {
+    it('throws unauthenticated AppError on missing Authorization header', () => {
       process.env.YOTI_WEBHOOK_SECRET = TEST_SECRET;
       try {
         const c = new LiveYotiClient();
-        expect(() => c.verifyWebhookSignature(Buffer.from('{}'), undefined)).toThrow(
-          /Missing webhook signature/,
+        expect(() => c.verifyWebhookAuth(Buffer.from('{}'), undefined)).toThrow(
+          /Missing Authorization header/,
         );
       } finally {
         delete process.env.YOTI_WEBHOOK_SECRET;
@@ -364,7 +376,7 @@ describe('LiveYotiClient', () => {
     it('throws config Error (not auth) when YOTI_WEBHOOK_SECRET is unset', () => {
       delete process.env.YOTI_WEBHOOK_SECRET;
       const c = new LiveYotiClient();
-      expect(() => c.verifyWebhookSignature(Buffer.from('{}'), 'sig')).toThrow(
+      expect(() => c.verifyWebhookAuth(Buffer.from('{}'), 'Bearer x')).toThrow(
         /YOTI_WEBHOOK_SECRET is not set/,
       );
     });
@@ -578,32 +590,36 @@ describe('applyYotiWebhookEnvelope — idempotency', () => {
   });
 });
 
-// ── HMAC failure (route-level) ────────────────────────────────────────────────
-describe('yotiWebhook — HMAC verification', () => {
-  it('returns 401 + YOTI_WEBHOOK_SIGNATURE_INVALID on bad signature', async () => {
-    const body = Buffer.from(JSON.stringify({ event_type: 'session.completed', session_id: 'x' }));
+// ── Bearer auth + topic-based payload (route-level) ──────────────────────────
+describe('yotiWebhook — Bearer auth + IDV topic payload', () => {
+  it('returns 401 + YOTI_WEBHOOK_AUTH_INVALID on bad Bearer token', async () => {
+    const body = Buffer.from(JSON.stringify({ session_id: 'x', topic: 'session_completion' }));
     const req = makeReq({
       body,
-      headers: { 'x-yoti-hmac': 'wrong-signature' },
+      headers: { authorization: 'Bearer wrong-token' },
     }) as unknown as Request;
     const res = makeRes();
     await yotiWebhook(req as any, res);
     expect(res._status).toBe(401);
-    expect(res._json.error.code).toBe('YOTI_WEBHOOK_SIGNATURE_INVALID');
-    // No DB queries should have been made.
+    expect(res._json.error.code).toBe('YOTI_WEBHOOK_AUTH_INVALID');
     expect(insertPayloads.yoti_sessions).toBeUndefined();
     expect(updatePayloads.yoti_sessions).toBeUndefined();
   });
 
-  it('accepts a correctly-signed payload and applies the state machine', async () => {
-    const envelope: YotiWebhookEnvelope = {
-      event_type: 'session.completed',
-      session_id: 'mock_sess_signed',
+  it('accepts a SESSION_COMPLETION notification and bridges through getSession', async () => {
+    const body = Buffer.from(
+      JSON.stringify({ session_id: 'mock_sess_bridge', topic: 'session_completion' }),
+    );
+    // The bridge calls yoti.getSession on SESSION_COMPLETION. Seed the mock's
+    // in-memory session so getSession returns the verified outcome.
+    const mockClient = getYotiClient() as MockYotiClient;
+    mockClient.setSessionState('mock_sess_bridge', {
+      sessionId: 'mock_sess_bridge',
+      status: 'completed',
       outcome: 'completed_verified',
-      age_estimate: 30,
-    };
-    const body = Buffer.from(JSON.stringify(envelope));
-    const signature = MockYotiClient.signPayload(body);
+      ageEstimate: 30,
+      rejectionReason: null,
+    });
 
     enqueue('yoti_sessions', () => ({
       data: { id: 's-1', user_id: 'user-1', last_event_type: 'session.created', status: 'created', purpose: 'both' },
@@ -614,17 +630,47 @@ describe('yotiWebhook — HMAC verification', () => {
 
     const req = makeReq({
       body,
-      headers: { 'x-yoti-hmac': signature },
+      headers: { authorization: MockYotiClient.authHeader() },
     }) as unknown as Request;
     const res = makeRes();
     await yotiWebhook(req as any, res);
     expect(res._status).toBeUndefined();
     expect(res._json.success).toBe(true);
     expect(res._json.data.applied).toBe(true);
+    expect(res._json.data.topic).toBe('session_completion');
+    // State machine wrote VERIFIED + age_verified using values getSession returned.
+    expect(updatePayloads.users?.[0]).toMatchObject({
+      seller_verification_status: 'VERIFIED',
+      age_verified: true,
+      yoti_age_estimate: 30,
+    });
+  });
+
+  it('check_completion topic is treated as in-progress (no DB writes when already in_progress)', async () => {
+    const body = Buffer.from(
+      JSON.stringify({ session_id: 'mock_sess_progress', topic: 'check_completion' }),
+    );
+
+    // Seed an existing session row in the in_progress state with last_event_type
+    // = session.in_progress so the idempotency guard short-circuits.
+    enqueue('yoti_sessions', () => ({
+      data: { id: 's-1', user_id: 'user-1', last_event_type: 'session.in_progress', status: 'in_progress', purpose: 'seller_kyc' },
+      error: null,
+    }));
+
+    const req = makeReq({
+      body,
+      headers: { authorization: MockYotiClient.authHeader() },
+    }) as unknown as Request;
+    const res = makeRes();
+    await yotiWebhook(req as any, res);
+    expect(res._json.success).toBe(true);
+    expect(res._json.data.applied).toBe(false);
+    expect(res._json.data.reason).toBe('duplicate_event');
   });
 
   it('rejects 400 when raw body is missing', async () => {
-    const req = makeReq({ body: undefined as any, headers: { 'x-yoti-hmac': 'whatever' } }) as unknown as Request;
+    const req = makeReq({ body: undefined as any, headers: { authorization: 'Bearer whatever' } }) as unknown as Request;
     const res = makeRes();
     await yotiWebhook(req as any, res);
     expect(res._status).toBe(400);

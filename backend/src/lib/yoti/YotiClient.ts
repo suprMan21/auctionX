@@ -30,14 +30,16 @@ export interface YotiClient {
   getSession(sessionId: string): Promise<YotiSessionDetail>;
 
   /**
-   * Verify the HMAC signature on a webhook callback. MUST be called before
-   * trusting any field on the payload. Throws on bad signature.
+   * Verify the `Authorization: Bearer <token>` header on a Yoti IDV webhook
+   * callback against the configured shared secret. MUST be called before
+   * trusting any field on the payload. Throws on bad token.
    *
    * `rawBody` is the request body as a Buffer or string (Express `raw()` mounts
    * the route with `Content-Type: application/json`).
    *
-   * `signature` is the value of the `X-Yoti-Hmac` header (or current equivalent
-   * — confirm against Yoti docs at S22.5 wiring time).
+   * `authHeader` is the full value of the `Authorization` request header
+   * (`Bearer <token>`). The implementation strips the `Bearer ` prefix and
+   * does a constant-time compare against the secret.
    */
-  verifyWebhookSignature(rawBody: Buffer | string, signature: string | undefined): VerifiedWebhook;
+  verifyWebhookAuth(rawBody: Buffer | string, authHeader: string | undefined): VerifiedWebhook;
 }

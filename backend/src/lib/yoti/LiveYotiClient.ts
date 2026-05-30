@@ -6,9 +6,10 @@ import type {
   CreateSessionInput,
   CreateSessionResult,
   VerifiedWebhook,
+  YotiNotificationPayload,
+  YotiOutcome,
   YotiSessionDetail,
   YotiSessionStatus,
-  YotiWebhookEnvelope,
 } from './types';
 
 /**
@@ -34,7 +35,11 @@ import type {
 // resolves to `any` at the type level. The aliases let TS check call shapes
 // inside this file without us owning the SDK's full surface.
 type YotiSdkSession = { getSessionId(): string; getClientSessionToken(): string };
-type YotiSdkGetResult = { getSessionId(): string; getState(): string };
+type YotiSdkGetResult = {
+  getSessionId(): string;
+  getState(): string;
+  getChecks?: () => unknown[];
+};
 type YotiIDVClient = {
   createSession(spec: unknown): Promise<YotiSdkSession>;
   getSession(sessionId: string): Promise<YotiSdkGetResult>;
@@ -50,6 +55,7 @@ const sdk = yotiSdk as unknown as {
     withRequestedCheck(c: unknown): unknown;
     withSdkConfig(c: unknown): unknown;
     withRequiredDocument(d: unknown): unknown;
+    withNotifications(n: unknown): unknown;
     build(): unknown;
   };
   SdkConfigBuilder: new () => {
@@ -62,6 +68,22 @@ const sdk = yotiSdk as unknown as {
   RequestedDocumentAuthenticityCheckBuilder: new () => { build(): unknown };
   RequestedFaceMatchCheckBuilder: new () => { build(): unknown };
   RequestedLivenessCheckBuilder: new () => LivenessBuilder;
+  NotificationConfigBuilder: new () => {
+    withEndpoint(u: string): unknown;
+    withAuthTypeBearer(): unknown;
+    withAuthToken(t: string): unknown;
+    forSessionCompletion(): unknown;
+    build(): unknown;
+  };
+};
+
+// Minimal type for the Yoti GetSessionResult check entries — only the surface
+// we touch to derive outcome + rejection_reason.
+type YotiCheck = {
+  getType?: () => string;
+  getReport?: () => {
+    recommendation?: { value?: string; reason?: string } | null;
+  } | null;
 };
 
 const requireEnv = (name: string): string => {
@@ -102,8 +124,17 @@ export class LiveYotiClient implements YotiClient {
     const sdkId = requireEnv('YOTI_SDK_ID');
     const pemKey = decodePem(requireEnv('YOTI_PEM_KEY'));
     const baseUrl = requireEnv('YOTI_BASE_URL').replace(/\/+$/, '');
+    const webhookUrl = requireEnv('YOTI_WEBHOOK_URL');
+    const webhookSecret = requireEnv('YOTI_WEBHOOK_SECRET');
 
     const client = new sdk.IDVClient(sdkId, pemKey);
+
+    const notifications = (new sdk.NotificationConfigBuilder()
+      .withEndpoint(webhookUrl) as any)
+      .withAuthTypeBearer()
+      .withAuthToken(webhookSecret)
+      .forSessionCompletion()
+      .build();
 
     const spec = (new sdk.SessionSpecificationBuilder()
       .withClientSessionTokenTtl(600) as any)
@@ -119,6 +150,7 @@ export class LiveYotiClient implements YotiClient {
           .build(),
       )
       .withRequiredDocument(new sdk.RequiredIdDocumentBuilder().build())
+      .withNotifications(notifications)
       .build();
 
     const session = await client.createSession(spec);
@@ -137,44 +169,69 @@ export class LiveYotiClient implements YotiClient {
 
     const client = new sdk.IDVClient(sdkId, pemKey);
     const result = await client.getSession(sessionId);
+    const status = mapState(result.getState());
+
+    // Derive outcome + rejectionReason from the checks array. Only meaningful
+    // when the session has reached `completed`; otherwise return nulls and the
+    // webhook handler treats this as in-flight.
+    let outcome: YotiOutcome | null = null;
+    let rejectionReason: string | null = null;
+    if (status === 'completed') {
+      const checks: YotiCheck[] = (result.getChecks?.() ?? []) as YotiCheck[];
+      // Only derive outcome when checks are actually present — an empty checks
+      // array means the SDK couldn't surface check details, and we'd rather
+      // leave outcome=null (state machine treats that as completed_rejected
+      // defensively) than wrongly mark a session VERIFIED.
+      if (checks.length > 0) {
+        let anyRejected = false;
+        for (const check of checks) {
+          const rec = check.getReport?.()?.recommendation;
+          if (rec?.value && rec.value !== 'APPROVE') {
+            anyRejected = true;
+            rejectionReason = rejectionReason ?? rec.reason ?? `Check ${check.getType?.() ?? '?'} rejected`;
+          }
+        }
+        outcome = anyRejected ? 'completed_rejected' : 'completed_verified';
+      }
+    }
 
     return {
       sessionId: result.getSessionId(),
-      status: mapState(result.getState()),
-      // outcome / ageEstimate / rejectionReason flow through the webhook path —
-      // getSession is consulted only as a status read, never as the source of
-      // truth for those fields.
-      outcome: null,
+      status,
+      outcome,
+      // Age estimation is best-effort from the Yoti SDK and varies by check
+      // type; left null here and refined in a follow-up. The state machine
+      // tolerates a null age_estimate (user.age_verified stays false).
       ageEstimate: null,
-      rejectionReason: null,
+      rejectionReason,
     };
   }
 
-  verifyWebhookSignature(rawBody: Buffer | string, signature: string | undefined): VerifiedWebhook {
-    if (!signature) {
-      throw new AppError('unauthenticated', 'Missing webhook signature');
+  verifyWebhookAuth(rawBody: Buffer | string, authHeader: string | undefined): VerifiedWebhook {
+    if (!authHeader) {
+      throw new AppError('unauthenticated', 'Missing Authorization header');
     }
     const secret = process.env.YOTI_WEBHOOK_SECRET;
     if (!secret) {
       throw new Error(
-        'LiveYotiClient.verifyWebhookSignature: YOTI_WEBHOOK_SECRET is not set. ' +
+        'LiveYotiClient.verifyWebhookAuth: YOTI_WEBHOOK_SECRET is not set. ' +
           'Populate op://AM_Development/Yoti/webhook-secret and re-run via cc-auctionx-op.',
       );
     }
-    const bodyBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody, 'utf-8');
-    const expected = crypto.createHmac('sha256', secret).update(bodyBuffer).digest('hex');
-    const sigBuf = Buffer.from(signature, 'utf-8');
-    const expBuf = Buffer.from(expected, 'utf-8');
-    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
-      throw new AppError('unauthenticated', 'Invalid webhook signature');
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const provided = Buffer.from(token, 'utf-8');
+    const expected = Buffer.from(secret, 'utf-8');
+    if (provided.length !== expected.length || !crypto.timingSafeEqual(provided, expected)) {
+      throw new AppError('unauthenticated', 'Invalid webhook token');
     }
+    const bodyBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody, 'utf-8');
     let parsed: unknown;
     try {
       parsed = JSON.parse(bodyBuffer.toString('utf-8'));
     } catch {
       throw new AppError('invalid_argument', 'Webhook body is not valid JSON');
     }
-    return { payload: parsed as YotiWebhookEnvelope };
+    return { payload: parsed as YotiNotificationPayload };
   }
 }
 

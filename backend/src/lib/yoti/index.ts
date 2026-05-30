@@ -52,6 +52,8 @@ export type {
   CreateSessionResult,
   VerifiedWebhook,
   YotiEventType,
+  YotiNotificationPayload,
+  YotiNotificationTopic,
   YotiOutcome,
   YotiSessionDetail,
   YotiSessionPurpose,
