@@ -108,7 +108,11 @@ fi
 
 # Bypass the global `Host * IdentityAgent` directive in ~/.ssh/config — only
 # for git, so plain `ssh` to other hosts keeps using the 1Password SSH agent.
-export GIT_SSH_COMMAND="ssh -o IdentityAgent=\"$SSH_AUTH_SOCK\" -o IdentitiesOnly=yes"
+# IdentitiesOnly=yes was previously set here but it filters out agent keys
+# unless they're also named via IdentityFile — that broke the whole point of
+# loading GitHub_AM into the session agent. The IdentityAgent override alone
+# is enough to bypass ~/.ssh/config; we don't need IdentitiesOnly.
+export GIT_SSH_COMMAND="ssh -o IdentityAgent=\"$SSH_AUTH_SOCK\""
 
 echo "Session active (1Password + GitHub SSH). Launch 'claude' to inherit."
 
