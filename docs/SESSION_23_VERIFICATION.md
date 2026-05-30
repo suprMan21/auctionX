@@ -26,23 +26,24 @@
 | Frontend `tsc --noEmit` | n/a — no frontend changes |
 | Postmark Sender Signature for `noreply@authentic-materials.com` | ❌ Not yet verified — see follow-up below |
 
-## Follow-up — Postmark deliverability (Boss action)
+## Postmark deliverability — CORRECTION
 
-DNS audit during this session:
+> **Initial audit was wrong.** This section was rewritten 2026-05-30 19:05 UTC after re-querying Postmark's Domains API (`/domains/5018956`) with the Account Token from 1Password. The earlier dig used the wrong DKIM selectors (`pm._domainkey`, `postmark._domainkey`, `20240220._domainkey`) — Postmark's actual selector is timestamp-prefixed.
+
+DNS audit re-run with Postmark's actual record names:
 
 ```
-DMARC:  v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net   ✅
-SPF:    v=spf1 include:_spf.google.com ~all                                                ❌ Google Workspace only — Postmark IPs unauthorized
-DKIM:   pm._domainkey / postmark._domainkey / 20240220._domainkey                          ❌ Empty at all standard Postmark selectors
+DMARC:        v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net   ✅
+DKIM host:    20260509151220pm._domainkey.authentic-materials.com → k=rsa; p=MIGfMA…vQIDAQAB     ✅ (Postmark-controlled key, matches /domains/5018956)
+Return-Path:  pm-bounces.authentic-materials.com → pm.mtasv.net.                                  ✅ (CNAME resolves)
+SPF (raw):    v=spf1 include:dc-aa8e722993._spfm.authentic-materials.com ~all                    ⚠️ (see below)
 ```
 
-With DMARC at `p=quarantine` and Postmark mail unsigned + unauthorized by SPF, transactional emails will deliver to Postmark's edge but are very likely to land in spam or be quarantined by recipient providers. Until this is fixed, the seller-verification approval/rejection emails this session ships will reach inboxes only intermittently.
+Postmark API reports `SPFVerified: true / DKIMVerified: true / ReturnPathDomainVerified: true` for `authentic-materials.com` (domain ID 5018956).
 
-**Action steps (Boss, in any 1Password-authed shell):**
-1. Postmark Dashboard → Sender Signatures → `noreply@authentic-materials.com`. Copy: (a) the DKIM TXT record (name + value), (b) the Return-Path CNAME (typically `pm-bounces.authentic-materials.com` → some Postmark host).
-2. In the domain registrar for `authentic-materials.com`, add the DKIM TXT and Return-Path CNAME from step 1, and update the SPF record to chain Postmark's macro: `v=spf1 include:_spf.google.com include:spf.mtasv.net ~all`.
-3. Wait for DNS propagation (5–60 min), then click "Verify" in Postmark Sender Signatures.
-4. Re-run `dig TXT pm._domainkey.authentic-materials.com` and the SPF lookup to confirm.
+**SPF caveat (non-blocking):** the dmarcian macro `_spfm.authentic-materials.com` flattens to `v=spf1 include:_spf.google.com ~all` — Google Workspace IPs only, no Postmark IPs explicit in the chain. Despite that, **mail still delivers DMARC-aligned** because relaxed-alignment DMARC (`adkim=r aspf=r`) requires *either* SPF or DKIM aligned, not both, and DKIM is fully aligned (signing key under `authentic-materials.com`, From-header same registered domain). Belt-and-suspenders fix if desired: add `include:spf.mtasv.net` to the dmarcian flattener config so SPF authorizes Postmark too. Not blocking the S23 emails or any other Postmark traffic.
+
+**Net:** S22.5 + S23 emails (and existing Phase 7E transactional traffic, the Yoti seller-verification emails this session ships, and the upcoming S23.5 waitlist welcome) all deliver authenticated. No spam-folder risk from auth failures.
 
 ## Manual E2E verification (deferred to staging push)
 
@@ -50,14 +51,14 @@ Run after Boss pushes the migration + redeploys backend:
 
 1. Trigger Yoti sandbox session → approve → confirm:
    - Postmark Activity dashboard shows `Your seller verification is approved` send to `test@authentic-materials.com`.
-   - Inbox arrival (or, until DKIM/SPF are fixed, spam folder is acceptable).
+   - Inbox arrival expected (DKIM aligns, DMARC passes).
    - In-app notification row inserted (`notifications` table).
 2. Trigger Yoti sandbox session → reject (sandbox supports force-failure modes) → confirm REJECTED email arrives with the rejection reason inline.
 3. Verify users with the new pref columns set to `false` do NOT receive the corresponding email (insert one with `seller_verification_approved = false`, run the flow).
 
 ## Deferred / follow-up items
 
-- ❌ **Postmark Sender Signature verification (DKIM + SPF + Return-Path CNAME)** — Boss-action, blocks reliable deliverability.
+- ✅ **Postmark Sender Signature verification** — already in place (DKIM + Return-Path + SPF all green per Postmark `/domains/5018956`). See corrected section above. Optional belt-and-suspenders: add `include:spf.mtasv.net` to the dmarcian SPF flattener so SPF explicitly authorizes Postmark too.
 - 🟡 **Notifications Preferences UI toggles** — Module 16's settings page needs 2 new toggles surfacing the new `seller_verification_*` columns. Logged as a follow-up; out of scope this session.
 - 🟡 **Email template branding pass** — All `emailTemplates.ts` templates still hard-code "AuctionX" in the header gradient block (legacy from pre-rebrand). Should be replaced with a `BRAND_LABEL`-style constant. Separate session.
 - 🟡 **`vw7zy9mkyg` App Runner redeploy** — triggers automatically once `dev` push lands.
