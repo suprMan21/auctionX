@@ -72,6 +72,14 @@ const requireEnv = (name: string): string => {
   return v;
 };
 
+// AWS App Runner env-var values must match the regex `.*` — single-line only.
+// PEM blocks are inherently multi-line, so we store the PEM with literal `\n`
+// escape sequences in env (one line) and decode here. Same pattern as Firebase
+// service-account keys, JWT signing keys, etc. Passthrough for already-decoded
+// PEMs (local dev via 1Password injection preserves real newlines).
+const decodePem = (raw: string): string =>
+  raw.includes('\\n') && !raw.includes('\n') ? raw.replace(/\\n/g, '\n') : raw;
+
 const mapState = (raw: string): YotiSessionStatus => {
   switch (raw.toUpperCase()) {
     case 'COMPLETED':
@@ -92,7 +100,7 @@ const mapState = (raw: string): YotiSessionStatus => {
 export class LiveYotiClient implements YotiClient {
   async createSession(input: CreateSessionInput): Promise<CreateSessionResult> {
     const sdkId = requireEnv('YOTI_SDK_ID');
-    const pemKey = requireEnv('YOTI_PEM_KEY');
+    const pemKey = decodePem(requireEnv('YOTI_PEM_KEY'));
     const baseUrl = requireEnv('YOTI_BASE_URL').replace(/\/+$/, '');
 
     const client = new sdk.IDVClient(sdkId, pemKey);
@@ -125,7 +133,7 @@ export class LiveYotiClient implements YotiClient {
 
   async getSession(sessionId: string): Promise<YotiSessionDetail> {
     const sdkId = requireEnv('YOTI_SDK_ID');
-    const pemKey = requireEnv('YOTI_PEM_KEY');
+    const pemKey = decodePem(requireEnv('YOTI_PEM_KEY'));
 
     const client = new sdk.IDVClient(sdkId, pemKey);
     const result = await client.getSession(sessionId);

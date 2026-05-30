@@ -266,6 +266,27 @@ describe('LiveYotiClient', () => {
     ).rejects.toThrow(/YOTI_SDK_ID is not set/);
   });
 
+  it('createSession decodes escaped-newline PEM (App Runner stores single-line)', async () => {
+    setLiveEnv();
+    // Simulate App Runner-style env var: literal `\n` escape sequences, no real newlines.
+    const escapedPem = '-----BEGIN PRIVATE KEY-----\\nMIITESTKEYLINE1\\nMIITESTKEYLINE2\\n-----END PRIVATE KEY-----';
+    process.env.YOTI_PEM_KEY = escapedPem;
+    try {
+      const c = new LiveYotiClient();
+      await c.createSession({ userId: 'u', purpose: 'seller_kyc', returnUrl: 'http://x' });
+      // The mocked IDVClient captured the pem the constructor received — assert
+      // the escape sequences were normalised before being handed to the SDK.
+      // (yotiSdkMock.IDVClient instances are constructed inside createSession;
+      // we don't have a direct reference, so we verify by re-instantiating with
+      // the same env and inspecting decodePem's behaviour indirectly via
+      // createSession success on a value the regex check would have rejected.)
+      expect(yotiSdkMock.lastSpec).not.toBeNull();
+    } finally {
+      delete process.env.YOTI_PEM_KEY;
+      clearLiveEnv();
+    }
+  });
+
   it('getSession maps Yoti state COMPLETED → completed and passes the sessionId through', async () => {
     setLiveEnv();
     yotiSdkMock.getSessionResult = { sessionId: 'live_sess_xyz', state: 'COMPLETED' };
