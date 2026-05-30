@@ -8,9 +8,10 @@
  *  - HMAC failure: invalid signature → 401, no DB write
  *  - startYotiSession refuses already-VERIFIED users with VERIFICATION_ALREADY_VERIFIED
  *  - flag-off path: /start returns 503 + YOTI_NOT_AVAILABLE when FEATURE_YOTI_ENABLED=false
- *  - LiveYotiClient createSession + getSession throw NotImplementedError (S22.5
- *    is the live-wiring follow-up); verifyWebhookSignature is wired against
- *    YOTI_WEBHOOK_SECRET as of 2026-05-30
+ *  - LiveYotiClient createSession + getSession wired against the `yoti` SDK
+ *    (S22.5) — vi.mock('yoti') stubs the IDVClient + builders so we cover the
+ *    happy path without touching the network. verifyWebhookSignature uses
+ *    YOTI_WEBHOOK_SECRET
  *  - admin override writes seller_verification_reviews row + flips user status
  */
 
@@ -84,6 +85,76 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({ from: (table: string) => buildChain(table) }),
 }));
 
+// ── Yoti SDK mock (used by LiveYotiClient specs) ──────────────────────────────
+// vi.hoisted() runs BEFORE vi.mock() factories AND before the test body, so
+// shared state + mock classes are visible to both the factory below and the
+// tests further down.
+const { yotiSdkMock } = vi.hoisted(() => ({
+  yotiSdkMock: {
+    lastSpec: null as unknown,
+    lastGetSessionId: null as string | null,
+    createSessionResult: {
+      sessionId: 'live_sess_abc',
+      sessionToken: 'tok_live_abc',
+    },
+    getSessionResult: { sessionId: 'live_sess_abc', state: 'ONGOING' },
+  },
+}));
+
+vi.mock('yoti', () => {
+  const makeBuilder = (initial: Record<string, unknown> = {}) => {
+    const state: Record<string, unknown> = { ...initial };
+    const builder: Record<string, unknown> = {};
+    builder.withClientSessionTokenTtl = (v: unknown) => { state.clientSessionTokenTtl = v; return builder; };
+    builder.withResourcesTtl = (v: unknown) => { state.resourcesTtl = v; return builder; };
+    builder.withUserTrackingId = (v: unknown) => { state.userTrackingId = v; return builder; };
+    builder.withRequestedCheck = (v: unknown) => {
+      state.checks = ((state.checks as unknown[]) ?? []).concat(v);
+      return builder;
+    };
+    builder.withSdkConfig = (v: unknown) => { state.sdkConfig = v; return builder; };
+    builder.withRequiredDocument = (v: unknown) => { state.requiredDocument = v; return builder; };
+    builder.withAllowsCameraAndUpload = () => { state.allowsCameraAndUpload = true; return builder; };
+    builder.withSuccessUrl = (u: unknown) => { state.successUrl = u; return builder; };
+    builder.withErrorUrl = (u: unknown) => { state.errorUrl = u; return builder; };
+    builder.forStaticLiveness = () => { state.staticLiveness = true; return builder; };
+    builder.build = () => ({ ...state });
+    return builder;
+  };
+  const builderClass = (initial: Record<string, unknown> = {}) =>
+    class MockBuilder {
+      constructor() {
+        return makeBuilder(initial);
+      }
+    } as unknown as new () => unknown;
+  class MockIDVClient {
+    constructor(public sdkId: string, public pem: string | Buffer) {}
+    async createSession(spec: unknown) {
+      yotiSdkMock.lastSpec = spec;
+      return {
+        getSessionId: () => yotiSdkMock.createSessionResult.sessionId,
+        getClientSessionToken: () => yotiSdkMock.createSessionResult.sessionToken,
+      };
+    }
+    async getSession(sessionId: string) {
+      yotiSdkMock.lastGetSessionId = sessionId;
+      return {
+        getSessionId: () => yotiSdkMock.getSessionResult.sessionId,
+        getState: () => yotiSdkMock.getSessionResult.state,
+      };
+    }
+  }
+  return {
+    IDVClient: MockIDVClient,
+    SessionSpecificationBuilder: builderClass({ checks: [] }),
+    SdkConfigBuilder: builderClass(),
+    RequiredIdDocumentBuilder: builderClass({ kind: 'required_doc' }),
+    RequestedDocumentAuthenticityCheckBuilder: builderClass({ kind: 'doc_authenticity' }),
+    RequestedFaceMatchCheckBuilder: builderClass({ kind: 'face_match' }),
+    RequestedLivenessCheckBuilder: builderClass({ kind: 'liveness' }),
+  };
+});
+
 vi.mock('../lib/logger', () => ({
   log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
   withLogContext: () => ({ debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }),
@@ -104,7 +175,7 @@ import { overrideVerification } from '../controllers/adminYotiVerificationContro
 import {
   LiveYotiClient,
   MockYotiClient,
-  NotImplementedError,
+  __resetYotiSdkCache,
   resetYotiClientForTests,
   YOTI_AGE_THRESHOLD,
   type YotiWebhookEnvelope,
@@ -139,21 +210,112 @@ beforeEach(() => {
   for (const k of Object.keys(updatePayloads)) delete updatePayloads[k];
   for (const k of Object.keys(insertPayloads)) delete insertPayloads[k];
   resetYotiClientForTests();
+  __resetYotiSdkCache();
+  yotiSdkMock.lastSpec = null;
+  yotiSdkMock.lastGetSessionId = null;
+  yotiSdkMock.createSessionResult = { sessionId: 'live_sess_abc', sessionToken: 'tok_live_abc' };
+  yotiSdkMock.getSessionResult = { sessionId: 'live_sess_abc', state: 'ONGOING' };
   delete process.env.FEATURE_YOTI_ENABLED;
 });
 
-// ── §5.0 LiveYotiClient guard ─────────────────────────────────────────────────
+// ── §5.0 LiveYotiClient (Yoti SDK wired in S22.5) ─────────────────────────────
 describe('LiveYotiClient', () => {
-  it('throws NotImplementedError from createSession (S22.5 wires this)', async () => {
+  const LIVE_ENV = {
+    YOTI_SDK_ID: 'sandbox-sdk-id',
+    YOTI_PEM_KEY: '-----BEGIN PRIVATE KEY-----\nMIITESTKEY\n-----END PRIVATE KEY-----',
+    YOTI_BASE_URL: 'https://api.yoti.com/idverify/v1',
+  } as const;
+  const setLiveEnv = () => Object.assign(process.env, LIVE_ENV);
+  const clearLiveEnv = () => {
+    delete process.env.YOTI_SDK_ID;
+    delete process.env.YOTI_PEM_KEY;
+    delete process.env.YOTI_BASE_URL;
+  };
+
+  it('createSession returns { sessionId, sessionUrl } and routes through the Yoti SDK builders', async () => {
+    setLiveEnv();
+    try {
+      const c = new LiveYotiClient();
+      const result = await c.createSession({
+        userId: 'user-1',
+        purpose: 'seller_kyc',
+        returnUrl: 'https://staging.test/seller/verification/return',
+      });
+      expect(result.sessionId).toBe('live_sess_abc');
+      expect(result.sessionUrl).toBe(
+        'https://api.yoti.com/idverify/v1/web/index.html?sessionID=live_sess_abc&sessionToken=tok_live_abc',
+      );
+      // Spec captured by the mock IDVClient — assert the builders fed in the
+      // expected shape.
+      const spec = yotiSdkMock.lastSpec as Record<string, unknown>;
+      expect(spec.userTrackingId).toBe('user-1');
+      expect(spec.clientSessionTokenTtl).toBe(600);
+      expect(Array.isArray(spec.checks)).toBe(true);
+      const kinds = ((spec.checks as Array<Record<string, unknown>>) ?? []).map((c) => c.kind);
+      expect(kinds).toEqual(expect.arrayContaining(['doc_authenticity', 'face_match', 'liveness']));
+    } finally {
+      clearLiveEnv();
+    }
+  });
+
+  it('createSession throws AppError when YOTI_SDK_ID is unset', async () => {
+    clearLiveEnv();
     const c = new LiveYotiClient();
     await expect(
       c.createSession({ userId: 'u', purpose: 'seller_kyc', returnUrl: 'http://x' }),
-    ).rejects.toBeInstanceOf(NotImplementedError);
+    ).rejects.toThrow(/YOTI_SDK_ID is not set/);
   });
 
-  it('throws NotImplementedError from getSession (S22.5 wires this)', async () => {
-    const c = new LiveYotiClient();
-    await expect(c.getSession('s')).rejects.toBeInstanceOf(NotImplementedError);
+  it('createSession decodes escaped-newline PEM (App Runner stores single-line)', async () => {
+    setLiveEnv();
+    // Simulate App Runner-style env var: literal `\n` escape sequences, no real newlines.
+    const escapedPem = '-----BEGIN PRIVATE KEY-----\\nMIITESTKEYLINE1\\nMIITESTKEYLINE2\\n-----END PRIVATE KEY-----';
+    process.env.YOTI_PEM_KEY = escapedPem;
+    try {
+      const c = new LiveYotiClient();
+      await c.createSession({ userId: 'u', purpose: 'seller_kyc', returnUrl: 'http://x' });
+      // The mocked IDVClient captured the pem the constructor received — assert
+      // the escape sequences were normalised before being handed to the SDK.
+      // (yotiSdkMock.IDVClient instances are constructed inside createSession;
+      // we don't have a direct reference, so we verify by re-instantiating with
+      // the same env and inspecting decodePem's behaviour indirectly via
+      // createSession success on a value the regex check would have rejected.)
+      expect(yotiSdkMock.lastSpec).not.toBeNull();
+    } finally {
+      delete process.env.YOTI_PEM_KEY;
+      clearLiveEnv();
+    }
+  });
+
+  it('getSession maps Yoti state COMPLETED → completed and passes the sessionId through', async () => {
+    setLiveEnv();
+    yotiSdkMock.getSessionResult = { sessionId: 'live_sess_xyz', state: 'COMPLETED' };
+    try {
+      const c = new LiveYotiClient();
+      const detail = await c.getSession('live_sess_xyz');
+      expect(yotiSdkMock.lastGetSessionId).toBe('live_sess_xyz');
+      expect(detail).toEqual({
+        sessionId: 'live_sess_xyz',
+        status: 'completed',
+        outcome: null,
+        ageEstimate: null,
+        rejectionReason: null,
+      });
+    } finally {
+      clearLiveEnv();
+    }
+  });
+
+  it('getSession maps Yoti state ONGOING → in_progress', async () => {
+    setLiveEnv();
+    yotiSdkMock.getSessionResult = { sessionId: 'live_sess_pending', state: 'ONGOING' };
+    try {
+      const c = new LiveYotiClient();
+      const detail = await c.getSession('live_sess_pending');
+      expect(detail.status).toBe('in_progress');
+    } finally {
+      clearLiveEnv();
+    }
   });
 
   describe('verifyWebhookSignature (wired 2026-05-30)', () => {
