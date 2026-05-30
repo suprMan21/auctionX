@@ -47,7 +47,7 @@ type YotiIDVClient = {
 type LivenessBuilder = { forStaticLiveness(): LivenessBuilder; build(): unknown };
 
 const sdk = yotiSdk as unknown as {
-  IDVClient: new (sdkId: string, pem: string | Buffer) => YotiIDVClient;
+  IDVClient: new (sdkId: string, pem: string | Buffer, options?: { apiUrl?: string }) => YotiIDVClient;
   SessionSpecificationBuilder: new () => {
     withClientSessionTokenTtl(s: number): ReturnType<typeof Function>;
     withResourcesTtl(s: number): unknown;
@@ -137,7 +137,12 @@ export class LiveYotiClient implements YotiClient {
     const webhookUrl = requireEnv('YOTI_WEBHOOK_URL');
     const webhookSecret = requireEnv('YOTI_WEBHOOK_SECRET');
 
-    const client = new sdk.IDVClient(sdkId, pemKey);
+    // CRITICAL: Yoti SDK's IDVClient defaults to the production URL stored in
+    // `yoti/config.yoti.idvApi`. Sandbox lives at a different path
+    // (`https://api.yoti.com/sandbox/idverify/v1`) and requires this explicit
+    // override; otherwise the SDK signs requests with the sandbox SDK ID but
+    // POSTs them to production, which rejects with `APP_NOT_FOUND`.
+    const client = new sdk.IDVClient(sdkId, pemKey, { apiUrl: baseUrl });
 
     const notifications = (new sdk.NotificationConfigBuilder()
       .withEndpoint(webhookUrl) as any)
@@ -184,8 +189,9 @@ export class LiveYotiClient implements YotiClient {
   async getSession(sessionId: string): Promise<YotiSessionDetail> {
     const sdkId = requireEnv('YOTI_SDK_ID');
     const pemKey = decodePem(requireEnv('YOTI_PEM_KEY'));
+    const baseUrl = requireEnv('YOTI_BASE_URL').replace(/\/+$/, '');
 
-    const client = new sdk.IDVClient(sdkId, pemKey);
+    const client = new sdk.IDVClient(sdkId, pemKey, { apiUrl: baseUrl });
     const result = await client.getSession(sessionId);
     const status = mapState(result.getState());
 
