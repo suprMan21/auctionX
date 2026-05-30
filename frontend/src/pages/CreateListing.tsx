@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -7,8 +7,10 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { ErrorHandler, AppError, ErrorCode } from '@/lib/errors/ErrorHandler';
 import { api } from '@/lib/api';
-import { VerificationBanner } from '@/features/seller-verification/components/VerificationBanner';
-import type { VerificationStatus } from '@/features/seller-verification/types/sellerVerification';
+import {
+  isSellerVerified,
+  type VerificationStatus,
+} from '@/features/seller-verification/types/sellerVerification';
 
 const MEDIA_BUCKET = 'auctionx-media-prod-cl';
 
@@ -17,7 +19,9 @@ export function CreateListing() {
   const navigate = useNavigate();
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
   const [verificationLoading, setVerificationLoading] = useState(true);
-  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  // rejectionReason no longer surfaced inline on this page — the dedicated
+  // /seller/verification page shows the full rejection context.
+  const [_rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [categoryId, setCategoryId] = useState('');
   const [title, setTitle] = useState('');
@@ -46,13 +50,13 @@ export function CreateListing() {
           // Admins / super_admins bypass the verification gate
           const isAdmin = data.role === 'admin' || data.role === 'super_admin';
           setVerificationStatus(
-            isAdmin ? 'APPROVED' : ((data.seller_verification_status || 'NONE') as VerificationStatus),
+            isAdmin ? 'VERIFIED' : ((data.seller_verification_status || 'NONE') as VerificationStatus),
           );
           setRejectionReason(data.seller_verification_rejection_reason);
         }
       } catch {
         // Fail-open: show the form
-        if (!cancelled) setVerificationStatus('APPROVED');
+        if (!cancelled) setVerificationStatus('VERIFIED');
       } finally {
         if (!cancelled) setVerificationLoading(false);
       }
@@ -115,10 +119,31 @@ export function CreateListing() {
     setPhotoPreview(URL.createObjectURL(file));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  /**
+   * Submit handler. `mode` controls whether we ship the listing as DRAFT or
+   * ACTIVE. Per brief §6.1, only Publish is gated by verification — Save Draft
+   * stays enabled so users can build a listing while their Yoti session is
+   * still PENDING.
+   */
+  const handleSubmit = async (e: React.FormEvent, mode: 'publish' | 'draft' = 'publish') => {
     e.preventDefault();
     if (!user) {
       navigate('/login');
+      return;
+    }
+
+    if (mode === 'publish' && !isSellerVerified(verificationStatus)) {
+      // Defence in depth — the Publish button is disabled, but if anything
+      // bypasses that (keyboard submit etc.) we still refuse.
+      ErrorHandler.handle(
+        new AppError(
+          ErrorCode.RLS_VERIFICATION_REQUIRED,
+          'Verification required to publish',
+          { verificationStatus },
+          'Verify your identity to publish this listing',
+        ),
+        'CreateListing.handleSubmit.publishGate',
+      );
       return;
     }
 
@@ -174,7 +199,8 @@ export function CreateListing() {
         photoUrl = publicUrlData.publicUrl;
       }
 
-      // 2. Insert listing as ACTIVE (so it shows up in browse + the auction is biddable)
+      // 2. Insert listing. Mode 'publish' → ACTIVE + published_at, mode 'draft' → DRAFT.
+      const nowIso = new Date().toISOString();
       const { data: listing, error: listingError } = await supabase
         .from('listings')
         .insert({
@@ -186,35 +212,39 @@ export function CreateListing() {
           condition: 'GOOD',
           reserve_price_cents: reservePriceCents,
           currency: 'USD',
-          status: 'ACTIVE',
-          published_at: new Date().toISOString(),
+          status: mode === 'publish' ? 'ACTIVE' : 'DRAFT',
+          published_at: mode === 'publish' ? nowIso : null,
         })
         .select()
         .single();
       if (listingError) throw listingError;
 
-      // 3. Insert the auction row — required for bidding
-      const durationDays = parseInt(duration, 10) || 7;
-      const startTime = new Date();
-      const endTime = new Date(startTime.getTime() + durationDays * 24 * 60 * 60 * 1000);
-      const { error: auctionError } = await supabase
-        .from('auctions')
-        .insert({
-          listing_id: listing.id,
-          seller_id: user.id,
-          currency: 'USD',
-          start_time: startTime.toISOString(),
-          end_time: endTime.toISOString(),
-          starting_price_cents: startingPriceCents,
-          current_price_cents: startingPriceCents,
-          minimum_increment_cents: 50,
-          reserve_price_cents: reservePriceCents,
-          status: 'ACTIVE',
-        });
-      if (auctionError) {
-        // Rollback listing if auction creation failed — keeps state consistent.
-        await supabase.from('listings').delete().eq('id', listing.id);
-        throw auctionError;
+      // 3. Insert the auction row — required for bidding (publish mode only).
+      // Drafts skip this; we'll create the auction when the seller publishes
+      // from the listing-detail page.
+      if (mode === 'publish') {
+        const durationDays = parseInt(duration, 10) || 7;
+        const startTime = new Date();
+        const endTime = new Date(startTime.getTime() + durationDays * 24 * 60 * 60 * 1000);
+        const { error: auctionError } = await supabase
+          .from('auctions')
+          .insert({
+            listing_id: listing.id,
+            seller_id: user.id,
+            currency: 'USD',
+            start_time: startTime.toISOString(),
+            end_time: endTime.toISOString(),
+            starting_price_cents: startingPriceCents,
+            current_price_cents: startingPriceCents,
+            minimum_increment_cents: 50,
+            reserve_price_cents: reservePriceCents,
+            status: 'ACTIVE',
+          });
+        if (auctionError) {
+          // Rollback listing if auction creation failed — keeps state consistent.
+          await supabase.from('listings').delete().eq('id', listing.id);
+          throw auctionError;
+        }
       }
 
       // 4. Insert listing_media row (non-fatal if it fails — listing still works without)
@@ -237,9 +267,11 @@ export function CreateListing() {
       }
 
       // 5. Navigate to verification flow or listing detail
-      if (addVerification) {
+      if (addVerification && mode === 'publish') {
         const verif = await api.createVerification(listing.id);
         navigate(`/verify/create/${verif.id}`);
+      } else if (mode === 'draft') {
+        navigate('/my-listings');
       } else {
         navigate(`/listings/${listing.id}`);
       }
@@ -250,7 +282,9 @@ export function CreateListing() {
     }
   };
 
-  // Loading + verification-gate guards (after hooks)
+  // Loading guard. The unverified state is NOT a full-page block anymore —
+  // per S22 §6.1 the form remains usable so sellers can build a listing while
+  // their Yoti session is still PENDING. Only the Publish action is gated.
   if (verificationLoading) {
     return (
       <div className="min-h-screen bg-dark-800 flex items-center justify-center">
@@ -259,14 +293,8 @@ export function CreateListing() {
     );
   }
 
-  if (verificationStatus && verificationStatus !== 'APPROVED') {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-white mb-6">Create Listing</h1>
-        <VerificationBanner status={verificationStatus} rejectionReason={rejectionReason} />
-      </div>
-    );
-  }
+  const canPublish = isSellerVerified(verificationStatus);
+  const publishTooltip = canPublish ? undefined : 'Verify your identity to publish';
 
   return (
     <ErrorBoundary>
@@ -287,7 +315,23 @@ export function CreateListing() {
               Fill out the details below to create your auction listing.
             </p>
 
-            <form onSubmit={handleSubmit} aria-label="Create listing form" className="space-y-8">
+            {!canPublish && (
+              <div className="mb-6 glass rounded-xl border border-yellow-500/20 p-4 text-sm text-gray-300">
+                <p>
+                  <span className="text-yellow-400 font-medium">Verification required to publish.</span>
+                  {' '}You can build your listing and save it as a draft. Publishing requires identity
+                  verification.{' '}
+                  <Link
+                    to="/seller/verification"
+                    className="text-primary-400 hover:text-primary-300 underline"
+                  >
+                    Verify now →
+                  </Link>
+                </p>
+              </div>
+            )}
+
+            <form onSubmit={(e) => handleSubmit(e, 'publish')} aria-label="Create listing form" className="space-y-8">
               <section aria-labelledby="photo-heading">
                 <h2 id="photo-heading" className="text-xl font-semibold text-white mb-4">
                   Listing Photo
@@ -509,9 +553,26 @@ export function CreateListing() {
                 </div>
               </section>
 
-              <div className="flex gap-4">
-                <Button type="submit" variant="primary" size="lg" disabled={saving} fullWidth>
-                  {saving ? 'Creating...' : 'Create Listing'}
+              <div className="flex flex-wrap gap-4">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  disabled={saving || !canPublish}
+                  title={publishTooltip}
+                  aria-label={canPublish ? 'Publish listing' : 'Publish disabled — verification required'}
+                >
+                  {saving ? 'Publishing…' : 'Publish'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  disabled={saving}
+                  onClick={(e) => handleSubmit(e as unknown as React.FormEvent, 'draft')}
+                  aria-label="Save listing as draft"
+                >
+                  {saving ? 'Saving…' : 'Save Draft'}
                 </Button>
                 <Button
                   type="button"
@@ -523,6 +584,11 @@ export function CreateListing() {
                   Cancel
                 </Button>
               </div>
+              {!canPublish && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Publish is disabled until your identity is verified.
+                </p>
+              )}
             </form>
           </div>
         </main>
