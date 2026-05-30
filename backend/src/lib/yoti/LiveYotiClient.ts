@@ -65,8 +65,18 @@ const sdk = yotiSdk as unknown as {
     build(): unknown;
   };
   RequiredIdDocumentBuilder: new () => { build(): unknown };
-  RequestedDocumentAuthenticityCheckBuilder: new () => { build(): unknown };
-  RequestedFaceMatchCheckBuilder: new () => { build(): unknown };
+  RequestedDocumentAuthenticityCheckBuilder: new () => {
+    withManualCheckFallback(): unknown;
+    withManualCheckAlways(): unknown;
+    withManualCheckNever(): unknown;
+    build(): unknown;
+  };
+  RequestedFaceMatchCheckBuilder: new () => {
+    withManualCheckFallback(): unknown;
+    withManualCheckAlways(): unknown;
+    withManualCheckNever(): unknown;
+    build(): unknown;
+  };
   RequestedLivenessCheckBuilder: new () => LivenessBuilder;
   NotificationConfigBuilder: new () => {
     withEndpoint(u: string): unknown;
@@ -136,12 +146,20 @@ export class LiveYotiClient implements YotiClient {
       .forSessionCompletion()
       .build();
 
+    // Each check requires a manualCheck mode (Yoti SDK validates this server-
+    // side and rejects with "manualCheck cannot be null or empty" otherwise).
+    // `withManualCheckFallback()` opts into Yoti's hybrid automation: try the
+    // automated check first; only fall back to a human reviewer if it fails.
     const spec = (new sdk.SessionSpecificationBuilder()
       .withClientSessionTokenTtl(600) as any)
       .withResourcesTtl(87000)
       .withUserTrackingId(input.userId)
-      .withRequestedCheck(new sdk.RequestedDocumentAuthenticityCheckBuilder().build())
-      .withRequestedCheck(new sdk.RequestedFaceMatchCheckBuilder().build())
+      .withRequestedCheck(
+        (new sdk.RequestedDocumentAuthenticityCheckBuilder() as any).withManualCheckFallback().build(),
+      )
+      .withRequestedCheck(
+        (new sdk.RequestedFaceMatchCheckBuilder() as any).withManualCheckFallback().build(),
+      )
       .withRequestedCheck(new sdk.RequestedLivenessCheckBuilder().forStaticLiveness().build())
       .withSdkConfig(
         (new sdk.SdkConfigBuilder().withAllowsCameraAndUpload() as any)

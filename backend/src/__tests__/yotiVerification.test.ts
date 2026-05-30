@@ -117,6 +117,9 @@ vi.mock('yoti', () => {
     builder.withSuccessUrl = (u: unknown) => { state.successUrl = u; return builder; };
     builder.withErrorUrl = (u: unknown) => { state.errorUrl = u; return builder; };
     builder.forStaticLiveness = () => { state.staticLiveness = true; return builder; };
+    builder.withManualCheckFallback = () => { state.manualCheck = 'FALLBACK'; return builder; };
+    builder.withManualCheckAlways = () => { state.manualCheck = 'ALWAYS'; return builder; };
+    builder.withManualCheckNever = () => { state.manualCheck = 'NEVER'; return builder; };
     builder.withNotifications = (n: unknown) => { state.notifications = n; return builder; };
     builder.withEndpoint = (u: unknown) => { state.endpoint = u; return builder; };
     builder.withAuthTypeBearer = () => { state.authType = 'BEARER'; return builder; };
