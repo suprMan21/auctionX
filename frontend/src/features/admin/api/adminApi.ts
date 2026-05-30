@@ -356,7 +356,143 @@ export const adminApi = {
   getHealth(): Promise<HealthStatus> {
     return adminFetch<HealthStatus>('/health');
   },
+
+  // ─── Yoti Verifications Endpoints (S22) ─────────────────────────────────────
+
+  /** GET /admin/verifications — list users with at least one yoti_sessions row. */
+  listYotiVerifications(params?: {
+    status?: string; // comma-separated list of verification_status
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<AdminYotiVerificationsListResponse> {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString() ? `?${qs}` : '';
+    return adminFetch<AdminYotiVerificationsListResponse>(`/verifications${query}`);
+  },
+
+  /** GET /admin/verifications/:userId — full detail: user + sessions + review history. */
+  getYotiVerificationDetail(userId: string): Promise<AdminYotiVerificationDetailResponse> {
+    return adminFetch<AdminYotiVerificationDetailResponse>(`/verifications/${userId}`);
+  },
+
+  /** POST /admin/verifications/:userId/override — manual override with audit. */
+  overrideYotiVerification(
+    userId: string,
+    new_status: AdminYotiVerificationStatus,
+    reason: string,
+  ): Promise<AdminYotiVerificationOverrideResponse> {
+    return adminFetch<AdminYotiVerificationOverrideResponse>(
+      `/verifications/${userId}/override`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ new_status, reason }),
+      },
+    );
+  },
 };
+
+// ─── Yoti Verifications Response Types (S22) ────────────────────────────────
+
+export type AdminYotiVerificationStatus =
+  | 'NONE'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'VIDEO_UPLOADED'
+  | 'NFC_PROGRAMMED'
+  | 'VERIFIED'
+  | 'FLAGGED'
+  | 'REVOKED';
+
+export interface AdminYotiVerificationListRow {
+  user_id: string;
+  email: string;
+  display_name: string | null;
+  status: AdminYotiVerificationStatus;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  age_verified: boolean;
+  age_verified_at: string | null;
+  yoti_session_id: string | null;
+  yoti_last_event_at: string | null;
+  joined_at: string;
+}
+
+export interface AdminYotiVerificationsListResponse {
+  success: true;
+  data: {
+    results: AdminYotiVerificationListRow[];
+    total: number;
+    page: number;
+    totalPages: number;
+  };
+}
+
+export interface AdminYotiSessionRow {
+  id: string;
+  yoti_session_id: string;
+  purpose: string;
+  status: string;
+  age_estimate: number | null;
+  rejection_reason: string | null;
+  last_event_type: string | null;
+  last_event_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminYotiVerificationReview {
+  id: string;
+  admin_id: string;
+  action: string;
+  notes: string;
+  previous_status: string;
+  new_status: string;
+  created_at: string;
+}
+
+export interface AdminYotiVerificationUserDetail {
+  id: string;
+  email: string;
+  display_name: string | null;
+  role: string;
+  seller_verification_status: AdminYotiVerificationStatus;
+  seller_verification_submitted_at: string | null;
+  seller_verification_reviewed_at: string | null;
+  seller_verification_rejection_reason: string | null;
+  age_verified: boolean;
+  age_verified_at: string | null;
+  age_verification_provider: string | null;
+  yoti_session_id: string | null;
+  yoti_age_estimate: number | null;
+  yoti_last_event_at: string | null;
+  created_at: string;
+}
+
+export interface AdminYotiVerificationDetailResponse {
+  success: true;
+  data: {
+    user: AdminYotiVerificationUserDetail;
+    sessions: AdminYotiSessionRow[];
+    reviews: AdminYotiVerificationReview[];
+  };
+}
+
+export interface AdminYotiVerificationOverrideResponse {
+  success: true;
+  data: {
+    user_id: string;
+    previous_status: AdminYotiVerificationStatus;
+    new_status: AdminYotiVerificationStatus;
+    reason: string;
+  };
+}
 
 // ─── Escrow Response Types ──────────────────────────────────────────────────
 
