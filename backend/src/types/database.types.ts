@@ -2021,6 +2021,9 @@ export type Database = {
           trailing_12mo_sales_cents: number
           updated_at: string
           warning_count: number
+          yoti_age_estimate: number | null
+          yoti_last_event_at: string | null
+          yoti_session_id: string | null
         }
         Insert: {
           age_verification_provider?: string | null
@@ -2061,6 +2064,9 @@ export type Database = {
           trailing_12mo_sales_cents?: number
           updated_at?: string
           warning_count?: number
+          yoti_age_estimate?: number | null
+          yoti_last_event_at?: string | null
+          yoti_session_id?: string | null
         }
         Update: {
           age_verification_provider?: string | null
@@ -2101,6 +2107,9 @@ export type Database = {
           trailing_12mo_sales_cents?: number
           updated_at?: string
           warning_count?: number
+          yoti_age_estimate?: number | null
+          yoti_last_event_at?: string | null
+          yoti_session_id?: string | null
         }
         Relationships: [
           {
@@ -2189,6 +2198,51 @@ export type Database = {
           email?: string
           id?: string
           source?: string
+        }
+        Relationships: []
+      }
+      yoti_sessions: {
+        Row: {
+          age_estimate: number | null
+          created_at: string
+          id: string
+          last_event_at: string | null
+          last_event_type: string | null
+          purpose: string
+          raw_payload: Json | null
+          rejection_reason: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          yoti_session_id: string
+        }
+        Insert: {
+          age_estimate?: number | null
+          created_at?: string
+          id?: string
+          last_event_at?: string | null
+          last_event_type?: string | null
+          purpose: string
+          raw_payload?: Json | null
+          rejection_reason?: string | null
+          status: string
+          updated_at?: string
+          user_id: string
+          yoti_session_id: string
+        }
+        Update: {
+          age_estimate?: number | null
+          created_at?: string
+          id?: string
+          last_event_at?: string | null
+          last_event_type?: string | null
+          purpose?: string
+          raw_payload?: Json | null
+          rejection_reason?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          yoti_session_id?: string
         }
         Relationships: []
       }
