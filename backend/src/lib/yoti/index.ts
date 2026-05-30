@@ -11,17 +11,15 @@ let cachedMode: 'mock' | 'live' | null = null;
  *
  * Selection rules (in order):
  *   1. NODE_ENV === 'test' — ALWAYS MockYotiClient (zero network in vitest).
- *   2. YOTI_CLIENT_MODE === 'live' — LiveYotiClient (throws until S22.5).
+ *   2. YOTI_CLIENT_MODE === 'live' — LiveYotiClient (real Yoti SDK, S22.5).
  *   3. else — MockYotiClient.
  *
  * The client is memoised so the in-memory mock state survives across the
  * lifetime of one process (each test resets via `resetYotiClientForTests`).
  *
- * Note: per §5.5 of the brief, 1Password items for Yoti may not resolve at
- * runtime (yoti business-account verification still pending). When that
- * happens with mode=live, LiveYotiClient throws NotImplementedError — we
- * don't silently degrade to mock in production. Documented in
- * `docs/SESSION_22_VERIFICATION.md`.
+ * Sandbox-in-staging pattern: with YOTI_CLIENT_MODE=live + sandbox SDK ID +
+ * sandbox PEM in 1Password, this drives a real Yoti sandbox session. Prod
+ * cutover only requires rotating env literals on the prod App Runner service.
  */
 export const getYotiClient = (): YotiClient => {
   const desiredMode = resolveMode();
@@ -62,6 +60,5 @@ export type {
 } from './types';
 export { YOTI_AGE_THRESHOLD } from './types';
 export { MockYotiClient, MOCK_WEBHOOK_SECRET } from './MockYotiClient';
-export { LiveYotiClient } from './LiveYotiClient';
-export { NotImplementedError } from './errors';
+export { LiveYotiClient, __resetYotiSdkCache } from './LiveYotiClient';
 export { isYotiFeatureEnabled } from './featureFlag';
