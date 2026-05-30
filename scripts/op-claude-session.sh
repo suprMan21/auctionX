@@ -114,7 +114,18 @@ fi
 # is enough to bypass ~/.ssh/config; we don't need IdentitiesOnly.
 export GIT_SSH_COMMAND="ssh -o IdentityAgent=\"$SSH_AUTH_SOCK\""
 
-echo "Session active (1Password + GitHub SSH). Launch 'claude' to inherit."
+# --- Stable AWS resource identifiers ---------------------------------------
+# Pre-export ARNs / distribution IDs we use repeatedly during staging deploys
+# so each new shell doesn't have to re-look-them-up. Non-secret — safe to
+# commit. Update when a new App Runner service is provisioned or a CF distro
+# is created/replaced.
+export STAGING_ARN="arn:aws:apprunner:us-east-2:904183418667:service/auctionX_backend_staging/cc454ddb98ac4adfa36c523a5dd5e87f"
+export STAGING_CF_DISTRO_ID="E3JOPXHI8DB4BE"
+export STAGING_FE_BUCKET="auctionx-frontend-staging"
+export STAGING_BACKEND_URL="https://vw7zy9mkyg.us-east-2.awsapprunner.com"
+export STAGING_FRONTEND_URL="https://d1bwev65w7rqzl.cloudfront.net"
+
+echo "Session active (1Password + GitHub SSH + AWS staging identifiers). Launch 'claude' to inherit."
 
 # Unified cleanup: revokes 1Password session AND tears down ssh-agent.
 # Idempotent — safe to re-source; the new trap replaces the prior one.
