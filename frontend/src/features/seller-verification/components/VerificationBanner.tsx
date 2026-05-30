@@ -11,22 +11,22 @@ interface VerificationBannerProps {
 export const VerificationBanner = ({ status, rejectionReason }: VerificationBannerProps) => {
   const navigate = useNavigate();
 
-  if (status === 'APPROVED') return null;
+  if (status === 'APPROVED' || status === 'VERIFIED') return null;
 
   const messages: Record<string, { title: string; body: string; actionLabel?: string }> = {
     NONE: {
       title: 'Verification Required',
-      body: 'Complete identity verification to start creating listings and selling on the platform.',
+      body: 'Verify your identity with our hosted partner to start selling on the platform.',
       actionLabel: 'Start Verification',
     },
     PENDING: {
       title: 'Verification Under Review',
-      body: 'Your identity documents are being reviewed. This typically takes 1-2 business days.',
+      body: 'Your identity verification is being processed. This usually completes within a few minutes.',
     },
     REJECTED: {
       title: 'Verification Needs Attention',
-      body: rejectionReason || 'Your verification was not approved. Please review the feedback and resubmit.',
-      actionLabel: 'Resubmit Documents',
+      body: rejectionReason || 'Your verification was not approved. You can retry the hosted verification flow.',
+      actionLabel: 'Retry Verification',
     },
     REVOKED: {
       title: 'Verification Revoked',
@@ -59,7 +59,7 @@ export const VerificationBanner = ({ status, rejectionReason }: VerificationBann
               variant="primary"
               size="sm"
               className="mt-4"
-              onClick={() => navigate('/seller-verification')}
+              onClick={() => navigate('/seller/verification')}
             >
               {msg.actionLabel}
             </Button>

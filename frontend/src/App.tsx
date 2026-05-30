@@ -44,7 +44,10 @@ import { CreatorLandingPage } from '@/pages/CreatorLandingPage';
 import { AMSealedPage } from '@/pages/AMSealedPage';
 import { AMProofPage } from '@/pages/AMProofPage';
 import { SellerVerificationPage } from '@/features/seller-verification/pages/SellerVerificationPage';
+import { YotiReturnHandler } from '@/features/seller-verification/components/YotiReturnHandler';
 import { AdminSellerVerificationPage } from '@/features/admin/pages/AdminSellerVerificationPage';
+import { AdminVerificationsPage } from '@/features/admin/pages/AdminVerificationsPage';
+import { AdminVerificationDetailPage } from '@/features/admin/pages/AdminVerificationDetailPage';
 import { AdminEscrowPage } from '@/features/admin/pages/AdminEscrowPage';
 import { AdminAuctionsPage } from '@/features/admin/pages/AdminAuctionsPage';
 import { AdminAuctionDetailPage } from '@/features/admin/pages/AdminAuctionDetailPage';
@@ -152,6 +155,25 @@ function App() {
           />
           <Route
             path="/seller-verification"
+            element={
+              <ProtectedRoute>
+                <SellerVerificationPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* S22: canonical seller-verification path. Old /seller-verification
+              kept as alias so existing links don't 404. Static return route
+              MUST come before any parameterized siblings (Lesson #5). */}
+          <Route
+            path="/seller/verification/return"
+            element={
+              <ProtectedRoute>
+                <YotiReturnHandler />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seller/verification"
             element={
               <ProtectedRoute>
                 <SellerVerificationPage />
@@ -286,6 +308,11 @@ function App() {
               <Route path="moderation" element={<AdminModerationPage />} />
               <Route path="auctions" element={<AdminAuctionsPage />} />
               <Route path="auctions/:id" element={<AdminAuctionDetailPage />} />
+              {/* S22: Yoti verifications admin surface. Static "verifications"
+                  before parameterized ":userId" sibling (Lesson #5). Legacy
+                  seller-verification doc-pipeline page remains accessible. */}
+              <Route path="verifications" element={<AdminVerificationsPage />} />
+              <Route path="verifications/:userId" element={<AdminVerificationDetailPage />} />
               <Route path="seller-verification" element={<AdminSellerVerificationPage />} />
               <Route path="escrow" element={<AdminEscrowPage />} />
               <Route path="audit-logs" element={<AdminAuditLogPage />} />

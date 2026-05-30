@@ -4,9 +4,13 @@ const STATUS_CONFIG: Record<VerificationStatus, { label: string; classes: string
   NONE: { label: 'Not Verified', classes: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
   PENDING: { label: 'Under Review', classes: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
   APPROVED: { label: 'Verified', classes: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+  VERIFIED: { label: 'Verified', classes: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
   REJECTED: { label: 'Rejected', classes: 'bg-red-500/20 text-red-400 border-red-500/30' },
   REVOKED: { label: 'Revoked', classes: 'bg-red-500/20 text-red-400 border-red-500/30' },
   FLAGGED: { label: 'Flagged', classes: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+  // NFC-pipeline states render as in-progress; never reached by Yoti seller-KYC.
+  VIDEO_UPLOADED: { label: 'Video Uploaded', classes: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+  NFC_PROGRAMMED: { label: 'NFC Programmed', classes: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
 };
 
 interface VerificationStatusBadgeProps {

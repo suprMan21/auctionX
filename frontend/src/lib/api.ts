@@ -621,6 +621,47 @@ export const api = {
       return json.data as { url: string };
     },
   },
+
+  // ── Phase 7A (S22): Yoti identity verification ───────────────────────────────
+
+  verification: {
+    /**
+     * Kick off a hosted Yoti session. The backend returns a URL we redirect
+     * the user to. Truth lives in the webhook — this only seeds the session.
+     */
+    async startVerification(
+      purpose: YotiVerificationPurpose,
+      returnUrl?: string,
+    ): Promise<YotiStartResult> {
+      const headers = await getAuthHeader();
+      const response = await fetch(`${API_URL}/verification/start`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purpose, return_url: returnUrl }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = (json as { error?: { code?: string; message?: string } }).error;
+        const err = new Error(error?.message || 'Failed to start verification') as Error & { code?: string; status?: number };
+        err.code = error?.code;
+        err.status = response.status;
+        throw err;
+      }
+      return (json as { data: YotiStartResult }).data;
+    },
+
+    /** Read the current user's verification facts + latest yoti_sessions row. */
+    async getStatus(): Promise<YotiStatus> {
+      const headers = await getAuthHeader();
+      const response = await fetch(`${API_URL}/verification/status`, { headers });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error((error as { error?: { message?: string } }).error?.message || 'Failed to fetch verification status');
+      }
+      const json = await response.json();
+      return (json as { data: YotiStatus }).data;
+    },
+  },
 };
 
 export interface StripeConnectStatus {
@@ -630,4 +671,54 @@ export interface StripeConnectStatus {
   payoutsEnabled: boolean;
   disabledReason: string | null;
   onboardingStartedAt: string | null;
+}
+
+// ── Phase 7A (S22): Yoti identity verification types ──────────────────────────
+
+export type YotiVerificationPurpose = 'seller_kyc' | 'age_gate' | 'both';
+
+export interface YotiStartResult {
+  session_url: string;
+  session_id: string;
+}
+
+export interface YotiSessionRow {
+  id: string;
+  yoti_session_id: string;
+  purpose: string;
+  status: string;
+  age_estimate: number | null;
+  rejection_reason: string | null;
+  last_event_type: string | null;
+  last_event_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Same enum as `verification_status` from database.types.ts, copied locally so
+ * the seller-verification feature module doesn't need to import the giant
+ * generated types file.
+ */
+export type YotiSellerStatus =
+  | 'NONE'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'VIDEO_UPLOADED'
+  | 'NFC_PROGRAMMED'
+  | 'VERIFIED'
+  | 'FLAGGED'
+  | 'REVOKED';
+
+export interface YotiStatus {
+  seller_verification_status: YotiSellerStatus;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  age_verified: boolean;
+  age_verified_at: string | null;
+  age_verification_provider: string | null;
+  last_session: YotiSessionRow | null;
+  feature_enabled: boolean;
 }

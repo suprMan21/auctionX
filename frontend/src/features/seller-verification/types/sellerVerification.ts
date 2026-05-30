@@ -1,4 +1,28 @@
-export type VerificationStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED' | 'FLAGGED';
+/**
+ * Verification types shared by the seller-verification feature module.
+ *
+ * As of S22 the doc-upload pipeline is superseded by Yoti hosted IDV. The
+ * legacy fields (DocumentType / VerificationDocument / DOCUMENT_LABELS) stay
+ * exported because the admin doc-pipeline page still reads them. The new
+ * Yoti-driven status type adds VERIFIED (the canonical post-Yoti success
+ * state — VERIFIED is what the DB writes, APPROVED is the legacy doc-pipeline
+ * approval flag, both render as "Verified" in the UI).
+ */
+/**
+ * Mirrors the `verification_status` enum in database.types.ts so the frontend
+ * can render any state the DB might produce (Yoti + legacy doc + NFC pipelines).
+ * The badge/banner components default unknown values gracefully.
+ */
+export type VerificationStatus =
+  | 'NONE'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'VIDEO_UPLOADED'
+  | 'NFC_PROGRAMMED'
+  | 'VERIFIED'
+  | 'REVOKED'
+  | 'FLAGGED';
 
 export type DocumentType = 'government_id' | 'selfie_with_id' | 'proof_of_address' | 'business_license';
 
@@ -48,3 +72,7 @@ export const DOCUMENT_LABELS: Record<DocumentType, { label: string; description:
     required: false,
   },
 };
+
+/** Treat both VERIFIED (Yoti) + APPROVED (legacy) as "user is a seller". */
+export const isSellerVerified = (status: VerificationStatus | null | undefined): boolean =>
+  status === 'VERIFIED' || status === 'APPROVED';
