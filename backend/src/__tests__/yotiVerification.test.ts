@@ -8,10 +8,13 @@
  *  - HMAC failure: invalid signature → 401, no DB write
  *  - startYotiSession refuses already-VERIFIED users with VERIFICATION_ALREADY_VERIFIED
  *  - flag-off path: /start returns 503 + YOTI_NOT_AVAILABLE when FEATURE_YOTI_ENABLED=false
- *  - LiveYotiClient methods throw NotImplementedError
+ *  - LiveYotiClient createSession + getSession throw NotImplementedError (S22.5
+ *    is the live-wiring follow-up); verifyWebhookSignature is wired against
+ *    YOTI_WEBHOOK_SECRET as of 2026-05-30
  *  - admin override writes seller_verification_reviews row + flips user status
  */
 
+import crypto from 'node:crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
 
@@ -141,21 +144,68 @@ beforeEach(() => {
 
 // ── §5.0 LiveYotiClient guard ─────────────────────────────────────────────────
 describe('LiveYotiClient', () => {
-  it('throws NotImplementedError from createSession', async () => {
+  it('throws NotImplementedError from createSession (S22.5 wires this)', async () => {
     const c = new LiveYotiClient();
     await expect(
       c.createSession({ userId: 'u', purpose: 'seller_kyc', returnUrl: 'http://x' }),
     ).rejects.toBeInstanceOf(NotImplementedError);
   });
 
-  it('throws NotImplementedError from getSession', async () => {
+  it('throws NotImplementedError from getSession (S22.5 wires this)', async () => {
     const c = new LiveYotiClient();
     await expect(c.getSession('s')).rejects.toBeInstanceOf(NotImplementedError);
   });
 
-  it('throws NotImplementedError from verifyWebhookSignature', () => {
-    const c = new LiveYotiClient();
-    expect(() => c.verifyWebhookSignature(Buffer.from('{}'), 'sig')).toThrow(NotImplementedError);
+  describe('verifyWebhookSignature (wired 2026-05-30)', () => {
+    const TEST_SECRET = 'live-yoti-test-webhook-secret';
+
+    it('accepts a valid HMAC-SHA256 signed against YOTI_WEBHOOK_SECRET', () => {
+      process.env.YOTI_WEBHOOK_SECRET = TEST_SECRET;
+      try {
+        const c = new LiveYotiClient();
+        const body = Buffer.from(
+          JSON.stringify({ event_type: 'session.completed', session_id: 'sess_live_1' }),
+        );
+        const sig = crypto.createHmac('sha256', TEST_SECRET).update(body).digest('hex');
+        const verified = c.verifyWebhookSignature(body, sig);
+        expect(verified.payload.session_id).toBe('sess_live_1');
+        expect(verified.payload.event_type).toBe('session.completed');
+      } finally {
+        delete process.env.YOTI_WEBHOOK_SECRET;
+      }
+    });
+
+    it('throws unauthenticated AppError on bad signature', () => {
+      process.env.YOTI_WEBHOOK_SECRET = TEST_SECRET;
+      try {
+        const c = new LiveYotiClient();
+        expect(() =>
+          c.verifyWebhookSignature(Buffer.from('{"x":1}'), 'deadbeef'.repeat(8)),
+        ).toThrow(/Invalid webhook signature/);
+      } finally {
+        delete process.env.YOTI_WEBHOOK_SECRET;
+      }
+    });
+
+    it('throws unauthenticated AppError on missing signature header', () => {
+      process.env.YOTI_WEBHOOK_SECRET = TEST_SECRET;
+      try {
+        const c = new LiveYotiClient();
+        expect(() => c.verifyWebhookSignature(Buffer.from('{}'), undefined)).toThrow(
+          /Missing webhook signature/,
+        );
+      } finally {
+        delete process.env.YOTI_WEBHOOK_SECRET;
+      }
+    });
+
+    it('throws config Error (not auth) when YOTI_WEBHOOK_SECRET is unset', () => {
+      delete process.env.YOTI_WEBHOOK_SECRET;
+      const c = new LiveYotiClient();
+      expect(() => c.verifyWebhookSignature(Buffer.from('{}'), 'sig')).toThrow(
+        /YOTI_WEBHOOK_SECRET is not set/,
+      );
+    });
   });
 });
 
