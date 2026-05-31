@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-05-30 (post-S22 close-out + cleanup sweep)
+**Last updated:** 2026-05-31 (post-S22.5 + S23 + S23.5 close-out)
 
 This file tracks **live, actionable items only**. Full per-session history is in Notion → Session Handoffs DB. Full pre-launch session pipeline (S22–S42) is in Feature Backlog DB. Lessons + Decisions + Ideas have their own Notion DBs.
 
@@ -9,12 +9,6 @@ This file tracks **live, actionable items only**. Full per-session history is in
 ---
 
 ## 🔴 BOSS ACTION — blocking next deploy
-
-- [ ] **SSH fix → `git push origin dev`** (carried from S19/S20/S21/S22). Local `dev` is N commits ahead of `origin/dev`. Once pushed, App Runner auto-deploys backend; frontend deploy block lives in each session's verification doc.
-  - Symptom: `git fetch / push` fails `Permission denied (publickey)` against `git@github.com:`. `SSH_AUTH_SOCK` points at a non-1Password agent.
-  - Action: re-export `SSH_AUTH_SOCK` to the 1Password SSH agent socket OR `ssh-add` the GitHub key. Then push.
-
-- [ ] **Merge `feature/session-22-yoti` → local `dev`** + apply migration `20260530000002_yoti_integration.sql` to staging. Branch is 13 commits, tsc clean, vitest 48/21 (no regressions). See `docs/SESSION_22_VERIFICATION.md`.
 
 - [ ] **Register Stripe `payment-webhook`** in Stripe Dashboard → Developers → Webhooks. URL `https://pmlofthmobglcfkqjtru.supabase.co/functions/v1/payment-webhook`, events `payment_intent.succeeded` + `payment_intent.payment_failed`. Then:
   ```bash
@@ -26,11 +20,20 @@ This file tracks **live, actionable items only**. Full per-session history is in
 
 - [ ] **Staging smoke test post-S20-deploy** — 7-step checklist in `docs/SESSION_20_VERIFICATION.md` "Staging verification" section.
 
+- [ ] **S24 outreach — 5 vendor lock conditions** (must clear before S24 can start; surfaced from Decisions DB "SEALED v1 Shipping" 2026-05-11):
+  - Shippo Platform Account — sales-call cycle required (not self-serve at marketplace volume). Current `op://AM_Development/Shippo/api-token` is personal-tier.
+  - Canada Post Developer Program credentials — register at developer.canadapost.ca.
+  - Purolator Resource Center activation key.
+  - Carrier acceptable-use policy responses for the 5 carriers (USPS, UPS, FedEx, Canada Post, Purolator) — drafts existed in Project Documentation DB on 2026-05-11; check if sent.
+  - HQ return address — CMRA selection or existing commercial address.
+
 ---
 
 ## 🟡 NEXT SESSIONS (ready to plan)
 
-- [ ] **S23 — Postmark / SMTP** — in progress (started 2026-05-30, immediately after S22.5 shipped). Wire `TODO(S23)` stubs in `backend/src/controllers/yotiVerificationController.ts:378,381`, sweep other unwired notification call sites, populate Postmark env on App Runner staging, DKIM-verify sender domain, vitest coverage for the new send paths.
+- [ ] **S24 — Shipping & Fulfillment Integration (Phase 7B)** — Wave 2 core loop. Hybrid stack per locked decision: Shippo (US: USPS/UPS/FedEx/DHL) + direct Canada Post Snap Ship + direct Purolator E-Ship. Carrier-native QR drop-off only (seller never sees buyer address). Module 19 (backend) + Module 20 (frontend) already drafted in Project Documentation DB. **Blocked on 5 vendor outreach items** (see 🔴 Boss Action above). Cannot start until at least Shippo PA approved.
+
+- [ ] **S25 — Dispute Resolution Full Flow (Phase 7F)** — Wave 2, parallel with S24, **no vendor gate**. Builds on the dispute approve/reject endpoints from Phase 3.75. Self-contained in-house work; could run before S24 unblocks.
 
 - [ ] **Unmentionables-frontend scaffold** — Feature Backlog entry. Per 2026-05-29 Locked decision: separate Vite + S3 + CloudFront + domain; shared backend. Blocks any Unmentionables UI work (age-gate, NSFW browse).
 
