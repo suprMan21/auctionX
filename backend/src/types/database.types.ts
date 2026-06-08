@@ -955,6 +955,8 @@ export type Database = {
           payment_received: boolean
           payment_window_expiring: boolean
           payout_completed: boolean
+          seller_verification_approved: boolean
+          seller_verification_rejected: boolean
           settlement_cascade: boolean
           updated_at: string
           user_id: string
@@ -972,6 +974,8 @@ export type Database = {
           payment_received?: boolean
           payment_window_expiring?: boolean
           payout_completed?: boolean
+          seller_verification_approved?: boolean
+          seller_verification_rejected?: boolean
           settlement_cascade?: boolean
           updated_at?: string
           user_id: string
@@ -989,6 +993,8 @@ export type Database = {
           payment_received?: boolean
           payment_window_expiring?: boolean
           payout_completed?: boolean
+          seller_verification_approved?: boolean
+          seller_verification_rejected?: boolean
           settlement_cascade?: boolean
           updated_at?: string
           user_id?: string
@@ -1710,6 +1716,9 @@ export type Database = {
       }
       settlements: {
         Row: {
+          appeal_deadline: string | null
+          appeal_opened_at: string | null
+          appeal_reason: string | null
           auction_id: string
           buyer_id: string | null
           created_at: string
@@ -1717,19 +1726,24 @@ export type Database = {
           delivery_confirmed_by: string | null
           dispute_opened_at: string | null
           dispute_reason: string | null
+          dispute_resolution_notes: string | null
           escrow_ends_at: string | null
           escrow_released_at: string | null
+          evidence_urls: string[]
           gross_amount_cents: number
           id: string
           net_amount_cents: number
           offer_attempt: number
+          partial_refund_amount_cents: number | null
           payment_id: string | null
           payment_window_expires_at: string | null
           platform_fee_cents: number
           platform_fee_percent: number
           processor_fee_cents: number
           processor_fee_percent: number
+          processor_refund_id: string | null
           processor_transaction_id: string | null
+          resolution_action: string | null
           seller_id: string
           settled_at: string | null
           status: string
@@ -1737,6 +1751,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          appeal_deadline?: string | null
+          appeal_opened_at?: string | null
+          appeal_reason?: string | null
           auction_id: string
           buyer_id?: string | null
           created_at?: string
@@ -1744,19 +1761,24 @@ export type Database = {
           delivery_confirmed_by?: string | null
           dispute_opened_at?: string | null
           dispute_reason?: string | null
+          dispute_resolution_notes?: string | null
           escrow_ends_at?: string | null
           escrow_released_at?: string | null
+          evidence_urls?: string[]
           gross_amount_cents: number
           id?: string
           net_amount_cents: number
           offer_attempt?: number
+          partial_refund_amount_cents?: number | null
           payment_id?: string | null
           payment_window_expires_at?: string | null
           platform_fee_cents: number
           platform_fee_percent: number
           processor_fee_cents: number
           processor_fee_percent: number
+          processor_refund_id?: string | null
           processor_transaction_id?: string | null
+          resolution_action?: string | null
           seller_id: string
           settled_at?: string | null
           status?: string
@@ -1764,6 +1786,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          appeal_deadline?: string | null
+          appeal_opened_at?: string | null
+          appeal_reason?: string | null
           auction_id?: string
           buyer_id?: string | null
           created_at?: string
@@ -1771,19 +1796,24 @@ export type Database = {
           delivery_confirmed_by?: string | null
           dispute_opened_at?: string | null
           dispute_reason?: string | null
+          dispute_resolution_notes?: string | null
           escrow_ends_at?: string | null
           escrow_released_at?: string | null
+          evidence_urls?: string[]
           gross_amount_cents?: number
           id?: string
           net_amount_cents?: number
           offer_attempt?: number
+          partial_refund_amount_cents?: number | null
           payment_id?: string | null
           payment_window_expires_at?: string | null
           platform_fee_cents?: number
           platform_fee_percent?: number
           processor_fee_cents?: number
           processor_fee_percent?: number
+          processor_refund_id?: string | null
           processor_transaction_id?: string | null
+          resolution_action?: string | null
           seller_id?: string
           settled_at?: string | null
           status?: string
@@ -1791,6 +1821,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "settlements_auction_id_fkey"
+            columns: ["auction_id"]
+            isOneToOne: false
+            referencedRelation: "auctions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "settlements_buyer_id_fkey"
             columns: ["buyer_id"]

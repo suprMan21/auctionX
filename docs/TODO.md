@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-05-31 (post-S22.5 + S23 + S23.5 close-out)
+**Last updated:** 2026-06-07 (post-S25 Part 1: dispute resolution backend)
 
 This file tracks **live, actionable items only**. Full per-session history is in Notion → Session Handoffs DB. Full pre-launch session pipeline (S22–S42) is in Feature Backlog DB. Lessons + Decisions + Ideas have their own Notion DBs.
 
@@ -33,7 +33,7 @@ This file tracks **live, actionable items only**. Full per-session history is in
 
 - [ ] **S24 — Shipping & Fulfillment Integration (Phase 7B)** — Wave 2 core loop. Hybrid stack per locked decision: Shippo (US: USPS/UPS/FedEx/DHL) + direct Canada Post Snap Ship + direct Purolator E-Ship. Carrier-native QR drop-off only (seller never sees buyer address). Module 19 (backend) + Module 20 (frontend) already drafted in Project Documentation DB. **Blocked on 5 vendor outreach items** (see 🔴 Boss Action above). Cannot start until at least Shippo PA approved.
 
-- [ ] **S25 — Dispute Resolution Full Flow (Phase 7F)** — Wave 2, parallel with S24, **no vendor gate**. Builds on the dispute approve/reject endpoints from Phase 3.75. Self-contained in-house work; could run before S24 unblocks.
+- [ ] **S25.5 — Dispute Resolution UI carryover** — S25 Part 1 shipped backend + buyer dispute submission form (see `docs/SESSION_25_VERIFICATION.md`). S25.5 builds the `/admin/disputes` side-by-side review interface (buyer evidence | seller evidence | resolution buttons), buyer dispute history page, and a richer appeal-with-evidence UI. No external blockers — pure frontend. Also wires PaymentCloud/Signature/CCBill refunds when their API keys land.
 
 - [ ] **Unmentionables-frontend scaffold** — Feature Backlog entry. Per 2026-05-29 Locked decision: separate Vite + S3 + CloudFront + domain; shared backend. Blocks any Unmentionables UI work (age-gate, NSFW browse).
 
@@ -91,7 +91,6 @@ This file tracks **live, actionable items only**. Full per-session history is in
 - [ ] Include `last_scanned_at` on `GET /verify/:tokenName` response (TODO comment in `VerificationPage.tsx`).
 - [ ] Stream IPFS pin → mint stage progress from backend (SSE or polling — current UX uses fake 1.5s timer).
 - [ ] Replace env-var-presence check in `backend/src/routes/admin/health.ts:40-45` with real S3 connectivity (`HeadBucket` + timeout).
-- [ ] Fix `backend/src/lib/s3.ts:4` default `AWS_REGION` to `'us-east-2'` (currently `'us-east-1'`; not breaking but misleading).
 - [ ] Stash `settle_secret` into `vault.secrets` for parity with `release_escrow_secret` / `reconcile_escrow_secret`.
 - [ ] Side menu UX — Boss reported menu renders very small and won't fully open on staging. Repro + fix.
 - [ ] Decide whether to keep the `[E2E-TEST-2026-05-11]` rows on prod or run cleanup SQL in `MODULE_7D_VERIFICATION.md`.

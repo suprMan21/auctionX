@@ -22,6 +22,11 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { sendEmail } from './emailSender';
 import {
+  disputeApprovedFullEmail,
+  disputeApprovedPartialEmail,
+  disputeAppealOpenedEmail,
+  disputeOpenedEmail,
+  disputeRejectedEmail,
   sellerVerificationApprovedEmail,
   sellerVerificationRejectedEmail,
 } from './emailTemplates';
@@ -50,7 +55,12 @@ const PREF_COLUMN_MAP: Record<string, string> = {
   ITEM_SCANNED:                   'item_scanned',
   SETTLEMENT_CASCADE:             'settlement_cascade',
   PAYMENT_WINDOW_EXPIRING:        'payment_window_expiring',
+  // S25 — dispute lifecycle types share the dispute_opened toggle ("dispute updates").
   DISPUTE_OPENED:                 'dispute_opened',
+  DISPUTE_APPROVED_FULL:          'dispute_opened',
+  DISPUTE_APPROVED_PARTIAL:       'dispute_opened',
+  DISPUTE_REJECTED:               'dispute_opened',
+  DISPUTE_APPEAL_OPENED:          'dispute_opened',
   SELLER_VERIFICATION_APPROVED:   'seller_verification_approved',
   SELLER_VERIFICATION_REJECTED:   'seller_verification_rejected',
 };
@@ -115,6 +125,13 @@ function renderEmail(
   payload: NotificationPayload,
   username: string | null,
 ): { subject: string; html: string } {
+  const meta = (payload.metadata ?? {}) as Record<string, unknown>;
+  const num = (key: string): number =>
+    typeof meta[key] === 'number' ? (meta[key] as number) : 0;
+  const str = (key: string): string =>
+    typeof meta[key] === 'string' ? (meta[key] as string) : '';
+  const bool = (key: string): boolean => meta[key] === true;
+
   switch (payload.type) {
     case 'SELLER_VERIFICATION_APPROVED':
       return sellerVerificationApprovedEmail({
@@ -132,6 +149,41 @@ function renderEmail(
         supportUrl: payload.actionUrl ?? `${frontendBaseUrl()}/support`,
       });
     }
+    case 'DISPUTE_OPENED':
+      return disputeOpenedEmail({
+        settlementId: str('settlementId'),
+        settlementUrl: payload.actionUrl ?? `${frontendBaseUrl()}/settlements/${str('settlementId')}`,
+        isSeller: bool('isSeller'),
+      });
+    case 'DISPUTE_APPROVED_FULL':
+      return disputeApprovedFullEmail({
+        settlementId: str('settlementId'),
+        settlementUrl: payload.actionUrl ?? `${frontendBaseUrl()}/settlements/${str('settlementId')}`,
+        refundAmountCents: num('refundAmountCents'),
+        isSeller: bool('isSeller'),
+      });
+    case 'DISPUTE_APPROVED_PARTIAL':
+      return disputeApprovedPartialEmail({
+        settlementId: str('settlementId'),
+        settlementUrl: payload.actionUrl ?? `${frontendBaseUrl()}/settlements/${str('settlementId')}`,
+        refundAmountCents: num('refundAmountCents'),
+        totalAmountCents: num('totalAmountCents'),
+        isSeller: bool('isSeller'),
+      });
+    case 'DISPUTE_REJECTED':
+      return disputeRejectedEmail({
+        settlementId: str('settlementId'),
+        settlementUrl: payload.actionUrl ?? `${frontendBaseUrl()}/settlements/${str('settlementId')}`,
+        appealUrl: str('appealUrl') || undefined,
+        appealDeadline: str('appealDeadline') || undefined,
+        isSeller: bool('isSeller'),
+      });
+    case 'DISPUTE_APPEAL_OPENED':
+      return disputeAppealOpenedEmail({
+        settlementId: str('settlementId'),
+        settlementUrl: payload.actionUrl ?? `${frontendBaseUrl()}/settlements/${str('settlementId')}`,
+        isSeller: bool('isSeller'),
+      });
     default:
       return {
         subject: payload.title,

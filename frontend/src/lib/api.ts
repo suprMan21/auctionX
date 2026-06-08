@@ -141,16 +141,58 @@ export const api = {
     return json.data;
   },
 
-  async openDispute(settlementId: string, reason: string): Promise<void> {
+  async openDispute(
+    settlementId: string,
+    reason: string,
+    evidenceUrls: string[] = [],
+  ): Promise<void> {
     const headers = await getAuthHeader();
     const response = await fetch(`${API_URL}/settlements/${settlementId}/dispute`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, evidence_urls: evidenceUrls }),
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error((error as { error?: string }).error || 'Failed to open dispute');
+    }
+  },
+
+  async getDisputeEvidenceUploadUrl(
+    settlementId: string,
+    filename: string,
+    contentType: string,
+  ): Promise<{ uploadUrl: string; publicUrl: string; s3Key: string }> {
+    const headers = await getAuthHeader();
+    const response = await fetch(
+      `${API_URL}/settlements/${settlementId}/dispute/evidence`,
+      {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename, content_type: contentType }),
+      },
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to get upload URL');
+    }
+    const json = await response.json();
+    return json.data;
+  },
+
+  async openDisputeAppeal(settlementId: string, reason: string): Promise<void> {
+    const headers = await getAuthHeader();
+    const response = await fetch(
+      `${API_URL}/settlements/${settlementId}/dispute/appeal`,
+      {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      },
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error((error as { error?: string }).error || 'Failed to open appeal');
     }
   },
 

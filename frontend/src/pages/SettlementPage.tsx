@@ -6,6 +6,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { CountdownTimer } from '@/features/auctions/components/CountdownTimer';
 import { Modal } from '@/components/common/Modal';
 import { PaymentForm } from '@/components/PaymentForm';
+import { DisputeSubmissionForm } from '@/components/disputes/DisputeSubmissionForm';
 import type { Settlement } from '@/features/auctions/types/settlement';
 import toast from 'react-hot-toast';
 
@@ -44,10 +45,10 @@ function BuyerView({
 }) {
   const currency = settlement.auction?.currency ?? 'USD';
   const activeOffer = settlement.offers?.find((o) => o.status === 'PENDING_PAYMENT') ?? null;
-  const [disputeReason, setDisputeReason] = useState('');
-  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
   const [confirmingDelivery, setConfirmingDelivery] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [appealReason, setAppealReason] = useState('');
+  const [appealSubmitting, setAppealSubmitting] = useState(false);
 
   const hasPaymentConfig =
     !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
@@ -56,20 +57,35 @@ function BuyerView({
     hasPaymentConfig && settlement.status === 'PENDING_PAYMENT' && !!listingId;
   const deliveryConfirmed = !!settlement.delivery_confirmed_at;
 
-  const handleOpenDispute = async () => {
-    if (disputeReason.trim().length < 20) {
-      toast.error('Please provide at least 20 characters for your dispute reason.');
+  // Appeal eligibility: a rejected dispute that's still inside the 7-day window.
+  // We render the appeal block when the resolution was REJECTED, status returned
+  // to ESCROW_HOLD, and the deadline hasn't lapsed. (S25.5 will replace this with
+  // a richer appeal UI; this is the minimum viable surfacing for the buyer.)
+  const appealDeadline = (settlement as Settlement & { appeal_deadline?: string | null })
+    .appeal_deadline;
+  const resolutionAction = (settlement as Settlement & { resolution_action?: string | null })
+    .resolution_action;
+  const canAppeal =
+    resolutionAction === 'REJECTED' &&
+    settlement.status === 'ESCROW_HOLD' &&
+    appealDeadline !== null &&
+    appealDeadline !== undefined &&
+    new Date(appealDeadline) > new Date();
+
+  const handleOpenAppeal = async () => {
+    if (appealReason.trim().length < 20) {
+      toast.error('Please provide at least 20 characters for your appeal.');
       return;
     }
-    setDisputeSubmitting(true);
+    setAppealSubmitting(true);
     try {
-      await api.openDispute(settlement.id, disputeReason.trim());
-      toast.success('Dispute opened. An admin will review your case.');
+      await api.openDisputeAppeal(settlement.id, appealReason.trim());
+      toast.success('Appeal submitted. Our team will re-review your case.');
       onDisputeOpened();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to open dispute');
+      toast.error(err instanceof Error ? err.message : 'Failed to open appeal');
     } finally {
-      setDisputeSubmitting(false);
+      setAppealSubmitting(false);
     }
   };
 
@@ -199,34 +215,43 @@ function BuyerView({
             </div>
           )}
 
-          {!deliveryConfirmed && (
+          {!deliveryConfirmed && !canAppeal && (
+            <DisputeSubmissionForm
+              settlementId={settlement.id}
+              onSubmitted={onDisputeOpened}
+            />
+          )}
+
+          {canAppeal && (
             <div className="glass rounded-2xl p-6 border border-orange-500/20">
-              <h2 className="text-lg font-semibold text-orange-300 mb-3">Open a Dispute</h2>
-              <p className="text-gray-400 text-sm mb-4">
-                If you have not received your item or there is a problem, you can open a dispute within the escrow window.
-                An admin will review your case.
+              <h2 className="text-lg font-semibold text-orange-300 mb-3">Appeal Available</h2>
+              <p className="text-gray-400 text-sm mb-2">
+                Your dispute was decided in the seller's favor. You can appeal until{' '}
+                <strong className="text-white">
+                  {appealDeadline ? new Date(appealDeadline).toLocaleString() : '—'}
+                </strong>.
               </p>
-              <label htmlFor="dispute-reason" className="block text-sm text-gray-300 mb-2">
-                Describe the issue <span className="text-gray-400">(min. 20 characters)</span>
+              <label htmlFor="appeal-reason" className="block text-sm text-gray-300 mb-2">
+                Why should we re-review? <span className="text-gray-400">(min. 20 characters)</span>
               </label>
               <textarea
-                id="dispute-reason"
+                id="appeal-reason"
                 rows={4}
-                value={disputeReason}
-                onChange={(e) => setDisputeReason(e.target.value)}
-                placeholder="Describe the problem in detail…"
+                value={appealReason}
+                onChange={(e) => setAppealReason(e.target.value)}
+                placeholder="Provide any additional context or evidence that wasn't captured the first time."
                 className="w-full rounded-xl bg-white/5 border border-white/10 text-white text-sm px-3 py-2
                            placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
               />
-              <p className="text-xs text-gray-400 mt-1 mb-3">{disputeReason.trim().length} / 20 minimum</p>
+              <p className="text-xs text-gray-400 mt-1 mb-3">{appealReason.trim().length} / 20 minimum</p>
               <button
                 type="button"
-                onClick={handleOpenDispute}
-                disabled={disputeSubmitting || disputeReason.trim().length < 20}
+                onClick={handleOpenAppeal}
+                disabled={appealSubmitting || appealReason.trim().length < 20}
                 className="w-full bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed
                            text-white font-semibold py-3 px-6 rounded-xl transition-all"
               >
-                {disputeSubmitting ? 'Submitting…' : 'Open Dispute'}
+                {appealSubmitting ? 'Submitting…' : 'Submit Appeal'}
               </button>
             </div>
           )}

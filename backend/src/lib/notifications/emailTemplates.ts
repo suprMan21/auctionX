@@ -212,6 +212,111 @@ export function disputeOpenedEmail(opts: {
   };
 }
 
+/**
+ * Notification: an admin approved a dispute with a full refund.
+ * Buyer hears "you're being refunded"; seller hears "your sale was refunded".
+ */
+export function disputeApprovedFullEmail(opts: {
+  settlementId: string;
+  settlementUrl: string;
+  refundAmountCents: number;
+  isSeller: boolean;
+}): { subject: string; html: string } {
+  const amount = (opts.refundAmountCents / 100).toFixed(2);
+  return {
+    subject: opts.isSeller
+      ? `Dispute resolved against you — full refund issued`
+      : `Refund issued: $${amount}`,
+    html: wrap('Dispute Resolved — Full Refund', `
+      <h2 style="font-size:20px;margin:24px 0 8px;">Dispute resolved — full refund</h2>
+      <p style="color:#9ca3af;margin:0 0 16px;">${opts.isSeller
+        ? `The dispute on this sale has been approved. The buyer is receiving a full refund of <strong style="color:#ef4444;">$${amount}</strong>. The funds have been released from escrow.`
+        : `Your dispute has been approved. A full refund of <strong style="color:#10b981;">$${amount}</strong> has been issued back to your original payment method. Funds typically appear within 5–10 business days.`
+      }</p>
+      <p style="color:#9ca3af;margin:0 0 4px;">Settlement reference: <strong style="color:#e5e7eb;">${opts.settlementId.slice(0, 8)}…</strong></p>
+      ${btn(opts.settlementUrl, 'View Details')}
+    `),
+  };
+}
+
+/** Notification: an admin approved a dispute with a partial refund. */
+export function disputeApprovedPartialEmail(opts: {
+  settlementId: string;
+  settlementUrl: string;
+  refundAmountCents: number;
+  totalAmountCents: number;
+  isSeller: boolean;
+}): { subject: string; html: string } {
+  const refund = (opts.refundAmountCents / 100).toFixed(2);
+  const total = (opts.totalAmountCents / 100).toFixed(2);
+  return {
+    subject: opts.isSeller
+      ? `Partial refund issued from your sale: $${refund}`
+      : `Partial refund issued: $${refund}`,
+    html: wrap('Dispute Resolved — Partial Refund', `
+      <h2 style="font-size:20px;margin:24px 0 8px;">Dispute resolved — partial refund</h2>
+      <p style="color:#9ca3af;margin:0 0 16px;">${opts.isSeller
+        ? `The dispute on this sale was partially resolved in the buyer's favor. <strong style="color:#ef4444;">$${refund}</strong> of the <strong>$${total}</strong> sale was refunded. The remainder remains in escrow on its normal release schedule.`
+        : `Your dispute was partially resolved. <strong style="color:#10b981;">$${refund}</strong> of the <strong>$${total}</strong> purchase has been refunded to your original payment method. Funds typically appear within 5–10 business days.`
+      }</p>
+      <p style="color:#9ca3af;margin:0 0 4px;">Settlement reference: <strong style="color:#e5e7eb;">${opts.settlementId.slice(0, 8)}…</strong></p>
+      ${btn(opts.settlementUrl, 'View Details')}
+    `),
+  };
+}
+
+/**
+ * Notification: an admin rejected a dispute.
+ * Buyer gets an appeal link (within 7d window); seller hears "decided in your favor".
+ */
+export function disputeRejectedEmail(opts: {
+  settlementId: string;
+  settlementUrl: string;
+  appealUrl?: string;
+  appealDeadline?: string;
+  isSeller: boolean;
+}): { subject: string; html: string } {
+  return {
+    subject: opts.isSeller
+      ? `Dispute decided in your favor`
+      : `Dispute decision — payment will release to seller`,
+    html: wrap('Dispute Decision', `
+      <h2 style="font-size:20px;margin:24px 0 8px;">${opts.isSeller ? 'Dispute decided in your favor' : 'Dispute decision'}</h2>
+      <p style="color:#9ca3af;margin:0 0 16px;">${opts.isSeller
+        ? `The dispute on this sale has been rejected. The escrow will continue to its normal release schedule and your payout will arrive as planned.`
+        : `Your dispute has been reviewed and the decision is to release funds to the seller. If you believe this was decided in error, you can appeal within 7 days.`
+      }</p>
+      <p style="color:#9ca3af;margin:0 0 4px;">Settlement reference: <strong style="color:#e5e7eb;">${opts.settlementId.slice(0, 8)}…</strong></p>
+      ${!opts.isSeller && opts.appealUrl && opts.appealDeadline
+        ? `<p style="color:#9ca3af;margin:12px 0 0;">Appeal deadline: <strong style="color:#e5e7eb;">${opts.appealDeadline}</strong></p>${btn(opts.appealUrl, 'File an Appeal')}`
+        : btn(opts.settlementUrl, 'View Details')
+      }
+    `),
+  };
+}
+
+/** Notification: buyer opened an appeal after a rejection. */
+export function disputeAppealOpenedEmail(opts: {
+  settlementId: string;
+  settlementUrl: string;
+  isSeller: boolean;
+}): { subject: string; html: string } {
+  return {
+    subject: opts.isSeller
+      ? `Buyer has appealed the rejected dispute`
+      : `Appeal received — under review`,
+    html: wrap('Dispute Appeal Opened', `
+      <h2 style="font-size:20px;margin:24px 0 8px;">${opts.isSeller ? 'The buyer has appealed' : 'Your appeal has been received'}</h2>
+      <p style="color:#9ca3af;margin:0 0 16px;">${opts.isSeller
+        ? `The buyer has filed an appeal on the dispute decision. Escrow release is paused pending our re-review. We'll be in touch with the outcome.`
+        : `Your appeal has been submitted and the settlement is paused pending re-review by our moderation team. We'll email you once a decision is made.`
+      }</p>
+      <p style="color:#9ca3af;margin:0 0 4px;">Settlement reference: <strong style="color:#e5e7eb;">${opts.settlementId.slice(0, 8)}…</strong></p>
+      ${btn(opts.settlementUrl, 'View Settlement')}
+    `),
+  };
+}
+
 /** Notification: seller identity verification (Yoti) succeeded. */
 export function sellerVerificationApprovedEmail(opts: {
   username?: string | null;

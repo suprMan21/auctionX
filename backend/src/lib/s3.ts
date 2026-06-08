@@ -1,7 +1,7 @@
 import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-const region = process.env.AWS_REGION || 'us-east-1';
+const region = process.env.AWS_REGION || 'us-east-2';
 const bucket = process.env.S3_BUCKET_NAME || 'auctionx-media-prod-cl';
 
 function getS3Client(): S3Client {
