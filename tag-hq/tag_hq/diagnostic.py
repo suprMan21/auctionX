@@ -36,14 +36,24 @@ def _get_version(tx: Transport) -> parsers.VersionInfo | None:
     return parsers.parse_get_version(r1.data, r2.data, r3.data)
 
 
-def _read_signature(tx: Transport) -> bytes | None:
+def _read_signature(tx: Transport) -> tuple[bytes, str]:
+    """Return (56-byte signature, SW hex). The ECDSA verify is the real gate.
+
+    Read_Sig (90 3C 00 00 01 00 00) returns the 56-byte originality signature as
+    the data field. Genuine NXP silicon observed on first hardware tap (2026-06-18)
+    returns trailing SW 91 90, NOT the 91 00 the AN12196 worked example implies;
+    other chips return 90 00. So we accept the payload whenever it is exactly 56
+    bytes regardless of the trailing SW and record the SW for diagnostics — a wrong
+    UID/key still fails the cryptographic verify downstream. Length/param errors
+    (917E, 910C, etc.) return 0 bytes and correctly raise here.
+    """
     tx.transmit(apdu.SELECT_NDEF_APP)
     resp: ApduResponse = tx.transmit(apdu.READ_SIG)
-    if not resp.ok:
-        raise RuntimeError(f"Read_Sig returned SW {resp.sw_hex}")
     if len(resp.data) != genuineness.SIGNATURE_LEN:
-        raise RuntimeError(f"Read_Sig returned {len(resp.data)} bytes, expected 56")
-    return resp.data
+        raise RuntimeError(
+            f"Read_Sig returned {len(resp.data)} bytes (SW {resp.sw_hex}), expected 56"
+        )
+    return resp.data, resp.sw_hex
 
 
 def _read_cc(tx: Transport) -> parsers.CapabilityContainer | None:
@@ -94,7 +104,8 @@ def run_full_diagnostic(tx: Transport) -> dict:
     reader_uid = _safe(lambda: _reader_uid(tx), "reader-uid", errors) or b""
     activation = parsers.parse_activation(tx.atr, reader_uid)
     version = _safe(lambda: _get_version(tx), "get-version", errors)
-    signature = _safe(lambda: _read_signature(tx), "read-sig", errors)
+    sig_result = _safe(lambda: _read_signature(tx), "read-sig", errors)
+    signature, sig_sw = (sig_result if sig_result else (None, None))
     cc = _safe(lambda: _read_cc(tx), "cc", errors)
     ndef = _safe(lambda: _read_ndef(tx), "ndef", errors)
     file_settings = _safe(lambda: _read_file_settings(tx), "file-settings", errors) or {}
@@ -160,6 +171,7 @@ def run_full_diagnostic(tx: Transport) -> dict:
             "notes": version.notes,
         },
         "signature_hex": signature.hex().upper() if signature else None,
+        "signature_sw": sig_sw,
         "file_structure": {
             "cc": None if not cc else {
                 "mapping_version": cc.mapping_version,
