@@ -29,7 +29,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.authenticmaterials.app"
+        applicationId = "com.authenticmaterials.tags"
         minSdk = 26
         targetSdk = 34
         versionCode = flutter.versionCode
