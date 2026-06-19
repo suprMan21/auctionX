@@ -115,8 +115,9 @@ function renderResult(d) {
       <div class="card">
         <h4>IDENTITY · GetVersion</h4>
         ${kv("Vendor", id.vendor_id || "—", id.is_nxp ? "good" : "bad")}
-        ${kv("Variant", id.variant || d.variant, id.is_gx ? "good" : "warn")}
-        ${kv("Gx match", id.is_gx ? "yes" : "no", id.is_gx ? "good" : "warn")}
+        ${kv("Variant", id.variant || d.variant, id.matches_reference ? "good" : "warn")}
+        ${kv("Ref match", id.matches_reference ? "yes" : "no", id.matches_reference ? "good" : "warn")}
+        ${id.possible_tt ? kv("TagTamper?", "possible — GetTTStatus needed", "warn") : ""}
         ${kv("HW", id.hw || "—")}
         ${kv("UID", id.uid_hex || d.uid_hex)}
       </div>

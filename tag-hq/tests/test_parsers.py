@@ -3,34 +3,53 @@
 from tag_hq import parsers
 
 
-# AN12196 worked-example Gx GetVersion: HW 04 04 08 30 00 11 05, SW 04 04 02 01 01 11 05.
-GX_P1 = bytes.fromhex("04040830001105")
-GX_P2 = bytes.fromhex("04040201011105")
-GX_P3 = bytes.fromhex("04518DFAA96180") + bytes.fromhex("0000000000000000")  # UID + lot/date pad
+# Real captured supplier tag (S-NFC1 first tap 2026-06-18), confirmed genuine
+# plain NTAG 424 DNA by DR-9: HW 04 04 02 30 00 11 05, SW 04 04 02 01 02 11 05.
+DNA_P1 = bytes.fromhex("04040230001105")
+DNA_P2 = bytes.fromhex("04040201021105")
+DNA_P3 = bytes.fromhex("04A27E02936980") + bytes.fromhex("CF0CD165304719")  # UID + batch
 
 
-def test_get_version_identifies_genuine_gx():
-    v = parsers.parse_get_version(GX_P1, GX_P2, GX_P3)
+def test_get_version_accepts_genuine_plain_424dna():
+    v = parsers.parse_get_version(DNA_P1, DNA_P2, DNA_P3)
     assert v.is_nxp is True
-    assert v.is_gx is True
-    assert v.variant == "Gx"
-    assert v.uid_hex == "04518DFAA96180"
-    assert v.prefix14 == parsers.GX_GETVERSION_PREFIX
+    assert v.matches_reference is True          # stable tuple, not the 0x08 nibble
+    assert v.possible_tt is False               # HW sub-type 0x02 high nibble = 0
+    assert v.variant == "NTAG 424 DNA (plain)"
+    assert v.uid_hex == "04A27E02936980"
+    assert v.sw_subtype == 0x02
 
 
-def test_get_version_flags_non_gx_as_spec_mismatch():
-    # Sub-type 0x02 (not 0x08) -> off-spec/Tx flag.
-    bad_p1 = bytes.fromhex("04040230001105")
-    v = parsers.parse_get_version(bad_p1, GX_P2, GX_P3)
-    assert v.is_gx is False
-    assert v.variant != "Gx"
-    assert any("Gx reference" in n for n in v.notes)
+def test_get_version_does_not_assert_on_brittle_subtype_nibble():
+    """The AN12196 0x08 'strong back modulation' example must ALSO match the tuple."""
+    an12196_p1 = bytes.fromhex("04040830001105")  # sub-type 0x08
+    v = parsers.parse_get_version(an12196_p1, DNA_P2, DNA_P3)
+    assert v.matches_reference is True           # type/storage/sw-subtype/proto unchanged
+
+
+def test_get_version_flags_off_reference_storage():
+    # Wrong storage class (0x0F) -> off-reference, NOT FIT.
+    bad_p1 = bytes.fromhex("0404020030 0F05".replace(" ", ""))
+    v = parsers.parse_get_version(bad_p1, DNA_P2, DNA_P3)
+    assert v.matches_reference is False
+    assert v.variant == "NXP, off-reference"
+    assert any("reference tuple" in n for n in v.notes)
+
+
+def test_get_version_flags_possible_tagtamper():
+    # HW sub-type high nibble set (0x12) -> possible TagTamper advisory.
+    tt_p1 = bytes.fromhex("04041230001105")
+    v = parsers.parse_get_version(tt_p1, DNA_P2, DNA_P3)
+    assert v.matches_reference is True           # still genuine 424 DNA family
+    assert v.possible_tt is True
+    assert v.variant == "NTAG 424 DNA (TagTamper?)"
 
 
 def test_get_version_flags_non_nxp_vendor():
-    bad_p1 = bytes.fromhex("99040830001105")
-    v = parsers.parse_get_version(bad_p1, GX_P2, GX_P3)
+    bad_p1 = bytes.fromhex("99040230001105")
+    v = parsers.parse_get_version(bad_p1, DNA_P2, DNA_P3)
     assert v.is_nxp is False
+    assert v.matches_reference is False
     assert any("not NXP" in n for n in v.notes)
 
 

@@ -8,9 +8,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-# Gx GetVersion reference (HW+SW prefix, first 14 bytes) — LOCKED in Decisions DB.
-GX_GETVERSION_PREFIX = bytes.fromhex("0404083000110504040201011105")
+# AM-SEALED acceptance reference for genuine plain NTAG 424 DNA.
+# CORRECTED 2026-06-19 (DR-9 analysis 3843…94be; Decisions DB 3843…0a59, which
+# amends the prior "Gx = HW sub-type 0x08" error in 3843…fe47). Do NOT assert on
+# the brittle HW sub-type nibble: genuine plain NTAG 424 DNA returns 0x02, while
+# the 0x08 the project trusted is AN12196's "50 pF, strong back modulation" example
+# byte, not a clean part identifier. Assert instead on the STABLE TUPLE below plus a
+# passing ECC originality-signature verify (the real genuineness gate, in §3).
 NXP_VENDOR_ID = 0x04
+REF_HW_TYPE = 0x04       # GetVersion HW byte 2 (p1[1]) — NTAG product family
+REF_STORAGE = 0x11       # HW byte 6 (p1[5]) — 256<size<512 → NTAG 424 DNA class (416B)
+REF_PROTOCOL = 0x05      # HW byte 7 (p1[6]) — ISO/IEC 14443-4
+REF_SW_SUBTYPE = 0x02    # SW byte 10 (p2[2]) — constant across the 424 DNA family
 
 
 # --- GetVersion ------------------------------------------------------------
@@ -25,11 +34,13 @@ class VersionInfo:
     storage_size: int
     protocol: int
     sw_type: int
+    sw_subtype: int
     uid: bytes  # 7 bytes; INVALID if random_id is True
     prefix14: bytes
-    is_gx: bool
+    matches_reference: bool  # matches the AM-SEALED NTAG 424 DNA acceptance tuple
+    possible_tt: bool        # HW sub-type high nibble set → maybe TagTamper (needs GetTTStatus)
     is_nxp: bool
-    variant: str  # "Gx" | "Tx?" | "off-spec"
+    variant: str  # "NTAG 424 DNA (plain)" | "NTAG 424 DNA (TagTamper?)" | "NXP, off-reference" | "non-NXP"
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -54,30 +65,51 @@ def parse_get_version(p1: bytes, p2: bytes, p3: bytes) -> VersionInfo:
     storage = p1[5] if len(p1) > 5 else -1
     protocol = p1[6] if len(p1) > 6 else -1
     sw_type = p2[1] if len(p2) > 1 else -1
+    sw_subtype = p2[2] if len(p2) > 2 else -1
 
     uid = p3[0:7] if len(p3) >= 7 else p3
     prefix14 = (p1[:7] + p2[:7]) if (len(p1) >= 7 and len(p2) >= 7) else b""
 
     is_nxp = vendor == NXP_VENDOR_ID
-    is_gx = prefix14 == GX_GETVERSION_PREFIX
+    # Assert on the stable tuple, NOT the brittle HW sub-type nibble (DR-9).
+    matches_reference = (
+        is_nxp
+        and hw_type == REF_HW_TYPE
+        and storage == REF_STORAGE
+        and protocol == REF_PROTOCOL
+        and sw_subtype == REF_SW_SUBTYPE
+    )
+    # On the Tx (TagTamper) part the HW sub-type HIGH nibble carries the tamper
+    # flag; a non-zero high nibble means we cannot exclude TagTamper from bytes
+    # alone — only an authenticated GetTTStatus (out of this read-only station's
+    # scope) is definitive. Plain stock returns a zero high nibble (e.g. 0x02).
+    possible_tt = is_nxp and (hw_subtype >> 4) != 0
+
     if not is_nxp:
         notes.append(f"vendor 0x{vendor:02X} is not NXP (0x04)")
 
-    if is_gx:
-        variant = "Gx"
-    elif is_nxp and hw_subtype != 0x08:
-        # Tx (TagTamper) and other variants differ in sub-type/SW; we cannot
-        # positively ID Tx from public tables, so flag rather than assert.
-        variant = "Tx?/off-spec"
-        notes.append("GetVersion prefix != Gx reference — off-spec or Tx variant (rejected hardware)")
+    if matches_reference and not possible_tt:
+        variant = "NTAG 424 DNA (plain)"
+    elif matches_reference and possible_tt:
+        variant = "NTAG 424 DNA (TagTamper?)"
+        notes.append(
+            "HW sub-type high nibble set — cannot exclude TagTamper (Tx) from bytes; "
+            "GetTTStatus needed (rejected hardware if confirmed Tx)"
+        )
+    elif is_nxp:
+        variant = "NXP, off-reference"
+        notes.append(
+            "GetVersion does not match the AM-SEALED NTAG 424 DNA reference tuple "
+            f"(type 0x{hw_type:02X} storage 0x{storage:02X} sw-subtype 0x{sw_subtype:02X} proto 0x{protocol:02X})"
+        )
     else:
-        variant = "off-spec"
-        notes.append("GetVersion prefix does not match Gx reference")
+        variant = "non-NXP / off-spec"
 
     return VersionInfo(
         raw=raw, vendor_id=vendor, hw_type=hw_type, hw_subtype=hw_subtype,
         hw_major=hw_major, hw_minor=hw_minor, storage_size=storage, protocol=protocol,
-        sw_type=sw_type, uid=uid, prefix14=prefix14, is_gx=is_gx, is_nxp=is_nxp,
+        sw_type=sw_type, sw_subtype=sw_subtype, uid=uid, prefix14=prefix14,
+        matches_reference=matches_reference, possible_tt=possible_tt, is_nxp=is_nxp,
         variant=variant, notes=notes,
     )
 

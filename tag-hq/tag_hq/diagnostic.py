@@ -133,9 +133,10 @@ def run_full_diagnostic(tx: Transport) -> dict:
     v = verdict.evaluate(
         genuine=gen.genuine,
         genuine_reason=gen.reason,
-        is_gx=bool(version and version.is_gx),
+        matches_reference=bool(version and version.matches_reference),
         variant=version.variant if version else "unknown",
         random_id=activation.random_id,
+        possible_tt=bool(version and version.possible_tt),
         version_notes=(version.notes if version else []) + activation.notes,
     )
 
@@ -160,14 +161,19 @@ def run_full_diagnostic(tx: Transport) -> dict:
         "identity": None if not version else {
             "vendor_id": f"0x{version.vendor_id:02X}",
             "is_nxp": version.is_nxp,
-            "is_gx": version.is_gx,
+            "matches_reference": version.matches_reference,
+            "possible_tt": version.possible_tt,
             "variant": version.variant,
             "hw": f"type=0x{version.hw_type:02X} sub=0x{version.hw_subtype:02X} "
                   f"v{version.hw_major}.{version.hw_minor} storage=0x{version.storage_size:02X} "
                   f"proto=0x{version.protocol:02X}",
+            "sw_subtype": f"0x{version.sw_subtype:02X}",
             "uid_hex": version.uid_hex,
             "prefix14": version.prefix14.hex().upper(),
-            "gx_reference": parsers.GX_GETVERSION_PREFIX.hex().upper(),
+            "reference_tuple": (
+                f"type=0x{parsers.REF_HW_TYPE:02X} storage=0x{parsers.REF_STORAGE:02X} "
+                f"sw_subtype=0x{parsers.REF_SW_SUBTYPE:02X} proto=0x{parsers.REF_PROTOCOL:02X}"
+            ),
             "notes": version.notes,
         },
         "signature_hex": signature.hex().upper() if signature else None,
