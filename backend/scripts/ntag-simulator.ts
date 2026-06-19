@@ -78,7 +78,14 @@ const cmdSeed = async (args: Args) => {
   const explicitToken = (args['token-name'] as string) ?? '';
   const tokenName = explicitToken || `sim_${Date.now().toString(36)}`;
 
-  const tagUid = generateTagUid();
+  // Optional: bind a real physical token's UID (e.g. from S-NFC1 Tag HQ) instead
+  // of a random one, so the smoke test runs against an actual token's identity.
+  const explicitUid = (args['tag-uid'] as string) ?? '';
+  const tagUid = explicitUid ? explicitUid.replace(/\s/g, '').toUpperCase() : generateTagUid();
+  if (explicitUid && !/^[0-9A-F]{14}$/.test(tagUid)) {
+    console.error(`--tag-uid must be 14 hex chars (7-byte UID); got "${explicitUid}"`);
+    process.exit(1);
+  }
   const aesKey = generateAesKey();
 
   const { data: verif, error: verifErr } = await supabase
