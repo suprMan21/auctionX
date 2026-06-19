@@ -8,5 +8,5 @@ class ApiConstants {
   static const receiveTimeout = Duration(seconds: 15);
 
   /// Set to false for physical NFC tag testing
-  static const bool kUseMockNfc = true;
+  static const bool kUseMockNfc = false;
 }
