@@ -1,0 +1,22 @@
+[project]
+name = "tag-hq"
+version = "1.0.0"
+description = "Read-only NTAG 424 DNA diagnostic console (S-NFC1) — hardware bring-up + acceptance inspection"
+requires-python = ">=3.11"
+dependencies = [
+    "pyscard>=2.0",
+    "ecdsa>=0.19",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+tag-hq = "tag_hq.server:run"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

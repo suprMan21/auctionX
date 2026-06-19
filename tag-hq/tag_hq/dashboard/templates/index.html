@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TAG HQ — NTAG 424 DNA Diagnostic Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand">
+      <span class="brand-mark">◆</span>
+      <h1>TAG&nbsp;HQ</h1>
+      <span class="brand-sub">NTAG&nbsp;424&nbsp;DNA · READ-ONLY DIAGNOSTIC CONSOLE</span>
+    </div>
+    <div class="masthead-right">
+      <span class="pill pill-readonly" title="Zero write/encode APDUs. Enforced by command whitelist.">READ-ONLY</span>
+      <span id="selftest-pill" class="pill pill-muted">SELF-TEST …</span>
+      <span class="version">v{{ version }}</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel scan-panel">
+      <div class="scan-cta">
+        <button id="scan-btn" class="btn btn-primary">
+          <span class="btn-label">SCAN&nbsp;TAG</span>
+        </button>
+        <div id="reader-status" class="reader-status">Checking for reader…</div>
+      </div>
+      <p class="scan-hint">Place one NTAG 424 DNA tag on the ACR1252U antenna, then scan. The station verifies <strong>genuine NXP silicon</strong> (issued-by-NXP) — anti-clone is the scan-time SUN/SDM CMAC, not this station.</p>
+    </section>
+
+    <section id="result" class="panel result-panel hidden">
+      <!-- populated by app.js -->
+    </section>
+
+    <section class="panel catalog-panel">
+      <div class="panel-head">
+        <h2>CATALOG</h2>
+        <div id="stats" class="stats"></div>
+      </div>
+      <table class="catalog-table">
+        <thead>
+          <tr><th>#</th><th>UID</th><th>VARIANT</th><th>GENUINE</th><th>VERDICT</th><th>SCANNED</th></tr>
+        </thead>
+        <tbody id="catalog-body">
+          <tr class="empty"><td colspan="6">No tags scanned yet.</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="detail-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modal-title">SCAN DETAIL</h3>
+        <button id="modal-close" class="btn-icon">✕</button>
+      </div>
+      <pre id="modal-body" class="json-dump"></pre>
+    </div>
+  </div>
+
+  <footer class="footer">
+    Tag HQ runs the AN12196 Table&nbsp;30 self-test (UID {{ selftest_uid }}) as a gating check before trusting any field read. Local-only · 127.0.0.1
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
