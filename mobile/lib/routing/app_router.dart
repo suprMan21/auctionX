@@ -65,7 +65,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         return RouteNames.browse;
       }
 
-      if (!isAuthenticated && !isAuthRoute && !isSplash && !isOnboarding && !isVerify) {
+      // Once auth has resolved to unauthenticated, move OFF splash too —
+      // otherwise a fresh/logged-out install is stranded on the splash spinner
+      // forever (initialLocation is splash and nothing else redirects away from
+      // it). Splash is only a holding state while auth is initial/loading, which
+      // is handled above.
+      if (!isAuthenticated && !isAuthRoute && !isOnboarding && !isVerify) {
         return RouteNames.login;
       }
 
