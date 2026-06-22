@@ -1,0 +1,5 @@
+# Phase 1 (SIM-ONLY) has NO runtime dependencies — the AES/CMAC core is pure
+# Python so simulator-parity tests run anywhere. Dev + future hardware extras:
+pytest>=8.0
+# Phase 2 (live reader) only:
+# pyscard>=2.0

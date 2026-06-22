@@ -1,0 +1,22 @@
+[project]
+name = "tag-encoder"
+version = "0.1.0"
+description = "NTAG 424 DNA encoder core + CLI (S-NFC2 Lane A) — Phase 1 SIM-ONLY, simulator-parity SUN encoder. Write counterpart to the read-only tag-hq."
+requires-python = ">=3.11"
+# Pure-Python AES/CMAC core means NO runtime crypto dependency for SIM parity.
+# pyscard is only needed for the Phase-2 live-reader path (extra below).
+dependencies = []
+
+[project.optional-dependencies]
+# Phase 2 (live silicon) — PC/SC reader I/O. Not used in Phase 1.
+hardware = ["pyscard>=2.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+tag-encoder = "tag_encoder.cli:main"
+
+[tool.pytest.ini_options]
+# "." makes tag_encoder importable; ".." makes the sibling tag-hq package
+# importable so the NDEF round-trip test can exercise tag_hq.parsers directly.
+pythonpath = [".", "../tag-hq"]
+testpaths = ["tests"]

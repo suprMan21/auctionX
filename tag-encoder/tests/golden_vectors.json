@@ -1,0 +1,56 @@
+{
+  "_source": "Generated from backend/src/services/nfc/ntag424Simulator.ts (encryptPiccData + computeCmac truncated to 8B + buildSunUrl), via node 22. These are the SIM-PARITY golden vectors: encode_sun() MUST match encPiccHex/cmacHex/sunUrl byte-for-byte.",
+  "_generated": "2026-06-22",
+  "vectors": [
+    {
+      "uid": "04A27E02936980",
+      "counter": 0,
+      "key": "00112233445566778899AABBCCDDEEFF",
+      "baseUrl": "https://authentic-materials.com",
+      "tokenName": "item_123",
+      "encPiccHex": "28A50623626C86DD43877E42CA868205",
+      "cmacHex": "4ED0148CF114A43F",
+      "sunUrl": "https://authentic-materials.com/verify/item_123?picc_data=28A50623626C86DD43877E42CA868205&cmac=4ED0148CF114A43F"
+    },
+    {
+      "uid": "04A27E02936980",
+      "counter": 1,
+      "key": "00112233445566778899AABBCCDDEEFF",
+      "baseUrl": "https://authentic-materials.com/",
+      "tokenName": "item_123",
+      "encPiccHex": "7ADED08E8940060E4225F095D78E89EA",
+      "cmacHex": "B0889BE5EE2EE8D4",
+      "sunUrl": "https://authentic-materials.com/verify/item_123?picc_data=7ADED08E8940060E4225F095D78E89EA&cmac=B0889BE5EE2EE8D4"
+    },
+    {
+      "uid": "0123456789ABCD",
+      "counter": 42,
+      "key": "FFEEDDCCBBAA99887766554433221100",
+      "baseUrl": "https://example.com",
+      "tokenName": "tok abc",
+      "encPiccHex": "DE87B2A4380C061317618510E2BEC9CB",
+      "cmacHex": "F43D9818483569A4",
+      "sunUrl": "https://example.com/verify/tok%20abc?picc_data=DE87B2A4380C061317618510E2BEC9CB&cmac=F43D9818483569A4"
+    },
+    {
+      "uid": "00000000000000",
+      "counter": 16777215,
+      "key": "000102030405060708090A0B0C0D0E0F",
+      "baseUrl": "https://d1bwev65w7rqzl.cloudfront.net",
+      "tokenName": "A/B?c",
+      "encPiccHex": "67D36D6E4FD0EDE2D71B8A7AF04F009C",
+      "cmacHex": "BB2FFC4FA8A05DE2",
+      "sunUrl": "https://d1bwev65w7rqzl.cloudfront.net/verify/A%2FB%3Fc?picc_data=67D36D6E4FD0EDE2D71B8A7AF04F009C&cmac=BB2FFC4FA8A05DE2"
+    },
+    {
+      "uid": "DEADBEEFCAFE01",
+      "counter": 255,
+      "key": "2B7E151628AED2A6ABF7158809CF4F3C",
+      "baseUrl": "https://t.co",
+      "tokenName": "x",
+      "encPiccHex": "48DCFBE8AB052C19F16AE3B13A7F6942",
+      "cmacHex": "17EF3B87AB38A779",
+      "sunUrl": "https://t.co/verify/x?picc_data=48DCFBE8AB052C19F16AE3B13A7F6942&cmac=17EF3B87AB38A779"
+    }
+  ]
+}
