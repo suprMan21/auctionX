@@ -1,0 +1,73 @@
+{
+  "tool": "S-NFC2 qualify_one",
+  "reader": "ACS ACR1252 Dual Reader PICC",
+  "tags": [
+    {
+      "sub_type": "0x02",
+      "uid": "04A97E02936980",
+      "tt_sw": "911C",
+      "verdict": "PLAIN",
+      "explanation": "GetTTStatus (0xF7) is not implemented (91 1C illegal command code) -> this is plain NTAG 424 DNA. Encode gate CLEARS.",
+      "seq": 1
+    },
+    {
+      "sub_type": "0x02",
+      "uid": "04927E02936980",
+      "tt_sw": "911C",
+      "verdict": "PLAIN",
+      "explanation": "GetTTStatus (0xF7) is not implemented (91 1C illegal command code) -> this is plain NTAG 424 DNA. Encode gate CLEARS.",
+      "seq": 2
+    },
+    {
+      "sub_type": "0x02",
+      "uid": "04A27E02936980",
+      "tt_sw": "911C",
+      "verdict": "PLAIN",
+      "explanation": "GetTTStatus (0xF7) is not implemented (91 1C illegal command code) -> this is plain NTAG 424 DNA. Encode gate CLEARS.",
+      "seq": 3
+    },
+    {
+      "sub_type": "0x02",
+      "uid": "04917E02936980",
+      "tt_sw": "911C",
+      "verdict": "PLAIN",
+      "explanation": "GetTTStatus (0xF7) is not implemented (91 1C illegal command code) -> this is plain NTAG 424 DNA. Encode gate CLEARS.",
+      "seq": 4
+    },
+    {
+      "sub_type": "0x02",
+      "uid": "048A7D02936980",
+      "tt_sw": "911C",
+      "verdict": "PLAIN",
+      "explanation": "GetTTStatus (0xF7) is not implemented (91 1C illegal command code) -> this is plain NTAG 424 DNA. Encode gate CLEARS.",
+      "seq": 5
+    },
+    {
+      "sub_type": "0x02",
+      "uid": "048B7E02936980",
+      "tt_sw": "911C",
+      "verdict": "PLAIN",
+      "explanation": "GetTTStatus (0xF7) is not implemented (91 1C illegal command code) -> this is plain NTAG 424 DNA. Encode gate CLEARS.",
+      "seq": 6
+    },
+    {
+      "sub_type": "0x02",
+      "uid": "048C7E02936980",
+      "tt_sw": "911C",
+      "verdict": "PLAIN",
+      "explanation": "GetTTStatus (0xF7) is not implemented (91 1C illegal command code) -> this is plain NTAG 424 DNA. Encode gate CLEARS.",
+      "seq": 7
+    },
+    {
+      "sub_type": "0x02",
+      "uid": "04937E02936980",
+      "tt_sw": "911C",
+      "verdict": "PLAIN",
+      "explanation": "GetTTStatus (0xF7) is not implemented (91 1C illegal command code) -> this is plain NTAG 424 DNA. Encode gate CLEARS.",
+      "seq": 8
+    }
+  ],
+  "tags_qualified": 8,
+  "plain": 8,
+  "all_plain": true
+}
