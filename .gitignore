@@ -55,3 +55,9 @@ supabase/.temp/
 
 # Claude Code worktrees + transient state
 .claude/worktrees/
+
+# Supabase CLI scratch state (predates S-ISO1)
+supabase/functions/supabase/
+
+# TS incremental build artifact — should never have been tracked
+frontend/tsconfig.tsbuildinfo
