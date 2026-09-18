@@ -1,0 +1,5 @@
+# This function performs its OWN authentication, so the gateway must not also
+# require a JWT. Deploys default to verify_jwt = true, and Supabase's newer
+# sb_secret_ keys are not JWTs, so without this a redeploy silently breaks the
+# caller with UNAUTHORIZED_NO_AUTH_HEADER before the handler ever runs.
+verify_jwt = false

@@ -13,11 +13,11 @@
 |---|---|---|---|
 | 1 | Route inventory before and after committed to `docs/PARKED_MARKETPLACE.md` | ✅ | §2 of that doc — every top-level mount, admin sub-mount and route-level gate |
 | 2 | Every marketplace endpoint 404s with the flag off; token endpoints unaffected | ✅ | `backend/src/__tests__/routeAllowlist.test.ts`, 47 specs |
-| 3 | Marketplace edge functions return 410 | ✅ | `_shared/marketplaceGate.ts` wired into all 8; **not verified against deployed staging** (see Blocked) |
-| 4 | No marketplace cron job scheduled | ⏳ | migration written; **not applied** (see Blocked) |
-| 5 | `authenticated` cannot write marketplace tables (tested) | ⏳ | migration written; **not applied** (see Blocked) |
+| 3 | Marketplace edge functions return 410 | ✅ | all 8 deployed to staging; 5 return `410 MARKETPLACE_PARKED`, 3 are blocked earlier by gateway JWT — see below |
+| 4 | No marketplace cron job scheduled | ⏳ | migration applied, but the `cron.unschedule` block has an exception guard that can silently skip — **one query still needed**, see below |
+| 5 | `authenticated` cannot write marketplace tables (tested) | ✅ | live probe: `42501 permission denied for table` on `listings`, `auctions`, `bids`, `settlements` |
 | 6 | Lint rule fails on a deliberate marketplace import, then removed | ✅ | proven — see below |
-| 7 | Flipping both flags + re-enable SQL restores behaviour on a local instance | ⚠️ | flag half proven by test (flag on restores every parked mount); **SQL half not run** (see Blocked) |
+| 7 | Flipping both flags + re-enable SQL restores behaviour on a local instance | ⚠️ | flag half proven by test (flag on restores every parked mount); the re-enable SQL itself is documented but not re-run |
 | 8 | `tsc` 0 errors; vitest green; no new skips | ✅ | below |
 
 ---
@@ -88,20 +88,46 @@ self-references `users`, violating the "RLS must never self-reference" lesson.
 
 ---
 
-## ⛔ Blocked — cannot complete without Boss
+## Staging verification (2026-09-18, after Boss pushed + ran `supabase db push --linked`)
 
-The shell running this session has **no 1Password session**, so:
+### 🔴 The key exposure is CLOSED
 
-| Blocked | Because |
-|---|---|
-| All git commits | `commit.gpgsign=true`, `gpg.format=ssh`, signing key in the locked 1Password SSH agent → `error: 1Password: failed to fill whole buffer` |
-| `git push origin dev` | permission-denied from Claude sessions (long-standing) |
-| Applying any migration to staging | `op read op://AM_Development/Supabase_Staging/DB_Password` fails — no active session |
-| Criteria 3, 4, 5, 7 | all need staging or a local Supabase instance |
+Same probe that returned the key before the fix:
+```
+GET /rest/v1/nfc_tags?select=id,status,aes_key_enc   apikey: <publishable>
+→ HTTP 200, rows: 0, rows exposing aes_key_enc: 0
+```
+`verification_events` likewise returns nothing to anon.
 
-**Unlocking the 1Password desktop app should restore the agent** — `SSH_AUTH_SOCK` already points at it.
+### Marketplace writes revoked
+```
+POST /rest/v1/listings     → 401 {"code":"42501","message":"permission denied for table listings"}
+POST /rest/v1/auctions     → 401 42501
+POST /rest/v1/bids         → 401 42501
+POST /rest/v1/settlements  → 401 42501
+```
 
-All work is written to the working tree and fully verified locally. Nothing is lost.
+### Edge functions gated
+All 8 deployed. `release-escrow`, `reconcile-escrow`, `payment-webhook`, `settle-auction` and `listings`
+return **410 `MARKETPLACE_PARKED`**. `process-payment`, `place-bid` and `check-payment-window` return 401
+at the gateway (`verify_jwt = true`), so the request is blocked before it reaches the gate — a stronger
+block, not a weaker one. `waitlist-welcome` correctly still answers with its own auth, not the gate.
+
+**`payment-webhook` and `settle-auction` gained a `config.toml` (`verify_jwt = false`) in this session.**
+They were deployed with JWT verification off but had no config in source, so shipping the 410 gate would
+have silently regressed them to gateway-JWT and broken both. Both were deployed `--no-verify-jwt` and
+probed.
+
+### ⏳ Still to verify — one query
+
+The `cron.unschedule` block in `20260918000003` is wrapped in an exception guard that downgrades
+`undefined_table` / `insufficient_privilege` to a NOTICE, so it *could* have skipped silently. The grants
+in the same migration demonstrably applied, but that does not prove the unschedule did. Confirm with:
+
+```sql
+SELECT jobname, schedule FROM cron.job;
+-- expect: neither 'release-escrow-tick' nor 'reconcile-escrow-daily'
+```
 
 ---
 

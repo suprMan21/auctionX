@@ -96,12 +96,20 @@ Gated by `supabase/functions/_shared/marketplaceGate.ts`, which returns **410 Go
 The gate runs immediately after the CORS preflight branch.
 
 **Gated (8):** `process-payment`, `payment-webhook`, `release-escrow`, `settle-auction`,
-`reconcile-escrow`, `check-payment-window`, `place-bid`, `listings`.
+`reconcile-escrow`, `check-payment-window`, `place-bid`, `listings`. All deployed to staging 2026-09-18.
 
 **Not gated (2):** `waitlist-welcome` (live), `upload-url` (generic S3 presigner the token
 origin-video flow needs).
 
-### ⚠️ Un-park prerequisite — `verify_jwt` regression trap
+Verified live on staging:
+
+| Function | Result | Note |
+|---|---|---|
+| `release-escrow`, `reconcile-escrow`, `payment-webhook`, `settle-auction`, `listings` | **410 `MARKETPLACE_PARKED`** | reachable without a JWT, so the gate answers |
+| `process-payment`, `place-bid`, `check-payment-window` | **401** at the gateway | `verify_jwt = true`, so the request never reaches the gate — blocked earlier and harder |
+| `waitlist-welcome` | 401 (its own auth) | correctly NOT marketplace-gated |
+
+### `verify_jwt` posture (fixed 2026-09-18)
 
 Edge Function deploys default to `verify_jwt = true`. A function with its own auth must deploy with
 `--no-verify-jwt`, **every** deploy, and be verified with a curl probe (a no-auth call must return the
@@ -109,14 +117,20 @@ function's own 401, not `UNAUTHORIZED_NO_AUTH_HEADER`).
 
 Current state of `config.toml` in source:
 
-| Function | `config.toml` | Risk |
+| Function | `config.toml` | Why |
 |---|---|---|
-| `release-escrow`, `reconcile-escrow`, `upload-url` | `verify_jwt = false` ✅ | safe |
-| **`payment-webhook`** | **missing** ⚠️ | has its own Stripe signature check; a redeploy would silently re-enable JWT verification and break the webhook |
-| **`settle-auction`** | **missing** ⚠️ | has its own `x-settle-secret` check; same risk |
+| `release-escrow`, `reconcile-escrow`, `upload-url` | `verify_jwt = false` | pre-existing; own shared-secret auth |
+| `payment-webhook` | `verify_jwt = false` — **added in S-ISO1** | own Stripe signature check |
+| `settle-auction` | `verify_jwt = false` — **added in S-ISO1** | own `x-settle-secret` check |
+| everything else | default (`verify_jwt = true`) | gateway JWT is the intended gate |
 
-**Before un-parking, add `config.toml` with `verify_jwt = false` to those two.** Left unfixed here
-deliberately: both are parked and return 410, so the trap cannot bite while the marketplace is off.
+`payment-webhook` and `settle-auction` were deployed with `verify_jwt = false` but had **no `config.toml`
+in source**, so any redeploy would silently re-enable gateway JWT verification and break them. S-ISO1 had
+to deploy these functions to ship the 410 gate, which would have triggered exactly that regression — so
+the two files were added and both were deployed with `--no-verify-jwt`.
+
+**Rule, every deploy:** a function with its own auth must be deployed `--no-verify-jwt`, then probed. A
+no-auth call must return the function's own response, never `UNAUTHORIZED_NO_AUTH_HEADER`.
 
 ---
 
