@@ -39,6 +39,8 @@ import { SettingsPayoutsPage } from './pages/SettingsPayoutsPage';
 import { AgeGateGuard } from '@/components/AgeGate/AgeGateGuard';
 import { UnmentionablesBrowsePage } from '@/pages/UnmentionablesBrowsePage';
 import { Dashboard } from '@/pages/Dashboard';
+import { isMarketplaceEnabledOnClient } from './lib/featureFlags';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { CollectorLandingPage } from '@/pages/CollectorLandingPage';
 import { CreatorLandingPage } from '@/pages/CreatorLandingPage';
 import { AMSealedPage } from '@/pages/AMSealedPage';
@@ -85,6 +87,10 @@ function PublicWithHeader({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  // S-ISO1: parked marketplace. Read once per render; the value is fixed at
+  // build time by VITE_FEATURE_MARKETPLACE.
+  const marketplaceEnabled = isMarketplaceEnabledOnClient();
+
   return (
     <ErrorBoundary>
       <BrowserRouter>
@@ -118,6 +124,11 @@ function App() {
             }
           />
           
+          {/* ── PARKED marketplace routes (S-ISO1) ──────────────────────────
+              Hidden when VITE_FEATURE_MARKETPLACE is off. React Router recurses
+              into fragments, so a conditional group works here. Nothing is
+              deleted — flip the flag to restore. */}
+          {marketplaceEnabled && (<>
           <Route
             path="/listings/create"
             element={
@@ -144,7 +155,9 @@ function App() {
               </ProtectedRoute>
             }
           />
+          </>)}
           
+          {marketplaceEnabled && (<>
           <Route
             path="/unmentionables"
             element={
@@ -180,6 +193,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+          </>)}
           <Route
             path="/dashboard"
             element={
@@ -189,10 +203,12 @@ function App() {
             }
           />
 
+          {marketplaceEnabled && (<>
           <Route path="/browse" element={<PublicWithHeader><BrowsePage /></PublicWithHeader>} />
           <Route path="/browse/:categorySlug" element={<PublicWithHeader><BrowsePage /></PublicWithHeader>} />
           <Route path="/search" element={<PublicWithHeader><SearchResultsPage /></PublicWithHeader>} />
           <Route path="/listings/:id" element={<PublicWithHeader><ViewListing /></PublicWithHeader>} />
+          </>)}
 
           {/* NFC Tag Management — static routes before parameterized (lesson #5) */}
           <Route path="/nfc/scan" element={<PublicWithHeader><Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="text-gray-400">Loading...</div></div>}><NfcScanPage /></Suspense></PublicWithHeader>} />
@@ -223,9 +239,12 @@ function App() {
             }
           />
           <Route path="/verify/:tokenName" element={<PublicWithHeader><VerificationPage /></PublicWithHeader>} />
+          {marketplaceEnabled && (<>
           <Route path="/auctions/:id" element={<PublicWithHeader><AuctionDetailPage /></PublicWithHeader>} />
           <Route path="/seller/:id" element={<PublicWithHeader><SellerProfilePage /></PublicWithHeader>} />
+          </>)}
 
+          {marketplaceEnabled && (<>
           <Route
             path="/settlements/:settlementId"
             element={
@@ -269,6 +288,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+          </>)}
 
           <Route
             path="/notifications"
@@ -288,6 +308,7 @@ function App() {
             }
           />
 
+          {marketplaceEnabled && (
           <Route
             path="/settings/payouts"
             element={
@@ -296,6 +317,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+          )}
 
           <Route path="/" element={<CollectorLandingPage />} />
 
@@ -305,23 +327,23 @@ function App() {
               <Route index element={<AdminDashboardPage />} />
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="users/:id" element={<AdminUserDetailPage />} />
-              <Route path="moderation" element={<AdminModerationPage />} />
-              <Route path="auctions" element={<AdminAuctionsPage />} />
-              <Route path="auctions/:id" element={<AdminAuctionDetailPage />} />
+              {marketplaceEnabled && <Route path="moderation" element={<AdminModerationPage />} />}
+              {marketplaceEnabled && <Route path="auctions" element={<AdminAuctionsPage />} />}
+              {marketplaceEnabled && <Route path="auctions/:id" element={<AdminAuctionDetailPage />} />}
               {/* S22: Yoti verifications admin surface. Static "verifications"
                   before parameterized ":userId" sibling (Lesson #5). Legacy
                   seller-verification doc-pipeline page remains accessible. */}
               <Route path="verifications" element={<AdminVerificationsPage />} />
               <Route path="verifications/:userId" element={<AdminVerificationDetailPage />} />
-              <Route path="seller-verification" element={<AdminSellerVerificationPage />} />
-              <Route path="escrow" element={<AdminEscrowPage />} />
+              {marketplaceEnabled && <Route path="seller-verification" element={<AdminSellerVerificationPage />} />}
+              {marketplaceEnabled && <Route path="escrow" element={<AdminEscrowPage />} />}
               <Route path="audit-logs" element={<AdminAuditLogPage />} />
               <Route path="health" element={<AdminHealthPage />} />
             </Route>
           </Route>
 
           {/* Catch-all: unknown paths → landing page */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
         
         <Toaster

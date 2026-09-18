@@ -21,6 +21,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { CascadeOrchestrator } from '../_shared/payment/CascadeOrchestrator.ts';
 import { PaymentRequest, PaymentStatus } from '../_shared/payment/types.ts';
 import { logger } from '../_shared/utils/logger.ts';
+import { marketplaceGate } from '../_shared/marketplaceGate.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -45,6 +46,12 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  // ── S-ISO1: parked marketplace gate ───────────────────────────────────────
+  // Returns 410 unless the secret MARKETPLACE_ENABLED=true. Nothing deleted;
+  // see docs/PARKED_MARKETPLACE.md for the reversal procedure.
+  const parked = marketplaceGate(corsHeaders);
+  if (parked) return parked;
 
   try {
     // ─── 1. Authenticate buyer via JWT ────────────────────────────────────────

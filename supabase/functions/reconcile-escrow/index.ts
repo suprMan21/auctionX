@@ -25,6 +25,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { calculatePayout } from '../_shared/payment/payoutCalculation.ts';
 import { logger } from '../_shared/utils/logger.ts';
+import { marketplaceGate } from '../_shared/marketplaceGate.ts';
 
 const STUCK_ESCROW_GRACE_MINUTES = 30;
 const DISPUTED_SLA_DAYS = 7;
@@ -46,6 +47,12 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  // ── S-ISO1: parked marketplace gate ───────────────────────────────────────
+  // Returns 410 unless the secret MARKETPLACE_ENABLED=true. Nothing deleted;
+  // see docs/PARKED_MARKETPLACE.md for the reversal procedure.
+  const parked = marketplaceGate(corsHeaders);
+  if (parked) return parked;
 
   // Shared-secret authentication. Edge Functions deploys with --no-verify-jwt
   // because Supabase's new sb_secret_ keys aren't JWTs and legacy service_role

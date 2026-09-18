@@ -10,6 +10,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { cn } from '@/lib/cn';
 import { BRAND_LABEL } from '@/constants/branding';
+import { isMarketplaceEnabledOnClient } from '../../lib/featureFlags';
 
 interface NavItem {
   /** Route path relative to /admin */
@@ -18,9 +19,11 @@ interface NavItem {
   label: string;
   /** SVG path string for icon */
   icon: string;
+  /** S-ISO1: this surface serves the parked marketplace. */
+  marketplace?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
+const ALL_NAV_ITEMS: NavItem[] = [
   {
     to: '/admin',
     label: 'Dashboard',
@@ -38,16 +41,19 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     to: '/admin/moderation',
+    marketplace: true,
     label: 'Moderation',
     icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
   },
   {
     to: '/admin/auctions',
+    marketplace: true,
     label: 'Auctions',
     icon: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3',
   },
   {
     to: '/admin/escrow',
+    marketplace: true,
     label: 'Escrow',
     icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
   },
@@ -62,6 +68,15 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
   },
 ];
+
+/**
+ * S-ISO1 — marketplace admin surfaces are hidden while the marketplace is
+ * parked. The routes themselves are gated in App.tsx and the API is gated in
+ * routes/admin/index.ts; this just keeps them out of the sidebar.
+ */
+const NAV_ITEMS: NavItem[] = ALL_NAV_ITEMS.filter(
+  (item) => !item.marketplace || isMarketplaceEnabledOnClient(),
+);
 
 /**
  * Icon rendered in the sidebar nav items.

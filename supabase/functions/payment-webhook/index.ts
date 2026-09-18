@@ -16,6 +16,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.93.1';
 import { ProcessorFactory } from '../_shared/payment/ProcessorFactory.ts';
 import { ProcessorType, PaymentStatus } from '../_shared/payment/types.ts';
 import { logger } from '../_shared/utils/logger.ts';
+import { marketplaceGate } from '../_shared/marketplaceGate.ts';
 
 /** Insert a notification row silently — errors never block the main flow. */
 async function insertNotification(
@@ -60,6 +61,12 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  // ── S-ISO1: parked marketplace gate ───────────────────────────────────────
+  // Returns 410 unless the secret MARKETPLACE_ENABLED=true. Nothing deleted;
+  // see docs/PARKED_MARKETPLACE.md for the reversal procedure.
+  const parked = marketplaceGate(corsHeaders);
+  if (parked) return parked;
 
   try {
     logger.info('Webhook: Received request', {

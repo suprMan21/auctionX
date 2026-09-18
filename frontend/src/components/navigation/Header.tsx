@@ -5,6 +5,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { NotificationBell } from '@/features/notifications/components/NotificationBell';
 import { BRAND_LABEL } from '@/constants/branding';
+import { isMarketplaceEnabledOnClient } from '../../lib/featureFlags';
 
 function useIsAdmin(userId: string | undefined) {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -86,6 +87,8 @@ const mobileNavLinkClass =
   'flex items-center gap-3 w-full px-4 py-3 min-h-[44px] rounded-xl text-gray-300 hover:text-white hover:bg-white/5 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800';
 
 export function Header() {
+  // S-ISO1: parked marketplace — hide marketplace nav, CTAs and search.
+  const marketplaceEnabled = isMarketplaceEnabledOnClient();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -177,11 +180,13 @@ export function Header() {
             )}
 
             <ul className="hidden lg:flex items-center gap-1" role="list">
-              <li>
+              {marketplaceEnabled && (
+                <li>
                 <Link to="/browse" className={navLinkClass}>
                   Browse
                 </Link>
-              </li>
+                </li>
+              )}
               {user && (
                 <li>
                   <Link to="/dashboard" className={navLinkClass}>
@@ -189,7 +194,8 @@ export function Header() {
                   </Link>
                 </li>
               )}
-              <li>
+              {marketplaceEnabled && (
+                <li>
                 <Link
                   to="/unmentionables"
                   className="flex items-center gap-2 px-4 py-2 min-h-[44px] rounded-xl
@@ -198,7 +204,8 @@ export function Header() {
                 >
                   Unmentionables
                 </Link>
-              </li>
+                </li>
+              )}
             </ul>
           </div>
 
@@ -269,18 +276,23 @@ export function Header() {
                   </button>
                   {userMenuOpen && (
                     <div className="absolute right-0 top-full mt-2 w-56 rounded-xl bg-dark-700 border border-white/10 shadow-xl py-1 z-50">
+                      {marketplaceEnabled && (
                       <Link to="/my-listings" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
                         My Listings
                       </Link>
+                      )}
+                      {marketplaceEnabled && (
                       <Link to="/listings/create" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
                         Create Listing
                       </Link>
+                      )}
                       <Link to="/nfc" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                           <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                         </svg>
                         NFC Tags
                       </Link>
+                      {marketplaceEnabled && (
                       <Link to="/messages" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
                         Messages
                         {unreadCount > 0 && (
@@ -289,9 +301,12 @@ export function Header() {
                           </span>
                         )}
                       </Link>
+                      )}
+                      {marketplaceEnabled && (
                       <Link to="/payouts" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
                         Payouts
                       </Link>
+                      )}
                       <Link to="/profile" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
                         Profile
                       </Link>
@@ -448,11 +463,13 @@ export function Header() {
 
           {/* Main nav */}
           <ul className="space-y-1" role="list">
-            <li>
+            {marketplaceEnabled && (
+              <li>
               <Link to="/browse" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
                 Browse
               </Link>
-            </li>
+              </li>
+            )}
             {user && (
               <>
                 <li>
@@ -460,11 +477,13 @@ export function Header() {
                     Dashboard
                   </Link>
                 </li>
-                <li>
+                {marketplaceEnabled && (
+                  <li>
                   <Link to="/my-listings" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
                     My Listings
                   </Link>
-                </li>
+                  </li>
+                )}
                 <li>
                   <Link to="/nfc" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -473,12 +492,15 @@ export function Header() {
                     NFC Tags
                   </Link>
                 </li>
-                <li>
+                {marketplaceEnabled && (
+                  <li>
                   <Link to="/payouts" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
                     Payouts
                   </Link>
-                </li>
-                <li>
+                  </li>
+                )}
+                {marketplaceEnabled && (
+                  <li>
                   <Link to="/messages" className={`relative ${mobileNavLinkClass}`} onClick={handleMobileNavClick}>
                     Messages
                     {unreadCount > 0 && (
@@ -487,12 +509,15 @@ export function Header() {
                       </span>
                     )}
                   </Link>
-                </li>
-                <li>
+                  </li>
+                )}
+                {marketplaceEnabled && (
+                  <li>
                   <Link to="/listings/create" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
                     Create Listing
                   </Link>
-                </li>
+                  </li>
+                )}
                 <li>
                   <Link to="/profile" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
                     Profile
@@ -504,6 +529,7 @@ export function Header() {
 
           {/* Unmentionables section */}
           <div className="border-t border-white/10 mt-4 pt-4">
+            {marketplaceEnabled && (
             <Link
               to="/unmentionables"
               className="flex items-center gap-3 w-full px-4 py-3 min-h-[44px] rounded-xl
@@ -515,6 +541,7 @@ export function Header() {
               Unmentionables
               <span className="ml-auto text-xs text-unmentionables-500/60">18+</span>
             </Link>
+            )}
           </div>
 
           {/* Admin link (mobile) */}

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { marketplaceGate } from '../_shared/marketplaceGate.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,6 +10,12 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
+
+  // ── S-ISO1: parked marketplace gate ───────────────────────────────────────
+  // Returns 410 unless the secret MARKETPLACE_ENABLED=true. Nothing deleted;
+  // see docs/PARKED_MARKETPLACE.md for the reversal procedure.
+  const parked = marketplaceGate(corsHeaders);
+  if (parked) return parked;
 
   try {
     const supabaseClient = createClient(

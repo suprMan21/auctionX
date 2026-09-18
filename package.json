@@ -10,6 +10,7 @@
     "audit:backend": "cd backend && npm audit --audit-level=high",
     "audit:contracts": "cd contracts && npm audit --audit-level=critical",
     "audit:scripts": "cd scripts && npm audit --audit-level=high",
-    "audit:all": "npm run audit:frontend && npm run audit:backend && npm run audit:contracts && npm run audit:scripts"
+    "audit:all": "npm run audit:frontend && npm run audit:backend && npm run audit:contracts && npm run audit:scripts",
+    "lint:boundaries": "cd backend && npx --yes -p dependency-cruiser@16 -p typescript@5.9.3 depcruise --config ../.dependency-cruiser.cjs src"
   }
 }
