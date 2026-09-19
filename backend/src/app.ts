@@ -12,6 +12,8 @@ import yotiVerificationRoutes from './routes/yotiVerification';
 import yotiWebhookRoutes from './routes/yotiWebhook';
 import notificationRoutes from './routes/notifications';
 import adminRoutes from './routes/admin/index';
+import tokenFeeWebhookRoutes from './routes/tokenFeeWebhook';
+import { ownershipRoutes } from './routes/tagManagement';
 
 // ── Parked marketplace routers (mounted only when FEATURE_MARKETPLACE=true) ──
 // Imported unconditionally so `tsc --noEmit` keeps typechecking the parked code.
@@ -44,8 +46,12 @@ type Mount = { readonly path: string; readonly router: Router; readonly raw?: bo
  */
 export const TOKEN_MOUNTS: readonly Mount[] = [
   { path: '/api/v1/webhooks/yoti', router: yotiWebhookRoutes, raw: true },
+  // S-NFC3: the only path that may complete a token transfer. Raw body for
+  // signature verification, and its OWN signing secret.
+  { path: '/api/v1/webhooks/stripe-token-fees', router: tokenFeeWebhookRoutes, raw: true },
   { path: '/api/v1/verification', router: yotiVerificationRoutes },
   { path: '/api/v1/nfc', router: nfcRoutes },
+  { path: '/api/v1/ownership', router: ownershipRoutes },
   { path: '/api/v1/verify', router: publicVerificationRoutes },
   { path: '/api/v1/notifications', router: notificationRoutes },
   { path: '/api/v1/admin', router: adminRoutes },

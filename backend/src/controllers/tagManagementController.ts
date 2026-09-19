@@ -1,0 +1,1077 @@
+/**
+ * S-NFC3 — Tag Management API (rev 2).
+ *
+ * The complete token lifecycle with no marketplace dependency:
+ *   enroll -> origin claim -> two-sided transfer -> release / replace / re-issue
+ *
+ * Lifecycle (nfc_tags.lifecycle_status):
+ *   ENROLLED --claim--> ACTIVE --transfer--> ACTIVE (new owner)
+ *   ACTIVE --release--> RELEASED (terminal)
+ *   ACTIVE --replace/reissue--> RETIRED (terminal)
+ *   ACTIVE <--admin--> SUSPENDED
+ *
+ * Invariants this file is responsible for:
+ *   1. Claim only on ENROLLED. There is no re-bind and no re-claim.
+ *   2. Claim and transfer completion both require a FRESH SUN scan.
+ *   3. A transfer reaches COMPLETED only from the Stripe webhook, never from a
+ *      client response. This file creates PaymentIntents; it never completes.
+ *   4. A pending transfer locks release.
+ *   5. After completion the previous owner loses every right.
+ *   6. No NFT, IPFS or chain call anywhere in this module.
+ */
+
+import { Response } from 'express';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { RequestWithId } from '../middleware/requestId';
+import { AuthRequest } from '../middleware/auth';
+import { AppError } from '../lib/errors';
+import { withLogContext } from '../lib/logger';
+import {
+  emitSecurityEvent,
+  hashEmailForLog,
+  type SecurityResult,
+} from '../lib/security/securityEvent';
+import { securityContext } from '../lib/security/requestContext';
+import { passesTwoFactor } from '../lib/security/twoFactorGate';
+import {
+  mintOwnershipProof,
+  type SecurityLogContext,
+} from '../lib/ownership/ownershipProof';
+import { verifyFreshSun, emitUnknownTagSun } from '../services/nfc/sunVerification';
+import {
+  enrollSchema,
+  claimSchema,
+  transferInitiateSchema,
+  transferCompleteSchema,
+  releaseSchema,
+  replaceSchema,
+  reissueRequestSchema,
+  disclosureSchema,
+  DISCLOSURE_FIELDS,
+} from '../services/nfc/tagManagementSchemas';
+import { getStripe } from '../lib/stripe';
+import {
+  TRANSFER_FEE_CENTS,
+  REISSUE_FEE_CENTS,
+  resolveCharge,
+} from '../lib/tokenFees';
+
+interface TagRequest extends RequestWithId, AuthRequest {}
+
+const getServiceClient = (): SupabaseClient =>
+  createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+
+/** Columns safe to read internally. `aes_key_enc` is fetched only where the SUN check needs it. */
+const TAG_COLUMNS =
+  'id, tag_uid, lifecycle_status, current_owner_id, seller_id, sun_counter, disclosure, linked_item_id';
+
+type TagRow = {
+  id: string;
+  tag_uid: string;
+  lifecycle_status: string | null;
+  current_owner_id: string | null;
+  seller_id: string | null;
+  sun_counter: number;
+  disclosure: Record<string, boolean> | null;
+  linked_item_id: string | null;
+};
+
+// ── Shared helpers ──────────────────────────────────────────────────────────
+
+const ok = <T>(res: Response, data: T, status = 200) =>
+  res.status(status).json({ success: true, data, error: null });
+
+/**
+ * Express 5 types a path parameter as `string | string[]` (a repeated segment
+ * yields an array). Every route here declares single-segment params, so an
+ * array can only come from a malformed path — collapse to the first value and
+ * let Zod/uuid validation downstream reject anything unexpected.
+ */
+const pathParam = (value: string | string[] | undefined): string =>
+  Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
+
+/**
+ * Maps a terminal or non-claimable lifecycle state onto the brief's error code.
+ * Returns null when the tag is in a state the caller may act on.
+ */
+const terminalStateError = (status: string | null): SecurityResult | null => {
+  switch (status) {
+    case 'RELEASED':
+      return 'token_released';
+    case 'RETIRED':
+      return 'token_retired';
+    case 'SUSPENDED':
+      return 'token_suspended';
+    default:
+      return null;
+  }
+};
+
+const errorFor = (code: SecurityResult): AppError => {
+  switch (code) {
+    case 'already_claimed':
+      return new AppError('conflict', 'This token has already been claimed');
+    case 'token_released':
+      return new AppError('failed_precondition', 'This token has been released and is no longer valid');
+    case 'token_retired':
+      return new AppError('failed_precondition', 'This token has been retired');
+    case 'token_suspended':
+      return new AppError('failed_precondition', 'This token is suspended');
+    case 'transfer_pending':
+      return new AppError('conflict', 'A transfer is already pending for this token');
+    case '2fa_required':
+      return new AppError('permission_denied', 'Two-factor authentication is required');
+    case 'forbidden':
+      return new AppError('permission_denied', 'Forbidden');
+    case 'sun_invalid':
+      return new AppError('invalid_argument', 'Tag scan could not be verified. Please tap the tag again');
+    case 'not_found':
+      return new AppError('not_found', 'Not found');
+    default:
+      return new AppError('invalid_argument', 'Request could not be processed');
+  }
+};
+
+const emitAuthzDenied = (
+  resourceType: 'tag' | 'transfer' | 'reissue',
+  resourceId: string | null,
+  reason: 'not_owner' | 'previous_owner' | 'not_recipient' | 'role',
+  ctx: SecurityLogContext,
+): void => {
+  emitSecurityEvent({
+    event: 'authz.denied',
+    resource_type: resourceType,
+    resource_id: resourceId,
+    reason,
+    result: 'forbidden',
+    request_id: ctx.requestId,
+    actor_id: ctx.actorId,
+    actor_type: ctx.actorType,
+    ip: ctx.ip,
+    route: ctx.route,
+  });
+};
+
+/**
+ * Ownership check for a tag.
+ *
+ * Distinguishes `previous_owner` from `not_owner` because they are different
+ * signals: a previous owner still poking at a tag is a UI or expectation
+ * problem, while a stranger doing so is IDOR probing (Rule 5).
+ */
+const assertTagOwner = async (
+  supabase: SupabaseClient,
+  tag: TagRow,
+  userId: string,
+  ctx: SecurityLogContext,
+): Promise<void> => {
+  if (tag.current_owner_id === userId) return;
+
+  const { data: priorRows } = await supabase
+    .from('ownership_transfers')
+    .select('id')
+    .eq('tag_id', tag.id)
+    .eq('from_user_id', userId)
+    .limit(1);
+
+  const reason = priorRows && priorRows.length > 0 ? 'previous_owner' : 'not_owner';
+  emitAuthzDenied('tag', tag.id, reason, ctx);
+  throw errorFor('forbidden');
+};
+
+const loadTag = async (
+  supabase: SupabaseClient,
+  tagId: string,
+): Promise<TagRow> => {
+  const { data, error } = await supabase
+    .from('nfc_tags')
+    .select(TAG_COLUMNS)
+    .eq('id', tagId)
+    .maybeSingle();
+
+  if (error || !data) throw errorFor('not_found');
+  return data as unknown as TagRow;
+};
+
+const isStaff = async (supabase: SupabaseClient, userId: string): Promise<boolean> => {
+  const { data } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+  // user_role enum is lowercase (Every-Session lesson).
+  return data?.role === 'admin' || data?.role === 'super_admin';
+};
+
+/**
+ * Mints a new `current` ownership proof and flips the previous one to `stale`,
+ * so exactly one current proof exists per tag (enforced by a partial unique
+ * index as well).
+ *
+ * Old and new IDs are never linked in any public output.
+ */
+const rotateOwnershipProof = async (
+  supabase: SupabaseClient,
+  params: {
+    tagId: string;
+    ownershipEventId: string;
+    ownershipEventType: 'claim' | 'transfer';
+    ownerId: string;
+  },
+  ctx: SecurityLogContext,
+): Promise<string> => {
+  const minted = mintOwnershipProof(
+    {
+      tagId: params.tagId,
+      ownershipEventId: params.ownershipEventId,
+      ownershipEventType: params.ownershipEventType,
+    },
+    ctx,
+  );
+
+  await supabase
+    .from('ownership_proofs')
+    .update({ status: 'stale' })
+    .eq('tag_id', params.tagId)
+    .eq('status', 'current');
+
+  const { error } = await supabase.from('ownership_proofs').insert({
+    tag_id: params.tagId,
+    ownership_event_id: minted.ownershipEventId,
+    ownership_event_type: minted.ownershipEventType,
+    ownership_id: minted.ownershipId,
+    tag_ref: minted.tagRef,
+    salt_enc: minted.saltEnc,
+    owner_id: params.ownerId,
+    status: 'current',
+  });
+
+  if (error) throw new AppError('internal', 'Could not record ownership proof');
+  return minted.ownershipId;
+};
+
+const billingCountryFor = async (
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string | null> => {
+  const { data } = await supabase.from('users').select('country').eq('id', userId).maybeSingle();
+  return (data?.country as string | undefined) ?? null;
+};
+
+// ── POST /api/v1/nfc/enroll ─────────────────────────────────────────────────
+
+/**
+ * Staff-only. Registers a chip that the encoder has already read back and
+ * verified. Lands in ENROLLED with no owner — claiming binds the owner.
+ */
+export const enrollTag = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/enroll', 'staff');
+  const logger = withLogContext({ requestId: req.requestId, route: '/api/v1/nfc/enroll' });
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  if (!(await isStaff(supabase, userId))) {
+    emitAuthzDenied('tag', null, 'role', ctx);
+    throw errorFor('forbidden');
+  }
+
+  const parsed = enrollSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+  const { tagUid, aesKey, tenantId, itemId } = parsed.data;
+
+  const { data, error } = await supabase
+    .from('nfc_tags')
+    .insert({
+      tag_uid: tagUid,
+      aes_key_enc: aesKey,
+      seller_id: userId,
+      tenant_id: tenantId ?? 'auctionx',
+      linked_item_id: itemId ?? null,
+      lifecycle_status: 'ENROLLED',
+      status: 'registered',
+    })
+    .select('id')
+    .single();
+
+  if (error || !data) {
+    emitSecurityEvent({
+      event: 'nfc.enroll', tag_id: null, result: 'conflict',
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'staff',
+      ip: ctx.ip, route: ctx.route,
+    });
+    logger.error('nfc_enroll_failed', { error: error?.message });
+    throw new AppError('conflict', 'Tag could not be enrolled — the UID may already exist');
+  }
+
+  emitSecurityEvent({
+    event: 'nfc.enroll', tag_id: data.id, result: 'ok',
+    request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'staff',
+    ip: ctx.ip, route: ctx.route,
+  });
+
+  return ok(res, { tagId: data.id, lifecycleStatus: 'ENROLLED' }, 201);
+};
+
+// ── POST /api/v1/nfc/claim ──────────────────────────────────────────────────
+
+/**
+ * Origin claim. ENROLLED -> ACTIVE, binding the tag to the caller's account.
+ *
+ * Only ENROLLED is claimable (Rule 1). There is no re-claim: a holder who
+ * skipped a transfer uses the re-issue path instead.
+ */
+export const claimTag = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/claim', 'user');
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const parsed = claimSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+  const { tagUid, sunMessage } = parsed.data;
+
+  if (!passesTwoFactor(req, 'claim', ctx)) {
+    emitSecurityEvent({
+      event: 'nfc.claim', tag_id: null, prior_status: null, result: '2fa_required',
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+    throw errorFor('2fa_required');
+  }
+
+  const { data: tagRow } = await supabase
+    .from('nfc_tags')
+    .select(`${TAG_COLUMNS}, aes_key_enc`)
+    .eq('tag_uid', tagUid)
+    .maybeSingle();
+
+  if (!tagRow) {
+    emitUnknownTagSun('claim', ctx);
+    throw errorFor('not_found');
+  }
+
+  const tag = tagRow as unknown as TagRow & { aes_key_enc: string };
+
+  // Possession first: a claim on a tag the caller cannot actually tap is
+  // rejected before the lifecycle state is even considered.
+  const sun = verifyFreshSun(
+    {
+      tagId: tag.id,
+      tagUid,
+      sunMessage,
+      storedAesKey: tag.aes_key_enc,
+      lastCounter: tag.sun_counter,
+    },
+    'claim',
+    'ok',
+    ctx,
+  );
+
+  if (!sun.ok) {
+    emitSecurityEvent({
+      event: 'nfc.claim', tag_id: tag.id, prior_status: tag.lifecycle_status,
+      result: 'sun_invalid',
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+    throw errorFor('sun_invalid');
+  }
+
+  const terminal = terminalStateError(tag.lifecycle_status);
+  const code: SecurityResult | null =
+    terminal ?? (tag.lifecycle_status === 'ENROLLED' ? null : 'already_claimed');
+
+  if (code) {
+    emitSecurityEvent({
+      event: 'nfc.claim', tag_id: tag.id, prior_status: tag.lifecycle_status, result: code,
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+    throw errorFor(code);
+  }
+
+  // Conditional update: `eq('lifecycle_status', 'ENROLLED')` is what makes two
+  // simultaneous claims safe — the second matches no row.
+  const { data: updated, error: updateError } = await supabase
+    .from('nfc_tags')
+    .update({
+      lifecycle_status: 'ACTIVE',
+      current_owner_id: userId,
+      sun_counter: sun.counter ?? tag.sun_counter,
+      activated_at: new Date().toISOString(),
+      status: 'active',
+    })
+    .eq('id', tag.id)
+    .eq('lifecycle_status', 'ENROLLED')
+    .select('id')
+    .maybeSingle();
+
+  if (updateError || !updated) {
+    emitSecurityEvent({
+      event: 'nfc.claim', tag_id: tag.id, prior_status: tag.lifecycle_status,
+      result: 'already_claimed',
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+    throw errorFor('already_claimed');
+  }
+
+  const ownershipId = await rotateOwnershipProof(
+    supabase,
+    { tagId: tag.id, ownershipEventId: tag.id, ownershipEventType: 'claim', ownerId: userId },
+    ctx,
+  );
+
+  emitSecurityEvent({
+    event: 'nfc.claim', tag_id: tag.id, prior_status: 'ENROLLED', result: 'ok',
+    request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+    ip: ctx.ip, route: ctx.route,
+  });
+
+  return ok(res, { tagId: tag.id, lifecycleStatus: 'ACTIVE', ownershipId });
+};
+
+// ── POST /api/v1/nfc/transfer/initiate ──────────────────────────────────────
+
+/**
+ * Owner initiates. Creates a PENDING transfer and locks release.
+ *
+ * The recipient may be an existing account or a bare email with no account
+ * (Rule 3) — they register, then complete.
+ */
+export const initiateTransfer = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/transfer/initiate', 'user');
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const parsed = transferInitiateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+  const { tagId, transferType, toUserId, toEmail, feePayer } = parsed.data;
+
+  const tag = await loadTag(supabase, tagId);
+  await assertTagOwner(supabase, tag, userId, ctx);
+
+  const emitTransfer = (result: SecurityResult, transferId: string | null) =>
+    emitSecurityEvent({
+      event: 'nfc.transfer',
+      tag_id: tag.id,
+      transfer_id: transferId,
+      action: 'initiate',
+      transfer_type: transferType,
+      fee_payer: feePayer,
+      payment_method: 'card',
+      to_email_hash: hashEmailForLog(toEmail),
+      result,
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+
+  const terminal = terminalStateError(tag.lifecycle_status);
+  if (terminal || tag.lifecycle_status !== 'ACTIVE') {
+    const code = terminal ?? 'invalid_argument';
+    emitTransfer(code, null);
+    throw errorFor(code);
+  }
+
+  const { data: pending } = await supabase
+    .from('ownership_transfers')
+    .select('id')
+    .eq('tag_id', tag.id)
+    .eq('status', 'PENDING')
+    .limit(1);
+
+  if (pending && pending.length > 0) {
+    emitTransfer('transfer_pending', pending[0].id);
+    throw errorFor('transfer_pending');
+  }
+
+  const { data: created, error } = await supabase
+    .from('ownership_transfers')
+    .insert({
+      tag_id: tag.id,
+      from_user_id: userId,
+      to_user_id: toUserId ?? null,
+      to_email: toEmail?.trim().toLowerCase() ?? null,
+      transfer_type: transferType === 'gift' ? 'GIFT' : 'SALE',
+      status: 'PENDING',
+      fee_payer: feePayer,
+      payment_method: 'card',
+      list_amount_usd_cents: TRANSFER_FEE_CENTS,
+      transfer_fee_cents: TRANSFER_FEE_CENTS,
+      initiated_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+
+  if (error || !created) {
+    // The partial unique index on (tag_id) WHERE status='PENDING' is the
+    // backstop against a race that slipped past the SELECT above.
+    emitTransfer('transfer_pending', null);
+    throw errorFor('transfer_pending');
+  }
+
+  emitSecurityEvent({
+    event: 'transfer.state_change',
+    transfer_id: created.id, from: null, to: 'PENDING', trigger: 'client', result: 'ok',
+    request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+    ip: ctx.ip, route: ctx.route,
+  });
+  emitTransfer('ok', created.id);
+
+  return ok(res, {
+    transferId: created.id,
+    status: 'PENDING',
+    listAmountUsdCents: TRANSFER_FEE_CENTS,
+  }, 201);
+};
+
+// ── POST /api/v1/nfc/transfer/:id/complete ──────────────────────────────────
+
+/**
+ * Recipient taps the tag and pays. Creates the PaymentIntent and returns its
+ * client secret.
+ *
+ * THIS ENDPOINT NEVER COMPLETES THE TRANSFER. The row moves to COMPLETED only
+ * when the Stripe webhook confirms `payment_intent.succeeded` — the client
+ * response is not evidence of payment, and treating it as such would be a free
+ * path around the fee.
+ */
+export const completeTransfer = async (req: TagRequest, res: Response) => {
+  const route = '/api/v1/nfc/transfer/:id/complete';
+  const ctx = securityContext(req, route, 'user');
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const transferId = pathParam(req.params.id);
+  const parsed = transferCompleteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+  const { tagUid, sunMessage } = parsed.data;
+
+  const { data: transfer } = await supabase
+    .from('ownership_transfers')
+    .select('id, tag_id, from_user_id, to_user_id, to_email, status, transfer_type, fee_payer, stripe_payment_intent_id')
+    .eq('id', transferId)
+    .maybeSingle();
+
+  if (!transfer) throw errorFor('not_found');
+
+  const transferType = transfer.transfer_type === 'GIFT' ? 'gift' : 'sale';
+  const emitTransfer = (result: SecurityResult) =>
+    emitSecurityEvent({
+      event: 'nfc.transfer',
+      tag_id: transfer.tag_id,
+      transfer_id: transfer.id,
+      action: 'complete_attempt',
+      transfer_type: transferType,
+      fee_payer: transfer.fee_payer === 'SELLER' ? 'SELLER' : 'BUYER',
+      payment_method: 'card',
+      to_email_hash: hashEmailForLog(transfer.to_email),
+      result,
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+
+  if (transfer.status !== 'PENDING') {
+    emitTransfer('conflict');
+    throw new AppError('conflict', 'This transfer is no longer pending');
+  }
+
+  // Recipient check. An email-targeted transfer resolves on first completion
+  // attempt by the account that owns that address.
+  const { data: actor } = await supabase.from('users').select('email').eq('id', userId).maybeSingle();
+  const actorEmail = (actor?.email as string | undefined)?.trim().toLowerCase() ?? null;
+
+  const isRecipient =
+    (transfer.to_user_id !== null && transfer.to_user_id === userId) ||
+    (transfer.to_user_id === null &&
+      transfer.to_email !== null &&
+      actorEmail !== null &&
+      transfer.to_email === actorEmail);
+
+  if (!isRecipient) {
+    emitAuthzDenied('transfer', transfer.id, 'not_recipient', ctx);
+    emitTransfer('forbidden');
+    throw errorFor('forbidden');
+  }
+
+  if (!passesTwoFactor(req, 'transfer_complete', ctx)) {
+    emitTransfer('2fa_required');
+    throw errorFor('2fa_required');
+  }
+
+  const { data: tagRow } = await supabase
+    .from('nfc_tags')
+    .select(`${TAG_COLUMNS}, aes_key_enc`)
+    .eq('id', transfer.tag_id)
+    .maybeSingle();
+
+  if (!tagRow) {
+    emitUnknownTagSun('transfer_complete', ctx);
+    throw errorFor('not_found');
+  }
+  const tag = tagRow as unknown as TagRow & { aes_key_enc: string };
+
+  // Rule 2: a fresh tap by the RECIPIENT. This is what stops a remote buyer
+  // from completing a transfer for goods they never received.
+  const sun = verifyFreshSun(
+    {
+      tagId: tag.id,
+      tagUid,
+      sunMessage,
+      storedAesKey: tag.aes_key_enc,
+      lastCounter: tag.sun_counter,
+    },
+    'transfer_complete',
+    'ok',
+    ctx,
+  );
+
+  if (!sun.ok) {
+    emitTransfer('sun_invalid');
+    throw errorFor('sun_invalid');
+  }
+
+  // Burn the counter now, so a captured tap cannot be replayed against a second
+  // attempt even though the transfer is still PENDING.
+  await supabase
+    .from('nfc_tags')
+    .update({ sun_counter: sun.counter ?? tag.sun_counter })
+    .eq('id', tag.id);
+
+  // Resolve the recipient onto the row now that they have been identified.
+  if (transfer.to_user_id === null) {
+    await supabase.from('ownership_transfers').update({ to_user_id: userId }).eq('id', transfer.id);
+  }
+
+  const payerId = transfer.fee_payer === 'SELLER' ? transfer.from_user_id : userId;
+  const charge = resolveCharge(TRANSFER_FEE_CENTS, payerId ? await billingCountryFor(supabase, payerId) : null);
+
+  const stripe = getStripe();
+  const intent = await stripe.paymentIntents.create(
+    {
+      amount: charge.chargedAmount,
+      currency: charge.chargedCurrency,
+      metadata: {
+        // Everything the webhook needs to resolve the row, and nothing else.
+        transfer_id: transfer.id,
+        tag_id: tag.id,
+        kind: 'token_transfer_fee',
+      },
+      automatic_payment_methods: { enabled: true },
+    },
+    // Keyed by transfer id: a retried request reuses the same PaymentIntent
+    // instead of charging twice.
+    { idempotencyKey: `token-transfer-fee-${transfer.id}` },
+  );
+
+  await supabase
+    .from('ownership_transfers')
+    .update({
+      stripe_payment_intent_id: intent.id,
+      list_amount_usd_cents: charge.listAmountUsdCents,
+      charged_amount: charge.chargedAmount,
+      charged_currency: charge.chargedCurrency,
+      fx_rate: charge.fxRate,
+    })
+    .eq('id', transfer.id);
+
+  emitTransfer('ok');
+
+  return ok(res, {
+    transferId: transfer.id,
+    // Still PENDING. The webhook is what advances it.
+    status: 'PENDING',
+    clientSecret: intent.client_secret,
+    listAmountUsdCents: charge.listAmountUsdCents,
+    chargedAmount: charge.chargedAmount,
+    chargedCurrency: charge.chargedCurrency,
+    fxRate: charge.fxRate,
+  });
+};
+
+// ── POST /api/v1/nfc/transfer/:id/cancel ────────────────────────────────────
+
+export const cancelTransfer = async (req: TagRequest, res: Response) => {
+  const route = '/api/v1/nfc/transfer/:id/cancel';
+  const ctx = securityContext(req, route, 'user');
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const { data: transfer } = await supabase
+    .from('ownership_transfers')
+    .select('id, tag_id, from_user_id, to_email, status, transfer_type, fee_payer')
+    .eq('id', pathParam(req.params.id))
+    .maybeSingle();
+
+  if (!transfer) throw errorFor('not_found');
+
+  const emitTransfer = (result: SecurityResult) =>
+    emitSecurityEvent({
+      event: 'nfc.transfer',
+      tag_id: transfer.tag_id, transfer_id: transfer.id, action: 'cancel',
+      transfer_type: transfer.transfer_type === 'GIFT' ? 'gift' : 'sale',
+      fee_payer: transfer.fee_payer === 'SELLER' ? 'SELLER' : 'BUYER',
+      payment_method: 'card',
+      to_email_hash: hashEmailForLog(transfer.to_email),
+      result,
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+
+  if (transfer.from_user_id !== userId) {
+    emitAuthzDenied('transfer', transfer.id, 'not_owner', ctx);
+    emitTransfer('forbidden');
+    throw errorFor('forbidden');
+  }
+
+  if (transfer.status !== 'PENDING') {
+    emitTransfer('conflict');
+    throw new AppError('conflict', 'This transfer is no longer pending');
+  }
+
+  await supabase
+    .from('ownership_transfers')
+    .update({ status: 'CANCELLED' })
+    .eq('id', transfer.id)
+    .eq('status', 'PENDING');
+
+  emitSecurityEvent({
+    event: 'transfer.state_change',
+    transfer_id: transfer.id, from: 'PENDING', to: 'CANCELLED', trigger: 'client', result: 'ok',
+    request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+    ip: ctx.ip, route: ctx.route,
+  });
+  emitTransfer('ok');
+
+  return ok(res, { transferId: transfer.id, status: 'CANCELLED' });
+};
+
+// ── POST /api/v1/nfc/release ────────────────────────────────────────────────
+
+/**
+ * Permanently kills the token. Free, owner-only, terminal, irreversible.
+ *
+ * Release is NEVER a gift mechanism (Rule 6) — a released tag cannot be claimed
+ * by anyone, which is exactly why it is safe to make it free.
+ */
+export const releaseTag = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/release', 'user');
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const parsed = releaseSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+
+  const tag = await loadTag(supabase, parsed.data.tagId);
+  await assertTagOwner(supabase, tag, userId, ctx);
+
+  const emitRelease = (result: SecurityResult) =>
+    emitSecurityEvent({
+      event: 'nfc.release', tag_id: tag.id, result,
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+
+  const terminal = terminalStateError(tag.lifecycle_status);
+  if (terminal) {
+    emitRelease(terminal);
+    throw errorFor(terminal);
+  }
+
+  // Rule 5: a sender cannot release out from under a pending transfer.
+  const { data: pending } = await supabase
+    .from('ownership_transfers')
+    .select('id')
+    .eq('tag_id', tag.id)
+    .eq('status', 'PENDING')
+    .limit(1);
+
+  if (pending && pending.length > 0) {
+    emitRelease('transfer_pending');
+    throw errorFor('transfer_pending');
+  }
+
+  const { data: updated } = await supabase
+    .from('nfc_tags')
+    .update({ lifecycle_status: 'RELEASED', current_owner_id: null, status: 'released' })
+    .eq('id', tag.id)
+    .eq('lifecycle_status', 'ACTIVE')
+    .select('id')
+    .maybeSingle();
+
+  if (!updated) {
+    emitRelease('conflict');
+    throw new AppError('conflict', 'Token could not be released');
+  }
+
+  // The proof goes stale with the token: there is no current owner any more.
+  await supabase
+    .from('ownership_proofs')
+    .update({ status: 'stale' })
+    .eq('tag_id', tag.id)
+    .eq('status', 'current');
+
+  emitRelease('ok');
+
+  return ok(res, { tagId: tag.id, lifecycleStatus: 'RELEASED', irreversible: true });
+};
+
+// ── POST /api/v1/nfc/replace ────────────────────────────────────────────────
+
+/**
+ * Moves the custody chain to a new ENROLLED chip; the old one is RETIRED.
+ * Owner or admin — the physical chip failed, the ownership did not.
+ */
+export const replaceTag = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/replace', 'user');
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const parsed = replaceSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+  const { oldTagId, newTagId } = parsed.data;
+
+  const oldTag = await loadTag(supabase, oldTagId);
+  const newTag = await loadTag(supabase, newTagId);
+
+  const emitReplace = (result: SecurityResult) =>
+    emitSecurityEvent({
+      event: 'nfc.replace', old_tag_id: oldTag.id, new_tag_id: newTag.id, result,
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+
+  const staff = await isStaff(supabase, userId);
+  if (!staff && oldTag.current_owner_id !== userId) {
+    emitAuthzDenied('tag', oldTag.id, 'not_owner', ctx);
+    emitReplace('forbidden');
+    throw errorFor('forbidden');
+  }
+
+  const terminal = terminalStateError(oldTag.lifecycle_status);
+  if (terminal) {
+    emitReplace(terminal);
+    throw errorFor(terminal);
+  }
+
+  if (newTag.lifecycle_status !== 'ENROLLED') {
+    emitReplace('conflict');
+    throw new AppError('conflict', 'The replacement tag must be enrolled and unclaimed');
+  }
+
+  const owner = oldTag.current_owner_id;
+  if (!owner) {
+    emitReplace('conflict');
+    throw new AppError('conflict', 'The tag being replaced has no current owner');
+  }
+
+  // Carry the full history: the new chip inherits the item link and the owner,
+  // so the verify page still shows the original origin record.
+  await supabase
+    .from('nfc_tags')
+    .update({
+      lifecycle_status: 'ACTIVE',
+      current_owner_id: owner,
+      linked_item_id: oldTag.linked_item_id,
+      disclosure: oldTag.disclosure ?? undefined,
+      activated_at: new Date().toISOString(),
+      status: 'active',
+    })
+    .eq('id', newTag.id);
+
+  await supabase
+    .from('nfc_tags')
+    .update({ lifecycle_status: 'RETIRED', current_owner_id: null, status: 'retired' })
+    .eq('id', oldTag.id);
+
+  // Custody record, so the chain is auditable internally.
+  const { data: record } = await supabase
+    .from('ownership_transfers')
+    .insert({
+      tag_id: newTag.id,
+      from_user_id: owner,
+      to_user_id: owner,
+      transfer_type: 'REISSUE',
+      status: 'COMPLETED',
+      reissued_token: true,
+      requires_reverification: false,
+      completed_at: new Date().toISOString(),
+      initiated_at: new Date().toISOString(),
+      list_amount_usd_cents: 0,
+      charged_amount: 0,
+      charged_currency: 'usd',
+      fx_rate: 1,
+    })
+    .select('id')
+    .single();
+
+  await supabase
+    .from('ownership_proofs')
+    .update({ status: 'stale' })
+    .eq('tag_id', oldTag.id)
+    .eq('status', 'current');
+
+  const ownershipId = await rotateOwnershipProof(
+    supabase,
+    {
+      tagId: newTag.id,
+      ownershipEventId: record?.id ?? newTag.id,
+      ownershipEventType: 'transfer',
+      ownerId: owner,
+    },
+    ctx,
+  );
+
+  emitReplace('ok');
+
+  return ok(res, {
+    oldTagId: oldTag.id,
+    newTagId: newTag.id,
+    oldLifecycleStatus: 'RETIRED',
+    newLifecycleStatus: 'ACTIVE',
+    ownershipId,
+  });
+};
+
+// ── POST /api/v1/nfc/reissue-request ────────────────────────────────────────
+
+/**
+ * The only path for a holder who skipped a transfer. Admin review of the
+ * internal custody record, $10. Not advertised in the UI.
+ *
+ * Creates the request only; approval and the RETIRE of the old tag happen in
+ * admin review.
+ */
+export const requestReissue = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/reissue-request', 'user');
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const parsed = reissueRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+
+  const tag = await loadTag(supabase, parsed.data.tagId);
+
+  const emitReissue = (result: SecurityResult) =>
+    emitSecurityEvent({
+      event: 'nfc.reissue_request', tag_id: tag.id, result,
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+
+  const terminal = terminalStateError(tag.lifecycle_status);
+  if (terminal) {
+    emitReissue(terminal);
+    throw errorFor(terminal);
+  }
+
+  const charge = resolveCharge(REISSUE_FEE_CENTS, await billingCountryFor(supabase, userId));
+
+  const { data: created, error } = await supabase
+    .from('reissue_requests')
+    .insert({
+      tag_id: tag.id,
+      requester_id: userId,
+      status: 'PENDING',
+      list_amount_usd_cents: charge.listAmountUsdCents,
+      charged_amount: charge.chargedAmount,
+      charged_currency: charge.chargedCurrency,
+      fx_rate: charge.fxRate,
+    })
+    .select('id')
+    .single();
+
+  if (error || !created) {
+    emitReissue('conflict');
+    throw new AppError('conflict', 'A re-issue request is already open for this token');
+  }
+
+  emitReissue('ok');
+
+  return ok(res, {
+    reissueRequestId: created.id,
+    status: 'PENDING',
+    listAmountUsdCents: charge.listAmountUsdCents,
+    chargedAmount: charge.chargedAmount,
+    chargedCurrency: charge.chargedCurrency,
+  }, 201);
+};
+
+// ── PATCH /api/v1/nfc/:tagId/disclosure ─────────────────────────────────────
+
+/**
+ * Sets which origin fields the public verify page shows. Owner-only.
+ *
+ * This is only the owner's half of the gate: `public_tag_provenance` also
+ * requires the item creator's own release flags, so turning a field on here
+ * cannot publish something the creator kept private.
+ */
+export const updateDisclosure = async (req: TagRequest, res: Response) => {
+  const route = '/api/v1/nfc/:tagId/disclosure';
+  const ctx = securityContext(req, route, 'user');
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const parsed = disclosureSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+
+  const tag = await loadTag(supabase, pathParam(req.params.tagId));
+  await assertTagOwner(supabase, tag, userId, ctx);
+
+  const terminal = terminalStateError(tag.lifecycle_status);
+  if (terminal) {
+    emitSecurityEvent({
+      event: 'nfc.disclosure_change', tag_id: tag.id, fields_changed: [], result: terminal,
+      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+      ip: ctx.ip, route: ctx.route,
+    });
+    throw errorFor(terminal);
+  }
+
+  const current = tag.disclosure ?? {};
+  const next = { ...current, ...parsed.data };
+
+  // Field NAMES only — never the values, and never a name outside the enum.
+  const changed = DISCLOSURE_FIELDS.filter(
+    (f) => parsed.data[f] !== undefined && parsed.data[f] !== current[f],
+  );
+
+  await supabase.from('nfc_tags').update({ disclosure: next }).eq('id', tag.id);
+
+  emitSecurityEvent({
+    event: 'nfc.disclosure_change', tag_id: tag.id, fields_changed: changed, result: 'ok',
+    request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+    ip: ctx.ip, route: ctx.route,
+  });
+
+  return ok(res, { tagId: tag.id, disclosure: next });
+};

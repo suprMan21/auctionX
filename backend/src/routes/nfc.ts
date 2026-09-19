@@ -2,6 +2,7 @@ import { Router, RequestHandler } from 'express';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/auth';
 import { isMarketplaceEnabled } from '../lib/featureFlags';
+import { tagManagementRoutes } from './tagManagement';
 import {
   registerTag,
   scanTag,
@@ -34,6 +35,13 @@ const verifyPageLimit = rateLimit({
 
 // Mounted at /api/v1/nfc
 export const nfcRoutes = Router();
+
+// ── S-NFC3 tag management ───────────────────────────────────────────────────
+// Mounted FIRST so its static routes (/enroll, /claim, /release, /replace,
+// /reissue-request, /transfer/*) are matched before this router's own
+// `/:tagId` catch-all. Its one parameterized route, PATCH /:tagId/disclosure,
+// cannot collide: the GET below is a different method.
+nfcRoutes.use('/', tagManagementRoutes);
 
 // Static routes BEFORE parameterized routes (lesson #5)
 nfcRoutes.get('/tags', requireAuth, listSellerTags as unknown as RequestHandler);
