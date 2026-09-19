@@ -59,13 +59,6 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
       ```
 - [ ] **Stripe dashboard (S-ISO1 §8)** — disable the Stripe **Connect** webhook endpoint; confirm no
       marketplace webhook is registered.
-- [ ] **Create `SECURITY_LOG_HMAC_KEY`** for the S-NFC3 security-event addendum:
-      ```bash
-      openssl rand -base64 32 | op item create --category=password --title='Security' \
-        --vault=AM_Development 'log-hmac-key[password]=-'
-      ```
-      Reference `op://AM_Development/Security/log-hmac-key` goes in `backend/.env.op`. Until it exists,
-      `to_email_hash` is omitted rather than failing.
 
 ---
 
@@ -94,13 +87,16 @@ approval endpoint, which was not in this session's scope.
 **No physical chip may be encoded for customers until this ships.** The SUN crypto S-NFC3 exercises
 is the S-NFC2 codec, not the production SDM scheme.
 
-## 🟡 AFTER S-NFC3
+## 🟡 AFTER S-NFC3.5
 
 Order per the Locked token-first pivot:
-S-NFC3.5 (real AN12196 SDM — **no physical chip may be encoded for customers until this ships**) →
-S-NFC3-FE (the token lifecycle frontend, split out of S-NFC3) → S-NFC2 Ph2 (physical encode) → S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee
-section is outdated, use flat $2.50) → S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate
-before any public token sale) → S-SEC2 (external pentest).
+S-NFC3-FE (the token lifecycle frontend, split out of S-NFC3) → S-NFC2 Ph2 (physical encode) →
+S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat
+$2.50) → S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token
+sale) → S-SEC2 (external pentest).
+
+**S-2FA (MFA enrollment + AAL2 step-up)** has no fixed slot but gates `FEATURE_REQUIRE_2FA` in
+production, so it must land before any real token sale.
 
 ---
 
@@ -108,13 +104,6 @@ before any public token sale) → S-SEC2 (external pentest).
 
 - [ ] **Route Registry is 6 months stale** (v1.1, 2026-03-07) yet an Every-Session lesson names it the
       authority for enum values. It predates S-NFC1.5, S-NFC2 and the pivot. Bump to v2.0.
-- [ ] **`database.types.ts` regen** — both copies were behind S-NFC1.5 and differed from each other.
-      Regen after the S-NFC3 migrations, into **both**, stripping the hint tag:
-      ```bash
-      npx supabase gen types typescript --project-id pmlofthmobglcfkqjtru \
-        | sed '/^<claude-code-hint/d' > frontend/src/types/database.types.ts
-      cp frontend/src/types/database.types.ts backend/src/types/database.types.ts
-      ```
 - [ ] **`public.users` is world-readable** — `"Anyone can view users" FOR SELECT USING (true)`
       (`20260201042342_remote_schema.sql:1537`). A privacy problem under anonymous token ownership, though
       not key material. Needs a view-based replacement. **Tracked for S-SEC1.** Its `UPDATE` policy also
