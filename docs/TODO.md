@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-09-19 (post S-ISO1)
+**Last updated:** 2026-09-19 (post S-NFC3)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -15,8 +15,41 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ## 🔴 BOSS ACTION
 
-- [ ] **Push `57f82b9`** — `fix(s-iso1): pin verify_jwt for own-auth functions; record staging verification`.
-      `git push origin feature/s-iso1-marketplace-isolation` (and `dev` after the merge).
+### S-NFC3 (new — branch `feature/s-nfc3-tag-management`, commit `1d49b4a`)
+
+- [ ] **Push the branch** — `git push -u origin feature/s-nfc3-tag-management`.
+- [ ] **Apply the migrations + regen types.** Claude cannot: `op read` of the DB password is blocked
+      by the sandbox classifier.
+      ```bash
+      supabase db push --linked
+      npx supabase gen types typescript --project-id pmlofthmobglcfkqjtru \
+        | sed '/^<claude-code-hint/d' > frontend/src/types/database.types.ts
+      cp frontend/src/types/database.types.ts backend/src/types/database.types.ts
+      ```
+- [ ] **Resolve the duplicate "Stripe" 1Password items** before any token fee is charged. The vault
+      has **three**: two LOGIN (`4jjqf5cazuxgjnk23lpwstzqoe`, `sejob6wh6bcjs4eyoimp4ugkk4`) and one
+      API_CREDENTIAL (`tbocfigu7g5kfogpyuddhwpqgu`). `op://AM_Development/Stripe/...` is ambiguous
+      across them, so backend and frontend can silently resolve to different accounts.
+- [ ] **Create the two new secrets** (references already in `backend/.env.op`):
+      ```bash
+      openssl rand -base64 32 | op item create --category=password \
+        --title='Ownership Salt Key' --vault=AM_Development 'key[password]=-'
+      openssl rand -base64 32 | op item create --category=password \
+        --title='Security' --vault=AM_Development 'log-hmac-key[password]=-'
+      ```
+      ⚠️ `OWNERSHIP_SALT_KEY` must be **backed up before any real claim in production** — losing it
+      means no owner can ever re-download their Receipt.
+- [ ] **Register the Stripe token-fee webhook** (sandbox first): `POST /api/v1/webhooks/stripe-token-fees`,
+      event `payment_intent.succeeded`. Put the `whsec_...` in
+      `op://AM_Development/Stripe/token-fee-webhook-secret`, then paste the **literal** value into
+      App Runner (it does not resolve `op://`).
+- [ ] **Confirm CAD presentment on the sandbox account.** Shipped USD-only behind
+      `FEATURE_CAD_PRESENTMENT=false`; if CAD is available set it plus `USD_CAD_RATE`.
+- [ ] **Verify `public_tag_provenance` live** once migrated — acceptance criterion 11, the only one
+      not closable without the DB: `SELECT * FROM public_tag_provenance LIMIT 5;`
+
+### S-ISO1 carry-over
+
 - [ ] **Confirm the marketplace crons are gone** — S-ISO1 acceptance criterion 4, the last one open. The
       `cron.unschedule` block carries an exception guard that can skip silently, so the grants applying
       does not prove it ran:
@@ -36,85 +69,36 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ---
 
-## 🟢 NEXT SESSION — S-NFC3 rev 2 (Tag Management API)
+## ✅ S-NFC3 — DONE (2026-09-19)
 
-Brief: https://app.notion.com/p/3843baf6966481448f1bcb6ad07174a9
-Addendum (in scope): https://app.notion.com/p/3df3baf6966481e6b01cca8711acffec
+Backend + tests shipped on `feature/s-nfc3-tag-management` (`1d49b4a`). Verification:
+`docs/S_NFC3_VERIFICATION.md`. 247 tests pass (+120), tsc 0 errors both sides, 0 boundary
+violations. Boss actions above.
 
-Scope confirmed with Boss: **backend + tests only.** Frontend is a separate session.
+Two things deliberately deferred, both behind default-off flags:
+- **2FA** (`FEATURE_REQUIRE_2FA=false`) — there is still no MFA enrollment path anywhere in the
+  product, so turning it on would make `/claim` and `/transfer/:id/complete` unreachable.
+  **S-2FA is a hard prerequisite** before it can default true in production.
+- **CAD presentment** (`FEATURE_CAD_PRESENTMENT=false`) — unconfirmed on the sandbox account, so
+  per the TODO's own instruction this shipped USD-only. Criterion 5's CAD half is deferred.
 
-- [ ] `backend/src/lib/security/securityEvent.ts` **first**, then emit per route — no batch retrofit.
-- [ ] Migrations split per the enum lesson:
-      `20260918000001_nfc_lifecycle_enum.sql` (values only) then `20260918000002_nfc_tag_management.sql`.
-      **Corrected against the real schema:** the enum is `nfc_lifecycle_status`, not
-      `tag_lifecycle_status`; `RELEASED` already exists; **`SUSPENDED` is missing and must be added**;
-      `transfer_type` needs `RELEASE` + `REISSUE` (`GIFT` exists); reuse `nfc_tags.sun_counter` rather than
-      adding `last_counter`; `ownership_transfers` already has `tag_id`, `status`, `completed_at`.
-- [ ] 11 endpoints, every static route before `/:tagId`.
-- [ ] Stripe token-fee webhook — raw body **before** `express.json()`, own signing secret, transfer
-      completes **only** on `payment_intent.succeeded`.
-      **Stripe is on SANDBOX/test tokens** (confirmed by Boss 2026-09-19). Per the locked
-      sandbox-in-staging pattern, wire the token-fee flow end-to-end against sandbox in staging; prod keys
-      swap only at prod cutover. Publishable and secret keys must come from the **same** account
-      (Every-Session lesson) — pair the sandbox keys, don't mix a sandbox pk with a live sk. Test cards
-      only via `pm_card_visa`, never raw PANs.
-      Open question carried into S-NFC3: confirm CAD presentment is available on the sandbox account
-      before committing to the Stripe-presentment FX approach Boss chose; if not, ship USD-only and defer
-      CAD with a note.
-
-### ⚠️ Stripe keys were rotated 2026-09-19 — verify before wiring token fees
-
-Boss rotated the Stripe keys. **Nothing is broken today** — Stripe touches only parked code
-(`payment-webhook`, `release-escrow`, `reconcile-escrow` all return 410; Connect is dormant; token fees
-are not built). But all four locations must be correct *before* S-NFC3 creates its first PaymentIntent,
-or the failure will surface as a confusing webhook/auth error rather than an obvious key problem.
-
-**Updating 1Password alone changes nothing.** The values live in four places:
-
-| # | Location | Notes |
-|---|---|---|
-| 1 | 1Password items | ⚠️ the vault has **duplicate "Stripe" items** — confirm you edited the one `.env.op` actually resolves to, or backend and frontend silently diverge |
-| 2 | App Runner env vars | **static literals** — no `op://` resolution. Real values must be pasted in |
-| 3 | Supabase edge-function secrets | `supabase secrets set` **does not auto-propagate** — redeploy each function afterwards |
-| 4 | Frontend bundle | `VITE_STRIPE_PUBLISHABLE_KEY` is baked in at build time → rebuild, S3 sync, CloudFront invalidation |
-
-**Hard rule:** publishable and secret keys must come from the **same account**. Rotate both together —
-a mismatched pair produces errors that look like anything but a key problem.
-
-References in `.env.op`:
-```
-backend/.env.op    STRIPE_SECRET_KEY             -> op://AM_Development/Stripe/secret-key
-                   STRIPE_PUBLISHABLE_KEY        -> op://AM_Development/Stripe/publishable-key
-                   STRIPE_WEBHOOK_SECRET         -> op://AM_Development/Stripe/webhook-secret
-                   STRIPE_CONNECT_WEBHOOK_SECRET -> op://AM_Development/Stripe/AM_Connect
-frontend/.env.op   VITE_STRIPE_PUBLISHABLE_KEY   -> op://AM_Development/Stripe/publishable-key
-```
-
-Code touching these: `backend/src/lib/stripe.ts`, `lib/refundClient.ts`,
-`routes/stripeAccountWebhook.ts`, `routes/admin/escrow.ts`, `frontend/src/lib/stripe.ts`,
-`pages/SettlementPage.tsx`, and the edge-function payment layer
-(`_shared/payment/stripeClient.ts`, `StripeProcessor.ts`, `ProcessorFactory.ts`).
-
-**First task in S-NFC3:** confirm 1–4 agree and that the pk/sk pair is same-account, before writing any
-PaymentIntent code. S-NFC3 also adds a *fifth* location — `STRIPE_TOKEN_FEE_WEBHOOK_SECRET`, deliberately
-separate from both `STRIPE_WEBHOOK_SECRET` and `STRIPE_CONNECT_WEBHOOK_SECRET`.
-
-- [ ] Ownership ID + Receipt: generate and store only. Anchoring is S-ANCHOR1.
-- [ ] `require2FA` behind `FEATURE_REQUIRE_2FA=false` (see blocker below).
-
-### ⚠️ Hard prerequisite before 2FA can be enforced in prod
-**There is no MFA enrollment anywhere in the product** — zero hits for `mfa|aal|totp` across
-`backend/src`, `frontend/src` and all migrations. The locked decision makes 2FA mandatory before any claim
-or transfer completion, so a new **S-2FA — MFA enrollment + AAL2 step-up** session has to land before
-`/claim` and `/transfer/:id/complete` can go live.
+Also outstanding: the **$10 re-issue charge**. `POST /reissue-request` prices and records the
+request; no PaymentIntent is created, because the brief routes re-issue through admin review first
+and charging before review would mean refunding every rejection. The charge belongs with the admin
+approval endpoint, which was not in this session's scope.
 
 ---
+
+## 🟢 NEXT SESSION — S-NFC3.5 (real AN12196 SDM)
+
+**No physical chip may be encoded for customers until this ships.** The SUN crypto S-NFC3 exercises
+is the S-NFC2 codec, not the production SDM scheme.
 
 ## 🟡 AFTER S-NFC3
 
 Order per the Locked token-first pivot:
 S-NFC3.5 (real AN12196 SDM — **no physical chip may be encoded for customers until this ships**) →
-S-NFC2 Ph2 (physical encode) → S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee
+S-NFC3-FE (the token lifecycle frontend, split out of S-NFC3) → S-NFC2 Ph2 (physical encode) → S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee
 section is outdated, use flat $2.50) → S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate
 before any public token sale) → S-SEC2 (external pentest).
 
