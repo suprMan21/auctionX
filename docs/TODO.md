@@ -61,6 +61,44 @@ Scope confirmed with Boss: **backend + tests only.** Frontend is a separate sess
       Open question carried into S-NFC3: confirm CAD presentment is available on the sandbox account
       before committing to the Stripe-presentment FX approach Boss chose; if not, ship USD-only and defer
       CAD with a note.
+
+### ⚠️ Stripe keys were rotated 2026-09-19 — verify before wiring token fees
+
+Boss rotated the Stripe keys. **Nothing is broken today** — Stripe touches only parked code
+(`payment-webhook`, `release-escrow`, `reconcile-escrow` all return 410; Connect is dormant; token fees
+are not built). But all four locations must be correct *before* S-NFC3 creates its first PaymentIntent,
+or the failure will surface as a confusing webhook/auth error rather than an obvious key problem.
+
+**Updating 1Password alone changes nothing.** The values live in four places:
+
+| # | Location | Notes |
+|---|---|---|
+| 1 | 1Password items | ⚠️ the vault has **duplicate "Stripe" items** — confirm you edited the one `.env.op` actually resolves to, or backend and frontend silently diverge |
+| 2 | App Runner env vars | **static literals** — no `op://` resolution. Real values must be pasted in |
+| 3 | Supabase edge-function secrets | `supabase secrets set` **does not auto-propagate** — redeploy each function afterwards |
+| 4 | Frontend bundle | `VITE_STRIPE_PUBLISHABLE_KEY` is baked in at build time → rebuild, S3 sync, CloudFront invalidation |
+
+**Hard rule:** publishable and secret keys must come from the **same account**. Rotate both together —
+a mismatched pair produces errors that look like anything but a key problem.
+
+References in `.env.op`:
+```
+backend/.env.op    STRIPE_SECRET_KEY             -> op://AM_Development/Stripe/secret-key
+                   STRIPE_PUBLISHABLE_KEY        -> op://AM_Development/Stripe/publishable-key
+                   STRIPE_WEBHOOK_SECRET         -> op://AM_Development/Stripe/webhook-secret
+                   STRIPE_CONNECT_WEBHOOK_SECRET -> op://AM_Development/Stripe/AM_Connect
+frontend/.env.op   VITE_STRIPE_PUBLISHABLE_KEY   -> op://AM_Development/Stripe/publishable-key
+```
+
+Code touching these: `backend/src/lib/stripe.ts`, `lib/refundClient.ts`,
+`routes/stripeAccountWebhook.ts`, `routes/admin/escrow.ts`, `frontend/src/lib/stripe.ts`,
+`pages/SettlementPage.tsx`, and the edge-function payment layer
+(`_shared/payment/stripeClient.ts`, `StripeProcessor.ts`, `ProcessorFactory.ts`).
+
+**First task in S-NFC3:** confirm 1–4 agree and that the pk/sk pair is same-account, before writing any
+PaymentIntent code. S-NFC3 also adds a *fifth* location — `STRIPE_TOKEN_FEE_WEBHOOK_SECRET`, deliberately
+separate from both `STRIPE_WEBHOOK_SECRET` and `STRIPE_CONNECT_WEBHOOK_SECRET`.
+
 - [ ] Ownership ID + Receipt: generate and store only. Anchoring is S-ANCHOR1.
 - [ ] `require2FA` behind `FEATURE_REQUIRE_2FA=false` (see blocker below).
 
