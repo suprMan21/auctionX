@@ -943,9 +943,14 @@ export const replaceTag = async (req: TagRequest, res: Response) => {
       ip: ctx.ip, route: ctx.route,
     });
 
+  // Staff only (Decisions DB 2026-10-02: token reset is admin-only). Owners
+  // used to be able to call this directly, which let them move their token onto
+  // any enrolled chip with no review, no $10 re-issue fee and no tap of the new
+  // chip. Owners file /reissue-request instead; S-ADMIN1 replaces this endpoint
+  // with a single-transaction admin reset.
   const staff = await isStaff(supabase, userId);
-  if (!staff && oldTag.current_owner_id !== userId) {
-    emitAuthzDenied('tag', oldTag.id, 'not_owner', ctx);
+  if (!staff) {
+    emitAuthzDenied('tag', oldTag.id, 'role', ctx);
     emitReplace('forbidden');
     throw errorFor('forbidden');
   }

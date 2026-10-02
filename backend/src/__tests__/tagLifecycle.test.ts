@@ -824,7 +824,7 @@ describe('replace', () => {
     withReplacementChip();
     const { replaceTag } = await controllers();
 
-    const out = await call(replaceTag, makeReq(OWNER, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
+    const out = await call(replaceTag, makeReq(STAFF, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
 
     expect(out.threw).toBeNull();
     expect(tag().lifecycle_status).toBe('RETIRED');
@@ -845,7 +845,7 @@ describe('replace', () => {
     withReplacementChip();
     const { replaceTag } = await controllers();
 
-    await call(replaceTag, makeReq(OWNER, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
+    await call(replaceTag, makeReq(STAFF, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
 
     const current = tables.ownership_proofs.filter((p) => p.status === 'current');
     expect(current).toHaveLength(1);
@@ -858,10 +858,25 @@ describe('replace', () => {
     (tables.nfc_tags.find((t) => t.id === NEW_TAG_ID) as Row).lifecycle_status = 'ACTIVE';
     const { replaceTag } = await controllers();
 
-    const out = await call(replaceTag, makeReq(OWNER, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
+    const out = await call(replaceTag, makeReq(STAFF, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
 
     expect(out.threw?.message).toMatch(/enrolled and unclaimed/i);
     expect(tag().lifecycle_status).toBe('ACTIVE');
+  });
+
+  it('refuses replace by the OWNER — reset is admin-only (Decisions DB 2026-10-02)', async () => {
+    withReplacementChip();
+    const { replaceTag } = await controllers();
+
+    const out = await call(replaceTag, makeReq(OWNER, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
+
+    expect(out.threw?.message).toMatch(/forbidden/i);
+    // Nothing moved: old chip still live with its owner, new chip untouched.
+    expect(tag().lifecycle_status).toBe('ACTIVE');
+    expect(tag().current_owner_id).toBe(OWNER);
+    expect(newTag().lifecycle_status).toBe('ENROLLED');
+    expect(newTag().current_owner_id).toBeNull();
+    expect(eventsNamed('nfc.replace')[0]).toMatchObject({ result: 'forbidden' });
   });
 
   it('refuses replace by a stranger but allows staff', async () => {
