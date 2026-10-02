@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-01 (post S-NFC3 merge to `dev`)
+**Last updated:** 2026-10-01 (S-DB1 applied to staging)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -15,44 +15,18 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ## 🔴 BOSS ACTION
 
-### 🟥 S-DB1 — FIRST TASK OF THE NEXT SESSION (database)
+### ✅ S-DB1 — done 2026-10-01
 
-Needs a **fresh session with network + `op` auth**. Attempted 2026-10-01 and blocked: the Supabase
-CLI dies at `Initialising login role` with `Connection terminated due to connection timeout` —
-this sandbox has no egress to `supabase.co` (a PostgREST probe returns HTTP 000 even for a table
-that exists). GitHub over SSH works, Supabase does not. `op` is also unsigned-in, so the DB
-password is unreachable regardless.
+The "no egress" blocker was misdiagnosed: the free-plan staging project had **auto-paused**
+(`supabase projects list` → `INACTIVE`, host NXDOMAIN). Boss restored it; then:
+`20260919000001` + `20260919000002` applied, types regenerated into both copies (they had also
+drifted from each other), the drift-guard exemption list emptied (proven to still fire), criterion
+11 checked live (view exposes no owner/user/UID column; anon REST read works; anon still gets
+nothing from `nfc_tags.aes_key_enc` and `permission denied` on `ownership_proofs`), S-ISO1 crons
+confirmed gone (`cron.job` empty). Extra: `20261001000001` revokes the default-privilege
+REFERENCES/TRIGGER/TRUNCATE that anon/authenticated had inherited on `public_tag_provenance`.
 
-Code is merged to `dev` (`e5531f4`) and green, so **the database is the only thing between S-NFC3
-and a deployable staging.**
-
-- [ ] **1. Apply the two migrations.**
-      ```bash
-      supabase db push --linked      # 20260919000001 then 20260919000002
-      ```
-      Watch for an error at the `public_tag_provenance` `CREATE VIEW`. If an earlier attempt already
-      failed there, it was the `c.username` bug — fixed in `9762429`, so a re-run applies cleanly.
-      Both files are idempotency-wrapped and safe to re-run.
-- [ ] **2. Regenerate types into BOTH copies**, stripping the hint tag:
-      ```bash
-      npx supabase gen types typescript --project-id pmlofthmobglcfkqjtru \
-        | sed '/^<claude-code-hint/d' > frontend/src/types/database.types.ts
-      cp frontend/src/types/database.types.ts backend/src/types/database.types.ts
-      ```
-- [ ] **3. Shrink the drift-guard exemption list.** `backend/src/__tests__/schemaColumnDrift.test.ts`
-      exempts `fee_payer`, `lifecycle_status` and `linked_item_id` **only** because the committed
-      types predate S-NFC1.5. After the regen those three must be **deleted**, not kept — the file's
-      own comment says growing the list to silence a failure is the wrong move.
-- [ ] **4. Close acceptance criterion 11** — the only S-NFC3 criterion not closable without the DB.
-      Confirm the view leaks no prior owner, no current owner and no undisclosed field:
-      ```sql
-      SELECT * FROM public_tag_provenance LIMIT 5;
-      ```
-- [ ] **5. Confirm the S-ISO1 crons are gone** (carried over, same SQL session):
-      ```sql
-      SELECT jobname, schedule FROM cron.job;
-      -- expect: neither 'release-escrow-tick' nor 'reconcile-escrow-daily'
-      ```
+- [ ] **Decide on Supabase Pro** — staging will auto-pause again after ~7 idle days on the free plan.
 
 ### S-NFC3 — remaining (not database)
 - [ ] **Resolve the duplicate "Stripe" 1Password items** before any token fee is charged. The vault
@@ -89,7 +63,7 @@ Merged to `dev` (`e5531f4`) and pushed; verified against the remote. Also on `de
 publishable key) and the legacy `com.authenticmaterials.auctionx` bundle id.
 
 Verification: `docs/S_NFC3_VERIFICATION.md` (v1.1). 252 tests pass, tsc 0 errors both sides,
-0 boundary violations across 121 modules. **Database work is NOT done — see S-DB1 above.**
+0 boundary violations across 121 modules. Database work done in S-DB1 (above).
 
 A post-merge fix (`9762429`) corrected two column names that would only have failed against the
 real database: `c.username` (no such column — it is `display_name`) would have aborted the

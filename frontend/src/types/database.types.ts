@@ -479,9 +479,11 @@ export type Database = {
       item_verifications: {
         Row: {
           created_at: string
+          current_owner_email: string | null
           current_owner_id: string | null
           id: string
-          listing_id: string
+          item_id: string | null
+          listing_id: string | null
           nfc_programmed_at: string | null
           nfc_tag_uid: string | null
           scan_count: number
@@ -496,9 +498,11 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          current_owner_email?: string | null
           current_owner_id?: string | null
           id?: string
-          listing_id: string
+          item_id?: string | null
+          listing_id?: string | null
           nfc_programmed_at?: string | null
           nfc_tag_uid?: string | null
           scan_count?: number
@@ -513,9 +517,11 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          current_owner_email?: string | null
           current_owner_id?: string | null
           id?: string
-          listing_id?: string
+          item_id?: string | null
+          listing_id?: string | null
           nfc_programmed_at?: string | null
           nfc_tag_uid?: string | null
           scan_count?: number
@@ -537,6 +543,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "item_verifications_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "item_verifications_listing_id_fkey"
             columns: ["listing_id"]
             isOneToOne: false
@@ -551,6 +564,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      items: {
+        Row: {
+          created_at: string
+          creator_id: string | null
+          creator_name_visible: boolean
+          description: string | null
+          id: string
+          location_visibility: string
+          origin_date: string | null
+          origin_event: string | null
+          origin_released: boolean
+          origin_video_url: string | null
+          tenant_id: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          creator_id?: string | null
+          creator_name_visible?: boolean
+          description?: string | null
+          id?: string
+          location_visibility?: string
+          origin_date?: string | null
+          origin_event?: string | null
+          origin_released?: boolean
+          origin_video_url?: string | null
+          tenant_id?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          creator_id?: string | null
+          creator_name_visible?: boolean
+          description?: string | null
+          id?: string
+          location_visibility?: string
+          origin_date?: string | null
+          origin_event?: string | null
+          origin_released?: boolean
+          origin_video_url?: string | null
+          tenant_id?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       listing_media: {
         Row: {
@@ -827,8 +888,14 @@ export type Database = {
           activated_at: string | null
           aes_key_enc: string
           created_at: string
+          current_owner_id: string | null
+          disclosure: Json
           id: string
           item_id: string | null
+          lifecycle_status:
+            | Database["public"]["Enums"]["nfc_lifecycle_status"]
+            | null
+          linked_item_id: string | null
           metadata: Json | null
           registered_at: string
           seller_id: string
@@ -843,8 +910,14 @@ export type Database = {
           activated_at?: string | null
           aes_key_enc: string
           created_at?: string
+          current_owner_id?: string | null
+          disclosure?: Json
           id?: string
           item_id?: string | null
+          lifecycle_status?:
+            | Database["public"]["Enums"]["nfc_lifecycle_status"]
+            | null
+          linked_item_id?: string | null
           metadata?: Json | null
           registered_at?: string
           seller_id: string
@@ -859,8 +932,14 @@ export type Database = {
           activated_at?: string | null
           aes_key_enc?: string
           created_at?: string
+          current_owner_id?: string | null
+          disclosure?: Json
           id?: string
           item_id?: string | null
+          lifecycle_status?:
+            | Database["public"]["Enums"]["nfc_lifecycle_status"]
+            | null
+          linked_item_id?: string | null
           metadata?: Json | null
           registered_at?: string
           seller_id?: string
@@ -873,10 +952,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "nfc_tags_current_owner_id_fkey"
+            columns: ["current_owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "nfc_tags_item_id_fkey"
             columns: ["item_id"]
             isOneToOne: false
             referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfc_tags_linked_item_id_fkey"
+            columns: ["linked_item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
             referencedColumns: ["id"]
           },
           {
@@ -939,6 +1032,13 @@ export type Database = {
             referencedRelation: "nfc_tags"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "nft_metadata_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
+          },
         ]
       }
       notification_preferences: {
@@ -955,6 +1055,8 @@ export type Database = {
           payment_received: boolean
           payment_window_expiring: boolean
           payout_completed: boolean
+          seller_verification_approved: boolean
+          seller_verification_rejected: boolean
           settlement_cascade: boolean
           updated_at: string
           user_id: string
@@ -972,6 +1074,8 @@ export type Database = {
           payment_received?: boolean
           payment_window_expiring?: boolean
           payout_completed?: boolean
+          seller_verification_approved?: boolean
+          seller_verification_rejected?: boolean
           settlement_cascade?: boolean
           updated_at?: string
           user_id: string
@@ -989,6 +1093,8 @@ export type Database = {
           payment_received?: boolean
           payment_window_expiring?: boolean
           payout_completed?: boolean
+          seller_verification_approved?: boolean
+          seller_verification_rejected?: boolean
           settlement_cascade?: boolean
           updated_at?: string
           user_id?: string
@@ -1047,48 +1153,160 @@ export type Database = {
           },
         ]
       }
+      ownership_proofs: {
+        Row: {
+          anchored_at: string | null
+          anchored_tx_hash: string | null
+          created_at: string
+          id: string
+          owner_id: string | null
+          ownership_event_id: string
+          ownership_event_type: string
+          ownership_id: string
+          salt_enc: string
+          status: string
+          tag_id: string
+          tag_ref: string
+        }
+        Insert: {
+          anchored_at?: string | null
+          anchored_tx_hash?: string | null
+          created_at?: string
+          id?: string
+          owner_id?: string | null
+          ownership_event_id: string
+          ownership_event_type: string
+          ownership_id: string
+          salt_enc: string
+          status?: string
+          tag_id: string
+          tag_ref: string
+        }
+        Update: {
+          anchored_at?: string | null
+          anchored_tx_hash?: string | null
+          created_at?: string
+          id?: string
+          owner_id?: string | null
+          ownership_event_id?: string
+          ownership_event_type?: string
+          ownership_id?: string
+          salt_enc?: string
+          status?: string
+          tag_id?: string
+          tag_ref?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ownership_proofs_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ownership_proofs_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ownership_proofs_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
+          },
+        ]
+      }
       ownership_transfers: {
         Row: {
+          charged_amount: number | null
+          charged_currency: string | null
           completed_at: string | null
+          fee_payer: string
           from_user_id: string | null
+          fx_rate: number | null
           id: string
+          initiated_at: string | null
+          is_reclaim: boolean
+          list_amount_usd_cents: number | null
+          payment_method: string | null
+          reissued_token: boolean
+          requires_reverification: boolean
           settlement_id: string | null
+          source: string
           status: string | null
+          stripe_payment_intent_id: string | null
           tag_id: string | null
-          to_user_id: string
+          to_email: string | null
+          to_user_id: string | null
           transaction_id: string | null
+          transfer_fee_cents: number | null
+          transfer_fee_paid: boolean
           transfer_type: Database["public"]["Enums"]["transfer_type"]
           transferred_at: string
           verification_event_id: string | null
-          verification_id: string
+          verification_id: string | null
         }
         Insert: {
+          charged_amount?: number | null
+          charged_currency?: string | null
           completed_at?: string | null
+          fee_payer?: string
           from_user_id?: string | null
+          fx_rate?: number | null
           id?: string
+          initiated_at?: string | null
+          is_reclaim?: boolean
+          list_amount_usd_cents?: number | null
+          payment_method?: string | null
+          reissued_token?: boolean
+          requires_reverification?: boolean
           settlement_id?: string | null
+          source?: string
           status?: string | null
+          stripe_payment_intent_id?: string | null
           tag_id?: string | null
-          to_user_id: string
+          to_email?: string | null
+          to_user_id?: string | null
           transaction_id?: string | null
+          transfer_fee_cents?: number | null
+          transfer_fee_paid?: boolean
           transfer_type: Database["public"]["Enums"]["transfer_type"]
           transferred_at?: string
           verification_event_id?: string | null
-          verification_id: string
+          verification_id?: string | null
         }
         Update: {
+          charged_amount?: number | null
+          charged_currency?: string | null
           completed_at?: string | null
+          fee_payer?: string
           from_user_id?: string | null
+          fx_rate?: number | null
           id?: string
+          initiated_at?: string | null
+          is_reclaim?: boolean
+          list_amount_usd_cents?: number | null
+          payment_method?: string | null
+          reissued_token?: boolean
+          requires_reverification?: boolean
           settlement_id?: string | null
+          source?: string
           status?: string | null
+          stripe_payment_intent_id?: string | null
           tag_id?: string | null
-          to_user_id?: string
+          to_email?: string | null
+          to_user_id?: string | null
           transaction_id?: string | null
+          transfer_fee_cents?: number | null
+          transfer_fee_paid?: boolean
           transfer_type?: Database["public"]["Enums"]["transfer_type"]
           transferred_at?: string
           verification_event_id?: string | null
-          verification_id?: string
+          verification_id?: string | null
         }
         Relationships: [
           {
@@ -1111,6 +1329,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "nfc_tags"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ownership_transfers_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
           },
           {
             foreignKeyName: "ownership_transfers_to_user_id_fkey"
@@ -1536,6 +1761,83 @@ export type Database = {
           },
         ]
       }
+      reissue_requests: {
+        Row: {
+          charged_amount: number | null
+          charged_currency: string | null
+          created_at: string
+          fx_rate: number | null
+          id: string
+          list_amount_usd_cents: number | null
+          requester_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          stripe_payment_intent_id: string | null
+          tag_id: string
+          updated_at: string
+        }
+        Insert: {
+          charged_amount?: number | null
+          charged_currency?: string | null
+          created_at?: string
+          fx_rate?: number | null
+          id?: string
+          list_amount_usd_cents?: number | null
+          requester_id: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          stripe_payment_intent_id?: string | null
+          tag_id: string
+          updated_at?: string
+        }
+        Update: {
+          charged_amount?: number | null
+          charged_currency?: string | null
+          created_at?: string
+          fx_rate?: number | null
+          id?: string
+          list_amount_usd_cents?: number | null
+          requester_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          stripe_payment_intent_id?: string | null
+          tag_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reissue_requests_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reissue_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reissue_requests_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reissue_requests_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
+          },
+        ]
+      }
       saved_searches: {
         Row: {
           created_at: string
@@ -1710,6 +2012,9 @@ export type Database = {
       }
       settlements: {
         Row: {
+          appeal_deadline: string | null
+          appeal_opened_at: string | null
+          appeal_reason: string | null
           auction_id: string
           buyer_id: string | null
           created_at: string
@@ -1717,19 +2022,24 @@ export type Database = {
           delivery_confirmed_by: string | null
           dispute_opened_at: string | null
           dispute_reason: string | null
+          dispute_resolution_notes: string | null
           escrow_ends_at: string | null
           escrow_released_at: string | null
+          evidence_urls: string[]
           gross_amount_cents: number
           id: string
           net_amount_cents: number
           offer_attempt: number
+          partial_refund_amount_cents: number | null
           payment_id: string | null
           payment_window_expires_at: string | null
           platform_fee_cents: number
           platform_fee_percent: number
           processor_fee_cents: number
           processor_fee_percent: number
+          processor_refund_id: string | null
           processor_transaction_id: string | null
+          resolution_action: string | null
           seller_id: string
           settled_at: string | null
           status: string
@@ -1737,6 +2047,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          appeal_deadline?: string | null
+          appeal_opened_at?: string | null
+          appeal_reason?: string | null
           auction_id: string
           buyer_id?: string | null
           created_at?: string
@@ -1744,19 +2057,24 @@ export type Database = {
           delivery_confirmed_by?: string | null
           dispute_opened_at?: string | null
           dispute_reason?: string | null
+          dispute_resolution_notes?: string | null
           escrow_ends_at?: string | null
           escrow_released_at?: string | null
+          evidence_urls?: string[]
           gross_amount_cents: number
           id?: string
           net_amount_cents: number
           offer_attempt?: number
+          partial_refund_amount_cents?: number | null
           payment_id?: string | null
           payment_window_expires_at?: string | null
           platform_fee_cents: number
           platform_fee_percent: number
           processor_fee_cents: number
           processor_fee_percent: number
+          processor_refund_id?: string | null
           processor_transaction_id?: string | null
+          resolution_action?: string | null
           seller_id: string
           settled_at?: string | null
           status?: string
@@ -1764,6 +2082,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          appeal_deadline?: string | null
+          appeal_opened_at?: string | null
+          appeal_reason?: string | null
           auction_id?: string
           buyer_id?: string | null
           created_at?: string
@@ -1771,19 +2092,24 @@ export type Database = {
           delivery_confirmed_by?: string | null
           dispute_opened_at?: string | null
           dispute_reason?: string | null
+          dispute_resolution_notes?: string | null
           escrow_ends_at?: string | null
           escrow_released_at?: string | null
+          evidence_urls?: string[]
           gross_amount_cents?: number
           id?: string
           net_amount_cents?: number
           offer_attempt?: number
+          partial_refund_amount_cents?: number | null
           payment_id?: string | null
           payment_window_expires_at?: string | null
           platform_fee_cents?: number
           platform_fee_percent?: number
           processor_fee_cents?: number
           processor_fee_percent?: number
+          processor_refund_id?: string | null
           processor_transaction_id?: string | null
+          resolution_action?: string | null
           seller_id?: string
           settled_at?: string | null
           status?: string
@@ -1791,6 +2117,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "settlements_auction_id_fkey"
+            columns: ["auction_id"]
+            isOneToOne: false
+            referencedRelation: "auctions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "settlements_buyer_id_fkey"
             columns: ["buyer_id"]
@@ -1990,6 +2323,7 @@ export type Database = {
           banned_at: string | null
           banned_by: string | null
           banned_until: string | null
+          billing_country: string | null
           bio: string | null
           created_at: string
           deleted_at: string | null
@@ -2017,6 +2351,7 @@ export type Database = {
           suspended_at: string | null
           suspended_until: string | null
           suspension_reason: string | null
+          tier: string
           tier_updated_at: string | null
           trailing_12mo_sales_cents: number
           updated_at: string
@@ -2033,6 +2368,7 @@ export type Database = {
           banned_at?: string | null
           banned_by?: string | null
           banned_until?: string | null
+          billing_country?: string | null
           bio?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -2060,6 +2396,7 @@ export type Database = {
           suspended_at?: string | null
           suspended_until?: string | null
           suspension_reason?: string | null
+          tier?: string
           tier_updated_at?: string | null
           trailing_12mo_sales_cents?: number
           updated_at?: string
@@ -2076,6 +2413,7 @@ export type Database = {
           banned_at?: string | null
           banned_by?: string | null
           banned_until?: string | null
+          billing_country?: string | null
           bio?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -2103,6 +2441,7 @@ export type Database = {
           suspended_at?: string | null
           suspended_until?: string | null
           suspension_reason?: string | null
+          tier?: string
           tier_updated_at?: string | null
           trailing_12mo_sales_cents?: number
           updated_at?: string
@@ -2178,6 +2517,13 @@ export type Database = {
             referencedRelation: "nfc_tags"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "verification_events_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
+          },
         ]
       }
       waitlist_signups: {
@@ -2248,7 +2594,23 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_tag_provenance: {
+        Row: {
+          claim_date: string | null
+          creator_name: string | null
+          current_ownership_id: string | null
+          enrolled_at: string | null
+          is_valid: boolean | null
+          lifecycle_status:
+            | Database["public"]["Enums"]["nfc_lifecycle_status"]
+            | null
+          origin_date: string | null
+          origin_location: string | null
+          origin_video_url: string | null
+          tag_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       apply_payment_penalty: {
@@ -2394,6 +2756,15 @@ export type Database = {
         | "approved"
         | "rejected"
         | "escalated"
+      nfc_lifecycle_status:
+        | "ENROLLED"
+        | "CLAIMED"
+        | "ASSOCIATED"
+        | "ACTIVE"
+        | "RELEASED"
+        | "TRANSFERRED"
+        | "RETIRED"
+        | "SUSPENDED"
       payment_method_type: "CARD" | "CRYPTO"
       payment_processor:
         | "STRIPE"
@@ -2420,7 +2791,7 @@ export type Database = {
         | "PARTIALLY_REFUNDED"
         | "DISPUTED"
         | "EXPIRED"
-      transfer_type: "SALE" | "GIFT" | "RETURN"
+      transfer_type: "SALE" | "GIFT" | "RETURN" | "RELEASE" | "REISSUE"
       user_role:
         | "user"
         | "moderator"
@@ -2453,12 +2824,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2482,11 +2853,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2507,11 +2878,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2532,11 +2903,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2549,11 +2920,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2635,6 +3006,16 @@ export const Constants = {
         "rejected",
         "escalated",
       ],
+      nfc_lifecycle_status: [
+        "ENROLLED",
+        "CLAIMED",
+        "ASSOCIATED",
+        "ACTIVE",
+        "RELEASED",
+        "TRANSFERRED",
+        "RETIRED",
+        "SUSPENDED",
+      ],
       payment_method_type: ["CARD", "CRYPTO"],
       payment_processor: [
         "STRIPE",
@@ -2664,7 +3045,7 @@ export const Constants = {
         "DISPUTED",
         "EXPIRED",
       ],
-      transfer_type: ["SALE", "GIFT", "RETURN"],
+      transfer_type: ["SALE", "GIFT", "RETURN", "RELEASE", "REISSUE"],
       user_role: [
         "user",
         "moderator",
