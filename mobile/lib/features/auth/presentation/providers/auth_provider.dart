@@ -25,10 +25,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _init() async {
-    final user = await _repository.getCurrentUser();
-    if (user != null) {
-      state = AuthState.authenticated(user);
-    } else {
+    try {
+      final user = await _repository.getCurrentUser();
+      state = user != null
+          ? AuthState.authenticated(user)
+          : const AuthState.unauthenticated();
+    } catch (_) {
+      // Never strand on `initial`: any failure resolving the stored session must
+      // still produce a routable state, or the router keeps us on splash forever.
       state = const AuthState.unauthenticated();
     }
 
