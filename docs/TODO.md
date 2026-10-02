@@ -94,7 +94,7 @@ is the S-NFC2 codec, not the production SDM scheme.
 
 Order per the Locked token-first pivot:
 S-NFC3-FE (the token lifecycle frontend, split out of S-NFC3) → S-NFC2 Ph2 (physical encode) →
-S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat
+**S-ADMIN1 → S-ADMIN2** (admin console, see below) → S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat
 $2.50) → S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token
 sale) → S-SEC2 (external pentest).
 
@@ -117,6 +117,25 @@ cd frontend && npm run build && aws s3 sync dist/ s3://auctionx-frontend-staging
   && aws cloudfront create-invalidation --profile auctionx --distribution-id E3JOPXHI8DB4BE --paths '/*'
 ```
 Natural moment: alongside S-NFC3-FE.
+
+## 🛠️ ADMIN CONSOLE (new section, Boss 2026-10-02)
+
+Re-scoped from the parked S26/S28 for the token platform (Decisions DB, 2026-10-02). Lands **before S-TIER1**: no public
+token sale without admin tooling.
+
+- **S-ADMIN1: tags, lifecycle, reset and re-issue.** Tag inventory and detail (timeline, custody, scans, security events).
+  Suspend/unsuspend. **Token reset** (admin-only, one DB transaction: move ownership, item and history to a new chip,
+  retire the old chip forever and mark it for destruction, rotate the Ownership ID). Re-issue queue with the $10 charge.
+  Owner override with a reason. Append-only admin audit.
+- **S-ADMIN2: users, roles and permissions.** User search and detail, suspend/reactivate, roles + `manage_nfc` /
+  `manage_users`, audit viewer, admin MFA (needs S-2FA). Owners stay anonymous except to support, with a logged reason.
+
+Locked decisions behind it: reset is **admin-only** (owner self-serve `/replace` removed); retired chips are **never
+reused**.
+
+- [ ] **Interim hotfix (before S-ADMIN1):** `POST /nfc/replace` currently lets an *owner* move their token onto any
+      enrolled chip whose id they know, with no review, no $10 and no tap of the new chip. It is also non-atomic (4 writes,
+      first unchecked). Restrict it to staff now; S-ADMIN1 replaces it with the transactional reset.
 
 ## 🔵 HOUSEKEEPING
 
