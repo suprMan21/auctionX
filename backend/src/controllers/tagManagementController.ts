@@ -716,7 +716,15 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
     .lt('sun_counter', tappedCounter)
     .select('id');
 
-  if (burnError || !burned || burned.length === 0) {
+  if (burnError) {
+    // A database failure is not evidence of a replay — don't report it as one.
+    withLogContext({ requestId: ctx.requestId, route: ctx.route }).error('transfer_counter_burn_failed', {
+      tagId: tag.id,
+      error: burnError.message,
+    });
+    throw new AppError('internal', 'Failed to record transfer tap');
+  }
+  if (!burned || burned.length === 0) {
     emitRaceReplay(tag.id, 'transfer_complete', tappedCounter, tag.sun_counter, ctx);
     emitTransfer('replay_detected');
     throw errorFor('replay_detected');

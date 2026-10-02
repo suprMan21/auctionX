@@ -225,7 +225,12 @@ export const scanTag = async (req: NfcRequest, res: Response) => {
         .eq('id', tag.id)
         .lt('sun_counter', result.counterValue)
         .select('id');
-      if (burnError || !burned || burned.length === 0) {
+      if (burnError) {
+        // A database failure is not evidence of a replay — don't report it as one.
+        logger.error('nfc_scan_counter_burn_failed', { tagId: tag.id, error: burnError.message });
+        throw new AppError('internal', 'Failed to record scan');
+      }
+      if (!burned || burned.length === 0) {
         result = { ...result, valid: false, error: 'replay_detected' };
       }
     }
