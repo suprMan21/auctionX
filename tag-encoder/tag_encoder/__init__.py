@@ -1,20 +1,18 @@
-"""Tag Encoder — NTAG 424 DNA encoder core + CLI (S-NFC2, Lane A).
+"""Tag Encoder — NTAG 424 DNA encoder core + CLI.
 
-The WRITE counterpart to the read-only `tag-hq` diagnostic station. Phase 1 is
-SIM-ONLY: it produces byte-identical SUN output to the backend simulator
-(`backend/src/services/nfc/ntag424Simulator.ts`) and validates through the
-backend verifier logic — no hardware in the loop.
+The WRITE counterpart to the read-only `tag-hq` diagnostic station.
+S-NFC3.5: implements real NXP AN12196 SDM (AES mode), byte-identical to the
+backend verifier and pinned to the shared OpenSSL vectors in
+`test-vectors/ntag424_sdm_vectors.json`. Live EV2 secure-channel writes remain
+S-NFC2 Phase 2.
 
 Modules:
-    aes          self-contained pure-Python AES-128 (ECB/CBC/CMAC), zero deps
-    ndef         NDEF URI record BUILDER (round-trips tag_hq.parsers.parse_ndef)
-    keyprovider  KeyProvider Protocol + LocalStubKeyProvider (per-UID KDF)
-    ntag424.encode  pure encode pipeline (SIM parity) + decrypt mirror
-    ntag424.apdu    write/encode C-APDU builder (AN12196 EV2)
-    cli          encode / read / verify commands (dry-run is fully offline)
-
-SEE SIM_PARITY.md: Phase 1 targets SIMULATOR parity, NOT genuine AN12196 SDM
-session-CMAC. Phase 2 (real silicon) must realign encoder AND backend.
+    aes             self-contained pure-Python AES-128 (ECB/CBC/CMAC), zero deps
+    ndef            NDEF URI record BUILDER (round-trips tag_hq.parsers.parse_ndef)
+    keyprovider     KDF spec + KeyProvider Protocol + LocalKeyProvider (SDM + ADMIN roots)
+    ntag424.encode  AN12196 SDM encode/verify + SDM NDEF template/offsets
+    ntag424.apdu    personalisation C-APDU builder (AN12196 EV2) + SDM file settings
+    cli             encode / read / verify (no command prints key material)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

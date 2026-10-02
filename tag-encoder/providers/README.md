@@ -1,127 +1,69 @@
-# Tag Encoder — Key-Derivation Providers (S-NFC2, Lane B)
+# Tag Encoder — Key Providers (S-NFC3.5)
 
-Per-tag AES-128 key derivation for the NTAG 424 DNA encoder. The encoder core
-selects a provider that satisfies the `KeyProvider` Protocol and calls
-`derive_tag_key(tag_uid: bytes) -> bytes` (7-byte UID in, 16-byte AES-128 key
-out, deterministic for a given UID + root).
+Role-aware chip-key derivation for the NTAG 424 DNA encoder. Every provider
+satisfies `tag_encoder.keyprovider.KeyProvider`:
 
 ```python
-from typing import Protocol
 class KeyProvider(Protocol):
-    def derive_tag_key(self, tag_uid: bytes) -> bytes: ...
+    def derive_key(self, role: str, version: int, uid: bytes | None = None) -> bytes: ...
 ```
 
-## Security model (non-negotiable, per the S-NFC2 brief)
+Roles: `META` (fleet SDMMetaReadKey, no UID), `FILE` (per-UID SDMFileReadKey),
+`APP_MASTER` (per-UID application master key). Output: 16-byte AES-128 key,
+deterministic for (root, role, version, uid). Spec and byte layout:
+`docs/NTAG424_CRYPTO_REFERENCE.md` §2.
 
-- **No master AES key on disk or in tool memory.** The keying root lives only
-  inside AWS KMS as a non-exportable HMAC CMK.
-- Per-tag derivation calls `kms:GenerateMac` with the tag UID as the message;
-  KMS computes `HMAC_SHA_256(root, uid)` server-side inside the HSM boundary.
-- The 32-byte MAC is run through one **HKDF-Expand** step (RFC 5869,
-  HMAC-SHA-256, stdlib only — no `cryptography` dependency) to produce the
-  16-byte AES-128 key bound to a stable `info` label. Only the derived key is
-  returned; it lives only for the call's lifetime (encoder core zeroizes after
-  use). The intermediate MAC buffer is best-effort wiped.
-- Every derivation is **audit-logged** (principal, timestamp via logging, tag
-  UID, key alias, region) on logger `tag_encoder.providers.kms.audit`. **Key
-  material is never logged.** AWS CloudTrail independently records every
-  `GenerateMac` call signed by the execution role.
+## Two roots, by role (amended 2026-10-01 by Boss)
 
-## Required KMS key
+KMS cannot restrict `GenerateMac` by message content, so role separation is
+root separation:
 
-- A **KMS HMAC key**: `KeySpec = HMAC_256`, `KeyUsage = GENERATE_VERIFY_MAC`.
-- Alias **`alias/am-tag-root`** (the project's key root for tag derivation).
-- Region **`us-east-2`** (the project's AWS region).
+| Root | Staging alias | Roles | Who may call it |
+|---|---|---|---|
+| SDM | `alias/am-tag-sdm-staging` | META, FILE | backend + encoder |
+| ADMIN | `alias/am-tag-admin-staging` | APP_MASTER | **encoder only** |
 
-Create once (admin, out of band):
+Production gets its own `-prod` pair at launch; staging and prod never share
+roots. Both keys: Symmetric, *Generate and verify MAC*, `HMAC_256`.
 
-```bash
-KEY_ID=$(aws kms create-key --region us-east-2 \
-  --key-spec HMAC_256 --key-usage GENERATE_VERIFY_MAC \
-  --description "AM NTAG424 per-tag key-derivation root" \
-  --query KeyMetadata.KeyId --output text)
-aws kms create-alias --region us-east-2 \
-  --alias-name alias/am-tag-root --target-key-id "$KEY_ID"
-```
+## KmsKeyProvider
 
-## Required IAM
+- Sends the public KDF message to `kms:GenerateMac` (HMAC_SHA_256) on the
+  role's root, then HKDF-Expand → 16 bytes. Roots never leave KMS.
+- No caching; the intermediate MAC buffer is wiped.
+- Audit log (`tag_encoder.providers.kms.audit`): role, version, key ref,
+  region, principal — never key material, MAC or UID.
+- **Never creates, aliases or imports a key** (grep-guarded by
+  `tests/test_no_kms_key_creation.py` and the backend `nfcKeyGuards.test.ts`).
+  Key creation is a one-time Boss action documented in
+  `docs/S_NFC3_5_VERIFICATION.md`.
 
-Scoped to the CMK ARN, the encoder's execution role needs:
+Environment:
 
-```json
-{
-  "Effect": "Allow",
-  "Action": ["kms:GenerateMac", "kms:DescribeKey"],
-  "Resource": "arn:aws:kms:us-east-2:<acct>:key/<key-id>"
-}
-```
+| Var | Default |
+|---|---|
+| `AM_TAG_SDM_KEY_ID` | `alias/am-tag-sdm-staging` |
+| `AM_TAG_ADMIN_KEY_ID` | `alias/am-tag-admin-staging` |
+| `AWS_REGION` | `us-east-2` |
+| `AM_TAG_ENCODER_PRINCIPAL` | `unknown` |
 
-- `kms:GenerateMac` — the derivation call (every tag).
-- `kms:DescribeKey` — startup validation (`validate_on_init=True` /
-  `validate_key()`) that the key is an enabled `HMAC_256 / GENERATE_VERIFY_MAC`
-  key, so a misconfigured key fails closed.
+IAM for the **encoder** role: `kms:GenerateMac` + `kms:DescribeKey` on BOTH key
+ARNs. The **backend** role gets the SDM key ARN only.
 
-> If you instead implement an encrypt-based KDF variant, swap `kms:GenerateMac`
-> for `kms:Encrypt`. This module uses **GenerateMac** (cleaner: KMS *is* the
-> HMAC PRF, no plaintext-vs-ciphertext determinism caveats).
+## LocalKeyProvider (staging / offline)
 
-## Environment variables
-
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `AM_TAG_ROOT_KEY_ALIAS` | `alias/am-tag-root` | KMS key id/alias |
-| `AWS_REGION` | `us-east-2` | KMS region |
-| `AM_TAG_ENCODER_PRINCIPAL` | `unknown` | audit-trail identity hint (real attribution is in CloudTrail) |
-
-Plus standard AWS credential resolution (role / `AWS_PROFILE` / env keys).
-
-## How the encoder selects this provider
-
-The provider is the production backend. A local dev stub (separate module owned
-by the encoder core, e.g. `LocalDevKeyProvider`) satisfies the same Protocol for
-offline work and **must never** be used to encode real tags. Suggested wiring:
-
-```python
-import os
-if os.environ.get("AM_TAG_KEY_PROVIDER", "kms") == "kms":
-    from providers import KmsKeyProvider
-    provider = KmsKeyProvider(validate_on_init=True)   # real KMS, us-east-2
-else:
-    from <encoder-core> import LocalDevKeyProvider      # dev stub, NEVER for prod
-    provider = LocalDevKeyProvider()
-```
-
-`KmsKeyProvider` accepts an injected `kms_client=` (a boto3 client or any object
-exposing `generate_mac`/`describe_key`) — used by the unit tests to run fully
-offline (no real AWS, no `moto` required).
-
-## Future backend: YubiHSM 2 (deferred)
-
-The S-NFC2 brief defers a **physically-sovereign HSM** backend behind this same
-`KeyProvider` Protocol. A `YubiHsmKeyProvider` will:
-
-- Hold the derivation root inside a YubiHSM 2 (PKCS#11 / `yubihsm-shell`),
-  computing `HMAC-SHA-256(root, uid)` on-device, then the identical HKDF-Expand
-  step — so a tag's derived key is **identical** whether produced via KMS or the
-  YubiHSM (same root value provisioned to both during migration).
-- Require **no encoder-core changes**: same `derive_tag_key(bytes) -> bytes`
-  contract, same 16-byte output, same audit-logging discipline (no key material
-  logged).
-
-This lets the project move from cloud-custodied (KMS + CloudTrail) to
-physically-sovereign custody without re-encoding the installed tag base.
+`tag_encoder.keyprovider.LocalKeyProvider(sdm_root, admin_root, allow_local_keys=True)`
+— two 32-byte roots, must differ, refuses to construct without the explicit
+opt-in. Produces exactly the KMS provider's keys for the same root bytes
+(tested). Never for customer chips.
 
 ## Tests
 
 ```bash
-python3 tag-encoder/providers/test_kms_key_provider.py     # standalone, no deps
-# or
-python3 -m pytest tag-encoder/providers/test_kms_key_provider.py
+cd tag-encoder && python -m pytest      # providers/ is in testpaths
 ```
 
-Covers: 16-byte output; 7-byte UID enforcement; non-bytes rejection;
-determinism (same UID→same key, across instances, across roots); KMS receives
-the raw UID; **no >=16-byte key constant at module level**; provider instance
-holds no `bytes` secret; audit log emitted without key material; `validate_key`
-accepts good / rejects wrong-spec & disabled keys. All offline via an injected
-KMS stub.
+`providers/test_kms_key_provider.py`: OpenSSL KDF vectors for all three roles
+through an injected KMS stub (no network), role→root routing, KMS == local,
+no caching, short-MAC rejection, audit-log redaction, `validate_keys`, no
+secret bytes on the instance or module.

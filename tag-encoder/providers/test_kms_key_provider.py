@@ -1,228 +1,143 @@
-"""Contract + determinism tests for KmsKeyProvider.
+"""KmsKeyProvider — two roots, OpenSSL KDF vectors, no network (S-NFC3.5).
 
-These tests NEVER hit real AWS. They inject a hand-rolled KMS stub that
-emulates ``generate_mac`` (HMAC-SHA-256 over the message) and ``describe_key``.
-The stub holds a throwaway test root only on the *stub* side, mirroring how a
-real KMS HMAC CMK holds the root server-side: the provider under test never sees
-it. moto is not required (and is not installed here), so the stub keeps the test
-self-contained.
-
-Run:  python3 -m pytest tag-encoder/providers/test_kms_key_provider.py
-  or:  python3 tag-encoder/providers/test_kms_key_provider.py   (no pytest needed)
+A hand-rolled KMS stub emulates ``generate_mac`` (HMAC-SHA-256) per KeyId; the
+roots live only inside the stub, as they would inside KMS. Runs under plain
+``pytest`` from tag-encoder/ (testpaths includes providers/).
 """
 
 from __future__ import annotations
 
 import hashlib
 import hmac
+import json
+import logging
 import os
 import sys
+from pathlib import Path
 
-# Allow running both as `pytest tag-encoder/...` and as a direct script.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pytest
 
-import kms_key_provider as mod  # noqa: E402
-from kms_key_provider import (  # noqa: E402
-    AES128_KEY_LEN,
-    NTAG424_UID_LEN,
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from providers import kms_key_provider as mod  # noqa: E402
+from providers.kms_key_provider import (  # noqa: E402
+    DEFAULT_ADMIN_KEY_ALIAS,
+    DEFAULT_SDM_KEY_ALIAS,
     KmsKeyProvider,
 )
+from tag_encoder.keyprovider import LocalKeyProvider  # noqa: E402
+
+VECTORS = json.loads(
+    (Path(__file__).resolve().parents[2] / "test-vectors" / "ntag424_sdm_vectors.json").read_text()
+)
+UID_A = bytes.fromhex("04A27E02936980")
+OTHER_ROOT = bytes.fromhex("77" * 32)
 
 
-class FakeKmsClient:
-    """Minimal deterministic stand-in for boto3's KMS client.
-
-    The "root" lives only inside this fake, never inside KmsKeyProvider —
-    exactly the property the real KMS boundary gives us.
-    """
-
-    def __init__(self, root: bytes = b"\xAB" * 32, key_spec: str = "HMAC_256",
-                 key_usage: str = "GENERATE_VERIFY_MAC", enabled: bool = True):
-        self._root = root
-        self._key_spec = key_spec
-        self._key_usage = key_usage
-        self._enabled = enabled
-        self.generate_mac_calls = []  # records messages for assertions
+class FakeKms:
+    def __init__(self, roots: dict[str, bytes], spec="HMAC_256", usage="GENERATE_VERIFY_MAC", enabled=True, short=False):
+        self._roots = roots
+        self._meta = (spec, usage, enabled)
+        self._short = short
+        self.calls: list[tuple[str, bytes]] = []
 
     def generate_mac(self, KeyId, MacAlgorithm, Message):  # noqa: N803 (boto3 casing)
         assert MacAlgorithm == "HMAC_SHA_256"
-        self.generate_mac_calls.append(bytes(Message))
-        mac = hmac.new(self._root, bytes(Message), hashlib.sha256).digest()
-        return {"Mac": mac, "KeyId": KeyId, "MacAlgorithm": MacAlgorithm}
+        self.calls.append((KeyId, bytes(Message)))
+        mac = hmac.new(self._roots[KeyId], bytes(Message), hashlib.sha256).digest()
+        return {"Mac": mac[:16] if self._short else mac, "KeyId": KeyId}
 
     def describe_key(self, KeyId):  # noqa: N803
-        return {
-            "KeyMetadata": {
-                "KeyId": KeyId,
-                "KeySpec": self._key_spec,
-                "KeyUsage": self._key_usage,
-                "Enabled": self._enabled,
-            }
-        }
+        spec, usage, enabled = self._meta
+        return {"KeyMetadata": {"KeyId": KeyId, "KeySpec": spec, "KeyUsage": usage, "Enabled": enabled}}
 
 
-UID_A = bytes.fromhex("04A27E02936980")  # 7 bytes, real-shaped NTAG 424 UID
-UID_B = bytes.fromhex("04DEADBEEF1234")  # 7 bytes, different
+def _kms(sdm_root: bytes, admin_root: bytes, **kw) -> tuple[KmsKeyProvider, FakeKms]:
+    fake = FakeKms({DEFAULT_SDM_KEY_ALIAS: sdm_root, DEFAULT_ADMIN_KEY_ALIAS: admin_root}, **kw)
+    return KmsKeyProvider(kms_client=fake), fake
 
 
-def _provider(client=None, **kw):
-    return KmsKeyProvider(key_id="alias/am-tag-root", kms_client=client or FakeKmsClient(), **kw)
+def test_default_aliases_are_the_per_role_staging_pair():
+    p = KmsKeyProvider(kms_client=object())
+    assert p.key_ids == {"sdm": "alias/am-tag-sdm-staging", "admin": "alias/am-tag-admin-staging"}
 
 
-# --- contract / shape -------------------------------------------------------
-
-def test_returns_16_byte_key():
-    key = _provider().derive_tag_key(UID_A)
-    assert isinstance(key, (bytes, bytearray))
-    assert len(key) == AES128_KEY_LEN == 16
+def test_same_key_for_both_roots_is_refused():
+    with pytest.raises(ValueError):
+        KmsKeyProvider(sdm_key_id="alias/x", admin_key_id="alias/x", kms_client=object())
 
 
-def test_uid_length_enforced():
-    p = _provider()
-    for bad in (b"", b"\x00" * 6, b"\x00" * 8):
-        try:
-            p.derive_tag_key(bad)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("expected ValueError for %d-byte UID" % len(bad))
-    assert NTAG424_UID_LEN == 7
+@pytest.mark.parametrize("v", VECTORS["kdf"], ids=[v["name"] for v in VECTORS["kdf"]])
+def test_reproduces_openssl_kdf_vectors_and_routes_by_role(v):
+    root = bytes.fromhex(v["rootKey"])
+    admin = v["role"] == "APP_MASTER"
+    p, fake = _kms(OTHER_ROOT if admin else root, root if admin else OTHER_ROOT)
+    uid = bytes.fromhex(v["uid"]) if v["uid"] else None
+    assert p.derive_key(v["role"], v["version"], uid).hex().upper() == v["key"]
+    key_id, message = fake.calls[0]
+    assert key_id == (DEFAULT_ADMIN_KEY_ALIAS if admin else DEFAULT_SDM_KEY_ALIAS)
+    assert message.hex().upper() == v["message"]
 
 
-def test_non_bytes_rejected():
-    p = _provider()
-    try:
-        p.derive_tag_key("04A27E02936980")  # str, not bytes
-    except TypeError:
-        return
-    raise AssertionError("expected TypeError for non-bytes UID")
+def test_kms_and_local_agree_for_the_same_roots():
+    sdm, admin = bytes.fromhex("A1" * 32), bytes.fromhex("B2" * 32)
+    kms, _ = _kms(sdm, admin)
+    local = LocalKeyProvider(sdm, admin, allow_local_keys=True)
+    for role, uid in (("META", None), ("FILE", UID_A), ("APP_MASTER", UID_A)):
+        assert kms.derive_key(role, 1, uid) == local.derive_key(role, 1, uid)
 
 
-# --- determinism ------------------------------------------------------------
-
-def test_same_uid_same_key_same_client():
-    p = _provider()
-    assert p.derive_tag_key(UID_A) == p.derive_tag_key(UID_A)
-
-
-def test_same_uid_same_key_across_provider_instances_same_root():
-    root = b"\x11\x22\x33" * 10 + b"\x44\x55"  # fixed 32-byte test root
-    c1, c2 = FakeKmsClient(root=root), FakeKmsClient(root=root)
-    k1 = _provider(c1).derive_tag_key(UID_A)
-    k2 = _provider(c2).derive_tag_key(UID_A)
-    assert k1 == k2  # deterministic for a given UID + root
+def test_no_caching():
+    p, fake = _kms(bytes(32), OTHER_ROOT)
+    p.derive_key("META", 1)
+    p.derive_key("META", 1)
+    assert len(fake.calls) == 2
 
 
-def test_different_uid_different_key():
-    p = _provider()
-    assert p.derive_tag_key(UID_A) != p.derive_tag_key(UID_B)
+def test_rejects_short_mac():
+    p, _ = _kms(bytes(32), OTHER_ROOT, short=True)
+    with pytest.raises(RuntimeError):
+        p.derive_key("META", 1)
 
 
-def test_different_root_different_key():
-    k_root1 = _provider(FakeKmsClient(root=b"\x01" * 32)).derive_tag_key(UID_A)
-    k_root2 = _provider(FakeKmsClient(root=b"\x02" * 32)).derive_tag_key(UID_A)
-    assert k_root1 != k_root2
-
-
-def test_mac_sent_is_the_uid():
-    c = FakeKmsClient()
-    _provider(c).derive_tag_key(UID_A)
-    assert c.generate_mac_calls == [UID_A]  # KMS signs the raw UID, nothing else
-
-
-# --- security: no root key material anywhere in the provider ----------------
-
-def test_no_root_key_constant_at_module_level():
-    """No 16/32-byte bytes constant in the provider module that could be a root.
-
-    Allow-list the public, non-secret HKDF info label and small protocol
-    constants; flag anything else that looks like fixed key material.
-    """
-    allow = {mod._HKDF_INFO}
-    for name in dir(mod):
-        val = getattr(mod, name)
-        if isinstance(val, (bytes, bytearray)) and len(val) >= 16:
-            assert val in allow, (
-                "suspicious >=16-byte bytes constant %r in module" % name
-            )
-
-
-def test_provider_instance_holds_no_secret_material():
-    p = _provider()
-    # Only non-secret config should be on the instance.
-    for attr in ("key_id", "region", "principal"):
-        assert hasattr(p, attr)
-    # No attribute should hold a 32-byte (or 16-byte) opaque blob = a key/root.
-    for k, v in vars(p).items():
-        if isinstance(v, (bytes, bytearray)):
-            raise AssertionError("provider holds bytes attr %r (possible key)" % k)
-
-
-def test_audit_log_emitted_without_key_material(caplog=None):
-    import logging
-
-    records = []
+def test_audit_log_has_no_key_mac_or_uid():
+    records: list[logging.LogRecord] = []
 
     class Capture(logging.Handler):
         def emit(self, record):
             records.append(record)
 
-    handler = Capture()
-    mod.audit_log.addHandler(handler)
+    h = Capture()
+    mod.audit_log.addHandler(h)
     mod.audit_log.setLevel(logging.INFO)
+    sdm = bytes.fromhex("5C" * 32)
     try:
-        key = _provider(principal="encoder-svc@am").derive_tag_key(UID_A)
+        p, _ = _kms(sdm, OTHER_ROOT)
+        key = p.derive_key("FILE", 1, UID_A)
     finally:
-        mod.audit_log.removeHandler(handler)
+        mod.audit_log.removeHandler(h)
 
     assert len(records) == 1
-    rec = records[0]
-    assert getattr(rec, "event", None) == "derive_tag_key"
-    assert getattr(rec, "principal", None) == "encoder-svc@am"
-    assert getattr(rec, "tag_uid", None) == UID_A.hex()
-    assert getattr(rec, "key_ref", None) == "alias/am-tag-root"
-    # The derived key (hex or raw) must not appear in the structured record.
-    blob = repr(vars(rec))
-    assert key.hex() not in blob
-    assert key not in (getattr(rec, a, None) for a in vars(rec))
+    rec = vars(records[0])
+    assert rec["event"] == "derive_key" and rec["role"] == "FILE" and rec["key_ref"] == DEFAULT_SDM_KEY_ALIAS
+    blob = repr(rec).lower()
+    mac = hmac.new(sdm, b"AM-NTAG424-KDF\x00FILE\x00\x01" + UID_A, hashlib.sha256).hexdigest()
+    for secret in (key.hex(), mac, sdm.hex(), UID_A.hex()):
+        assert secret not in blob
 
 
-# --- key validation (kms:DescribeKey) ---------------------------------------
-
-def test_validate_key_accepts_good_key():
-    _provider().validate_key()  # should not raise
-
-
-def test_validate_key_rejects_wrong_spec():
-    bad = FakeKmsClient(key_spec="RSA_2048", key_usage="ENCRYPT_DECRYPT")
-    try:
-        _provider(bad).validate_key()
-    except RuntimeError:
-        return
-    raise AssertionError("expected RuntimeError for non-HMAC key")
+def test_validate_keys():
+    _kms(bytes(32), OTHER_ROOT)[0].validate_keys()
+    with pytest.raises(RuntimeError):
+        _kms(bytes(32), OTHER_ROOT, spec="SYMMETRIC_DEFAULT")[0].validate_keys()
+    with pytest.raises(RuntimeError):
+        _kms(bytes(32), OTHER_ROOT, enabled=False)[0].validate_keys()
 
 
-def test_validate_key_rejects_disabled_key():
-    try:
-        _provider(FakeKmsClient(enabled=False)).validate_key()
-    except RuntimeError:
-        return
-    raise AssertionError("expected RuntimeError for disabled key")
-
-
-# --- standalone runner (no pytest required) ---------------------------------
-
-def _run_standalone():
-    fns = [v for k, v in sorted(globals().items())
-           if k.startswith("test_") and callable(v)]
-    passed = 0
-    for fn in fns:
-        fn()
-        passed += 1
-        print("PASS", fn.__name__)
-    print("\n%d/%d tests passed" % (passed, len(fns)))
-    return passed == len(fns)
-
-
-if __name__ == "__main__":
-    sys.exit(0 if _run_standalone() else 1)
+def test_provider_holds_no_secret_bytes():
+    p = KmsKeyProvider(kms_client=object())
+    for name, val in vars(p).items():
+        assert not isinstance(val, (bytes, bytearray)), name
+    for name in dir(mod):
+        val = getattr(mod, name)
+        assert not (isinstance(val, (bytes, bytearray)) and len(val) >= 16), name
