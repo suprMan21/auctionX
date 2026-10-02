@@ -11,6 +11,7 @@ import { requireAuth } from '../middleware/auth';
 import { AppError, toAppError } from '../lib/errors';
 import {
   enrollTag,
+  enrollPrecheck,
   claimTag,
   initiateTransfer,
   completeTransfer,
@@ -82,6 +83,7 @@ tagManagementRoutes.use(ownershipAuthProbeDetector as unknown as RequestHandler)
 
 // ── Static routes, ALL before any parameterized route (lesson #5) ────────────
 tagManagementRoutes.post('/enroll', requireAuth, mutationLimit, handle(enrollTag));
+tagManagementRoutes.get('/enroll/precheck/:tagUid', requireAuth, mutationLimit, handle(enrollPrecheck));
 tagManagementRoutes.post('/claim', requireAuth, mutationLimit, handle(claimTag));
 tagManagementRoutes.post('/release', requireAuth, mutationLimit, handle(releaseTag));
 tagManagementRoutes.post('/replace', requireAuth, mutationLimit, handle(replaceTag));

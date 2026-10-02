@@ -35,13 +35,10 @@ python3 test-vectors/generate_ntag424_vectors.py   # needs OpenSSL >= 3.0
 
 The script asserts OpenSSL reproduces AN12196's own example before writing.
 
-## What still requires a live secure channel (S-NFC2 Phase 2)
+## Live secure channel (S-NFC2 Phase 2, 2026-10-02)
 
-`tag_encoder/ntag424/apdu.py` builds spec-correct command *structures*; the
-secure-messaging commands still raise `RequiresLiveChannel`:
-AuthenticateEV2First part 2, ChangeKey (0xC4), ChangeFileSettings (0x5F),
-WriteData (0x8D) on a MACed/Full file. `--dry-run` prints them with every key
-byte **redacted** — derived keys are never printed.
-
-No physical chip may be encoded for customers until Phase 2 lands on top of
-this crypto.
+Implemented in `tag_encoder/ntag424/session.py` and pinned to NXP AN12196
+Rev 1.8 worked examples (Tables 8, 14, 18, 19, 26, 27) in
+`tests/test_session.py`. The `apdu.py` "secured" helpers still raise
+`RequiresLiveChannel` on purpose: a secured APDU only exists inside a live
+`Session`. The physical flow is `tag_encoder/personalise.py`.

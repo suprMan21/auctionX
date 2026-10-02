@@ -341,6 +341,54 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
   return ok(res, { tagId: data.id, lifecycleStatus: 'ENROLLED' }, 201);
 };
 
+// ── GET /api/v1/nfc/enroll/precheck/:tagUid ─────────────────────────────────
+
+const tagUidParam = enrollSchema.shape.tagUid;
+
+/**
+ * S-NFC2 Ph2 encoder guard: may this physical chip be personalised?
+ *
+ * Called by the encoding station BEFORE any write to the chip. A UID that
+ * already exists is never re-personalised, and a RETIRED one never comes back
+ * (Locked 2026-10-02: retired chips are never reused). Unlike the public
+ * GET /by-uid, a lookup failure is an error, never "not found", so an outage
+ * cannot read as "this UID is free". Staff only.
+ */
+export const enrollPrecheck = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/enroll/precheck', 'staff');
+  const logger = withLogContext({ requestId: req.requestId, route: '/api/v1/nfc/enroll/precheck' });
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  if (!(await isStaff(supabase, userId))) {
+    emitAuthzDenied('tag', null, 'role', ctx);
+    throw errorFor('forbidden');
+  }
+
+  const parsed = tagUidParam.safeParse(req.params.tagUid);
+  if (!parsed.success) {
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+
+  const { data, error } = await supabase
+    .from('nfc_tags')
+    .select('id, lifecycle_status')
+    .eq('tag_uid', parsed.data.toUpperCase())
+    .maybeSingle();
+
+  if (error) {
+    logger.error('nfc_enroll_precheck_failed', { error: error.message });
+    throw new AppError('unavailable', 'Tag registry lookup failed');
+  }
+
+  return ok(res, {
+    exists: Boolean(data),
+    lifecycleStatus: (data?.lifecycle_status as string | null | undefined) ?? null,
+  });
+};
+
 // ── POST /api/v1/nfc/claim ──────────────────────────────────────────────────
 
 /**

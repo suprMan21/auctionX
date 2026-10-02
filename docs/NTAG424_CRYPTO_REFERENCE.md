@@ -125,7 +125,7 @@ ChangeFileSettings cleartext body (`apdu.py` `sdm_file_settings_payload`):
 | FileOption | `40` | SDM on, CommMode Plain (any phone can read) |
 | AccessRights | `00 E0` | 0xE000 LSB first: Read=E (free), Write=K0, RW=K0, Change=K0 |
 | SDMOptions | `C1` | UID mirror, SDMReadCtr mirror, ASCII |
-| SDMAccessRights | `23 FF` | 0xFF23 LSB first: RFU=F, CtrRet=F, **MetaRead=K2**, FileRead=K3 |
+| SDMAccessRights | `FF 23` | 0x23FF LSB first: [15:12] **MetaRead=K2**, [11:8] FileRead=K3, [7:4] RFU=F, [3:0] CtrRet=F. Pinned by AN12196 Rev 1.8 Table 12/19 (`F1 21`). S-NFC3.5 had `23 FF` (swapped), fixed in S-NFC2 Ph2 before any chip was written |
 | PICCDataOffset | 3 B LE | present because MetaRead is a key (encrypted PICCData) |
 | SDMMACInputOffset | 3 B LE | == SDMMACOffset |
 | SDMMACOffset | 3 B LE | |

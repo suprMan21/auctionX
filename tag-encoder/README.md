@@ -9,8 +9,13 @@ Authentic Materials tags.
 > (`../test-vectors/ntag424_sdm_vectors.json`). The Phase-1 simplified CMAC is
 > deleted — see [`SIM_PARITY.md`](./SIM_PARITY.md) and
 > [`docs/NTAG424_CRYPTO_REFERENCE.md`](../docs/NTAG424_CRYPTO_REFERENCE.md).
-> Live EV2 secure-channel writes are still S-NFC2 Phase 2: **no physical chip
-> may be encoded for customers until that ships.**
+>
+> **S-NFC2 Phase 2 (2026-10-02): physical encode.** EV2 secure messaging
+> (`ntag424/session.py`) is pinned byte-for-byte to NXP AN12196's worked
+> examples (auth, session keys, MAC/Full modes, both ChangeKey cases). The
+> `personalise` command keys a real chip, reads it back, verifies the SUN, and
+> only then enrolls it. Ph2 also fixed a byte-swapped `SDMAccessRights` from
+> S-NFC3.5 (`23 FF` → `FF 23`) before any chip was written.
 
 ## Layout
 
@@ -19,10 +24,17 @@ tag_encoder/
 ├── aes.py              # pure-Python AES-128 (ECB/CBC enc+dec, CMAC) — zero runtime deps
 ├── ndef.py             # NDEF URI record BUILDER (round-trips tag_hq.parsers)
 ├── keyprovider.py      # KDF spec + KeyProvider Protocol + LocalKeyProvider (two roots)
-├── cli.py              # encode / read / verify (dry-run is fully offline)
+├── cli.py              # encode / read / verify / personalise / tapcheck
+├── personalise.py      # the 9-stage physical encode (gate → precheck → key → read-back → enroll)
+├── transport.py        # PC/SC (pyscard); separate from tag-hq's read-only transport
+├── registry.py         # backend precheck + enroll (staff JWT); MemoryRegistry for rehearsal
+├── audit.py            # append-only JSONL ledger, field allowlist (no UID / URL / keys)
 └── ntag424/
     ├── encode.py       # AN12196 SDM: PICCData, SV2 session MAC, even-byte truncation, NDEF template
-    └── apdu.py         # personalisation C-APDU builder (AN12196 EV2), SDM file settings
+    ├── apdu.py         # personalisation C-APDU builder, SDM file settings, GetKeyVersion
+    ├── session.py      # EV2 secure messaging (AuthenticateEV2First, MAC/Full, ChangeKey)
+    └── emulator.py     # software NTAG 424 DNA for rehearsal + tests (never for customer chips)
+iam/                    # encoder IAM role/trust/user policies (MFA-gated KMS GenerateMac)
 providers/
 └── kms_key_provider.py # KmsKeyProvider — SDM root + ADMIN root (KMS GenerateMac)
 tests/                  # pytest (shared OpenSSL vectors, KDF, apdu layout, cli, guards)
@@ -60,6 +72,83 @@ python -m tag_encoder.cli verify --uid 04A27E02936980 --picc <32hex> --cmac <16h
 
 No command prints key material. Any future local server **must bind to
 127.0.0.1 only**.
+
+## Physical encode (S-NFC2 Phase 2)
+
+### What `personalise` does to each chip
+
+| # | Stage | Writes? | Refuses / fails when |
+|---|---|---|---|
+| 1 | identify: GetVersion | no | not the AM-SEALED acceptance tuple, non-NXP UID |
+| 2 | gate: GetTTStatus `0xF7` | no | command exists → TagTamper (Locked: rejected) |
+| 3 | originality: Read_Sig + NXP P-224 verify | no | signature does not verify |
+| 4 | registry precheck (staff API) | no | UID exists at all; **RETIRED is never reused**; backend unreachable (fails closed) |
+| 5 | key state: GetKeyVersion K0/K2/K3 | no | a version that is neither factory (0) nor ours |
+| 6 | Auth K0 (factory) → ChangeFileSettings → ChangeKey K2, K3 → ChangeKey **K0 last** | yes | any SW / MAC error (re-run resumes) |
+| 7 | Auth K0 (new) → WriteData NDEF template | yes | new K0 rejected |
+| 8 | read-back: GetFileSettings + ReadBinary; the SUN must verify under the derived keys | no | settings or NDEF differ, SUN invalid |
+| 9 | enroll (staff API) → `ENROLLED` | DB | API error (chip is fine; re-run resumes and enrolls) |
+
+K1 and K4 stay at factory (locked slot map). No blockchain write (G5).
+An abort at any point is safe to re-run on the same chip: K0 changes last, and
+GetKeyVersion tells the encoder which old key each slot holds.
+
+### One-time setup (Boss, AWS console, ~10 min)
+
+1. IAM **role** `am-tag-encoder-staging`: permissions = `iam/am-tag-encoder-staging.role-policy.json`
+   (GenerateMac + DescribeKey on both tag keys); trust = `iam/am-tag-encoder-staging.trust-policy.json`
+   (only user `am-tag-encoder`, only with MFA ≤ 1 h old).
+2. IAM **user** `am-tag-encoder`: inline policy `iam/am-tag-encoder.user-policy.json` (AssumeRole
+   into that role, nothing else), a virtual **MFA device**, one access key (store in 1Password).
+3. `~/.aws/config` on the encoding Mac:
+   ```ini
+   [profile am-encoder-user]
+   region = us-east-2
+   [profile am-encoder]
+   role_arn = arn:aws:iam::904183418667:role/am-tag-encoder-staging
+   source_profile = am-encoder-user
+   mfa_serial = arn:aws:iam::904183418667:mfa/am-tag-encoder
+   region = us-east-2
+   ```
+   plus the user's access key under `[am-encoder-user]` in `~/.aws/credentials`. boto3 asks for the
+   MFA code once per run. Every derivation shows up in CloudTrail as `GenerateMac` by the role.
+4. Fill the staff-login item names in `encoder.env.op`.
+
+### Encoding
+
+```bash
+cd tag-encoder
+python3 -m venv .venv && .venv/bin/pip install -e '.[hardware]'
+
+# Rehearse first: software chip, in-memory registry, nothing leaves the Mac
+.venv/bin/python -m tag_encoder.cli personalise --item rehearsal --emulator --dev-roots
+
+# One real chip (prompts to place it; MFA prompt once)
+op run --env-file encoder.env.op -- .venv/bin/python -m tag_encoder.cli personalise --item <id>
+
+# A lot: CSV with an `item` column (optional `token`), one chip per row
+op run --env-file encoder.env.op -- .venv/bin/python -m tag_encoder.cli personalise --batch lot.csv
+```
+
+`--item` that is an `items.id` UUID is linked at enroll; anything else is an
+audit label only. Chips keyed under the staging KMS roots point at the staging
+frontend by default (`--base-url` to override).
+
+### Phone-tap end-to-end
+
+Tap the chip with a phone, copy the URL it opens, then:
+
+```bash
+.venv/bin/python -m tag_encoder.cli tapcheck --url '<the URL>'   # POST /api/v1/nfc/scan → HTTP 200
+```
+
+### Audit ledger
+
+`~/.am-tag-encoder/audit.jsonl` (mode 0600, append-only): who, when, item,
+token, tag id, outcome + closed-set reason, stage, key version, read-back
+counter. Never the UID, URL, PICCData, CMAC or any key; the tag id resolves to
+the UID in the registry. The backend's `nfc.enroll` security event is the
+server-side record.
 
 ## Tests
 

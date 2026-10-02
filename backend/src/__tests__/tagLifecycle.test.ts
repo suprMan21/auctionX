@@ -706,6 +706,55 @@ describe('enroll', () => {
   });
 });
 
+// ── Encoder precheck (S-NFC2 Ph2) ───────────────────────────────────────────
+
+describe('enroll precheck', () => {
+  it('refuses a non-staff caller', async () => {
+    const { enrollPrecheck } = await controllers();
+
+    const out = await call(enrollPrecheck, makeReq(OWNER, {}, { tagUid: 'AABBCCDDEEFF00' }));
+
+    expect(out.threw?.message).toMatch(/forbidden/i);
+    expect(eventsNamed('authz.denied')[0]).toMatchObject({ reason: 'role' });
+  });
+
+  it('reports an unknown UID as free', async () => {
+    const { enrollPrecheck } = await controllers();
+
+    const out = await call(enrollPrecheck, makeReq(STAFF, {}, { tagUid: 'aabbccddeeff00' }));
+
+    expect(out.threw).toBeNull();
+    expect(out.body).toMatchObject({ success: true, data: { exists: false, lifecycleStatus: null } });
+  });
+
+  it('reports a RETIRED UID so the encoder refuses it (retired chips are never reused)', async () => {
+    tables.nfc_tags = [baseTag({ lifecycle_status: 'RETIRED' })];
+    const { enrollPrecheck } = await controllers();
+
+    const out = await call(enrollPrecheck, makeReq(STAFF, {}, { tagUid: TAG_UID.toLowerCase() }));
+
+    expect(out.body).toMatchObject({ data: { exists: true, lifecycleStatus: 'RETIRED' } });
+  });
+
+  it('fails closed when the registry lookup errors, rather than reporting the UID free', async () => {
+    hooks = { failRead: (table) => table === 'nfc_tags' };
+    const { enrollPrecheck } = await controllers();
+
+    const out = await call(enrollPrecheck, makeReq(STAFF, {}, { tagUid: 'AABBCCDDEEFF00' }));
+
+    expect(out.threw?.code).toBe('unavailable');
+    expect(out.body).not.toHaveProperty('data');
+  });
+
+  it('rejects a malformed UID', async () => {
+    const { enrollPrecheck } = await controllers();
+
+    const out = await call(enrollPrecheck, makeReq(STAFF, {}, { tagUid: 'not-a-uid' }));
+
+    expect(out.threw?.code).toBe('invalid_argument');
+  });
+});
+
 // ── Previous owner lockout (Rule 5) ─────────────────────────────────────────
 
 describe('after a completed transfer', () => {

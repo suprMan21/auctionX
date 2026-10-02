@@ -14,6 +14,15 @@ Commands:
         Run the backend's validateSunScan logic: decrypt PICCData under the
         META key, check the claimed UID, verify the SDMMAC, check the counter.
 
+    personalise --item <id> [--token T] [--base-url URL] [--batch CSV] [--emulator]
+        S-NFC2 Phase 2: physically key + write a chip on the PC/SC reader, read it
+        back, verify the SUN, then enroll it (personalise.py has the 9 stages).
+        Real chips: KMS keys + staff login (env) ONLY. --emulator rehearses the
+        whole flow on a software chip with an in-memory registry.
+
+    tapcheck --url URL
+        POST a SUN URL read by a phone to the backend's /nfc/scan (staging e2e).
+
 KEYS: derived from roots via a KeyProvider and held in memory for one command.
 They are NEVER printed, written to a file, or put in JSON output. Roots come
 from the environment (staging/dev):
@@ -28,21 +37,39 @@ NOTE: any future local server MUST bind to 127.0.0.1 only.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import sys
+import urllib.error
+import urllib.request
+
+# tag-hq's read-only parsers + originality check are reused; make the sibling
+# package importable when running from a checkout (`python -m tag_encoder.cli`).
+_SIBLING_TAG_HQ = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "tag-hq")
+if os.path.isdir(_SIBLING_TAG_HQ) and _SIBLING_TAG_HQ not in sys.path:
+    sys.path.append(_SIBLING_TAG_HQ)
 
 from .keyprovider import ROLE_APP_MASTER, ROLE_FILE, ROLE_META, KeyProvider, LocalKeyProvider
 from .ntag424 import apdu as apdu_mod
 from .ntag424.encode import build_sdm_template, encode_sun, verify_sun
 
 DEFAULT_BASE_URL = "https://authentic-materials.com"
+# Chips keyed under the STAGING KMS roots point at the staging frontend: the
+# production domain will never verify staging keys.
+STAGING_BASE_URL = "https://d1bwev65w7rqzl.cloudfront.net"
 DEFAULT_KEY_VERSION = 1
 
 # PUBLIC dev roots. Deliberately recognisable; anything encoded under them is
 # forgeable by anyone who reads this file. Opt-in only via --dev-roots.
 _DEV_SDM_ROOT = bytes.fromhex("D0" * 32)
 _DEV_ADMIN_ROOT = bytes.fromhex("DA" * 32)
+
+
+def _default_audit_path():
+    from .audit import DEFAULT_AUDIT_PATH
+
+    return DEFAULT_AUDIT_PATH
 
 
 def _hex_to_apdu_str(apdu: list[int]) -> str:
@@ -106,7 +133,7 @@ def cmd_encode(args: argparse.Namespace) -> int:
         print()
         print("APDU SEQUENCE (AN12196 EV2):")
         for i, step in enumerate(seq, 1):
-            live = " [REQUIRES LIVE CHANNEL — Phase 2]" if step.get("requires_live_channel") else ""
+            live = " [secure session]" if step.get("requires_live_channel") else ""
             print(f"  {i}. {step['name']}{live}")
             if "apdu" in step:
                 print(f"       APDU: {_hex_to_apdu_str(step['apdu'])}")
@@ -178,6 +205,118 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 0 if res.valid else 1
 
 
+def _personalise_jobs(args: argparse.Namespace) -> list:
+    from .personalise import EncodeJob
+
+    if not args.batch:
+        if not args.item:
+            raise SystemExit("error: --item or --batch is required")
+        return [EncodeJob(args.item, args.token or args.item, args.base_url, args.key_version)]
+    with open(args.batch, newline="", encoding="utf-8") as fh:
+        rows = [r for r in csv.DictReader(fh) if (r.get("item") or "").strip()]
+    if not rows:
+        raise SystemExit(f"error: {args.batch} has no rows with an 'item' column")
+    return [
+        EncodeJob(r["item"].strip(), (r.get("token") or r["item"]).strip(), args.base_url, args.key_version)
+        for r in rows
+    ]
+
+
+def cmd_personalise(args: argparse.Namespace) -> int:
+    from .audit import AuditLog
+    from .ntag424.emulator import EmulatedNtag424
+    from .personalise import EncodeError, Refused, personalise
+    from .registry import MemoryRegistry, RegistryError, backend_registry_from_env
+
+    jobs = _personalise_jobs(args)
+    audit = AuditLog(args.audit_log)
+
+    if args.emulator:
+        provider = _provider(args)
+        registry = MemoryRegistry()
+        originality = lambda uid, sig: True  # noqa: E731 - a software chip has no NXP signature
+        mode = "emulator"
+        print("EMULATOR: software chip, in-memory registry. Nothing touches silicon or the backend.")
+    else:
+        if args.dev_roots:
+            raise SystemExit("error: --dev-roots are PUBLIC; they may never key a physical chip")
+        from providers.kms_key_provider import KmsKeyProvider
+
+        from .personalise import nxp_originality
+        from .transport import PcscCard
+
+        try:
+            provider = KmsKeyProvider(validate_on_init=True)
+            registry = backend_registry_from_env()
+        except RegistryError as exc:
+            raise SystemExit(f"error: {exc}")
+        originality, mode = nxp_originality, "pcsc"
+        print(f"LIVE ENCODE  keys: KMS {provider.key_ids['sdm']} + {provider.key_ids['admin']} ({provider.region})")
+        print(f"             registry: {registry.api_base}   base URL: {args.base_url}")
+        print(f"             audit: {audit.path}")
+
+    failures = 0
+    for n, job in enumerate(jobs, 1):
+        print(f"\n[{n}/{len(jobs)}] item={job.item} token={job.token}")
+        if args.emulator:
+            card = EmulatedNtag424(uid=bytes.fromhex(_derive_uid_for_item(job.item)))
+        else:
+            if not args.yes:
+                answer = input("  Place a BLANK chip on the reader, then Enter (s = skip, q = quit): ").strip().lower()
+                if answer == "q":
+                    break
+                if answer == "s":
+                    continue
+            try:
+                card = PcscCard.connect(args.reader)
+            except Exception as exc:
+                print(f"  ✗ reader: {exc}")
+                failures += 1
+                continue
+        try:
+            out = personalise(card, provider, registry, job, audit=audit, originality=originality, mode=mode)
+        except EncodeError as exc:
+            failures += 1
+            kind = "REFUSED (nothing written)" if isinstance(exc, Refused) else "FAILED (re-run this chip to resume)"
+            print(f"  ✗ {kind}: {exc}")
+            continue
+        finally:
+            if hasattr(card, "close"):
+                card.close()
+        print(f"  ✓ ENCODED  tag {out.tag_id}  UID {out.uid_hex}  read-back ctr {out.readback_counter}"
+              f"{'  (resumed)' if out.resumed else ''}")
+        print(f"    read-back URL: {out.readback_url}")
+        if not args.emulator and not args.yes and len(jobs) > 1:
+            input("  Remove the chip, then Enter: ")
+
+    print(f"\n{len(jobs) - failures} encoded, {failures} not encoded")
+    return 0 if failures == 0 else 1
+
+
+def cmd_tapcheck(args: argparse.Namespace) -> int:
+    """Phone-tap e2e: send the URL a phone read to the backend's public /nfc/scan."""
+    from .registry import DEFAULT_API_BASE
+
+    api = os.environ.get("AM_API_BASE", DEFAULT_API_BASE).rstrip("/")
+    req = urllib.request.Request(
+        api + "/api/v1/nfc/scan",
+        data=json.dumps({"sunMessage": args.url}).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            status, body = resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        status, body = exc.code, exc.read()
+    print(f"HTTP {status}")
+    try:
+        print(json.dumps(json.loads(body), indent=2))
+    except ValueError:
+        print(body.decode("utf-8", "replace"))
+    return 0 if status == 200 else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tag-encoder", description="NTAG 424 DNA encoder (AN12196 SDM)")
     sub = p.add_subparsers(dest="command", required=True)
@@ -207,6 +346,22 @@ def build_parser() -> argparse.ArgumentParser:
     vf.add_argument("--last-counter", type=int, default=-1, help="last accepted counter (replay gate)")
     key_args(vf)
     vf.set_defaults(func=cmd_verify)
+
+    ps = sub.add_parser("personalise", help="physically encode chip(s) on the reader (S-NFC2 Ph2)")
+    ps.add_argument("--item", help="item id (an items.id UUID is linked at enroll; any other label is audit-only)")
+    ps.add_argument("--token", help="SUN token name in the URL path (defaults to --item)")
+    ps.add_argument("--batch", help="CSV with an 'item' column (optional 'token'); one chip per row")
+    ps.add_argument("--base-url", default=STAGING_BASE_URL, help="SUN base URL (default: staging frontend)")
+    ps.add_argument("--reader", help="substring of the PC/SC reader name (default: first PICC reader)")
+    ps.add_argument("--audit-log", default=str(_default_audit_path()), help="append-only JSONL audit ledger")
+    ps.add_argument("--emulator", action="store_true", help="rehearse on a software chip (no reader, no backend)")
+    ps.add_argument("--yes", action="store_true", help="no per-chip prompts (chip must already be on the reader)")
+    key_args(ps)
+    ps.set_defaults(func=cmd_personalise)
+
+    tc = sub.add_parser("tapcheck", help="POST a phone-read SUN URL to the backend /nfc/scan")
+    tc.add_argument("--url", required=True, help="the full URL the phone opened")
+    tc.set_defaults(func=cmd_tapcheck)
 
     return p
 

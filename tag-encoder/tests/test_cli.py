@@ -63,9 +63,9 @@ def test_dry_run_prints_sequence_but_no_keys(capsys):
     assert rc == 0
     cap = capsys.readouterr()
     assert "DRY RUN" in cap.out and "AuthenticateEV2First" in cap.out
-    assert "REQUIRES LIVE CHANNEL" in cap.out and "SUN URL" in cap.out
+    assert "[secure session]" in cap.out and "SUN URL" in cap.out
     assert "never printed" in cap.out
-    assert "cleartext body: 4000E0C123FF" in cap.out  # SDM settings with encrypted PICCData
+    assert "cleartext body: 4000E0C1FF23" in cap.out  # SDM settings with encrypted PICCData
     _assert_no_secrets(cap.out + cap.err, UID)
 
 
@@ -117,3 +117,36 @@ def test_read_roundtrips_encoded_ndef(capsys):
     out = json.loads(capsys.readouterr().out)
     assert main(["read", "--ndef", out["ndefBytes"]]) == 0
     assert json.loads(capsys.readouterr().out)["uri"] == out["sunUrl"]
+
+
+# --- S-NFC2 Phase 2: personalise -------------------------------------------------
+
+
+def test_personalise_emulator_single_chip(capsys, tmp_path):
+    audit = tmp_path / "audit.jsonl"
+    rc = main(["personalise", "--item", "item_ph2", "--emulator", "--dev-roots", "--audit-log", str(audit)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "EMULATOR" in out and "✓ ENCODED" in out and "1 encoded, 0 not encoded" in out
+    assert '"result": "encoded"' in audit.read_text()
+
+
+def test_personalise_emulator_batch(capsys, tmp_path):
+    manifest = tmp_path / "lot.csv"
+    manifest.write_text("item,token\nitem_a,tok_a\nitem_b,\n\nitem_c,tok_c\n")
+    rc = main(["personalise", "--batch", str(manifest), "--emulator", "--dev-roots",
+               "--audit-log", str(tmp_path / "a.jsonl")])
+    out = capsys.readouterr().out
+    assert rc == 0 and "3 encoded, 0 not encoded" in out
+    assert "token=item_b" in out  # empty token falls back to the item id
+
+
+def test_personalise_refuses_dev_roots_on_real_silicon(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        main(["personalise", "--item", "x", "--dev-roots", "--audit-log", str(tmp_path / "a.jsonl")])
+    assert "PUBLIC" in str(exc.value)
+
+
+def test_personalise_needs_item_or_batch(tmp_path):
+    with pytest.raises(SystemExit):
+        main(["personalise", "--emulator", "--dev-roots", "--audit-log", str(tmp_path / "a.jsonl")])
