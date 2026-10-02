@@ -31,6 +31,14 @@ import { ownershipAuthProbeDetector, resolveOwnershipId } from '../controllers/o
  * cross-cutting edit well outside this session. Wrapping here keeps the new
  * surface compliant without touching parked behaviour.
  */
+const SUN_REASONS = new Set(['replay_detected', 'invalid_signature']);
+
+const sunReason = (details: unknown): string | null => {
+  if (!details || typeof details !== 'object') return null;
+  const reason = (details as { reason?: unknown }).reason;
+  return typeof reason === 'string' && SUN_REASONS.has(reason) ? reason : null;
+};
+
 const handle =
   (fn: (req: never, res: Response) => Promise<unknown>): RequestHandler =>
   async (req: Request, res: Response, next: NextFunction) => {
@@ -39,11 +47,16 @@ const handle =
     } catch (err) {
       const appError: AppError = toAppError(err);
       if (res.headersSent) return next(err);
+      // S-NFC3.5: a failed SUN check carries a closed-set `reason`
+      // (`replay_detected` | `invalid_signature`). Nothing else from
+      // `details` is ever echoed.
+      const reason = sunReason(appError.details);
       res.status(appError.status).json({
         success: false,
         data: null,
         error: appError.message,
         code: appError.code,
+        ...(reason ? { reason } : {}),
       });
     }
   };

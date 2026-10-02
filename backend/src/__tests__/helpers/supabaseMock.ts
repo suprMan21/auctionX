@@ -4,7 +4,11 @@
  * Covers exactly the surface the S-NFC3 controllers use:
  *   .from(t).select(cols).eq(c, v).maybeSingle() / .single() / .limit(n)
  *   .from(t).insert(row).select(cols).single()
- *   .from(t).update(patch).eq(c, v)[.eq(...)][.select().maybeSingle()]
+ *   .from(t).update(patch).eq(c, v)[.eq(...)][.lt(c, v)][.select().maybeSingle()]
+ *
+ * S-NFC3.5: `.lt()` (the conditional counter burn) and an optional
+ * `beforeUpdate` hook, so a test can play a concurrent request that wins the
+ * race between our read and our conditional write.
  *
  * Deliberately NOT a general Supabase emulator. It exists so the lifecycle
  * rules — claim only on ENROLLED, completion only via webhook, pending
@@ -19,11 +23,21 @@ export type Tables = Record<string, Row[]>;
 
 interface Filter {
   column: string;
+  op: 'eq' | 'lt';
   value: unknown;
 }
 
 const matches = (row: Row, filters: Filter[]): boolean =>
-  filters.every((f) => row[f.column] === f.value);
+  filters.every((f) =>
+    f.op === 'eq'
+      ? row[f.column] === f.value
+      : (row[f.column] as number) < (f.value as number),
+  );
+
+export interface MockHooks {
+  /** Runs immediately before an update is applied (after filters are set). */
+  beforeUpdate?: (table: string, patch: Row) => void;
+}
 
 let idCounter = 0;
 const nextId = (): string => {
@@ -47,6 +61,7 @@ class QueryBuilder {
   constructor(
     private readonly tables: Tables,
     private readonly table: string,
+    private readonly hooks: MockHooks = {},
   ) {
     if (!this.tables[table]) this.tables[table] = [];
   }
@@ -70,7 +85,12 @@ class QueryBuilder {
   }
 
   eq(column: string, value: unknown): this {
-    this.filters.push({ column, value });
+    this.filters.push({ column, op: 'eq', value });
+    return this;
+  }
+
+  lt(column: string, value: unknown): this {
+    this.filters.push({ column, op: 'lt', value });
     return this;
   }
 
@@ -112,6 +132,8 @@ class QueryBuilder {
       return { data: [row], error: null };
     }
 
+    if (this.mode === 'update') this.hooks.beforeUpdate?.(this.table, this.patch);
+
     const hits = rows.filter((r) => matches(r, this.filters));
 
     if (this.mode === 'update') {
@@ -142,8 +164,8 @@ class QueryBuilder {
   }
 }
 
-export const createMockSupabase = (tables: Tables) => ({
-  from: (table: string) => new QueryBuilder(tables, table),
+export const createMockSupabase = (tables: Tables, hooks: MockHooks = {}) => ({
+  from: (table: string) => new QueryBuilder(tables, table, hooks),
 });
 
 export type MockSupabase = ReturnType<typeof createMockSupabase>;

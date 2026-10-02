@@ -17,9 +17,13 @@ const sunScan = z.object({
   sunMessage: z.string().min(1).max(2048),
 });
 
+/**
+ * Staff enrollment. S-NFC3.5: NO key field — chip keys are derived from the
+ * KMS root, never sent over the API. `.strict()` turns a legacy `aesKey` into
+ * a 400 rather than silently accepting key material.
+ */
 export const enrollSchema = z.object({
-  tagUid: z.string().min(1).max(32),
-  aesKey: z.string().regex(/^[0-9a-fA-F]{32}$/, 'aesKey must be 16 bytes of hex'),
+  tagUid: z.string().regex(/^[0-9a-fA-F]{14}$/, 'tagUid must be a 7-byte UID in hex'),
   tenantId: z.string().min(1).max(64).optional(),
   itemId: uuid.optional(),
 }).strict();

@@ -1,7 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { randomBytes } from 'crypto';
-import { encryptPiccData, computeCmac, truncateCmac, buildSunUrl } from '../services/nfc/ntag424Codec';
-import { createMockSupabase, resetMockIds, type Tables, type Row } from './helpers/supabaseMock';
+import {
+  buildPiccPlaintext,
+  buildSunUrl,
+  computeSdmMac,
+  encryptPiccBlock,
+} from '../services/nfc/ntag424Codec';
+import { createLocalTagKeyProvider } from '../services/nfc/keys/tagKeyProvider';
+import { createMockSupabase, resetMockIds, type MockHooks, type Tables, type Row } from './helpers/supabaseMock';
 import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEvents';
 
 /**
@@ -17,13 +23,16 @@ import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEv
  *   - release is irreversible
  *   - every rejection emits the matching security event with the right result
  *
- * SUN messages are REAL: built with the production codec against a real AES
- * key, so the counter and CMAC checks are genuinely exercised rather than
- * stubbed past.
+ * SUN messages are REAL: AN12196 SDM built with the production codec, under
+ * keys derived by the production local provider from a test SDM root — the
+ * same derivation the controllers run — so the MAC and counter checks are
+ * genuinely exercised rather than stubbed past.
  */
 
-const AES_KEY = '00112233445566778899aabbccddeeff';
+const TEST_SDM_ROOT = '5A'.repeat(32);
 const TAG_UID = '04A27E02936980';
+const OTHER_UID = '04DE5F1EACC040';
+const OTHER_TAG_ID = '66666666-6666-4666-8666-666666666666';
 
 const OWNER = '11111111-1111-4111-8111-111111111111';
 const BUYER = '22222222-2222-4222-8222-222222222222';
@@ -31,22 +40,44 @@ const STRANGER = '33333333-3333-4333-8333-333333333333';
 const STAFF = '44444444-4444-4444-8444-444444444444';
 const TAG_ID = '55555555-5555-4555-8555-555555555555';
 
-/** Builds a genuinely valid SUN URL for a given read counter. */
-const sunFor = (counter: number): string => {
-  const encPicc = encryptPiccData(TAG_UID, counter, AES_KEY);
-  const cmac = truncateCmac(computeCmac(encPicc, AES_KEY));
-  return buildSunUrl('https://am.example', 'token_01', encPicc, cmac);
+let META_KEY: Buffer;
+const FILE_KEYS = new Map<string, Buffer>();
+
+beforeAll(async () => {
+  const provider = createLocalTagKeyProvider({ sdmRootKeyHex: TEST_SDM_ROOT, allowLocalKeys: true });
+  const audit = {
+    ctx: { requestId: 'setup', actorId: null, actorType: 'system' as const, ip: 'test', route: 'setup' },
+  };
+  const quiet = vi.spyOn(console, 'log').mockImplementation(() => {});
+  META_KEY = await provider.deriveKey({ role: 'META', version: 1 }, audit);
+  for (const uid of [TAG_UID, OTHER_UID]) {
+    FILE_KEYS.set(uid, await provider.deriveKey({ role: 'FILE', version: 1, uid: Buffer.from(uid, 'hex') }, audit));
+  }
+  quiet.mockRestore();
+});
+
+/** Builds a genuinely valid AN12196 SUN URL for a given chip + read counter. */
+const sunFor = (counter: number, uid: string = TAG_UID): string => {
+  const uidBuf = Buffer.from(uid, 'hex');
+  const plain = buildPiccPlaintext(uidBuf, counter, Buffer.from('0102030405', 'hex'));
+  const enc = encryptPiccBlock(plain, META_KEY).toString('hex').toUpperCase();
+  const mac = computeSdmMac(FILE_KEYS.get(uid) as Buffer, uidBuf, plain.subarray(8, 11), Buffer.alloc(0));
+  return buildSunUrl('https://am.example', 'token_01', enc, mac.toString('hex').toUpperCase());
 };
+
+const reasonOf = (out: { threw: unknown }): unknown =>
+  (out.threw as { details?: { reason?: unknown } } | null)?.details?.reason;
 
 // ── Harness ─────────────────────────────────────────────────────────────────
 
 let tables: Tables;
+let hooks: MockHooks = {};
 let logSpy: SecurityEventSpy;
 
 const baseTag = (overrides: Row = {}): Row => ({
   id: TAG_ID,
   tag_uid: TAG_UID,
-  aes_key_enc: AES_KEY,
+  sdm_key_version: 1,
   lifecycle_status: 'ENROLLED',
   current_owner_id: null,
   seller_id: STAFF,
@@ -58,7 +89,7 @@ const baseTag = (overrides: Row = {}): Row => ({
 });
 
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => createMockSupabase(tables),
+  createClient: () => createMockSupabase(tables, hooks),
 }));
 
 const stripeCreate = vi.fn();
@@ -113,6 +144,10 @@ beforeEach(async () => {
   process.env.SUPABASE_URL = 'https://example.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_test';
   delete process.env.FEATURE_REQUIRE_2FA;
+  process.env.NFC_KEY_PROVIDER = "local";
+  process.env.NFC_ALLOW_LOCAL_KEYS = "true";
+  process.env.NFC_LOCAL_SDM_ROOT_KEY = TEST_SDM_ROOT;
+  hooks = {};
 
   logSpy = spyOnSecurityEvents();
 
@@ -199,33 +234,90 @@ describe('origin claim', () => {
     const out = await call(claimTag, makeReq(OWNER, { tagUid: TAG_UID, sunMessage: sunFor(5) }));
 
     expect(out.threw?.message).toMatch(/tap the tag again/i);
+    expect(reasonOf(out)).toBe('replay_detected');
     expect(tag().lifecycle_status).toBe('ENROLLED');
     expect(eventsNamed('nfc.sun_verify')[0]).toMatchObject({
-      sun_result: 'counter_replay',
-      result: 'sun_invalid',
+      sun_result: 'replay_detected',
+      result: 'replay_detected',
       context: 'claim',
     });
+    expect(eventsNamed('nfc.claim')[0]).toMatchObject({ result: 'replay_detected' });
   });
 
-  it('rejects a counter regression distinctly from a straight replay', async () => {
+  it('treats a counter regression as replay_detected (counter/last_counter keep it distinguishable)', async () => {
     tables.nfc_tags[0] = baseTag({ sun_counter: 9 });
 
     const { claimTag } = await controllers();
-    await call(claimTag, makeReq(OWNER, { tagUid: TAG_UID, sunMessage: sunFor(3) }));
+    const out = await call(claimTag, makeReq(OWNER, { tagUid: TAG_UID, sunMessage: sunFor(3) }));
 
-    // A real NTAG 424 counter cannot go backwards: cloned chip or forged URL.
-    expect(eventsNamed('nfc.sun_verify')[0]).toMatchObject({ sun_result: 'counter_regression' });
+    expect(reasonOf(out)).toBe('replay_detected');
+    // S-SEC0 still sees the regression: counter < last_counter.
+    expect(eventsNamed('nfc.sun_verify')[0]).toMatchObject({
+      sun_result: 'replay_detected',
+      counter: 3,
+      last_counter: 9,
+    });
   });
 
-  it('rejects a forged CMAC', async () => {
+  it('rejects a forged MAC as invalid_signature', async () => {
     const { claimTag } = await controllers();
     const forged = sunFor(1).replace(/cmac=[0-9a-f]+/i, 'cmac=0000000000000000');
 
     const out = await call(claimTag, makeReq(OWNER, { tagUid: TAG_UID, sunMessage: forged }));
 
-    expect(out.threw).not.toBeNull();
+    expect(reasonOf(out)).toBe('invalid_signature');
     expect(tag().lifecycle_status).toBe('ENROLLED');
-    expect(eventsNamed('nfc.sun_verify')[0].sun_result).toBe('cmac_invalid');
+    expect(eventsNamed('nfc.sun_verify')[0]).toMatchObject({
+      sun_result: 'invalid_signature',
+      result: 'invalid_signature',
+    });
+  });
+
+  it.each([0, 3, 7, 15])('rejects one flipped MAC nibble (hex index %i) as invalid_signature', async (idx) => {
+    const { claimTag } = await controllers();
+    const url = new URL(sunFor(1));
+    const mac = url.searchParams.get('cmac') as string;
+    const nibble = (parseInt(mac[idx], 16) ^ 0x1).toString(16).toUpperCase();
+    url.searchParams.set('cmac', mac.slice(0, idx) + nibble + mac.slice(idx + 1));
+
+    const out = await call(claimTag, makeReq(OWNER, { tagUid: TAG_UID, sunMessage: url.toString() }));
+
+    expect(reasonOf(out)).toBe('invalid_signature');
+    expect(tag().lifecycle_status).toBe('ENROLLED');
+    expect(tag().sun_counter).toBe(0);
+  });
+
+  it('rejects a Tag-A URL presented with Tag-B UID', async () => {
+    // Both chips enrolled; the caller names B but taps A.
+    tables.nfc_tags.push(baseTag({ id: OTHER_TAG_ID, tag_uid: OTHER_UID }));
+    const { claimTag } = await controllers();
+
+    const out = await call(claimTag, makeReq(OWNER, { tagUid: OTHER_UID, sunMessage: sunFor(1, TAG_UID) }));
+
+    expect(reasonOf(out)).toBe('invalid_signature');
+    expect(tables.nfc_tags.every((t) => t.lifecycle_status === 'ENROLLED')).toBe(true);
+    expect(eventsNamed('nfc.sun_verify')[0]).toMatchObject({
+      tag_id: OTHER_TAG_ID,
+      sun_result: 'uid_mismatch',
+      result: 'invalid_signature',
+    });
+  });
+
+  it('loses the race cleanly: a conditional counter burn matching no row is replay_detected', async () => {
+    const { claimTag } = await controllers();
+    // A concurrent request with the same tap commits between our verify and
+    // our conditional update.
+    hooks.beforeUpdate = (table) => {
+      if (table === 'nfc_tags') tables.nfc_tags[0].sun_counter = 1;
+    };
+
+    const out = await call(claimTag, makeReq(OWNER, { tagUid: TAG_UID, sunMessage: sunFor(1) }));
+
+    expect(reasonOf(out)).toBe('replay_detected');
+    expect(tag().lifecycle_status).toBe('ENROLLED');
+    expect(tag().current_owner_id).toBeNull();
+    expect(tables.ownership_proofs).toHaveLength(0);
+    expect(eventsNamed('nfc.claim').at(-1)).toMatchObject({ result: 'replay_detected' });
   });
 
   it('blocks the claim when 2FA is required and the token is only aal1', async () => {
@@ -407,11 +499,64 @@ describe('transfer', () => {
     );
 
     expect(out.threw?.message).toMatch(/tap the tag again/i);
+    expect(reasonOf(out)).toBe('replay_detected');
     expect(stripeCreate).not.toHaveBeenCalled();
     expect(eventsNamed('nfc.sun_verify')[0]).toMatchObject({
       context: 'transfer_complete',
-      sun_result: 'counter_replay',
+      sun_result: 'replay_detected',
     });
+  });
+
+  it('rejects a second completion with the same tap (replayed URL)', async () => {
+    await claimFirst();
+    const { initiateTransfer, completeTransfer } = await controllers();
+    await call(initiateTransfer, makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toUserId: BUYER }));
+    const transferId = String(tables.ownership_transfers[0].id);
+    const tap = sunFor(2);
+
+    const first = await call(completeTransfer, makeReq(BUYER, { tagUid: TAG_UID, sunMessage: tap }, { id: transferId }));
+    expect(first.threw).toBeNull();
+
+    const replay = await call(completeTransfer, makeReq(BUYER, { tagUid: TAG_UID, sunMessage: tap }, { id: transferId }));
+    expect(reasonOf(replay)).toBe('replay_detected');
+    expect(stripeCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects completion with another chip's URL", async () => {
+    await claimFirst();
+    const { initiateTransfer, completeTransfer } = await controllers();
+    await call(initiateTransfer, makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toUserId: BUYER }));
+    const transferId = String(tables.ownership_transfers[0].id);
+    logSpy.clear();
+
+    const out = await call(
+      completeTransfer,
+      makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2, OTHER_UID) }, { id: transferId }),
+    );
+
+    expect(reasonOf(out)).toBe('invalid_signature');
+    expect(stripeCreate).not.toHaveBeenCalled();
+    expect(eventsNamed('nfc.sun_verify')[0]).toMatchObject({ sun_result: 'uid_mismatch' });
+  });
+
+  it('loses the completion race cleanly: a zero-row counter burn is replay_detected', async () => {
+    await claimFirst();
+    const { initiateTransfer, completeTransfer } = await controllers();
+    await call(initiateTransfer, makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toUserId: BUYER }));
+    const transferId = String(tables.ownership_transfers[0].id);
+    hooks.beforeUpdate = (table, patch) => {
+      if (table === 'nfc_tags' && 'sun_counter' in patch) tables.nfc_tags[0].sun_counter = 2;
+    };
+    logSpy.clear();
+
+    const out = await call(
+      completeTransfer,
+      makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }),
+    );
+
+    expect(reasonOf(out)).toBe('replay_detected');
+    expect(stripeCreate).not.toHaveBeenCalled();
+    expect(eventsNamed('nfc.sun_verify').at(-1)).toMatchObject({ sun_result: 'replay_detected' });
   });
 
   it('lets the sender cancel a pending transfer, and refuses cancel by others', async () => {
@@ -523,7 +668,7 @@ describe('enroll', () => {
 
     const out = await call(
       enrollTag,
-      makeReq(OWNER, { tagUid: 'AABBCCDDEEFF00', aesKey: AES_KEY }),
+      makeReq(OWNER, { tagUid: 'AABBCCDDEEFF00' }),
     );
 
     expect(out.threw?.message).toMatch(/forbidden/i);
@@ -535,14 +680,29 @@ describe('enroll', () => {
 
     const out = await call(
       enrollTag,
-      makeReq(STAFF, { tagUid: 'AABBCCDDEEFF00', aesKey: AES_KEY }),
+      makeReq(STAFF, { tagUid: 'aabbccddeeff00' }),
     );
 
     expect(out.threw).toBeNull();
     const created = tables.nfc_tags.find((t) => t.tag_uid === 'AABBCCDDEEFF00');
     expect(created?.lifecycle_status).toBe('ENROLLED');
     expect(created?.current_owner_id).toBeUndefined();
+    // S-NFC3.5: no key material is stored — only the KDF version.
+    expect(created && 'aes_key_enc' in created).toBe(false);
+    expect(created?.sdm_key_version).toBe(1);
     expect(eventsNamed('nfc.enroll')[0]).toMatchObject({ result: 'ok' });
+  });
+
+  it('refuses an enrollment that tries to send key material', async () => {
+    const { enrollTag } = await controllers();
+
+    const out = await call(
+      enrollTag,
+      makeReq(STAFF, { tagUid: 'AABBCCDDEEFF00', aesKey: '00112233445566778899aabbccddeeff' }),
+    );
+
+    expect(out.threw?.code).toBe('invalid_argument');
+    expect(tables.nfc_tags.find((t) => t.tag_uid === 'AABBCCDDEEFF00')).toBeUndefined();
   });
 });
 

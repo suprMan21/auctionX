@@ -37,7 +37,14 @@ import {
   mintOwnershipProof,
   type SecurityLogContext,
 } from '../lib/ownership/ownershipProof';
-import { verifyFreshSun, emitUnknownTagSun } from '../services/nfc/sunVerification';
+import {
+  verifyFreshSun,
+  emitUnknownTagSun,
+  emitRaceReplay,
+  emitSunVerify,
+  sunFailureCode,
+} from '../services/nfc/sunVerification';
+import { currentSdmKeyVersion } from '../services/nfc/keys/config';
 import {
   enrollSchema,
   claimSchema,
@@ -61,7 +68,11 @@ interface TagRequest extends RequestWithId, AuthRequest {}
 const getServiceClient = (): SupabaseClient =>
   createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
-/** Columns safe to read internally. `aes_key_enc` is fetched only where the SUN check needs it. */
+/**
+ * Columns safe to read internally. `aes_key_enc` is NEVER read (S-NFC3.5:
+ * chip keys are derived from the KMS root, not stored). `sdm_key_version` is
+ * added only where the SUN check needs it.
+ */
 const TAG_COLUMNS =
   'id, tag_uid, lifecycle_status, current_owner_id, seller_id, sun_counter, disclosure, linked_item_id';
 
@@ -125,6 +136,14 @@ const errorFor = (code: SecurityResult): AppError => {
       return new AppError('permission_denied', 'Forbidden');
     case 'sun_invalid':
       return new AppError('invalid_argument', 'Tag scan could not be verified. Please tap the tag again');
+    case 'invalid_signature':
+      return new AppError('invalid_argument', 'Tag scan could not be verified. Please tap the tag again', {
+        reason: 'invalid_signature',
+      });
+    case 'replay_detected':
+      return new AppError('invalid_argument', 'This tap has already been used. Please tap the tag again', {
+        reason: 'replay_detected',
+      });
     case 'not_found':
       return new AppError('not_found', 'Not found');
     default:
@@ -284,13 +303,16 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
   if (!parsed.success) {
     throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
   }
-  const { tagUid, aesKey, tenantId, itemId } = parsed.data;
+  const { tagUid, tenantId, itemId } = parsed.data;
 
+  // No key material crosses this API: the chip's SDM keys are derived from
+  // the KMS root at encode time and again at verify time. Only the KDF
+  // version is recorded, so a rotated META key still serves this chip.
   const { data, error } = await supabase
     .from('nfc_tags')
     .insert({
-      tag_uid: tagUid,
-      aes_key_enc: aesKey,
+      tag_uid: tagUid.toUpperCase(),
+      sdm_key_version: currentSdmKeyVersion(),
       seller_id: userId,
       tenant_id: tenantId ?? 'auctionx',
       linked_item_id: itemId ?? null,
@@ -351,8 +373,8 @@ export const claimTag = async (req: TagRequest, res: Response) => {
 
   const { data: tagRow } = await supabase
     .from('nfc_tags')
-    .select(`${TAG_COLUMNS}, aes_key_enc`)
-    .eq('tag_uid', tagUid)
+    .select(`${TAG_COLUMNS}, sdm_key_version`)
+    .eq('tag_uid', tagUid.toUpperCase())
     .maybeSingle();
 
   if (!tagRow) {
@@ -360,16 +382,16 @@ export const claimTag = async (req: TagRequest, res: Response) => {
     throw errorFor('not_found');
   }
 
-  const tag = tagRow as unknown as TagRow & { aes_key_enc: string };
+  const tag = tagRow as unknown as TagRow & { sdm_key_version: number | null };
 
   // Possession first: a claim on a tag the caller cannot actually tap is
   // rejected before the lifecycle state is even considered.
-  const sun = verifyFreshSun(
+  const sun = await verifyFreshSun(
     {
       tagId: tag.id,
-      tagUid,
+      tagUid: tag.tag_uid,
       sunMessage,
-      storedAesKey: tag.aes_key_enc,
+      keyVersion: tag.sdm_key_version,
       lastCounter: tag.sun_counter,
     },
     'claim',
@@ -377,15 +399,17 @@ export const claimTag = async (req: TagRequest, res: Response) => {
     ctx,
   );
 
-  if (!sun.ok) {
+  if (!sun.ok || sun.counter === null) {
+    const failure = sunFailureCode(sun.sunResult);
     emitSecurityEvent({
       event: 'nfc.claim', tag_id: tag.id, prior_status: tag.lifecycle_status,
-      result: 'sun_invalid',
+      result: failure,
       request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
       ip: ctx.ip, route: ctx.route,
     });
-    throw errorFor('sun_invalid');
+    throw errorFor(failure);
   }
+  const tappedCounter = sun.counter;
 
   const terminal = terminalStateError(tag.lifecycle_status);
   const code: SecurityResult | null =
@@ -400,21 +424,44 @@ export const claimTag = async (req: TagRequest, res: Response) => {
     throw errorFor(code);
   }
 
-  // Conditional update: `eq('lifecycle_status', 'ENROLLED')` is what makes two
-  // simultaneous claims safe — the second matches no row.
+  // Conditional update. `eq('lifecycle_status', 'ENROLLED')` makes two
+  // simultaneous claims safe; `lt('sun_counter', n)` burns the counter
+  // atomically, so the same tap can never be accepted twice even under a race.
   const { data: updated, error: updateError } = await supabase
     .from('nfc_tags')
     .update({
       lifecycle_status: 'ACTIVE',
       current_owner_id: userId,
-      sun_counter: sun.counter ?? tag.sun_counter,
+      sun_counter: tappedCounter,
       activated_at: new Date().toISOString(),
       status: 'active',
     })
     .eq('id', tag.id)
     .eq('lifecycle_status', 'ENROLLED')
+    .lt('sun_counter', tappedCounter)
     .select('id')
     .maybeSingle();
+
+  if (!updateError && !updated) {
+    // Zero rows: find out which guard lost. A counter already at/after ours
+    // means another request consumed this tap first -> replay.
+    const { data: current } = await supabase
+      .from('nfc_tags')
+      .select('sun_counter')
+      .eq('id', tag.id)
+      .maybeSingle();
+    const burned = (current?.sun_counter as number | undefined) ?? tappedCounter;
+    if (burned >= tappedCounter) {
+      emitRaceReplay(tag.id, 'claim', tappedCounter, tag.sun_counter, ctx);
+      emitSecurityEvent({
+        event: 'nfc.claim', tag_id: tag.id, prior_status: tag.lifecycle_status,
+        result: 'replay_detected',
+        request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+        ip: ctx.ip, route: ctx.route,
+      });
+      throw errorFor('replay_detected');
+    }
+  }
 
   if (updateError || !updated) {
     emitSecurityEvent({
@@ -619,7 +666,7 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
 
   const { data: tagRow } = await supabase
     .from('nfc_tags')
-    .select(`${TAG_COLUMNS}, aes_key_enc`)
+    .select(`${TAG_COLUMNS}, sdm_key_version`)
     .eq('id', transfer.tag_id)
     .maybeSingle();
 
@@ -627,16 +674,24 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
     emitUnknownTagSun('transfer_complete', ctx);
     throw errorFor('not_found');
   }
-  const tag = tagRow as unknown as TagRow & { aes_key_enc: string };
+  const tag = tagRow as unknown as TagRow & { sdm_key_version: number | null };
 
   // Rule 2: a fresh tap by the RECIPIENT. This is what stops a remote buyer
   // from completing a transfer for goods they never received.
-  const sun = verifyFreshSun(
+  // The UID the recipient names must be this transfer's chip; a URL from any
+  // other chip fails as uid_mismatch inside verifyFreshSun.
+  if (tagUid.toUpperCase() !== tag.tag_uid.toUpperCase()) {
+    emitSunVerify(tag.id, 'transfer_complete', 'uid_mismatch', null, tag.sun_counter, 'invalid_signature', ctx);
+    emitTransfer('invalid_signature');
+    throw errorFor('invalid_signature');
+  }
+
+  const sun = await verifyFreshSun(
     {
       tagId: tag.id,
-      tagUid,
+      tagUid: tag.tag_uid,
       sunMessage,
-      storedAesKey: tag.aes_key_enc,
+      keyVersion: tag.sdm_key_version,
       lastCounter: tag.sun_counter,
     },
     'transfer_complete',
@@ -644,17 +699,28 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
     ctx,
   );
 
-  if (!sun.ok) {
-    emitTransfer('sun_invalid');
-    throw errorFor('sun_invalid');
+  if (!sun.ok || sun.counter === null) {
+    const failure = sunFailureCode(sun.sunResult);
+    emitTransfer(failure);
+    throw errorFor(failure);
   }
+  const tappedCounter = sun.counter;
 
   // Burn the counter now, so a captured tap cannot be replayed against a second
-  // attempt even though the transfer is still PENDING.
-  await supabase
+  // attempt even though the transfer is still PENDING. Conditional: if another
+  // request already burned this (or a later) counter, zero rows -> replay.
+  const { data: burned, error: burnError } = await supabase
     .from('nfc_tags')
-    .update({ sun_counter: sun.counter ?? tag.sun_counter })
-    .eq('id', tag.id);
+    .update({ sun_counter: tappedCounter })
+    .eq('id', tag.id)
+    .lt('sun_counter', tappedCounter)
+    .select('id');
+
+  if (burnError || !burned || burned.length === 0) {
+    emitRaceReplay(tag.id, 'transfer_complete', tappedCounter, tag.sun_counter, ctx);
+    emitTransfer('replay_detected');
+    throw errorFor('replay_detected');
+  }
 
   // Resolve the recipient onto the row now that they have been identified.
   if (transfer.to_user_id === null) {

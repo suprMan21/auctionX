@@ -1,169 +1,260 @@
-import { createCipheriv, createDecipheriv } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'crypto';
 import type { SunMessageParts } from './types';
 
 /**
- * Canonical NTAG 424 DNA codec — single source of truth for both the
- * encode side (simulator / Python encoder parity) and the verify side
- * (scan validation). Do not fork this logic; both lanes must produce
- * byte-identical output.
+ * NXP AN12196 Secure Dynamic Messaging (SDM / SUN), AES mode — chip-exact.
+ * S-NFC3.5 replaced the S-NFC2 simplified CMAC with this; the simplified path
+ * is deleted, not flagged off.
  *
- * Wire format (frozen):
- *   - PICC plaintext: 0xC7 || UID(7B) || counter(3B little-endian) || 0x00 * 5  → 16 bytes
- *   - Encryption: AES-128-CBC, zero IV, no padding
- *   - CMAC: AES-128-CMAC (RFC 4493) over the *encrypted* PICC data, truncated to first 8 bytes
- *   - SUN URL: {baseUrl}/verify/{tokenName}?picc_data=<hex>&cmac=<hex>, uppercase hex
+ * Byte-identical counterpart: `tag-encoder/tag_encoder/ntag424/encode.py`.
+ * Both are pinned by `test-vectors/ntag424_sdm_vectors.json` (OpenSSL oracle,
+ * incl. AN12196's own all-zero-key example).
+ *
+ *   PICCData   = AES-128-CBC-decrypt(SDMMetaReadKey, IV = 0, ENCPICCData[16])
+ *              = PICCDataTag(1) || UID(7) || SDMReadCtr(3, little-endian) || padding(5)
+ *   PICCDataTag: bit7 UID mirrored, bit6 SDMReadCtr mirrored, bits3..0 UID length
+ *   SV2        = 3C C3 00 01 00 80 || UID(7) || SDMReadCtr(3, LE as on the wire)
+ *   KSesSDMFileReadMAC = AES-CMAC(SDMFileReadKey, SV2)
+ *   SDMMAC     = AES-CMAC(KSesSDMFileReadMAC, file[SDMMACInputOffset : SDMMACOffset])
+ *   on wire    = even-numbered bytes of SDMMAC (indices 1,3,...,15) -> 8 bytes
+ *
+ * Our URL layout has no SDMENCFileData and SDMMACInputOffset == SDMMACOffset,
+ * so the MAC input is the empty string. `extractMacInput` implements the
+ * general range so a non-empty layout works too.
  */
 
-const BLOCK_SIZE = 16;
-const PICC_HEADER = 0xc7;
-const ZERO_IV = (): Buffer => Buffer.alloc(BLOCK_SIZE, 0);
+const BLOCK = 16;
+const UID_LEN = 7;
+const ZERO_IV = (): Buffer => Buffer.alloc(BLOCK, 0);
+export const SV2_PREFIX = Buffer.from('3CC300010080', 'hex');
+export const SDM_MAC_LEN = 8;
 
-/**
- * Build the 16-byte PICCData plaintext block from a UID and counter.
- * 0xC7 || UID(7B) || counter(3B little-endian) || pad(5B = 0x00).
- */
-export const buildPiccPlaintext = (uidHex: string, counter: number): Buffer => {
-  if (!/^[0-9A-Fa-f]{14}$/.test(uidHex)) throw new Error('uidHex must be 14 hex chars (7 bytes)');
-  if (counter < 0 || counter > 0xffffff) throw new Error('counter must fit in 3 bytes');
+// ── PICCData ────────────────────────────────────────────────────────────────
 
-  const block = Buffer.alloc(BLOCK_SIZE, 0);
-  block[0] = PICC_HEADER;
-  Buffer.from(uidHex, 'hex').copy(block, 1);
-  block[8] = counter & 0xff;
-  block[9] = (counter >> 8) & 0xff;
-  block[10] = (counter >> 16) & 0xff;
-  return block;
+export interface PiccDataTag {
+  readonly uidMirrored: boolean;
+  readonly ctrMirrored: boolean;
+  readonly uidLength: number;
+}
+
+export const parsePiccDataTag = (byte: number): PiccDataTag => ({
+  uidMirrored: (byte & 0x80) !== 0,
+  ctrMirrored: (byte & 0x40) !== 0,
+  uidLength: byte & 0x0f,
+});
+
+/** Our layout needs UID (7 bytes) AND counter mirrored. Anything else is rejected. */
+export const isAcceptablePiccDataTag = (tag: PiccDataTag): boolean =>
+  tag.uidMirrored && tag.ctrMirrored && tag.uidLength === UID_LEN;
+
+export interface PiccData {
+  readonly uid: Buffer;
+  readonly uidHex: string;
+  /** SDMReadCtr exactly as on the wire (3 bytes, little-endian) — SV2 input. */
+  readonly counterLE: Buffer;
+  readonly counter: number;
+}
+
+/** Parses a decrypted 16-byte PICCData block. Returns null on any violation. */
+export const parsePiccPlaintext = (plain: Buffer): PiccData | null => {
+  if (plain.length !== BLOCK) return null;
+  const tag = parsePiccDataTag(plain[0]);
+  if (!isAcceptablePiccDataTag(tag)) return null;
+  const uid = Buffer.from(plain.subarray(1, 1 + UID_LEN));
+  const counterLE = Buffer.from(plain.subarray(1 + UID_LEN, 1 + UID_LEN + 3));
+  return {
+    uid,
+    uidHex: uid.toString('hex').toUpperCase(),
+    counterLE,
+    counter: counterLE.readUIntLE(0, 3),
+  };
 };
 
-/**
- * Encrypt PICCData (AES-128-CBC, zero IV, no padding).
- * Returns uppercase hex of the 16-byte ciphertext.
- */
-export const encryptPiccData = (uidHex: string, counter: number, aesKeyHex: string): string => {
-  if (!/^[0-9A-Fa-f]{32}$/.test(aesKeyHex)) throw new Error('aesKeyHex must be 32 hex chars (16 bytes)');
-
-  const block = buildPiccPlaintext(uidHex, counter);
-  const key = Buffer.from(aesKeyHex, 'hex');
-  const cipher = createCipheriv('aes-128-cbc', key, ZERO_IV());
-  cipher.setAutoPadding(false);
-  const encrypted = Buffer.concat([cipher.update(block), cipher.final()]);
-  return encrypted.toString('hex').toUpperCase();
+const aesCbc = (encrypt: boolean, key: Buffer, data: Buffer): Buffer => {
+  if (key.length !== BLOCK) throw new Error('AES-128 key must be 16 bytes');
+  const c = encrypt
+    ? createCipheriv('aes-128-cbc', key, ZERO_IV())
+    : createDecipheriv('aes-128-cbc', key, ZERO_IV());
+  c.setAutoPadding(false);
+  return Buffer.concat([c.update(data), c.final()]);
 };
 
-/**
- * Decrypt the encrypted PICCData to recover the tag UID and read counter.
- * AES-128-CBC, zero IV, no padding. Returns null on header mismatch / error.
- */
-export const decryptPiccData = (
-  encPiccDataHex: string,
-  aesKeyHex: string,
-): { uid: string; counter: number } | null => {
-  try {
-    const key = Buffer.from(aesKeyHex, 'hex');
-    const data = Buffer.from(encPiccDataHex, 'hex');
+/** AES-128-CBC-decrypt (IV 0) of the 16-byte ENCPICCData. */
+export const decryptPiccBlock = (encPicc: Buffer, metaKey: Buffer): Buffer => {
+  if (encPicc.length !== BLOCK) throw new Error('ENCPICCData must be 16 bytes');
+  return aesCbc(false, metaKey, encPicc);
+};
 
-    const decipher = createDecipheriv('aes-128-cbc', key, ZERO_IV());
-    decipher.setAutoPadding(false);
-    const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
+/** Decrypt + parse. Null when the block does not decode to an acceptable PICCData. */
+export const decryptPiccData = (encPicc: Buffer, metaKey: Buffer): PiccData | null => {
+  if (encPicc.length !== BLOCK) return null;
+  return parsePiccPlaintext(decryptPiccBlock(encPicc, metaKey));
+};
 
-    if (decrypted[0] !== PICC_HEADER) return null;
-
-    const uid = decrypted.subarray(1, 8).toString('hex').toUpperCase();
-    const counter = decrypted[8] | (decrypted[9] << 8) | (decrypted[10] << 16);
-
-    return { uid, counter };
-  } catch {
-    return null;
+/** Encode side (simulator / encoder parity): PICCDataTag 0xC7 || UID || ctr LE || padding. */
+export const buildPiccPlaintext = (uid: Buffer, counter: number, padding?: Buffer): Buffer => {
+  if (uid.length !== UID_LEN) throw new Error('UID must be 7 bytes');
+  if (!Number.isInteger(counter) || counter < 0 || counter > 0xffffff) {
+    throw new Error('counter must fit in 3 bytes');
   }
+  const pad = padding ?? randomBytes(5);
+  if (pad.length !== 5) throw new Error('PICCData padding must be 5 bytes');
+  const ctr = Buffer.alloc(3);
+  ctr.writeUIntLE(counter, 0, 3);
+  return Buffer.concat([Buffer.from([0xc7]), uid, ctr, pad]);
 };
 
-/**
- * Compute the full 16-byte AES-128-CMAC (RFC 4493) over a hex message.
- * Returns uppercase hex (32 chars).
- */
-export const computeCmac = (messageHex: string, keyHex: string): string => {
-  const key = Buffer.from(keyHex, 'hex');
-  const message = Buffer.from(messageHex, 'hex');
+export const encryptPiccBlock = (plaintext: Buffer, metaKey: Buffer): Buffer => {
+  if (plaintext.length !== BLOCK) throw new Error('PICCData must be 16 bytes');
+  return aesCbc(true, metaKey, plaintext);
+};
 
-  // Step 1: Generate subkeys
-  const zeroBlock = Buffer.alloc(BLOCK_SIZE, 0);
-  const cipher0 = createCipheriv('aes-128-ecb', key, null);
-  cipher0.setAutoPadding(false);
-  const L = cipher0.update(zeroBlock);
+// ── AES-CMAC (RFC 4493) ─────────────────────────────────────────────────────
 
-  const K1 = deriveSubkey(L);
-  const K2 = deriveSubkey(K1);
+const ecbBlock = (key: Buffer, block: Buffer): Buffer => {
+  const c = createCipheriv('aes-128-ecb', key, null);
+  c.setAutoPadding(false);
+  return c.update(block);
+};
 
-  // Step 2: Pad and XOR
-  const numBlocks = Math.max(1, Math.ceil(message.length / BLOCK_SIZE));
-  const lastBlockIndex = numBlocks - 1;
-  const isComplete = message.length > 0 && message.length % BLOCK_SIZE === 0;
-
-  const blocks: Buffer[] = [];
-  for (let i = 0; i < numBlocks; i++) {
-    blocks.push(message.subarray(i * BLOCK_SIZE, (i + 1) * BLOCK_SIZE));
+const deriveSubkey = (input: Buffer): Buffer => {
+  const out = Buffer.alloc(BLOCK);
+  let carry = 0;
+  for (let i = BLOCK - 1; i >= 0; i--) {
+    out[i] = ((input[i] << 1) | carry) & 0xff;
+    carry = input[i] & 0x80 ? 1 : 0;
   }
+  if (input[0] & 0x80) out[BLOCK - 1] ^= 0x87;
+  return out;
+};
 
-  // XOR last block with K1 (complete) or K2 (padded)
-  let lastBlock: Buffer;
-  if (isComplete) {
-    lastBlock = xorBuffers(blocks[lastBlockIndex], K1);
+const xor = (a: Buffer, b: Buffer): Buffer => {
+  const out = Buffer.alloc(BLOCK);
+  for (let i = 0; i < BLOCK; i++) out[i] = a[i] ^ b[i];
+  return out;
+};
+
+/** Full 16-byte AES-128-CMAC. Empty input is a single padded block (RFC 4493 §2.4). */
+export const aesCmac = (key: Buffer, message: Buffer): Buffer => {
+  if (key.length !== BLOCK) throw new Error('AES-128 key must be 16 bytes');
+  const k1 = deriveSubkey(ecbBlock(key, Buffer.alloc(BLOCK, 0)));
+  const k2 = deriveSubkey(k1);
+
+  const n = Math.max(1, Math.ceil(message.length / BLOCK));
+  const complete = message.length > 0 && message.length % BLOCK === 0;
+
+  let x: Buffer = Buffer.alloc(BLOCK, 0);
+  for (let i = 0; i < n - 1; i++) {
+    x = ecbBlock(key, xor(x, message.subarray(i * BLOCK, (i + 1) * BLOCK)));
+  }
+  const tail = message.subarray((n - 1) * BLOCK);
+  let last: Buffer;
+  if (complete) {
+    last = xor(tail, k1);
   } else {
-    const padded = Buffer.alloc(BLOCK_SIZE, 0);
-    const partial = blocks[lastBlockIndex];
-    partial.copy(padded);
-    padded[partial.length] = 0x80;
-    lastBlock = xorBuffers(padded, K2);
+    const padded = Buffer.alloc(BLOCK, 0);
+    tail.copy(padded);
+    padded[tail.length] = 0x80;
+    last = xor(padded, k2);
   }
-  blocks[lastBlockIndex] = lastBlock;
-
-  // Step 3: CBC-MAC
-  let x = Buffer.alloc(BLOCK_SIZE, 0);
-  for (const block of blocks) {
-    const xored = xorBuffers(x, block);
-    const cipherN = createCipheriv('aes-128-ecb', key, null);
-    cipherN.setAutoPadding(false);
-    x = cipherN.update(xored);
-  }
-
-  return x.toString('hex').toUpperCase();
+  return ecbBlock(key, xor(x, last));
 };
 
-/**
- * Truncate a full CMAC (hex) to the first 8 bytes (16 hex chars), as the
- * NTAG 424 DNA chip does on the wire. Returns uppercase hex.
- */
-export const truncateCmac = (fullCmacHex: string): string =>
-  fullCmacHex.substring(0, 16).toUpperCase();
+// ── SDM MAC ─────────────────────────────────────────────────────────────────
 
-/**
- * Verify a truncated CMAC from a SUN scan against the expected value.
- */
-export const verifyCmac = (messageHex: string, keyHex: string, expectedCmacHex: string): boolean => {
-  const truncated = truncateCmac(computeCmac(messageHex, keyHex));
-  return truncated === expectedCmacHex.toUpperCase();
+export const buildSv2 = (uid: Buffer, counterLE: Buffer): Buffer => {
+  if (uid.length !== UID_LEN || counterLE.length !== 3) throw new Error('SV2 needs UID(7) + ctr(3)');
+  return Buffer.concat([SV2_PREFIX, uid, counterLE]);
 };
 
+/** KSesSDMFileReadMAC = AES-CMAC(SDMFileReadKey, SV2). */
+export const deriveSessionMacKey = (fileKey: Buffer, uid: Buffer, counterLE: Buffer): Buffer =>
+  aesCmac(fileKey, buildSv2(uid, counterLE));
+
+/** AN12196 truncation: the even-numbered bytes (1-based) = indices 1,3,...,15. */
+export const truncateSdmMac = (full: Buffer): Buffer => {
+  if (full.length !== BLOCK) throw new Error('full CMAC must be 16 bytes');
+  const out = Buffer.alloc(SDM_MAC_LEN);
+  for (let i = 0; i < SDM_MAC_LEN; i++) out[i] = full[2 * i + 1];
+  return out;
+};
+
+/** MAC input = the mirrored file bytes from SDMMACInputOffset up to SDMMACOffset. */
+export const extractMacInput = (
+  fileData: Buffer,
+  macInputOffset: number,
+  sdmMacOffset: number,
+): Buffer => {
+  if (macInputOffset < 0 || sdmMacOffset < macInputOffset || sdmMacOffset > fileData.length) {
+    throw new Error('SDM MAC input range out of bounds');
+  }
+  return Buffer.from(fileData.subarray(macInputOffset, sdmMacOffset));
+};
+
+/** Full 16-byte SDMMAC (before truncation). */
+export const computeFullSdmMac = (
+  fileKey: Buffer,
+  uid: Buffer,
+  counterLE: Buffer,
+  macInput: Buffer,
+): Buffer => {
+  const ses = deriveSessionMacKey(fileKey, uid, counterLE);
+  try {
+    return aesCmac(ses, macInput);
+  } finally {
+    ses.fill(0);
+  }
+};
+
+/** The 8 bytes the chip mirrors into the URL. */
+export const computeSdmMac = (
+  fileKey: Buffer,
+  uid: Buffer,
+  counterLE: Buffer,
+  macInput: Buffer,
+): Buffer => truncateSdmMac(computeFullSdmMac(fileKey, uid, counterLE, macInput));
+
+/** Constant-time comparison of the presented 8-byte MAC against the expected one. */
+export const verifySdmMac = (
+  fileKey: Buffer,
+  uid: Buffer,
+  counterLE: Buffer,
+  macInput: Buffer,
+  presented: Buffer,
+): boolean => {
+  const expected = computeSdmMac(fileKey, uid, counterLE, macInput);
+  // Length is public (fixed 8); checked first because timingSafeEqual throws on mismatch.
+  if (presented.length !== expected.length) return false;
+  return timingSafeEqual(expected, presented);
+};
+
+// ── URL ─────────────────────────────────────────────────────────────────────
+
+const HEX_PICC = /^[0-9A-Fa-f]{32}$/;
+const HEX_MAC = /^[0-9A-Fa-f]{16}$/;
+
+/** Strict hex validation of the two mirrored fields. */
+export const isWellFormedSun = (parts: SunMessageParts): boolean =>
+  HEX_PICC.test(parts.encPiccData) && HEX_MAC.test(parts.cmac);
+
 /**
- * Parse SUN (Secure Unique NFC) message URL parameters.
- * NTAG 424 DNA appends ?picc_data=<hex>&cmac=<hex> to the mirror URL.
+ * Parse SUN URL parameters: `picc_data`/`e` (ENCPICCData) and `cmac`/`c` (SDMMAC).
+ * Returns null unless both are present and well-formed hex of the right length.
  */
 export const parseSunMessage = (url: string): SunMessageParts | null => {
   try {
     const parsed = new URL(url);
     const encPiccData = parsed.searchParams.get('picc_data') ?? parsed.searchParams.get('e');
     const cmac = parsed.searchParams.get('cmac') ?? parsed.searchParams.get('c');
-
     if (!encPiccData || !cmac) return null;
-    return { encPiccData, cmac };
+    const parts = { encPiccData, cmac };
+    return isWellFormedSun(parts) ? parts : null;
   } catch {
     return null;
   }
 };
 
-/**
- * Build the SUN verification URL: {baseUrl}/verify/{tokenName}?picc_data=..&cmac=..
- */
+/** `{baseUrl}/verify/{tokenName}?picc_data=<hex>&cmac=<hex>` (uppercase hex). */
 export const buildSunUrl = (
   baseUrl: string,
   tokenName: string,
@@ -173,27 +264,4 @@ export const buildSunUrl = (
   const trimmed = baseUrl.replace(/\/$/, '');
   const params = new URLSearchParams({ picc_data: encPiccHex, cmac: cmacHex });
   return `${trimmed}/verify/${encodeURIComponent(tokenName)}?${params.toString()}`;
-};
-
-// --- RFC 4493 helpers ---
-
-const deriveSubkey = (input: Buffer): Buffer => {
-  const shifted = Buffer.alloc(input.length);
-  let carry = 0;
-  for (let i = input.length - 1; i >= 0; i--) {
-    shifted[i] = ((input[i] << 1) | carry) & 0xff;
-    carry = input[i] & 0x80 ? 1 : 0;
-  }
-  if (input[0] & 0x80) {
-    shifted[input.length - 1] ^= 0x87; // Rb for 128-bit block
-  }
-  return shifted;
-};
-
-const xorBuffers = (a: Buffer, b: Buffer): Buffer => {
-  const result = Buffer.alloc(a.length);
-  for (let i = 0; i < a.length; i++) {
-    result[i] = a[i] ^ b[i];
-  }
-  return result;
 };

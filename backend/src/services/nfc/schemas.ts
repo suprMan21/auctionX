@@ -6,18 +6,18 @@ const hexString = (length?: number) => {
 };
 
 export const registerTagSchema = z.object({
-  tagUid: hexString().min(8).max(14),
-  aesKey: hexString(32), // 16 bytes = 32 hex chars
+  tagUid: hexString(14),
+  // S-NFC3.5: no aesKey — chip keys are derived from the KMS root, never sent.
   itemId: z.string().uuid().optional(),
   tenantId: z.string().min(1).max(64).default('auctionx'),
-});
+}).strict();
 
 export const scanTagSchema = z.union([
   z.object({ sunMessage: z.string().url() }),
   z.object({
-    piccData: hexString(),
+    piccData: hexString(32),
     cmac: hexString(16),
-    tagUid: hexString().min(8).max(14),
+    tagUid: hexString(14),
   }),
 ]);
 
