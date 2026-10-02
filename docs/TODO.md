@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-09-19 (post S-NFC3)
+**Last updated:** 2026-10-01 (post S-NFC3 merge to `dev`)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -15,17 +15,46 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ## 🔴 BOSS ACTION
 
-### S-NFC3 (new — branch `feature/s-nfc3-tag-management`, commit `1d49b4a`)
+### 🟥 S-DB1 — FIRST TASK OF THE NEXT SESSION (database)
 
-- [ ] **Push the branch** — `git push -u origin feature/s-nfc3-tag-management`.
-- [ ] **Apply the migrations + regen types.** Claude cannot: `op read` of the DB password is blocked
-      by the sandbox classifier.
+Needs a **fresh session with network + `op` auth**. Attempted 2026-10-01 and blocked: the Supabase
+CLI dies at `Initialising login role` with `Connection terminated due to connection timeout` —
+this sandbox has no egress to `supabase.co` (a PostgREST probe returns HTTP 000 even for a table
+that exists). GitHub over SSH works, Supabase does not. `op` is also unsigned-in, so the DB
+password is unreachable regardless.
+
+Code is merged to `dev` (`e5531f4`) and green, so **the database is the only thing between S-NFC3
+and a deployable staging.**
+
+- [ ] **1. Apply the two migrations.**
       ```bash
-      supabase db push --linked
+      supabase db push --linked      # 20260919000001 then 20260919000002
+      ```
+      Watch for an error at the `public_tag_provenance` `CREATE VIEW`. If an earlier attempt already
+      failed there, it was the `c.username` bug — fixed in `9762429`, so a re-run applies cleanly.
+      Both files are idempotency-wrapped and safe to re-run.
+- [ ] **2. Regenerate types into BOTH copies**, stripping the hint tag:
+      ```bash
       npx supabase gen types typescript --project-id pmlofthmobglcfkqjtru \
         | sed '/^<claude-code-hint/d' > frontend/src/types/database.types.ts
       cp frontend/src/types/database.types.ts backend/src/types/database.types.ts
       ```
+- [ ] **3. Shrink the drift-guard exemption list.** `backend/src/__tests__/schemaColumnDrift.test.ts`
+      exempts `fee_payer`, `lifecycle_status` and `linked_item_id` **only** because the committed
+      types predate S-NFC1.5. After the regen those three must be **deleted**, not kept — the file's
+      own comment says growing the list to silence a failure is the wrong move.
+- [ ] **4. Close acceptance criterion 11** — the only S-NFC3 criterion not closable without the DB.
+      Confirm the view leaks no prior owner, no current owner and no undisclosed field:
+      ```sql
+      SELECT * FROM public_tag_provenance LIMIT 5;
+      ```
+- [ ] **5. Confirm the S-ISO1 crons are gone** (carried over, same SQL session):
+      ```sql
+      SELECT jobname, schedule FROM cron.job;
+      -- expect: neither 'release-escrow-tick' nor 'reconcile-escrow-daily'
+      ```
+
+### S-NFC3 — remaining (not database)
 - [ ] **Resolve the duplicate "Stripe" 1Password items** before any token fee is charged. The vault
       has **three**: two LOGIN (`4jjqf5cazuxgjnk23lpwstzqoe`, `sejob6wh6bcjs4eyoimp4ugkk4`) and one
       API_CREDENTIAL (`tbocfigu7g5kfogpyuddhwpqgu`). `op://AM_Development/Stripe/...` is ambiguous
@@ -45,28 +74,27 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
       App Runner (it does not resolve `op://`).
 - [ ] **Confirm CAD presentment on the sandbox account.** Shipped USD-only behind
       `FEATURE_CAD_PRESENTMENT=false`; if CAD is available set it plus `USD_CAD_RATE`.
-- [ ] **Verify `public_tag_provenance` live** once migrated — acceptance criterion 11, the only one
-      not closable without the DB: `SELECT * FROM public_tag_provenance LIMIT 5;`
 
 ### S-ISO1 carry-over
 
-- [ ] **Confirm the marketplace crons are gone** — S-ISO1 acceptance criterion 4, the last one open. The
-      `cron.unschedule` block carries an exception guard that can skip silently, so the grants applying
-      does not prove it ran:
-      ```sql
-      SELECT jobname, schedule FROM cron.job;
-      -- expect: neither 'release-escrow-tick' nor 'reconcile-escrow-daily'
-      ```
 - [ ] **Stripe dashboard (S-ISO1 §8)** — disable the Stripe **Connect** webhook endpoint; confirm no
       marketplace webhook is registered.
 
 ---
 
-## ✅ S-NFC3 — DONE (2026-09-19)
+## ✅ S-NFC3 — CODE DONE AND MERGED (2026-10-01)
 
-Backend + tests shipped on `feature/s-nfc3-tag-management` (`1d49b4a`). Verification:
-`docs/S_NFC3_VERIFICATION.md`. 247 tests pass (+120), tsc 0 errors both sides, 0 boundary
-violations. Boss actions above.
+Merged to `dev` (`e5531f4`) and pushed; verified against the remote. Also on `dev`: the
+`feature/s-nfc-ios-testflight` merge, which fixes the mobile 401-on-login (stale Supabase
+publishable key) and the legacy `com.authenticmaterials.auctionx` bundle id.
+
+Verification: `docs/S_NFC3_VERIFICATION.md` (v1.1). 252 tests pass, tsc 0 errors both sides,
+0 boundary violations across 121 modules. **Database work is NOT done — see S-DB1 above.**
+
+A post-merge fix (`9762429`) corrected two column names that would only have failed against the
+real database: `c.username` (no such column — it is `display_name`) would have aborted the
+`CREATE VIEW` and taken the whole migration with it, and `users.country` (no such column) left the
+CAD path with nothing to read. Guarded now by `schemaColumnDrift.test.ts`.
 
 Two things deliberately deferred, both behind default-off flags:
 - **2FA** (`FEATURE_REQUIRE_2FA=false`) — there is still no MFA enrollment path anywhere in the
