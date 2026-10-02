@@ -36,40 +36,16 @@ const TARGET_FILES = [
 ];
 
 /**
- * Columns that are absent from `database.types.ts` but legitimately exist (or
- * will, once the migration is applied). Two distinct reasons:
+ * Columns that are absent from `database.types.ts` but legitimately exist
+ * because a migration has been written and not yet applied + regenerated.
+ * Use `['*']` for a table the pending migration creates.
  *
- *  (a) Added by THIS session's migrations (20260919000001/2) — types cannot know
- *      about them until regenerated.
- *  (b) Added by S-NFC1.5 (20260622000000) and already live, but the committed
- *      types file predates it. The S-NFC3 TODO records this: "database.types.ts
- *      regen — both copies were behind S-NFC1.5 and differed from each other."
- *      These entries should DISAPPEAR after the regen, not be kept.
- *
- * Shrink this list as types are regenerated. Growing it to silence a failure is
- * the wrong move — the point of the test is that a wrong column name fails.
+ * Empty since S-DB1 (2026-10-01): 20260919000001/2 applied to staging and both
+ * types copies regenerated. Add entries only for a migration that is genuinely
+ * pending, and remove them at the next regen. Growing it to silence a failure
+ * is the wrong move — the point of the test is that a wrong column name fails.
  */
-const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {
-  users: ['tier', 'billing_country'],
-  nfc_tags: [
-    // (a) this session
-    'current_owner_id', 'disclosure',
-    // (b) live since S-NFC1.5, missing from the stale types file
-    'lifecycle_status', 'linked_item_id',
-  ],
-  ownership_transfers: [
-    // (a) this session
-    'to_email', 'stripe_payment_intent_id', 'list_amount_usd_cents',
-    'charged_amount', 'charged_currency', 'fx_rate', 'payment_method',
-    'initiated_at',
-    // (b) live since S-NFC1.5, missing from the stale types file
-    'fee_payer',
-  ],
-  // Tables created by 20260919000002 — absent from types until regeneration.
-  ownership_proofs: ['*'],
-  reissue_requests: ['*'],
-  public_tag_provenance: ['*'],
-};
+const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {};
 
 /** Parses `Row: { ... }` blocks out of database.types.ts, keyed by table name. */
 const parseKnownColumns = (): Map<string, Set<string>> => {
