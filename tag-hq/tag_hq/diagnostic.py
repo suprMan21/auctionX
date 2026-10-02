@@ -200,7 +200,17 @@ def run_full_diagnostic(tx: Transport) -> dict:
         "sdm_sun": {
             "enabled": sdm_enabled,
             "ndef_mirror_detected": bool(ndef and ndef.is_sdm_mirror),
-            "files": {f"file_{fno}": {"comm_mode": fs.comm_mode, "sdm": fs.sdm_enabled}
+            "files": {f"file_{fno}": {
+                          "comm_mode": fs.comm_mode,
+                          "sdm": fs.sdm_enabled,
+                          # S-NFC3.5: key SLOT numbers and offsets only — never key material.
+                          "sdm_picc_encrypted": fs.sdm.picc_encrypted if fs.sdm else None,
+                          "sdm_meta_read_key": fs.sdm.meta_read if fs.sdm else None,
+                          "sdm_file_read_key": fs.sdm.file_read if fs.sdm else None,
+                          "sdm_picc_data_offset": fs.sdm.picc_data_offset if fs.sdm else None,
+                          "sdm_mac_input_offset": fs.sdm.mac_input_offset if fs.sdm else None,
+                          "sdm_mac_offset": fs.sdm.mac_offset if fs.sdm else None,
+                      }
                       for fno, fs in file_settings.items()},
         },
         "crypto_mode": parsers.detect_crypto_mode(version) if version else "unknown",

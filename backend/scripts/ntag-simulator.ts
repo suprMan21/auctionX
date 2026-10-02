@@ -1,10 +1,23 @@
 #!/usr/bin/env node
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import {
-  generateAesKey,
-  generateTagUid,
-  simulateTap,
-} from '../src/services/nfc/ntag424Simulator';
+import { generateTagUid, simulateTap } from '../src/services/nfc/ntag424Simulator';
+import { currentSdmKeyVersion, getTagKeyProvider } from '../src/services/nfc/keys/config';
+
+/*
+ * S-NFC3.5: real AN12196 SDM. Keys are derived from the SDM root through the
+ * same provider the backend uses (NFC_KEY_PROVIDER / NFC_LOCAL_SDM_ROOT_KEY /
+ * NFC_ALLOW_LOCAL_KEYS), held in memory for one tap, and NEVER printed or
+ * stored. There is no key column to seed any more.
+ */
+const SCRIPT_AUDIT = {
+  ctx: {
+    requestId: 'ntag-simulator',
+    actorId: null,
+    actorType: 'system' as const,
+    ip: 'local',
+    route: 'scripts/ntag-simulator',
+  },
+};
 
 type Args = Record<string, string | true>;
 
@@ -54,7 +67,7 @@ const getSupabase = (): SupabaseClient => {
 const TENANT = 'auctionx';
 
 const cmdGenerate = () => {
-  console.log(JSON.stringify({ tagUid: generateTagUid(), aesKey: generateAesKey() }, null, 2));
+  console.log(JSON.stringify({ tagUid: generateTagUid() }, null, 2));
 };
 
 const cmdSeed = async (args: Args) => {
@@ -86,8 +99,6 @@ const cmdSeed = async (args: Args) => {
     console.error(`--tag-uid must be 14 hex chars (7-byte UID); got "${explicitUid}"`);
     process.exit(1);
   }
-  const aesKey = generateAesKey();
-
   const { data: verif, error: verifErr } = await supabase
     .from('item_verifications')
     .insert({
@@ -110,7 +121,7 @@ const cmdSeed = async (args: Args) => {
       seller_id: sellerId,
       item_id: listing.id,
       verification_id: verif.id,
-      aes_key_enc: aesKey,
+      sdm_key_version: currentSdmKeyVersion(),
       status: 'active',
       activated_at: new Date().toISOString(),
     })
@@ -136,7 +147,7 @@ const cmdSeed = async (args: Args) => {
 
   console.log(JSON.stringify({
     tagUid,
-    aesKey,
+    sdmKeyVersion: currentSdmKeyVersion(),
     tokenName: verif.token_name,
     verificationId: verif.id,
     tagId: tag.id,
@@ -154,7 +165,7 @@ const cmdTap = async (args: Args, opts: { scan: boolean }) => {
 
   const { data: tag, error: tagErr } = await supabase
     .from('nfc_tags')
-    .select('id, tag_uid, aes_key_enc, sun_counter, verification_id')
+    .select('id, tag_uid, sun_counter, sdm_key_version, verification_id')
     .eq('tag_uid', tagUid)
     .maybeSingle();
   if (tagErr) throw new Error(`tag lookup failed: ${tagErr.message}`);
@@ -175,12 +186,14 @@ const cmdTap = async (args: Args, opts: { scan: boolean }) => {
   if (!tokenName) tokenName = 'unknown';
 
   const counter = (tag.sun_counter ?? 0) + 1;
-  const sim = simulateTap({
+  const sim = await simulateTap({
     tagUid: tag.tag_uid,
     counter,
-    aesKeyHex: tag.aes_key_enc,
+    version: (tag.sdm_key_version as number | null) ?? 1,
     baseUrl,
     tokenName,
+    provider: getTagKeyProvider(),
+    audit: SCRIPT_AUDIT,
   });
 
   if (!opts.scan) {
@@ -237,8 +250,8 @@ const usage = () => {
 Run via 1Password: op run --env-file backend/.env.op -- npx tsx backend/scripts/ntag-simulator.ts <cmd> [args]
 
 Commands:
-  generate                                  Print a fresh (tagUid, aesKey) pair. No DB writes.
-  seed --seller-id <uuid> [--base-url url]  Create item_verifications + nfc_tags + nft_metadata for the seller's most recent listing. Prints {tagUid, aesKey, tokenName, verifyUrl}.
+  generate                                  Print a fresh random tagUid. No DB writes, no keys.
+  seed --seller-id <uuid> [--base-url url]  Create item_verifications + nfc_tags + nft_metadata for the seller's most recent listing. Prints {tagUid, sdmKeyVersion, tokenName, verifyUrl} — never a key.
   tap --tag-uid <hex> [--base-url url]      Generate a fresh SUN URL for a registered tag (counter = stored + 1). No DB write.
   tap-and-scan --tag-uid <hex>              Same as tap, then POST to /api/v1/nfc/scan and print the response.
                   [--api-url url] [--base-url url]

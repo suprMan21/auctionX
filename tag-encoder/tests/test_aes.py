@@ -30,10 +30,10 @@ def test_aes_ecb_zero_block_matches_node():
 def test_rfc4493_cmac_vectors():
     # RFC 4493 §4 example with key 2B7E1516...4F3C.
     key = bytes.fromhex("2B7E151628AED2A6ABF7158809CF4F3C")
-    # Mlen=0 (empty): RFC = BB1D6929E95937287FA37D129B756746.
-    # NOTE: the project's computeCmac (and our aes128_cmac) treat empty as a
-    # single padded block, so empty input is out of scope and intentionally
-    # untested here (the NTAG path never CMACs an empty message).
+    # Mlen=0 (empty): RFC = BB1D6929E95937287FA37D129B756746. S-NFC3.5: the
+    # SDM MAC in our URL layout IS a CMAC over the empty string, so this KAT
+    # is load-bearing.
+    assert aes128_cmac(key, b"").hex().upper() == "BB1D6929E95937287FA37D129B756746"
 
     # Mlen=16: 6BC1BEE2 2E409F96 E93D7E11 7393172A
     m16 = bytes.fromhex("6BC1BEE22E409F96E93D7E117393172A")
@@ -64,3 +64,16 @@ def test_cbc_single_block_equals_ecb_with_zero_iv():
     cbc = aes128_cbc_encrypt_nopad(key, bytes(16), pt)
     ecb = aes128_encrypt_block(key, pt)
     assert cbc == ecb
+
+
+def test_cbc_decrypt_inverts_encrypt():
+    from tag_encoder.aes import aes128_cbc_decrypt_nopad, aes128_decrypt_block
+
+    key = bytes.fromhex("000102030405060708090A0B0C0D0E0F")
+    # FIPS-197 C.1 inverse cipher.
+    assert aes128_decrypt_block(key, bytes.fromhex("69C4E0D86A7B0430D8CDB78070B4C55A")).hex().upper() == (
+        "00112233445566778899AABBCCDDEEFF"
+    )
+    pt = bytes(range(48))
+    iv = bytes(range(16, 32))
+    assert aes128_cbc_decrypt_nopad(key, iv, aes128_cbc_encrypt_nopad(key, iv, pt)) == pt

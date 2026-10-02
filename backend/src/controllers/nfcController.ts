@@ -5,7 +5,12 @@ import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../lib/errors';
 import { withLogContext } from '../lib/logger';
 import { generatePresignedUrl, verifyS3ObjectExists } from '../lib/s3';
-import { validateScan, parseSunMessage, decryptPiccData, verifyCmac } from '../services/nfc/ntag424';
+import { parseSunMessage, recoverPiccData, verifyRecoveredScan } from '../services/nfc/ntag424';
+import type { PiccData } from '../services/nfc/ntag424Codec';
+import type { ScanValidationResult, SunMessageParts } from '../services/nfc/types';
+import { currentSdmKeyVersion, getTagKeyProvider } from '../services/nfc/keys/config';
+import { classify, emitSunVerify, sunFailureCode } from '../services/nfc/sunVerification';
+import { securityContext } from '../lib/security/requestContext';
 import { z } from 'zod';
 import { registerTagSchema, scanTagSchema, uploadProofSchema, transferSchema, mintSchema } from '../services/nfc/schemas';
 import { prepareNftMetadata } from '../services/nfc/pinataService';
@@ -21,8 +26,19 @@ function getServiceClient() {
 }
 
 /**
+ * Every nfc_tags column a response may carry. Explicit on purpose: `select('*')`
+ * would read `aes_key_enc` (S-NFC3.5 audit — historically plaintext hex), and
+ * stripping it after the fact is one forgotten line away from a key leak.
+ */
+const PUBLIC_TAG_COLUMNS =
+  'id, tenant_id, tag_uid, item_id, seller_id, verification_id, status, sun_counter, registered_at, activated_at, metadata, created_at, updated_at, lifecycle_status, current_owner_id, linked_item_id, disclosure';
+
+/**
  * POST /api/v1/nfc/register
- * Register an NTAG 424 DNA tag for a listing.
+ * Register an NTAG 424 DNA tag for a listing. (Parked route — see routes/nfc.ts.)
+ *
+ * S-NFC3.5: no key material is accepted or stored. The chip's SDM keys are
+ * derived from the KMS root; only the KDF version is recorded.
  */
 export const registerTag = async (req: NfcRequest, res: Response) => {
   const logger = withLogContext({ requestId: req.requestId, route: req.path });
@@ -36,7 +52,8 @@ export const registerTag = async (req: NfcRequest, res: Response) => {
       throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
     }
 
-    const { tagUid, aesKey, itemId, tenantId } = parsed.data;
+    const { itemId, tenantId } = parsed.data;
+    const tagUid = parsed.data.tagUid.toUpperCase();
     const supabase = getServiceClient();
 
     // If itemId provided, verify seller owns the listing
@@ -86,18 +103,18 @@ export const registerTag = async (req: NfcRequest, res: Response) => {
         item_id: itemId ?? null,
         seller_id: userId,
         verification_id: verificationId,
-        aes_key_enc: aesKey,
+        sdm_key_version: currentSdmKeyVersion(),
         status: 'registered',
       })
-      .select()
+      .select(PUBLIC_TAG_COLUMNS)
       .single();
 
-    if (insertError) {
-      logger.error('register_tag_failed', { error: insertError });
+    if (insertError || !tag) {
+      logger.error('register_tag_failed', { error: insertError?.message });
       throw new AppError('internal', 'Failed to register NFC tag');
     }
 
-    logger.info('nfc_tag_registered', { tagId: tag.id, tagUid, tenantId });
+    logger.info('nfc_tag_registered', { tagId: tag.id, tenantId });
 
     return res.status(201).json({ success: true, data: tag });
   } catch (error) {
@@ -108,12 +125,26 @@ export const registerTag = async (req: NfcRequest, res: Response) => {
   }
 };
 
+type ScanTagRow = {
+  id: string;
+  tag_uid: string;
+  sun_counter: number;
+  sdm_key_version: number | null;
+  verification_id: string | null;
+  status: string;
+};
+
 /**
  * POST /api/v1/nfc/scan
- * Public endpoint — validates an NTAG 424 DNA SUN scan.
+ * Public endpoint — validates an NTAG 424 DNA SUN scan (AN12196 SDM).
+ *
+ * Identification is ONE META decrypt (per live key version, current first):
+ * PICCData yields the UID, the UID selects the row. No trial decryption
+ * across stored per-tag keys (the S-NFC2 path did up to 500).
  */
 export const scanTag = async (req: NfcRequest, res: Response) => {
   const logger = withLogContext({ requestId: req.requestId, route: req.path });
+  const ctx = securityContext(req, '/api/v1/nfc/scan', req.user?.id ? 'user' : 'anon');
 
   try {
     const parsed = scanTagSchema.safeParse(req.body);
@@ -124,114 +155,97 @@ export const scanTag = async (req: NfcRequest, res: Response) => {
     const supabase = getServiceClient();
     const body = parsed.data;
 
-    let tagUid: string;
+    let parts: SunMessageParts;
     let sunMessage: string | null = null;
-    let piccData: string | null = null;
-    let cmac: string | null = null;
+    let claimedUid: string | undefined;
 
     if ('sunMessage' in body) {
-      // Parse SUN URL → encrypted PICC payload + truncated CMAC.
-      const parts = parseSunMessage(body.sunMessage);
-      if (!parts) throw new AppError('invalid_argument', 'Invalid SUN message URL');
+      const fromUrl = parseSunMessage(body.sunMessage);
+      if (!fromUrl) throw new AppError('invalid_argument', 'Invalid SUN message URL');
+      parts = fromUrl;
       sunMessage = body.sunMessage;
-      piccData = parts.encPiccData;
-      cmac = parts.cmac;
+    } else {
+      parts = { encPiccData: body.piccData, cmac: body.cmac };
+      claimedUid = body.tagUid.toUpperCase();
+    }
 
-      // Recover the tag by trial decryption against candidate tags. We do NOT
-      // extract a tag UID or token name from the URL path — physical NTAG 424
-      // DNA chips embed a fixed verification URL at provisioning time, and we
-      // cannot rely on its path segments to identify the tag. The encrypted
-      // PICC payload itself is the only authoritative discriminator.
-      //
-      // decryptPiccData() returns null when byte 0 of the decrypted block is
-      // not 0xC7, which only happens (with overwhelming probability) when the
-      // AES key matches the chip. CMAC verification is the second gate.
-      const { data: candidates, error: candidatesError } = await supabase
+    const provider = getTagKeyProvider();
+
+    let match: { tag: ScanTagRow; picc: PiccData; version: number } | null = null;
+    let decoded = false;
+    for (let version = currentSdmKeyVersion(); version >= 1 && !match; version--) {
+      const picc = await recoverPiccData(parts.encPiccData, version, provider, { ctx });
+      if (!picc) continue;
+      decoded = true;
+
+      const { data: row, error: rowError } = await supabase
         .from('nfc_tags')
-        .select('id, tag_uid, aes_key_enc, sun_counter, verification_id, status')
-        .in('status', ['registered', 'active'])
-        .order('updated_at', { ascending: false, nullsFirst: false })
-        .limit(500);
-
-      if (candidatesError) {
-        logger.error('nfc_scan_candidate_query_failed', { error: candidatesError });
+        .select('id, tag_uid, sun_counter, sdm_key_version, verification_id, status')
+        .eq('tag_uid', picc.uidHex)
+        .maybeSingle();
+      if (rowError) {
+        logger.error('nfc_scan_lookup_failed', { error: rowError.message });
         throw new AppError('internal', 'Tag lookup failed');
       }
-      if (!candidates || candidates.length === 0) {
-        throw new AppError('not_found', 'No NFC tag matched the scan');
-      }
-
-      let matched: typeof candidates[number] | null = null;
-      for (const candidate of candidates) {
-        const decrypted = decryptPiccData(piccData, candidate.aes_key_enc);
-        if (!decrypted) continue;
-        if (decrypted.uid !== candidate.tag_uid.toUpperCase()) continue;
-        if (!verifyCmac(piccData, candidate.aes_key_enc, cmac)) continue;
-        matched = candidate;
-        break;
-      }
-
-      if (!matched) {
-        logger.warn('nfc_scan_no_match', { piccDataPrefix: piccData.slice(0, 8) });
-        throw new AppError('not_found', 'No NFC tag matched the scan');
-      }
-
-      tagUid = matched.tag_uid;
-    } else {
-      tagUid = body.tagUid.toUpperCase();
-      piccData = body.piccData;
-      cmac = body.cmac;
-    }
-
-    // Look up the tag
-    const { data: tag, error: tagError } = await supabase
-      .from('nfc_tags')
-      .select('id, tag_uid, aes_key_enc, sun_counter, verification_id, status')
-      .eq('tag_uid', tagUid)
-      .maybeSingle();
-
-    if (tagError || !tag) {
-      throw new AppError('not_found', 'NFC tag not found');
-    }
-
-    // Validate the scan cryptographically
-    let cmacValid = false;
-    let counterValue: number | null = null;
-
-    if (sunMessage) {
-      const result = validateScan({
-        tagUid: tag.tag_uid,
-        sunMessage,
-        storedAesKey: tag.aes_key_enc,
-        lastCounter: tag.sun_counter,
-      });
-      cmacValid = result.valid;
-      counterValue = result.counterValue;
-
-      if (!result.valid) {
-        // Log failed scan but don't reveal internal details
-        logger.warn('nfc_scan_failed', { tagId: tag.id, error: result.error });
-      }
-    } else if (piccData && cmac) {
-      // Direct piccData + cmac validation
-      const decrypted = decryptPiccData(piccData, tag.aes_key_enc);
-      if (decrypted) {
-        cmacValid = verifyCmac(piccData, tag.aes_key_enc, cmac);
-        counterValue = decrypted.counter;
-        if (decrypted.counter <= tag.sun_counter) {
-          cmacValid = false;
-          logger.warn('nfc_counter_replay', { tagId: tag.id });
-        }
+      const tagRow = row as ScanTagRow | null;
+      // The chip must have been encoded under the version that decoded it.
+      if (tagRow && (tagRow.sdm_key_version ?? 1) === version) {
+        match = { tag: tagRow, picc, version };
       }
     }
 
-    // Update sun_counter if valid
-    if (cmacValid && counterValue !== null) {
-      await supabase
+    if (!match) {
+      emitSunVerify(null, 'verify', decoded ? 'unknown_tag' : 'invalid_signature', null, null, 'not_found', ctx);
+      logger.warn('nfc_scan_no_match', { decoded });
+      throw new AppError('not_found', 'No NFC tag matched the scan');
+    }
+
+    const { tag, picc, version } = match;
+
+    let result: ScanValidationResult = await verifyRecoveredScan({
+      picc,
+      cmacHex: parts.cmac,
+      version,
+      lastCounter: tag.sun_counter,
+      expectedUid: claimedUid,
+      provider,
+      audit: { ctx, tagId: tag.id },
+    });
+
+    // Burn the counter atomically. Zero rows -> another request already
+    // consumed this (or a later) counter -> replay.
+    if (result.valid && result.counterValue !== null) {
+      const { data: burned, error: burnError } = await supabase
         .from('nfc_tags')
-        .update({ sun_counter: counterValue, status: 'active', activated_at: tag.status === 'registered' ? new Date().toISOString() : undefined })
-        .eq('id', tag.id);
+        .update({
+          sun_counter: result.counterValue,
+          status: 'active',
+          activated_at: tag.status === 'registered' ? new Date().toISOString() : undefined,
+        })
+        .eq('id', tag.id)
+        .lt('sun_counter', result.counterValue)
+        .select('id');
+      if (burnError) {
+        // A database failure is not evidence of a replay — don't report it as one.
+        logger.error('nfc_scan_counter_burn_failed', { tagId: tag.id, error: burnError.message });
+        throw new AppError('internal', 'Failed to record scan');
+      }
+      if (!burned || burned.length === 0) {
+        result = { ...result, valid: false, error: 'replay_detected' };
+      }
     }
+
+    const sunResult = classify(result.error);
+    emitSunVerify(
+      tag.id,
+      'verify',
+      sunResult,
+      result.counterValue,
+      tag.sun_counter,
+      result.valid ? 'ok' : sunFailureCode(sunResult),
+      ctx,
+    );
+    if (!result.valid) logger.warn('nfc_scan_failed', { tagId: tag.id, reason: sunResult });
 
     // Insert verification event
     const { data: event, error: eventError } = await supabase
@@ -241,16 +255,16 @@ export const scanTag = async (req: NfcRequest, res: Response) => {
         scan_type: 'verification',
         scanned_by: req.user?.id ?? null,
         sun_message: sunMessage,
-        sun_counter_value: counterValue,
-        cmac_valid: cmacValid,
+        sun_counter_value: result.counterValue,
+        cmac_valid: result.valid,
         ip_address: req.ip ?? null,
         user_agent: req.headers['user-agent'] ?? null,
       })
-      .select()
+      .select('id')
       .single();
 
     if (eventError) {
-      logger.error('verification_event_insert_failed', { tagId: tag.id, error: eventError });
+      logger.error('verification_event_insert_failed', { tagId: tag.id, error: eventError.message });
     }
 
     // Backward compat: increment scan_count on linked item_verifications
@@ -269,15 +283,16 @@ export const scanTag = async (req: NfcRequest, res: Response) => {
       }
     }
 
-    logger.info('nfc_scan_processed', { tagId: tag.id, valid: cmacValid });
+    logger.info('nfc_scan_processed', { tagId: tag.id, valid: result.valid });
 
     return res.json({
       success: true,
       data: {
-        valid: cmacValid,
+        valid: result.valid,
         tagId: tag.id,
         eventId: event?.id ?? null,
-        counterValue,
+        counterValue: result.counterValue,
+        ...(result.valid ? {} : { reason: sunFailureCode(sunResult) }),
       },
     });
   } catch (error) {
@@ -429,7 +444,7 @@ export const getTagVerification = async (req: NfcRequest, res: Response) => {
 
     const { data: tag, error } = await supabase
       .from('nfc_tags')
-      .select('*')
+      .select(PUBLIC_TAG_COLUMNS)
       .eq('id', tagId)
       .maybeSingle();
 
@@ -468,8 +483,8 @@ export const getTagVerification = async (req: NfcRequest, res: Response) => {
 
     logger.info('nfc_tag_viewed', { tagId });
 
-    // Strip aes_key_enc from public response
-    const { aes_key_enc: _omit, ...publicTag } = tag;
+    // Explicit column list: aes_key_enc is never read (S-NFC3.5).
+    const publicTag = tag;
 
     return res.json({
       success: true,
@@ -748,7 +763,7 @@ export const getTagByUid = async (req: NfcRequest, res: Response) => {
 
     const { data: tag, error } = await supabase
       .from('nfc_tags')
-      .select('*')
+      .select(PUBLIC_TAG_COLUMNS)
       .eq('tag_uid', tagUid.toUpperCase())
       .maybeSingle();
 
@@ -786,7 +801,7 @@ export const getTagByUid = async (req: NfcRequest, res: Response) => {
 
     logger.info('nfc_tag_viewed_by_uid', { tagUid });
 
-    const { aes_key_enc: _omit, ...publicTag } = tag;
+    const publicTag = tag;
 
     return res.json({
       success: true,

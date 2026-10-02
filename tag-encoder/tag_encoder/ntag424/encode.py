@@ -1,111 +1,162 @@
-"""Pure encode pipeline — the SIMULATOR-PARITY core of S-NFC2 (Lane A).
+"""NXP AN12196 Secure Dynamic Messaging (SDM / SUN), AES mode — S-NFC3.5.
 
-`encode_sun(uid, counter, key, base_url, token_name)` produces the exact same
-(encPiccHex, cmacHex, sunUrl) that the backend simulator emits in
-`backend/src/services/nfc/ntag424Simulator.ts` (`simulateTap`), and an
-`ndefBytes` image that round-trips through `tag_hq.parsers.parse_ndef`.
+Chip-exact, and byte-identical to the backend verifier
+(`backend/src/services/nfc/ntag424Codec.ts`). Both are pinned by the shared
+OpenSSL-generated vectors in `test-vectors/ntag424_sdm_vectors.json`
+(including AN12196's own all-zero-key example). The S-NFC2 "simplified CMAC"
+(MAC over the ciphertext under a static per-tag key) is DELETED.
 
-The decrypt of the produced `encPiccHex` with the same key recovers the
-original (uid, counter) — mirroring the backend `decryptPiccData` in
-`backend/src/services/nfc/ntag424.ts`.
+    PICCData  = PICCDataTag(1) || UID(7) || SDMReadCtr(3, little-endian) || padding(5)
+    ENCPICCData = AES-128-CBC-encrypt(SDMMetaReadKey, IV = 0, PICCData)
+    PICCDataTag: bit7 UID mirrored, bit6 SDMReadCtr mirrored, bits3..0 UID length
+    SV2       = 3C C3 00 01 00 80 || UID(7) || SDMReadCtr(3, LE as on the wire)
+    KSesSDMFileReadMAC = AES-CMAC(SDMFileReadKey, SV2)
+    SDMMAC    = AES-CMAC(KSesSDMFileReadMAC, file[SDMMACInputOffset : SDMMACOffset])
+    on wire   = even-numbered bytes of SDMMAC (indices 1,3,...,15) -> 8 bytes
 
-==========================================================================
-SIM-PARITY CONTRACT (Phase 1, SIM-ONLY) — DO NOT SILENTLY DIVERGE
-==========================================================================
-The simulator + backend use a SIMPLIFIED scheme:
-
-  * PICC plaintext (16B): 0xC7 || UID(7B) || counter(3B LE) || 0x00*5
-  * Encrypt: AES-128-CBC, zero IV (16 null bytes), per-tag 16B key.
-  * CMAC: AES-128-CMAC (RFC 4493) over the *encrypted PICC bytes*,
-    truncated to the first 8 bytes (16 hex chars).
-
-This is NOT the full NXP AN12196 SDM scheme that genuine NTAG 424 DNA
-silicon emits. Real silicon:
-  * derives a per-tap SDM session key (SesSDMFileReadMACKey / ENCKey) from
-    the file-read key + the SDMReadCtr (KSDFAuth / CMAC-based KDF), and
-  * computes the SDMMAC over the *cleartext mirror inputs*, not over the
-    encrypted PICCData block as we do here.
-
-Phase 1 deliberately targets SIMULATOR PARITY so the encoder, simulator,
-and backend agree end-to-end with no hardware in the loop. Phase 2 (real
-silicon) MUST realign BOTH this encoder AND the backend verifier to true
-AN12196 SDM session-CMAC. See SIM_PARITY.md.
-==========================================================================
+Our NDEF layout: `{base}/verify/{token}?picc_data=<32 hex>&cmac=<16 hex>`,
+no SDMENCFileData, SDMMACInputOffset == SDMMACOffset -> the MAC input is the
+empty string. `extract_mac_input` implements the general range.
 """
 
 from __future__ import annotations
 
+import hmac
+import os
 from dataclasses import dataclass
 
-from ..aes import aes128_cbc_encrypt_nopad, aes128_cmac
+from ..aes import aes128_cbc_decrypt_nopad, aes128_cbc_encrypt_nopad, aes128_cmac
 from ..ndef import build_ndef_uri_file
 
-PICC_HEADER = 0xC7
+PICC_DATA_TAG = 0xC7  # UID mirrored | ctr mirrored | UID length 7
 PICC_BLOCK_LEN = 16
 UID_LEN = 7
 COUNTER_MAX = 0xFFFFFF
-CMAC_TRUNCATE_BYTES = 8  # NTAG 424 DNA SDMMAC truncation
+SDM_MAC_LEN = 8
+SV2_PREFIX = bytes.fromhex("3CC300010080")
+ZERO_IV = bytes(16)
+
+# Placeholders written into the NDEF file at personalisation; the chip
+# overwrites them on every read (ASCII hex mirroring).
+PICC_PLACEHOLDER = "0" * 32
+MAC_PLACEHOLDER = "0" * 16
 
 
-def _coerce_uid(uid: bytes | str) -> bytes:
-    if isinstance(uid, str):
-        uid = bytes.fromhex(uid)
-    if len(uid) != UID_LEN:
-        raise ValueError(f"uid must be {UID_LEN} bytes (got {len(uid)})")
-    return uid
+def _as_bytes(value: bytes | str, length: int, name: str) -> bytes:
+    if isinstance(value, str):
+        value = bytes.fromhex(value)
+    if len(value) != length:
+        raise ValueError(f"{name} must be {length} bytes (got {len(value)})")
+    return bytes(value)
 
 
-def _coerce_key(key: bytes | str) -> bytes:
-    if isinstance(key, str):
-        key = bytes.fromhex(key)
-    if len(key) != 16:
-        raise ValueError(f"key must be 16 bytes (got {len(key)})")
-    return key
+# --- PICCData ----------------------------------------------------------------
 
 
-def build_picc_block(uid: bytes | str, counter: int) -> bytes:
-    """0xC7 || UID(7B) || counter(3B little-endian) || 0x00*5  (16 bytes)."""
-    uid = _coerce_uid(uid)
+@dataclass(frozen=True)
+class PiccDataTag:
+    uid_mirrored: bool
+    ctr_mirrored: bool
+    uid_length: int
+
+    @property
+    def acceptable(self) -> bool:
+        """Our layout needs UID (7 bytes) AND the counter mirrored."""
+        return self.uid_mirrored and self.ctr_mirrored and self.uid_length == UID_LEN
+
+
+def parse_picc_data_tag(byte: int) -> PiccDataTag:
+    return PiccDataTag(bool(byte & 0x80), bool(byte & 0x40), byte & 0x0F)
+
+
+@dataclass(frozen=True)
+class PiccData:
+    uid: bytes
+    counter_le: bytes  # exactly as on the wire — the SV2 input
+    counter: int
+
+    @property
+    def uid_hex(self) -> str:
+        return self.uid.hex().upper()
+
+
+def build_picc_plaintext(uid: bytes | str, counter: int, padding: bytes | str | None = None) -> bytes:
+    """PICCDataTag 0xC7 || UID || SDMReadCtr (3 LE) || 5 padding bytes (random, as on silicon)."""
+    uid = _as_bytes(uid, UID_LEN, "uid")
     if not (0 <= counter <= COUNTER_MAX):
         raise ValueError("counter must fit in 3 bytes (0..16777215)")
-    block = bytearray(PICC_BLOCK_LEN)
-    block[0] = PICC_HEADER
-    block[1:8] = uid
-    block[8] = counter & 0xFF
-    block[9] = (counter >> 8) & 0xFF
-    block[10] = (counter >> 16) & 0xFF
-    return bytes(block)
+    pad = os.urandom(5) if padding is None else _as_bytes(padding, 5, "padding")
+    return bytes([PICC_DATA_TAG]) + uid + counter.to_bytes(3, "little") + pad
 
 
-def encrypt_picc_data(uid: bytes | str, counter: int, key: bytes | str) -> str:
-    """AES-128-CBC (zero IV, no padding) over the PICC block -> uppercase hex.
-
-    Parity target: `encryptPiccData()` in ntag424Simulator.ts.
-    """
-    key = _coerce_key(key)
-    block = build_picc_block(uid, counter)
-    enc = aes128_cbc_encrypt_nopad(key, bytes(16), block)
-    return enc.hex().upper()
+def parse_picc_plaintext(plain: bytes) -> PiccData | None:
+    if len(plain) != PICC_BLOCK_LEN or not parse_picc_data_tag(plain[0]).acceptable:
+        return None
+    ctr = plain[1 + UID_LEN : 1 + UID_LEN + 3]
+    return PiccData(uid=plain[1 : 1 + UID_LEN], counter_le=ctr, counter=int.from_bytes(ctr, "little"))
 
 
-def compute_cmac_hex(enc_picc_hex: str, key: bytes | str) -> str:
-    """Full 16-byte AES-128-CMAC over the encrypted PICC bytes -> uppercase hex.
-
-    Parity target: `computeCmac()` in ntag424.ts (full, untruncated).
-    """
-    key = _coerce_key(key)
-    mac = aes128_cmac(key, bytes.fromhex(enc_picc_hex))
-    return mac.hex().upper()
+def encrypt_picc_block(plaintext: bytes, meta_key: bytes | str) -> bytes:
+    if len(plaintext) != PICC_BLOCK_LEN:
+        raise ValueError("PICCData must be 16 bytes")
+    return aes128_cbc_encrypt_nopad(_as_bytes(meta_key, 16, "meta_key"), ZERO_IV, plaintext)
 
 
-def truncated_cmac_hex(enc_picc_hex: str, key: bytes | str) -> str:
-    """First 8 bytes (16 hex chars) of the CMAC — what the SUN URL carries."""
-    return compute_cmac_hex(enc_picc_hex, key)[: CMAC_TRUNCATE_BYTES * 2].upper()
+def decrypt_picc_block(enc: bytes | str, meta_key: bytes | str) -> bytes:
+    return aes128_cbc_decrypt_nopad(_as_bytes(meta_key, 16, "meta_key"), ZERO_IV, _as_bytes(enc, 16, "ENCPICCData"))
 
 
-# --- encodeURIComponent parity --------------------------------------------
-# The simulator builds the path segment with JS `encodeURIComponent(tokenName)`.
-# RFC 3986 unreserved + the JS-exempt set: A-Z a-z 0-9 - _ . ! ~ * ' ( )
+def decrypt_picc_data(enc: bytes | str, meta_key: bytes | str) -> PiccData | None:
+    """Decrypt + parse; None unless it decodes to an acceptable PICCData."""
+    try:
+        return parse_picc_plaintext(decrypt_picc_block(enc, meta_key))
+    except ValueError:
+        return None
+
+
+# --- SDM MAC -----------------------------------------------------------------
+
+
+def build_sv2(uid: bytes, counter_le: bytes) -> bytes:
+    return SV2_PREFIX + _as_bytes(uid, UID_LEN, "uid") + _as_bytes(counter_le, 3, "counter_le")
+
+
+def session_mac_key(file_key: bytes | str, uid: bytes, counter_le: bytes) -> bytes:
+    """KSesSDMFileReadMAC = AES-CMAC(SDMFileReadKey, SV2)."""
+    return aes128_cmac(_as_bytes(file_key, 16, "file_key"), build_sv2(uid, counter_le))
+
+
+def truncate_sdm_mac(full: bytes) -> bytes:
+    """AN12196: the even-numbered bytes (1-based) = indices 1,3,...,15."""
+    if len(full) != 16:
+        raise ValueError("full CMAC must be 16 bytes")
+    return bytes(full[i] for i in range(1, 16, 2))
+
+
+def extract_mac_input(file_data: bytes, mac_input_offset: int, sdm_mac_offset: int) -> bytes:
+    """MAC input = mirrored file bytes from SDMMACInputOffset up to SDMMACOffset."""
+    if mac_input_offset < 0 or sdm_mac_offset < mac_input_offset or sdm_mac_offset > len(file_data):
+        raise ValueError("SDM MAC input range out of bounds")
+    return bytes(file_data[mac_input_offset:sdm_mac_offset])
+
+
+def full_sdm_mac(file_key: bytes | str, uid: bytes, counter_le: bytes, mac_input: bytes = b"") -> bytes:
+    return aes128_cmac(session_mac_key(file_key, uid, counter_le), mac_input)
+
+
+def sdm_mac(file_key: bytes | str, uid: bytes, counter_le: bytes, mac_input: bytes = b"") -> bytes:
+    return truncate_sdm_mac(full_sdm_mac(file_key, uid, counter_le, mac_input))
+
+
+def verify_sdm_mac(
+    file_key: bytes | str, uid: bytes, counter_le: bytes, mac_input: bytes, presented: bytes
+) -> bool:
+    """Constant-time compare of the presented 8-byte MAC."""
+    return hmac.compare_digest(sdm_mac(file_key, uid, counter_le, mac_input), bytes(presented))
+
+
+# --- URL / NDEF ----------------------------------------------------------------
+
 _URIC_SAFE = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()"
 )
@@ -113,26 +164,58 @@ _URIC_SAFE = frozenset(
 
 def encode_uri_component(value: str) -> str:
     """Port of JavaScript `encodeURIComponent` (UTF-8, uppercase %XX)."""
-    out: list[str] = []
-    for byte in value.encode("utf-8"):
-        ch = chr(byte)
-        if ch in _URIC_SAFE:
-            out.append(ch)
-        else:
-            out.append(f"%{byte:02X}")
-    return "".join(out)
+    return "".join(
+        chr(b) if chr(b) in _URIC_SAFE else f"%{b:02X}" for b in value.encode("utf-8")
+    )
 
 
 def build_sun_url(base_url: str, token_name: str, enc_picc_hex: str, cmac_hex: str) -> str:
-    """`{base}/verify/{encodeURIComponent(token)}?picc_data=<hex>&cmac=<hex>`.
-
-    Parity target: `buildSunUrl()` in ntag424Simulator.ts (trailing slash on
-    base is stripped; token segment uses encodeURIComponent; picc_data/cmac are
-    pure hex so x-www-form-urlencoded vs percent-encoding is a no-op for them).
-    """
+    """`{base}/verify/{encodeURIComponent(token)}?picc_data=<hex>&cmac=<hex>` (backend parity)."""
     trimmed = base_url[:-1] if base_url.endswith("/") else base_url
-    token = encode_uri_component(token_name)
-    return f"{trimmed}/verify/{token}?picc_data={enc_picc_hex}&cmac={cmac_hex}"
+    return f"{trimmed}/verify/{encode_uri_component(token_name)}?picc_data={enc_picc_hex}&cmac={cmac_hex}"
+
+
+@dataclass(frozen=True)
+class SdmTemplate:
+    """The NDEF file written at personalisation + the SDM offsets into it."""
+
+    ndef_bytes: bytes
+    picc_data_offset: int
+    sdm_mac_input_offset: int
+    sdm_mac_offset: int
+
+
+def build_sdm_template(base_url: str, token_name: str) -> SdmTemplate:
+    """NDEF file with placeholder mirrors, and the file offsets the chip writes to.
+
+    Offsets count from the start of the NDEF FILE (including the 2-byte NLEN),
+    as ChangeFileSettings expects. SDMMACInputOffset == SDMMACOffset, so the
+    MAC input range is empty (AN12196 SUN without SDMENCFileData).
+    """
+    url = build_sun_url(base_url, token_name, PICC_PLACEHOLDER, MAC_PLACEHOLDER)
+    ndef = build_ndef_uri_file(url)
+    picc_marker = ("?picc_data=" + PICC_PLACEHOLDER).encode("ascii")
+    mac_marker = ("&cmac=" + MAC_PLACEHOLDER).encode("ascii")
+    p = ndef.rfind(picc_marker)
+    m = ndef.rfind(mac_marker)
+    if p < 0 or m < 0:
+        raise ValueError("SDM placeholders not found in the NDEF template")
+    picc_off = p + len("?picc_data=")
+    mac_off = m + len("&cmac=")
+    return SdmTemplate(ndef, picc_off, mac_off, mac_off)
+
+
+def mirror_into_template(template: SdmTemplate, enc_picc: bytes, mac: bytes) -> bytes:
+    """What the chip returns on read: the template with ASCII-hex mirrors written in."""
+    buf = bytearray(template.ndef_bytes)
+    picc_ascii = enc_picc.hex().upper().encode("ascii")
+    mac_ascii = mac.hex().upper().encode("ascii")
+    buf[template.picc_data_offset : template.picc_data_offset + 32] = picc_ascii
+    buf[template.sdm_mac_offset : template.sdm_mac_offset + 16] = mac_ascii
+    return bytes(buf)
+
+
+# --- Encode / verify pipelines --------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -154,101 +237,62 @@ class EncodeResult:
 def encode_sun(
     uid: bytes | str,
     counter: int,
-    key: bytes | str,
+    meta_key: bytes | str,
+    file_key: bytes | str,
     base_url: str,
     token_name: str,
+    padding: bytes | str | None = None,
 ) -> EncodeResult:
-    """Full pure encode pipeline. SIM-parity with simulateTap() + NDEF image."""
-    enc_picc_hex = encrypt_picc_data(uid, counter, key)
-    cmac_hex = truncated_cmac_hex(enc_picc_hex, key)
-    sun_url = build_sun_url(base_url, token_name, enc_picc_hex, cmac_hex)
-    ndef_bytes = build_ndef_uri_file(sun_url)
+    """Simulate one tap of a personalised chip: exactly what silicon mirrors."""
+    uid_b = _as_bytes(uid, UID_LEN, "uid")
+    plain = build_picc_plaintext(uid_b, counter, padding)
+    enc = encrypt_picc_block(plain, meta_key)
+    mac = sdm_mac(file_key, uid_b, plain[8:11], b"")
+    template = build_sdm_template(base_url, token_name)
+    ndef = mirror_into_template(template, enc, mac)
     return EncodeResult(
-        enc_picc_hex=enc_picc_hex,
-        cmac_hex=cmac_hex,
-        sun_url=sun_url,
-        ndef_bytes=ndef_bytes,
+        enc_picc_hex=enc.hex().upper(),
+        cmac_hex=mac.hex().upper(),
+        sun_url=build_sun_url(base_url, token_name, enc.hex().upper(), mac.hex().upper()),
+        ndef_bytes=ndef,
     )
 
 
-# --- decrypt (mirror of backend decryptPiccData) ---------------------------
+@dataclass(frozen=True)
+class VerifyResult:
+    valid: bool
+    uid_hex: str | None
+    counter: int | None
+    error: str | None  # malformed | invalid_signature | uid_mismatch | replay_detected
 
-def decrypt_picc_data(enc_picc_hex: str, key: bytes | str) -> tuple[str, int] | None:
-    """Recover (uid_hex_upper, counter) from encrypted PICC data, or None.
 
-    Mirror of `decryptPiccData()` in ntag424.ts. Used by the `verify` CLI and
-    by the parity round-trip test. Implemented via CBC-decrypt of a single
-    block: since IV is zero and there is exactly one block, plaintext =
-    AES-decrypt(ciphertext). We avoid pulling in an AES decrypt path by noting
-    the block is recoverable through re-encryption search is NOT needed — we
-    decrypt properly below.
+def verify_sun(
+    enc_picc_hex: str,
+    cmac_hex: str,
+    meta_key: bytes,
+    file_key_for_uid,
+    last_counter: int,
+    expected_uid: str | None = None,
+) -> VerifyResult:
+    """Mirror of the backend `validateSunScan` (same order, same error codes).
+
+    `file_key_for_uid(uid: bytes) -> bytes` derives the per-UID FILE key only
+    after PICCData has been authenticated-decrypted.
     """
-    from ..aes import _expand_key, _SBOX  # noqa: F401  (kept local; see _aes_decrypt_block)
-
-    data = bytes.fromhex(enc_picc_hex)
-    if len(data) != 16:
-        return None
-    plain = _aes128_decrypt_block(_coerce_key(key), data)  # zero IV, single block
-    if plain[0] != PICC_HEADER:
-        return None
-    uid = plain[1:8].hex().upper()
-    counter = plain[8] | (plain[9] << 8) | (plain[10] << 16)
-    return uid, counter
-
-
-# Inverse AES-128 block (decrypt) — only needed for the verify/round-trip path.
-_INV_SBOX = bytes(255 for _ in range(0))  # placeholder, filled below
-
-
-def _build_inv_sbox() -> bytes:
-    from ..aes import _SBOX
-
-    inv = bytearray(256)
-    for i, s in enumerate(_SBOX):
-        inv[s] = i
-    return bytes(inv)
-
-
-_INV_SBOX = _build_inv_sbox()
-
-
-def _aes128_decrypt_block(key: bytes, block: bytes) -> bytes:
-    from ..aes import _expand_key, _mul
-
-    rks = _expand_key(key)
-    state = list(block)
-
-    def add_round_key(rk: list[int]) -> None:
-        for i in range(16):
-            state[i] ^= rk[i]
-
-    def inv_sub_bytes() -> None:
-        for i in range(16):
-            state[i] = _INV_SBOX[state[i]]
-
-    def inv_shift_rows() -> None:
-        new = state[:]
-        for row in range(1, 4):
-            for col in range(4):
-                new[row + 4 * col] = state[row + 4 * ((col - row) % 4)]
-        state[:] = new
-
-    def inv_mix_columns() -> None:
-        for c in range(4):
-            i = 4 * c
-            a0, a1, a2, a3 = state[i], state[i + 1], state[i + 2], state[i + 3]
-            state[i] = _mul(a0, 14) ^ _mul(a1, 11) ^ _mul(a2, 13) ^ _mul(a3, 9)
-            state[i + 1] = _mul(a0, 9) ^ _mul(a1, 14) ^ _mul(a2, 11) ^ _mul(a3, 13)
-            state[i + 2] = _mul(a0, 13) ^ _mul(a1, 9) ^ _mul(a2, 14) ^ _mul(a3, 11)
-            state[i + 3] = _mul(a0, 11) ^ _mul(a1, 13) ^ _mul(a2, 9) ^ _mul(a3, 14)
-
-    add_round_key(rks[10])
-    for rnd in range(9, 0, -1):
-        inv_shift_rows()
-        inv_sub_bytes()
-        add_round_key(rks[rnd])
-        inv_mix_columns()
-    inv_shift_rows()
-    inv_sub_bytes()
-    add_round_key(rks[0])
-    return bytes(state)
+    try:
+        enc = bytes.fromhex(enc_picc_hex)
+        mac = bytes.fromhex(cmac_hex)
+    except ValueError:
+        return VerifyResult(False, None, None, "malformed")
+    if len(enc) != 16 or len(mac) != SDM_MAC_LEN:
+        return VerifyResult(False, None, None, "malformed")
+    picc = decrypt_picc_data(enc, meta_key)
+    if picc is None:
+        return VerifyResult(False, None, None, "invalid_signature")
+    if expected_uid is not None and expected_uid.upper() != picc.uid_hex:
+        return VerifyResult(False, picc.uid_hex, picc.counter, "uid_mismatch")
+    if not verify_sdm_mac(file_key_for_uid(picc.uid), picc.uid, picc.counter_le, b"", mac):
+        return VerifyResult(False, picc.uid_hex, picc.counter, "invalid_signature")
+    if picc.counter <= last_counter:
+        return VerifyResult(False, picc.uid_hex, picc.counter, "replay_detected")
+    return VerifyResult(True, picc.uid_hex, picc.counter, None)

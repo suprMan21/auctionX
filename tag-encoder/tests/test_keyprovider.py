@@ -1,61 +1,97 @@
-"""Key-derivation determinism + per-UID uniqueness tests.
+"""LocalKeyProvider — role/root separation, refusals, determinism (S-NFC3.5).
 
-Guards the core security property: NO single master AES key is reused across
-tags. Every UID yields a distinct, deterministic 16-byte key.
+Byte-exactness against OpenSSL lives in test_sdm_vectors.py (KDF vectors).
 """
 
 import pytest
 
-from tag_encoder.keyprovider import KeyProvider, LocalStubKeyProvider, derive_tag_key_hex
+from tag_encoder.keyprovider import (
+    ROLE_ROOT,
+    KeyProvider,
+    LocalKeyProvider,
+    kdf_message,
+)
 
+SDM_ROOT = bytes.fromhex("11" * 32)
+ADMIN_ROOT = bytes.fromhex("22" * 32)
 UID_A = bytes.fromhex("04A27E02936980")
-UID_B = bytes.fromhex("0123456789ABCD")
+UID_B = bytes.fromhex("04DE5F1EACC040")
 
 
-def test_derivation_is_deterministic():
-    p = LocalStubKeyProvider()
-    k1 = p.derive_tag_key(UID_A)
-    k2 = p.derive_tag_key(UID_A)
-    assert k1 == k2
-    assert len(k1) == 16
+def _p(**kw):
+    return LocalKeyProvider(SDM_ROOT, ADMIN_ROOT, allow_local_keys=True, **kw)
 
 
-def test_distinct_keys_per_uid():
-    p = LocalStubKeyProvider()
-    assert p.derive_tag_key(UID_A) != p.derive_tag_key(UID_B)
+def test_refuses_without_explicit_opt_in():
+    with pytest.raises(PermissionError):
+        LocalKeyProvider(SDM_ROOT, ADMIN_ROOT)
 
 
-def test_not_a_reused_master_key():
-    # The derived key must never equal the root seed (i.e. it is derived, not
-    # the master itself) and two UIDs must not collide.
-    p = LocalStubKeyProvider()
-    keys = {p.derive_tag_key(bytes([0x04]) + bytes([i]) * 6) for i in range(32)}
-    assert len(keys) == 32  # all distinct
-
-
-def test_different_root_yields_different_keys():
-    p1 = LocalStubKeyProvider(bytes.fromhex("00000000000000000000000000000000"))
-    p2 = LocalStubKeyProvider(bytes.fromhex("11111111111111111111111111111111"))
-    assert p1.derive_tag_key(UID_A) != p2.derive_tag_key(UID_A)
-
-
-def test_rejects_bad_uid_length():
-    p = LocalStubKeyProvider()
+def test_roots_must_be_32_bytes_and_distinct():
     with pytest.raises(ValueError):
-        p.derive_tag_key(b"\x04\x05\x06")  # 3 bytes, not 7
-
-
-def test_rejects_bad_root_length():
+        LocalKeyProvider(b"\x00" * 16, ADMIN_ROOT, allow_local_keys=True)
     with pytest.raises(ValueError):
-        LocalStubKeyProvider(b"\x00" * 8)
+        LocalKeyProvider(SDM_ROOT, SDM_ROOT, allow_local_keys=True)
+
+
+def test_role_to_root_map():
+    assert ROLE_ROOT == {"META": "sdm", "FILE": "sdm", "APP_MASTER": "admin"}
+
+
+def test_app_master_comes_from_admin_root_only():
+    a = LocalKeyProvider(SDM_ROOT, ADMIN_ROOT, allow_local_keys=True).derive_key("APP_MASTER", 1, UID_A)
+    b = LocalKeyProvider(bytes.fromhex("33" * 32), ADMIN_ROOT, allow_local_keys=True).derive_key("APP_MASTER", 1, UID_A)
+    c = LocalKeyProvider(SDM_ROOT, bytes.fromhex("44" * 32), allow_local_keys=True).derive_key("APP_MASTER", 1, UID_A)
+    assert a == b  # SDM root is irrelevant to APP_MASTER
+    assert a != c
+
+
+def test_sdm_roles_come_from_sdm_root_only():
+    a = _p().derive_key("FILE", 1, UID_A)
+    b = LocalKeyProvider(SDM_ROOT, bytes.fromhex("44" * 32), allow_local_keys=True).derive_key("FILE", 1, UID_A)
+    assert a == b
+
+
+def test_deterministic_and_distinct():
+    p = _p()
+    assert p.derive_key("FILE", 1, UID_A) == p.derive_key("FILE", 1, UID_A)
+    keys = {
+        p.derive_key("META", 1),
+        p.derive_key("META", 2),
+        p.derive_key("FILE", 1, UID_A),
+        p.derive_key("FILE", 1, UID_B),
+        p.derive_key("FILE", 2, UID_A),
+        p.derive_key("APP_MASTER", 1, UID_A),
+    }
+    assert len(keys) == 6
+    assert all(len(k) == 16 for k in keys)
+
+
+@pytest.mark.parametrize(
+    "role,version,uid",
+    [
+        ("META", 1, UID_A),        # META takes no UID
+        ("FILE", 1, None),         # FILE needs a UID
+        ("FILE", 1, b"\x04\x05"),  # wrong UID length
+        ("META", 0, None),         # version out of range
+        ("META", 256, None),
+        ("ROOT", 1, None),         # unknown role
+    ],
+)
+def test_rejects_bad_requests(role, version, uid):
+    with pytest.raises(ValueError):
+        _p().derive_key(role, version, uid)
+
+
+def test_kdf_message_layout():
+    assert kdf_message("FILE", 1, UID_A) == b"AM-NTAG424-KDF\x00FILE\x00\x01" + UID_A
+    assert kdf_message("META", 3) == b"AM-NTAG424-KDF\x00META\x00\x03"
+
+
+def test_repr_never_shows_roots():
+    r = repr(_p())
+    assert SDM_ROOT.hex() not in r.lower() and ADMIN_ROOT.hex() not in r.lower()
 
 
 def test_satisfies_protocol():
-    # runtime_checkable Protocol: the stub must structurally satisfy KeyProvider
-    # (so the KMS backend can drop in to the same contract).
-    assert isinstance(LocalStubKeyProvider(), KeyProvider)
-
-
-def test_hex_helper():
-    h = derive_tag_key_hex(LocalStubKeyProvider(), "04A27E02936980")
-    assert len(h) == 32 and h == h.upper()
+    assert isinstance(_p(), KeyProvider)

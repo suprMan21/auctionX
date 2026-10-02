@@ -33,6 +33,8 @@ const TARGET_FILES = [
   'controllers/tagManagementController.ts',
   'controllers/ownershipController.ts',
   'routes/tokenFeeWebhook.ts',
+  // S-NFC3.5: scan / register now select explicit nfc_tags columns.
+  'controllers/nfcController.ts',
 ];
 
 /**
@@ -45,7 +47,11 @@ const TARGET_FILES = [
  * pending, and remove them at the next regen. Growing it to silence a failure
  * is the wrong move — the point of the test is that a wrong column name fails.
  */
-const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {};
+const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {
+  // S-NFC3.5 — 20261001000002_nfc_sdm_key_version.sql (not yet pushed). Remove
+  // at the next types regen.
+  nfc_tags: ['sdm_key_version'],
+};
 
 /** Parses `Row: { ... }` blocks out of database.types.ts, keyed by table name. */
 const parseKnownColumns = (): Map<string, Set<string>> => {
@@ -96,7 +102,10 @@ const extractSelects = (source: string): Array<{ table: string; columns: string[
     const sel = /\.select\(\s*(?:`([^`]*)`|'([^']*)')\s*\)/.exec(window);
     if (!sel) continue;
 
-    const raw = (sel[1] ?? sel[2] ?? '').trim();
+    let raw = (sel[1] ?? sel[2] ?? '').trim();
+    // Drop embedded resources (`listing:listings(title, ...)`), innermost first:
+    // their columns belong to another table.
+    while (/\([^()]*\)/.test(raw)) raw = raw.replace(/[\w:!]*\([^()]*\)/g, '');
     if (raw === '' || raw === '*') continue;
 
     const columns = raw
@@ -104,7 +113,7 @@ const extractSelects = (source: string): Array<{ table: string; columns: string[
       .replace(/\$\{[^}]*\}/g, '')
       .split(',')
       .map((c) => c.trim())
-      .filter((c) => c !== '' && !c.includes('(') && !c.includes(':'));
+      .filter((c) => c !== '' && c !== '*' && !c.includes('(') && !c.includes(':'));
 
     if (columns.length > 0) results.push({ table, columns });
   }

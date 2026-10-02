@@ -1,24 +1,23 @@
 """Self-contained pure-Python AES-128 core (ECB block cipher + CBC + CMAC).
 
-WHY PURE PYTHON: this package must produce byte-identical output to the
-backend simulator (`backend/src/services/nfc/ntag424Simulator.ts`) with ZERO
-runtime crypto dependencies, so the parity tests run anywhere `pytest` runs
-(no `cryptography`/`pycryptodome` install, no native build). The algorithms
-here are the standard FIPS-197 (AES) and RFC 4493 (AES-CMAC); validated in
-tests against the FIPS-197 known-answer vector and against golden vectors
-pulled straight from the TypeScript simulator.
+WHY PURE PYTHON: the encoder has ZERO runtime crypto dependencies, so its
+tests run anywhere `pytest` runs (no `cryptography`/`pycryptodome` install, no
+native build). The algorithms are the standard FIPS-197 (AES) and RFC 4493
+(AES-CMAC), validated against the FIPS-197 / RFC 4493 known-answer vectors and
+against the shared OpenSSL-generated SDM vectors
+(`test-vectors/ntag424_sdm_vectors.json`, S-NFC3.5).
 
-This is NOT a hardened crypto library — it is a deterministic, auditable
-reference implementation for SIM parity. Real key material lives behind the
-KeyProvider abstraction (see keyprovider.py); for the production AWS-KMS path
-the encrypt/CMAC happens in KMS, not here.
+This is NOT a hardened crypto library (table lookups are not constant-time);
+it runs only in the local, operator-attended encoder. Chip keys are derived by
+a KeyProvider (keyprovider.py / providers/) from a KMS HMAC root — KMS performs
+the HMAC step only; AES/CMAC over chip data happens here.
 
 Sources: FIPS-197 (AES), RFC 4493 (AES-128-CMAC), NXP AN12196.
 """
 
 from __future__ import annotations
 
-# --- AES-128 S-box / inverse not needed (encrypt-only) ---------------------
+# --- AES-128 S-box (inverse built below for the decrypt path) ---------------
 
 _SBOX = bytes.fromhex(
     "637c777bf26b6fc53001672bfed7ab76"
@@ -141,6 +140,61 @@ def aes128_cbc_encrypt_nopad(key: bytes, iv: bytes, data: bytes) -> bytes:
     return bytes(out)
 
 
+_INV_SBOX = bytes(_SBOX.index(i) for i in range(256))
+
+
+def aes128_decrypt_block(key: bytes, block: bytes) -> bytes:
+    """Decrypt a single 16-byte block with AES-128 (ECB primitive)."""
+    if len(block) != 16:
+        raise ValueError("AES block must be 16 bytes")
+    rks = _expand_key(key)
+    state = list(block)
+
+    def inv_shift_rows() -> None:
+        new = state[:]
+        for row in range(1, 4):
+            for col in range(4):
+                new[row + 4 * col] = state[row + 4 * ((col - row) % 4)]
+        state[:] = new
+
+    def inv_sub_bytes() -> None:
+        for i in range(16):
+            state[i] = _INV_SBOX[state[i]]
+
+    def inv_mix_columns() -> None:
+        for c in range(4):
+            i = 4 * c
+            a0, a1, a2, a3 = state[i], state[i + 1], state[i + 2], state[i + 3]
+            state[i] = _mul(a0, 14) ^ _mul(a1, 11) ^ _mul(a2, 13) ^ _mul(a3, 9)
+            state[i + 1] = _mul(a0, 9) ^ _mul(a1, 14) ^ _mul(a2, 11) ^ _mul(a3, 13)
+            state[i + 2] = _mul(a0, 13) ^ _mul(a1, 9) ^ _mul(a2, 14) ^ _mul(a3, 11)
+            state[i + 3] = _mul(a0, 11) ^ _mul(a1, 13) ^ _mul(a2, 9) ^ _mul(a3, 14)
+
+    _add_round_key(state, rks[10])
+    for rnd in range(9, 0, -1):
+        inv_shift_rows()
+        inv_sub_bytes()
+        _add_round_key(state, rks[rnd])
+        inv_mix_columns()
+    inv_shift_rows()
+    inv_sub_bytes()
+    _add_round_key(state, rks[0])
+    return bytes(state)
+
+
+def aes128_cbc_decrypt_nopad(key: bytes, iv: bytes, data: bytes) -> bytes:
+    """AES-128-CBC decrypt, NO padding. data length must be a multiple of 16."""
+    if len(data) % 16 != 0:
+        raise ValueError("CBC data must be a multiple of 16 bytes")
+    prev = bytes(iv)
+    out = bytearray()
+    for off in range(0, len(data), 16):
+        block = data[off : off + 16]
+        out.extend(a ^ b for a, b in zip(aes128_decrypt_block(key, block), prev))
+        prev = block
+    return bytes(out)
+
+
 # --- AES-128-CMAC (RFC 4493) ----------------------------------------------
 
 def _left_shift_one(b: bytes) -> bytes:
@@ -159,10 +213,9 @@ def _derive_subkey(L: bytes) -> bytes:
 def aes128_cmac(key: bytes, message: bytes) -> bytes:
     """Full 16-byte AES-128-CMAC (RFC 4493).
 
-    Byte-for-byte equivalent to `computeCmac()` in ntag424.ts. NOTE the TS
-    code treats an EMPTY message as a single (padded) block — this mirrors
-    that with `numBlocks = max(1, ...)`; both differ harmlessly from RFC 4493
-    on the empty input but the NTAG path never CMACs an empty message.
+    An EMPTY message is one padded block XORed with K2 — exactly RFC 4493
+    §2.4 (KAT BB1D6929E95937287FA37D129B756746). This matters: AN12196 SDM
+    MACs the empty MAC-input range in our URL layout.
     """
     L = aes128_encrypt_block(key, bytes(16))
     K1 = _derive_subkey(L)

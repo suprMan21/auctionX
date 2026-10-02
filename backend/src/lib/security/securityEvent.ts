@@ -50,6 +50,9 @@ export const securityResultSchema = z.enum([
   'not_found',
   'invalid_argument',
   'sun_invalid',
+  // S-NFC3.5: specific SDM failures surfaced to the caller (acceptance criteria).
+  'replay_detected',
+  'invalid_signature',
   'payment_required',
   'conflict',
   'internal',
@@ -73,11 +76,14 @@ const sunVerifySchema = envelopeSchema.extend({
   event: z.literal('nfc.sun_verify'),
   tag_id: uuid.nullable(),
   context: z.enum(['verify', 'claim', 'transfer_complete']),
+  // S-NFC3.5 renames: cmac_invalid -> invalid_signature; counter_replay and
+  // counter_regression -> replay_detected (regression is derivable from
+  // counter < last_counter); UID mismatch now has its own code.
   sun_result: z.enum([
     'ok',
-    'cmac_invalid',
-    'counter_replay',
-    'counter_regression',
+    'invalid_signature',
+    'replay_detected',
+    'uid_mismatch',
     'unknown_tag',
     'malformed',
   ]),
@@ -180,7 +186,7 @@ const ownershipAuthAttemptSchema = envelopeSchema.extend({
 
 const kmsOpSchema = envelopeSchema.extend({
   event: z.literal('kms.op'),
-  operation: z.enum(['Encrypt', 'Decrypt', 'GenerateDataKey']),
+  operation: z.enum(['Encrypt', 'Decrypt', 'GenerateDataKey', 'GenerateMac']),
   purpose: z.enum(['ownership_salt', 'tag_key']),
   tag_id: uuid.nullable(),
 }).strict();
