@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-01 (S-DB1 applied to staging)
+**Last updated:** 2026-10-02 (S-NFC3.5 deployed; session close-out)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -14,20 +14,6 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ---
 
 ## 🔴 BOSS ACTION
-
-### ✅ S-DB1 — done 2026-10-01
-
-The "no egress" blocker was misdiagnosed: the free-plan staging project had **auto-paused**
-(`supabase projects list` → `INACTIVE`, host NXDOMAIN). Boss restored it; then:
-`20260919000001` + `20260919000002` applied, types regenerated into both copies (they had also
-drifted from each other), the drift-guard exemption list emptied (proven to still fire), criterion
-11 checked live (view exposes no owner/user/UID column; anon REST read works; anon still gets
-nothing from `nfc_tags.aes_key_enc` and `permission denied` on `ownership_proofs`), S-ISO1 crons
-confirmed gone (`cron.job` empty). Extra: `20261001000001` revokes the default-privilege
-REFERENCES/TRIGGER/TRUNCATE that anon/authenticated had inherited on `public_tag_provenance`.
-
-> Staying on the free plan until launch (Decisions DB, 2026-10-01). If Supabase calls fail after a
-> break of more than 7 days, run `supabase projects list` first and restore from the dashboard.
 
 ### S-NFC3 — remaining (not database)
 - [ ] **Resolve the duplicate "Stripe" 1Password items** before any token fee is charged. The vault
@@ -57,46 +43,31 @@ REFERENCES/TRIGGER/TRUNCATE that anon/authenticated had inherited on `public_tag
 
 ---
 
-## ✅ S-NFC3 — CODE DONE AND MERGED (2026-10-01)
+## ✅ Shipped 2026-10-01/02 (details in Notion: Session Handoff + S-NFC3.5 Verification)
 
-Merged to `dev` (`e5531f4`) and pushed; verified against the remote. Also on `dev`: the
-`feature/s-nfc-ios-testflight` merge, which fixes the mobile 401-on-login (stale Supabase
-publishable key) and the legacy `com.authenticmaterials.auctionx` bundle id.
+S-DB1 (S-NFC3 migrations live) · S-NFC3.5 real AN12196 SDM with KMS-derived keys (deployed, KMS confirmed live) ·
+`public_tag_provenance` enumeration hole closed · `/replace` staff-only.
 
-Verification: `docs/S_NFC3_VERIFICATION.md` (v1.1). 252 tests pass, tsc 0 errors both sides,
-0 boundary violations across 121 modules. Database work done in S-DB1 (above).
+## 🟢 NEXT SESSION — S-NFC2 Ph2 (physical encode), recommended
 
-A post-merge fix (`9762429`) corrected two column names that would only have failed against the
-real database: `c.username` (no such column — it is `display_name`) would have aborted the
-`CREATE VIEW` and taken the whole migration with it, and `users.country` (no such column) left the
-CAD path with nothing to read. Guarded now by `schemaColumnDrift.test.ts`.
+First real signed-tap end-to-end, and confirms the SDM file-settings bytes on silicon. **Launch with `amCode`.**
+Before/at session start:
+- [ ] **Encoder IAM identity** (Boss, console, ~10 min): an IAM user for the encoding Mac, MFA required, with
+      `kms:GenerateMac` + `kms:DescribeKey` on **both** `am-tag-sdm-staging` and `am-tag-admin-staging`. The admin key's
+      policy currently denies only the backend role, so this user is unaffected.
+- [ ] ACR1252U reader + a few blank plain NTAG 424 DNA chips on hand.
+- [ ] Encoder must refuse to re-personalise any UID already in `nfc_tags` as `RETIRED` (Locked: retired chips never reused).
 
-Two things deliberately deferred, both behind default-off flags:
-- **2FA** (`FEATURE_REQUIRE_2FA=false`) — there is still no MFA enrollment path anywhere in the
-  product, so turning it on would make `/claim` and `/transfer/:id/complete` unreachable.
-  **S-2FA is a hard prerequisite** before it can default true in production.
-- **CAD presentment** (`FEATURE_CAD_PRESENTMENT=false`) — unconfirmed on the sandbox account, so
-  per the TODO's own instruction this shipped USD-only. Criterion 5's CAD half is deferred.
+Alternative if hardware isn't ready: **S-NFC3-FE** (token frontend + staging frontend redeploy). Needs nothing from Boss.
 
-Also outstanding: the **$10 re-issue charge**. `POST /reissue-request` prices and records the
-request; no PaymentIntent is created, because the brief routes re-issue through admin review first
-and charging before review would mean refunding every rejection. The charge belongs with the admin
-approval endpoint, which was not in this session's scope.
+## 🟡 AFTER
 
----
+S-NFC3-FE / S-NFC2 Ph2 (whichever is not done first) → **S-ADMIN1 → S-ADMIN2** (admin console, see below) →
+S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat $2.50) →
+S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token sale) → S-SEC2 (external pentest).
 
-## 🟢 NEXT SESSION — S-NFC3.5 (real AN12196 SDM)
-
-**No physical chip may be encoded for customers until this ships.** The SUN crypto S-NFC3 exercises
-is the S-NFC2 codec, not the production SDM scheme.
-
-## 🟡 AFTER S-NFC3.5
-
-Order per the Locked token-first pivot:
-S-NFC3-FE (the token lifecycle frontend, split out of S-NFC3) → S-NFC2 Ph2 (physical encode) →
-**S-ADMIN1 → S-ADMIN2** (admin console, see below) → S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat
-$2.50) → S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token
-sale) → S-SEC2 (external pentest).
+Deferred behind default-off flags since S-NFC3: **2FA** (`FEATURE_REQUIRE_2FA`, needs S-2FA) and **CAD presentment**
+(`FEATURE_CAD_PRESENTMENT`). The **$10 re-issue charge** moves into S-ADMIN1's approval flow.
 
 **Production KMS keys (decide at launch):** create a `-prod` pair (`am-tag-sdm-prod`, `am-tag-admin-prod`),
 never shared with staging. Decide **multi-Region vs single-Region at creation**, because it cannot be changed later and chip
@@ -137,6 +108,9 @@ reused**.
 It is still non-atomic; S-ADMIN1 replaces it with the transactional reset.
 
 ## 🔵 HOUSEKEEPING
+
+- **Supabase staging stays on the free plan until launch** (Locked 2026-10-01). It auto-pauses after ~7 idle days, so if
+  Supabase calls fail, run `supabase projects list` first and restore from the dashboard.
 
 - [ ] **Route Registry is 6 months stale** (v1.1, 2026-03-07) yet an Every-Session lesson names it the
       authority for enum values. It predates S-NFC1.5, S-NFC2 and the pivot. Bump to v2.0.
