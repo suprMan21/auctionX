@@ -47,11 +47,7 @@ const TARGET_FILES = [
  * pending, and remove them at the next regen. Growing it to silence a failure
  * is the wrong move — the point of the test is that a wrong column name fails.
  */
-const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {
-  // S-NFC3.5 — 20261001000002_nfc_sdm_key_version.sql (not yet pushed). Remove
-  // at the next types regen.
-  nfc_tags: ['sdm_key_version'],
-};
+const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {};
 
 /** Parses `Row: { ... }` blocks out of database.types.ts, keyed by table name. */
 const parseKnownColumns = (): Map<string, Set<string>> => {

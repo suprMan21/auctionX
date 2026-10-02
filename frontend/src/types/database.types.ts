@@ -886,7 +886,7 @@ export type Database = {
       nfc_tags: {
         Row: {
           activated_at: string | null
-          aes_key_enc: string
+          aes_key_enc: string | null
           created_at: string
           current_owner_id: string | null
           disclosure: Json
@@ -898,6 +898,7 @@ export type Database = {
           linked_item_id: string | null
           metadata: Json | null
           registered_at: string
+          sdm_key_version: number | null
           seller_id: string
           status: string
           sun_counter: number
@@ -908,7 +909,7 @@ export type Database = {
         }
         Insert: {
           activated_at?: string | null
-          aes_key_enc: string
+          aes_key_enc?: string | null
           created_at?: string
           current_owner_id?: string | null
           disclosure?: Json
@@ -920,6 +921,7 @@ export type Database = {
           linked_item_id?: string | null
           metadata?: Json | null
           registered_at?: string
+          sdm_key_version?: number | null
           seller_id: string
           status?: string
           sun_counter?: number
@@ -930,7 +932,7 @@ export type Database = {
         }
         Update: {
           activated_at?: string | null
-          aes_key_enc?: string
+          aes_key_enc?: string | null
           created_at?: string
           current_owner_id?: string | null
           disclosure?: Json
@@ -942,6 +944,7 @@ export type Database = {
           linked_item_id?: string | null
           metadata?: Json | null
           registered_at?: string
+          sdm_key_version?: number | null
           seller_id?: string
           status?: string
           sun_counter?: number
