@@ -26,7 +26,8 @@ nothing from `nfc_tags.aes_key_enc` and `permission denied` on `ownership_proofs
 confirmed gone (`cron.job` empty). Extra: `20261001000001` revokes the default-privilege
 REFERENCES/TRIGGER/TRUNCATE that anon/authenticated had inherited on `public_tag_provenance`.
 
-- [ ] **Decide on Supabase Pro** — staging will auto-pause again after ~7 idle days on the free plan.
+> Staying on the free plan until launch (Decisions DB, 2026-10-01). If Supabase calls fail after a
+> break of more than 7 days, run `supabase projects list` first and restore from the dashboard.
 
 ### S-NFC3 — remaining (not database)
 - [ ] **Resolve the duplicate "Stripe" 1Password items** before any token fee is charged. The vault
