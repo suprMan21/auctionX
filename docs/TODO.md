@@ -133,9 +133,8 @@ token sale without admin tooling.
 Locked decisions behind it: reset is **admin-only** (owner self-serve `/replace` removed); retired chips are **never
 reused**.
 
-- [ ] **Interim hotfix (before S-ADMIN1):** `POST /nfc/replace` currently lets an *owner* move their token onto any
-      enrolled chip whose id they know, with no review, no $10 and no tap of the new chip. It is also non-atomic (4 writes,
-      first unchecked). Restrict it to staff now; S-ADMIN1 replaces it with the transactional reset.
+✅ **Interim hotfix done 2026-10-02:** `POST /nfc/replace` is staff-only (owners get 403 and use `/reissue-request`).
+It is still non-atomic; S-ADMIN1 replaces it with the transactional reset.
 
 ## 🔵 HOUSEKEEPING
 
