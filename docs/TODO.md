@@ -117,6 +117,9 @@ production, so it must land before any real token sale.
       self-references `users`, violating the "RLS must never self-reference" lesson.
 - [ ] **Mobile hardcodes the Supabase publishable key** in `mobile/lib/core/constants/api_constants.dart`
       — in git history; should move to `--dart-define`.
+- [ ] **AWS admin is done as the root account** (only IAM identities: `auctionx-deploy` + S3 access). Before launch,
+      create a personal admin (IAM Identity Center or an IAM user with MFA), make it administrator of the
+      `am-tag-*` KMS keys, and keep root for emergencies. Fold into S-SEC1.
 - [ ] **`op` CLI integration** — the desktop "Integrate with 1Password CLI" toggle is on but does not reach
       Claude Code's shell, and an inherited `OP_SESSION_*` expires after 30 idle minutes. Launch dev
       sessions with `amCode`, not `cCode`.
