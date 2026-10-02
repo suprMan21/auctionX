@@ -1,187 +1,162 @@
-# NTAG 424 DNA — Crypto Reference (Phase-1 Simulator Parity)
+# NTAG 424 DNA — Crypto Reference (AN12196 SDM, S-NFC3.5)
 
-> **Status:** Phase-1 (simulator-parity) reference. This documents the crypto the
-> existing AuctionX backend simulator and verify-side actually implement today, so
-> the S-NFC2 encoder can produce bytes the backend `validateScan` will accept.
+> **Status (2026-10-01, S-NFC3.5):** the encoder, the backend verifier and the
+> Tag HQ parser now implement **real NXP AN12196 Secure Dynamic Messaging, AES
+> mode**. The Phase-1 "simplified CMAC" (MAC over the ciphertext under a static
+> per-tag key) has been **deleted** from all three. The previous "Known Gap"
+> section is closed — see §8.
 >
-> **⚠️ CRITICAL — read [Known Gap](#known-gap--this-is-not-yet-an12196-sdm) before
-> trusting any of this against real silicon.** The CMAC scheme described here is a
-> *simplified* scheme, deliberately matched to the simulator. It is **NOT** the full
-> NXP AN12196 SDM session-key / session-CMAC derivation that a genuine NTAG 424 DNA
-> chip emits. Phase 2 (real hardware) must align both the encoder and the backend to
-> true AN12196 SDM. This is a tracked, intentional gap — not a bug.
+> Out of scope: LRP mode, physical encode over a live EV2 channel (S-NFC2
+> Phase 2), mobile, frontend.
 
 ---
 
 ## 1. Authoritative sources in this repo
 
-| Concern | File | Symbol |
+| Concern | Backend (TS) | Encoder (Python) |
 |---|---|---|
-| PICC plaintext layout + AES-CBC encrypt | `backend/src/services/nfc/ntag424Simulator.ts:8` | `encryptPiccData` |
-| PICC AES-CBC decrypt | `backend/src/services/nfc/ntag424.ts:26` | `decryptPiccData` |
-| AES-CMAC (RFC 4493) | `backend/src/services/nfc/ntag424.ts:53` | `computeCmac` |
-| CMAC verify (truncated 8B) | `backend/src/services/nfc/ntag424.ts:106` | `verifyCmac` |
-| Tap simulation (encrypt → CMAC → URL) | `backend/src/services/nfc/ntag424Simulator.ts:55` | `simulateTap` |
-| Full verify pipeline | `backend/src/services/nfc/ntag424.ts:116` | `validateScan` |
+| PICCDataTag parse | `backend/src/services/nfc/ntag424Codec.ts:40` `parsePiccDataTag` | `tag-encoder/tag_encoder/ntag424/encode.py:68` `parse_picc_data_tag` |
+| PICCData decrypt + parse | `ntag424Codec.ts:83` `decryptPiccBlock`, `:89` `decryptPiccData` | `encode.py:105` `decrypt_picc_block`, `:109` `decrypt_picc_data` |
+| PICCData encode (simulator) | `ntag424Codec.ts:95` `buildPiccPlaintext`, `:107` `encryptPiccBlock` | `encode.py:83` `build_picc_plaintext`, `:99` `encrypt_picc_block` |
+| AES-CMAC (RFC 4493) | `ntag424Codec.ts:138` `aesCmac` | `tag-encoder/tag_encoder/aes.py` `aes128_cmac` |
+| SV2 / session MAC key | `ntag424Codec.ts:165` `buildSv2`, `:171` `deriveSessionMacKey` | `encode.py:120` `build_sv2`, `:124` `session_mac_key` |
+| Truncation (even bytes) | `ntag424Codec.ts:175` `truncateSdmMac` | `encode.py:129` `truncate_sdm_mac` |
+| MAC input range | `ntag424Codec.ts:183` `extractMacInput` | `encode.py:136` `extract_mac_input` |
+| Constant-time verify | `ntag424Codec.ts:218` `verifySdmMac` (`timingSafeEqual`) | `encode.py:151` `verify_sdm_mac` (`hmac.compare_digest`) |
+| Full verify pipeline | `backend/src/services/nfc/ntag424.ts:96` `validateSunScan` | `encode.py:269` `verify_sun` |
+| Tap simulation | `backend/src/services/nfc/ntag424Simulator.ts:40` `simulateTap` | `encode.py:237` `encode_sun` |
+| Chip-key KDF | `backend/src/services/nfc/keys/keyDerivation.ts:61` `kdfMessage`, `:78` `hkdfExpand` | `tag-encoder/tag_encoder/keyprovider.py:57` `kdf_message`, `:66` `hkdf_expand` |
+| Key providers | `backend/src/services/nfc/keys/tagKeyProvider.ts:85` KMS, `:130` local | `tag-encoder/providers/kms_key_provider.py:62` KMS, `keyprovider.py:91` local |
+| SDM file settings (write) | — | `tag-encoder/tag_encoder/ntag424/apdu.py` `sdm_file_settings_payload` |
+| SDM file settings (read) | — | `tag-hq/tag_hq/parsers.py` `parse_file_settings` / `parse_sdm_settings` |
 
-NXP reference docs cited by the read-only diagnostic station:
-`tag-hq/tag_hq/parsers.py:4-5` (AN12196 Rev 2.0, NT4H2421Gx datasheet Rev 3.0).
-
----
-
-## 2. PICCData plaintext block
-
-The PICC plaintext is a single 16-byte AES block, laid out exactly as
-`encryptPiccData` builds it (`ntag424Simulator.ts:13-20`):
-
-```
-offset  bytes  value
-------  -----  -----------------------------------------------
-0       1      0xC7                 header / tag byte
-1..7    7      UID                  the 7-byte tag UID
-8..10   3      counter (LE)         read counter, 3 bytes little-endian
-11..15  5      0x00 * 5             zero padding to fill the 16-byte block
-```
-
-Constraints enforced in code:
-
-- `uidHex` must be exactly 14 hex chars / 7 bytes (`ntag424Simulator.ts:9`).
-- `aesKeyHex` must be exactly 32 hex chars / 16 bytes — AES-128 (`ntag424Simulator.ts:10`).
-- `counter` must fit in 3 bytes, i.e. `0 .. 0xFFFFFF` (`ntag424Simulator.ts:11`).
-
-Counter encoding is little-endian on both sides:
-
-- write (`ntag424Simulator.ts:17-19`):
-  `block[8]=ctr&0xff; block[9]=(ctr>>8)&0xff; block[10]=(ctr>>16)&0xff`
-- read (`ntag424.ts:41`):
-  `counter = d[8] | (d[9]<<8) | (d[10]<<16)`
-
-> **Note on the header byte.** The simulator uses a fixed `0xC7` constant and the
-> verify side asserts `decrypted[0] === 0xC7` (`ntag424.ts:37`). On genuine NTAG 424
-> DNA, the leading PICCData byte is a **PICCDataTag** whose bits encode which fields
-> (UID present, counter present) are mirrored, and is therefore not a fixed `0xC7`.
-> The fixed value here is a simulator simplification. See [Known Gap](#known-gap--this-is-not-yet-an12196-sdm).
+**Single shared vector file:** `test-vectors/ntag424_sdm_vectors.json`, generated
+by `test-vectors/generate_ntag424_vectors.py` with the **openssl binary as the
+oracle** (never our code). Loaded by backend vitest (`ntag424Sdm.test.ts`,
+`nfcKeyProvider.test.ts`), tag-encoder pytest (`test_sdm_vectors.py`,
+`providers/test_kms_key_provider.py`) and tag-hq pytest (`test_sdm_parsing.py`).
 
 ---
 
-## 3. PICC encryption — AES-128-CBC, zero IV
+## 2. Keys and slots
 
-`encryptPiccData` (`ntag424Simulator.ts:21-27`):
+| Slot | Role | Scope | Root | Who derives it |
+|---|---|---|---|---|
+| K0 | `APP_MASTER` | per UID | **ADMIN** root (`alias/am-tag-admin-staging`) | encoder only |
+| K1 | reserved | — | — | — |
+| K2 | `META` = SDMMetaReadKey | fleet-wide, versioned | **SDM** root (`alias/am-tag-sdm-staging`) | backend + encoder |
+| K3 | `FILE` = SDMFileReadKey | per UID, versioned | **SDM** root | backend + encoder |
+| K4 | reserved | — | — | — |
 
-- Algorithm: `aes-128-cbc`.
-- Key: the 16-byte per-tag AES key.
-- IV: **16 zero bytes** (`Buffer.alloc(16, 0)`).
-- Padding: **disabled** (`cipher.setAutoPadding(false)`) — input is already exactly
-  one 16-byte block, so output is exactly 16 bytes / 32 hex chars.
+Two HMAC_256 KMS roots per environment, separated by role (amended 2026-10-01
+by Boss: KMS cannot restrict `GenerateMac` by message content, so role
+separation must be root separation). Production gets its own `-prod` pair.
 
-Decryption is the mirror (`ntag424.ts:28-34`): `aes-128-cbc`, same zero IV, padding
-disabled. After decrypt it validates the `0xC7` header and returns `{ uid, counter }`,
-returning `null` on any throw or header mismatch (`ntag424.ts:36-46`).
+KDF (identical in TS and Python):
 
-The result is uppercased hex, e.g. `encPiccData = 32 hex chars`.
+```
+msg = "AM-NTAG424-KDF" || 00 || role_ascii || 00 || version(1 byte) || uid(0 or 7 bytes)
+prk = HMAC-SHA256(root, msg)          # KMS GenerateMac (HMAC_SHA_256) or local HMAC
+key = HKDF-Expand(prk, info = "NTAG424-DNA/" || role || "/AES128/v" || version, L = 16)
+```
+
+The key version is recorded per chip in `nfc_tags.sdm_key_version` so a rotated
+META key still serves older chips. Derived keys are never cached, stored,
+logged or printed.
 
 ---
 
-## 4. CMAC — AES-128-CMAC (RFC 4493), over the **encrypted** PICC, truncated to 8 bytes
-
-This is the part that is simulator-specific. Read carefully.
-
-### 4.1 What is MAC'd
-
-The simulator MACs **the encrypted PICC ciphertext itself** — not a session-derived
-message, not the URL. From `simulateTap` (`ntag424Simulator.ts:56-58`):
+## 3. PICCData (encrypted, under SDMMetaReadKey)
 
 ```
-piccData = encryptPiccData(uid, counter, key)   // 16-byte ciphertext, hex
-cmacFull = computeCmac(piccData, key)            // CMAC over that ciphertext, SAME key
-cmac     = cmacFull.substring(0, 16)             // first 8 bytes → 16 hex chars
+ENCPICCData (16 B, in the URL as 32 hex)  = AES-128-CBC-encrypt(SDMMetaReadKey, IV = 0, PICCData)
+PICCData = PICCDataTag(1) || UID(7) || SDMReadCtr(3, little-endian) || padding(5, random on silicon)
+
+PICCDataTag  bit7 = UID mirrored
+             bit6 = SDMReadCtr mirrored
+             bits3..0 = UID length (7)
 ```
 
-The verify side mirrors this exactly. `validateScan` sets
-`cmacMessage = parts.encPiccData` and calls
-`verifyCmac(cmacMessage, storedAesKey, parts.cmac)` (`ntag424.ts:137-138`). So:
+We parse the tag byte rather than asserting `0xC7`, and reject anything that
+does not mirror BOTH a 7-byte UID and the counter. Correction to the old doc:
+PICCData is encrypted under the SDMMetaReadKey directly with a zero IV — not
+under a counter-derived session ENC key (that key, `SesSDMFileReadENCKey`,
+applies only to SDMENCFileData, which we do not use).
 
-- **MAC input** = the encrypted PICC ciphertext bytes (the same hex passed in `picc_data`).
-- **MAC key** = the tag's stored AES key — the *same* key used for PICC encryption.
-- **Truncation** = first 8 bytes / 16 hex chars (`verifyCmac`, `ntag424.ts:108-109`;
-  `simulateTap`, `ntag424Simulator.ts:58`).
-
-### 4.2 The CMAC algorithm itself (RFC 4493)
-
-`computeCmac` (`ntag424.ts:53-100`) is a faithful AES-128-CMAC:
-
-1. **Subkey generation** (`ntag424.ts:58-64`): `L = AES-ECB(key, 0^128)`, then
-   `K1 = subkey(L)`, `K2 = subkey(K1)`.
-2. **Subkey left-shift + Rb** (`deriveSubkey`, `ntag424.ts:152-163`): one-bit left
-   shift across the 16-byte block; if the MSB of the input was set, XOR the last byte
-   with `0x87` (Rb for the 128-bit block).
-3. **Last-block handling** (`ntag424.ts:77-88`): if the message is a non-empty exact
-   multiple of 16, XOR the last block with `K1`; otherwise `0x80`-pad and XOR with `K2`.
-4. **CBC-MAC chain** (`ntag424.ts:91-97`): iterate `X = AES-ECB(key, X ⊕ block)`.
-
-For the SUN case the message is exactly 16 bytes (the ciphertext), so the complete-block
-path (`K1`) is taken. Output is uppercased hex; only the first 16 hex chars are kept.
-
----
-
-## 5. Putting it together — the simulator tap
-
-`simulateTap` (`ntag424Simulator.ts:55-61`) is the canonical encode/emit reference for
-the S-NFC2 encoder:
+## 4. SDMMAC (under the per-UID SDMFileReadKey)
 
 ```
-piccData = AES-128-CBC(zeroIV, key, 0xC7||UID||ctrLE||0^5)    → 32 hex
-cmac     = AES-128-CMAC(key, piccData)[:8]                    → 16 hex
-sunUrl   = {baseUrl}/verify/{tokenName}?picc_data={piccData}&cmac={cmac}
+SV2                = 3C C3 00 01 00 80 || UID(7) || SDMReadCtr(3, LE as on the wire)
+KSesSDMFileReadMAC = AES-CMAC(SDMFileReadKey, SV2)
+SDMMAC (16 B)      = AES-CMAC(KSesSDMFileReadMAC, file[SDMMACInputOffset : SDMMACOffset])
+on the wire (8 B)  = SDMMAC bytes at indices 1,3,5,...,15  ("even-numbered" bytes)
 ```
 
-The verify pipeline `validateScan` (`ntag424.ts:116-148`) then:
+Our URL layout has no SDMENCFileData and `SDMMACInputOffset == SDMMACOffset`,
+so the MAC input is the **empty string** (RFC 4493 empty-message CMAC). The
+general range is implemented and tested with a non-empty vector.
 
-1. parses `picc_data` + `cmac` from the URL (`parseSunMessage`, `ntag424.ts:8-19`),
-2. AES-CBC-decrypts PICC, checks `0xC7` header, recovers UID + counter,
-3. checks decrypted UID equals the stored tag UID (`ntag424.ts:132`),
-4. verifies the truncated CMAC over the ciphertext (`ntag424.ts:137-138`),
-5. enforces strictly-increasing counter for replay protection
-   (`decrypted.counter <= lastCounter` → reject, `ntag424.ts:143`).
+## 5. Verify order (both stacks)
 
-For the encoder, an encoded tag is "correct" iff a `simulateTap` against it produces a
-URL that `validateScan` accepts with the same stored key, UID, and a `lastCounter`
-below the encoded counter.
+1. Parse `picc_data`/`e` (32 hex) and `cmac`/`c` (16 hex) → else `malformed`.
+2. Derive META(version) → decrypt → parse PICCDataTag → else `invalid_signature`.
+3. If the request names a chip, decrypted UID must match → else `uid_mismatch`
+   (surfaced to API callers as `invalid_signature`).
+4. Derive FILE(version, UID) → SDMMAC, **constant-time** compare → else `invalid_signature`.
+5. Counter must be strictly greater than `nfc_tags.sun_counter` → else `replay_detected`.
+6. Burn the counter with a conditional update
+   `.update({sun_counter: n}).eq('id', id).lt('sun_counter', n).select('id')`;
+   zero rows → `replay_detected` (a concurrent request won).
 
----
+The public scan identifies the chip by **one** META decrypt per live key
+version (current first): PICCData → UID → row. No trial decryption across tags.
 
-## Known Gap — this is NOT yet AN12196 SDM
+## 6. NDEF layout and SDM file settings
 
-The scheme above is the **Phase-1 simulator-parity** target. It diverges from genuine
-NTAG 424 DNA silicon (NXP AN12196 SDM / SUN) in at least these ways:
+URL: `https://<host>/verify/<token>?picc_data=<32 hex>&cmac=<16 hex>`.
+The encoder writes the file with ASCII `0` placeholders and computes the offsets
+from the template (`encode.py:188` `build_sdm_template`); offsets count from the
+start of the NDEF file including NLEN.
 
-1. **CMAC is computed directly with the file/app AES key over the ciphertext.**
-   Genuine NTAG 424 DNA derives an **SDM session MAC key** (`SesSDMFileReadMACKey`) via
-   a CMAC-based key-derivation from the file key and the SDMReadCtr, and then computes
-   the **SDMMAC** over the SDM-mirrored input (per the file's SDM config), not directly
-   over the encrypted PICC with the raw key. The simulator's "CMAC over ciphertext with
-   the raw key" is a stand-in.
+ChangeFileSettings cleartext body (`apdu.py` `sdm_file_settings_payload`):
 
-2. **PICCData encryption key.** Real silicon encrypts PICCData with an SDM-derived
-   session key (`SesSDMFileReadENCKey`) tied to the read counter, not the raw file key
-   under a fixed zero IV.
+| Field | Value | Meaning |
+|---|---|---|
+| FileOption | `40` | SDM on, CommMode Plain (any phone can read) |
+| AccessRights | `00 E0` | 0xE000 LSB first: Read=E (free), Write=K0, RW=K0, Change=K0 |
+| SDMOptions | `C1` | UID mirror, SDMReadCtr mirror, ASCII |
+| SDMAccessRights | `23 FF` | 0xFF23 LSB first: RFU=F, CtrRet=F, **MetaRead=K2**, FileRead=K3 |
+| PICCDataOffset | 3 B LE | present because MetaRead is a key (encrypted PICCData) |
+| SDMMACInputOffset | 3 B LE | == SDMMACOffset |
+| SDMMACOffset | 3 B LE | |
 
-3. **PICCDataTag header byte is fixed `0xC7`** here; on real silicon the leading byte is
-   a config-dependent tag indicating which fields are mirrored.
+S-NFC2 shipped `SDMMetaRead = 0xE` (plain UID/counter mirror); that is now
+rejected by the builder. Tag HQ decodes the same block from GetFileSettings and
+flags a plain mirror.
 
-4. **No session-key derivation, no SDMReadCtr-bound IV** — both encrypt and MAC reuse
-   the static per-tag AES-128 key.
+## 7. Golden vector #1 (AN12196, all-zero keys)
 
-**Implication for Phase 2 (real hardware).** When the encoder writes real silicon, the
-chip will emit AN12196-conformant SUN messages. The backend `validateScan` as written
-(`ntag424.ts:116`) will **not** validate those, because it implements the simplified
-scheme. Phase 2 therefore requires a coordinated change to BOTH:
+```
+e   = EF963FF7828658A599F3041510671E88
+PICCData = C7 04DE5F1EACC040 3D0000 DA5CF60941   -> UID 04DE5F1EACC040, ctr 61
+SV2 = 3CC30001008004DE5F1EACC0403D0000
+KSesSDMFileReadMAC = 3FB5F6E3A807A03D5E3570ACE393776F
+CMAC(empty)        = E194C7EE12D9F7EE8A65C8331B704386
+c   = 94EED9EE65337086
+```
 
-- the **encoder** — write SDM file settings (`ChangeFileSettings` with SDM enabled,
-  correct SDMReadCtr/PICCData/MAC mirror offsets), and
-- the backend **`validateScan` / `computeCmac`** — implement true AN12196 SDM session-key
-  derivation and SDMMAC verification.
+Reproduced byte for byte by OpenSSL, the backend and the encoder.
 
-This is a known, tracked gap, not a defect in the current code. The current code is
-internally consistent (encoder-side `simulateTap` ↔ verify-side `validateScan`) and is
-the correct Phase-1 target.
+## 8. Known gaps — closed / remaining
+
+| Former gap | Status |
+|---|---|
+| CMAC over ciphertext with the raw key | **Closed** — session MAC key from SV2, MAC over the SDM input range |
+| PICCData key / IV | **Closed** — SDMMetaReadKey, zero IV (old doc's session-ENC claim was wrong) |
+| Fixed `0xC7` header assert | **Closed** — PICCDataTag parsed |
+| First-8-bytes truncation | **Closed** — even-numbered bytes |
+| Non-constant-time compare | **Closed** |
+| Plain UID/ctr mirror in ChangeFileSettings | **Closed** — encrypted PICCData, explicit slots |
+
+Remaining (out of scope here): live EV2 secure channel for ChangeKey /
+ChangeFileSettings / WriteData (S-NFC2 Phase 2), LRP mode, SDMENCFileData.
