@@ -48,17 +48,17 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 S-DB1 (S-NFC3 migrations live) · S-NFC3.5 real AN12196 SDM with KMS-derived keys (deployed, KMS confirmed live) ·
 `public_tag_provenance` enumeration hole closed · `/replace` staff-only.
 
-## 🟢 NEXT SESSION — S-NFC2 Ph2 (physical encode), recommended
+## 🟢 IN PROGRESS — S-NFC2 Ph2 (physical encode). Code done 2026-10-02 (`2326035`); hardware run pending
 
-First real signed-tap end-to-end, and confirms the SDM file-settings bytes on silicon. **Launch with `amCode`.**
-Before/at session start:
-- [ ] **Encoder IAM identity** (Boss, console, ~10 min): an IAM user for the encoding Mac, MFA required, with
-      `kms:GenerateMac` + `kms:DescribeKey` on **both** `am-tag-sdm-staging` and `am-tag-admin-staging`. The admin key's
-      policy currently denies only the backend role, so this user is unaffected.
-- [ ] ACR1252U reader + a few blank plain NTAG 424 DNA chips on hand.
-- [ ] Encoder must refuse to re-personalise any UID already in `nfc_tags` as `RETIRED` (Locked: retired chips never reused).
-
-Alternative if hardware isn't ready: **S-NFC3-FE** (token frontend + staging frontend redeploy). Needs nothing from Boss.
+Encoder `personalise` + EV2 secure messaging (NXP-vector-pinned) + staff `GET /nfc/enroll/precheck/:tagUid`
+are on `dev`. Runbook: `tag-encoder/README.md` → "Physical encode". Fixed en route: SDMAccessRights byte swap.
+- [ ] **Boss: push `dev`** so App Runner deploys the precheck endpoint (the encoder fails closed without it).
+- [ ] **Encoder IAM identity** (Boss, console, ~10 min): role `am-tag-encoder-staging` + user `am-tag-encoder`
+      with MFA, from `tag-encoder/iam/*.json`; `~/.aws/config` profile `am-encoder` per the README.
+- [ ] Fill the staff-login 1Password item names in `tag-encoder/encoder.env.op`.
+- [ ] ACR1252U + blank plain NTAG 424 DNA chips; run the emulator rehearsal, then ONE real chip.
+- [ ] Phone tap → `tag-encoder … tapcheck --url …` → HTTP 200 on staging. Confirms SDM file-settings bytes on silicon.
+- [ ] Then the session-end Notion close-out (lesson: SDMAccessRights byte order; decision: audit ledger keys on tag id, not UID).
 
 ## 🟡 AFTER
 
