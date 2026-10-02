@@ -226,6 +226,47 @@ def parse_ndef(data: bytes) -> NdefSummary | None:
 
 
 # --- File settings / SDM-SUN ----------------------------------------------
+#
+# S-NFC3.5: the full SDM block is decoded (SDMOptions, SDMAccessRights and the
+# offsets), so Tag HQ can confirm a personalised chip mirrors ENCRYPTED
+# PICCData (SDMMetaRead = key 0..4) rather than a plain UID/counter (E).
+# Tag HQ holds no keys and does no SUN crypto — layout only.
+
+def _access_nibbles(two: bytes) -> dict[str, int]:
+    """AccessRights: 16 bits Read|Write|RW|Change (MSB->LSB), transmitted LSB first."""
+    v = int.from_bytes(two, "little")
+    return {"read": (v >> 12) & 0xF, "write": (v >> 8) & 0xF, "read_write": (v >> 4) & 0xF, "change": v & 0xF}
+
+
+@dataclass(frozen=True)
+class SdmSettings:
+    sdm_options: int
+    uid_mirror: bool
+    read_ctr_mirror: bool
+    read_ctr_limit: bool
+    enc_file_data: bool
+    ascii_encoding: bool
+    ctr_ret: int          # SDMCtrRet access nibble
+    meta_read: int        # SDMMetaRead: 0..4 key (encrypted PICCData) | E plain | F none
+    file_read: int        # SDMFileRead: 0..4 key (SDMMAC on) | F off
+    uid_offset: int | None = None
+    read_ctr_offset: int | None = None
+    picc_data_offset: int | None = None
+    mac_input_offset: int | None = None
+    enc_offset: int | None = None
+    enc_length: int | None = None
+    mac_offset: int | None = None
+    read_ctr_limit_value: int | None = None
+
+    @property
+    def picc_encrypted(self) -> bool:
+        return 0 <= self.meta_read <= 4
+
+    @property
+    def mac_enabled(self) -> bool:
+        return self.file_read != 0xF
+
+
 @dataclass(frozen=True)
 class FileSettings:
     file_no: int
@@ -235,13 +276,72 @@ class FileSettings:
     sdm_enabled: bool
     access_rights_hex: str
     notes: list[str] = field(default_factory=list)
+    access_rights: dict[str, int] = field(default_factory=dict)
+    file_size: int | None = None
+    sdm: SdmSettings | None = None
 
 
 _COMM_MODE = {0x00: "Plain", 0x01: "MACed", 0x03: "Full (encrypted)"}
 
 
+def parse_sdm_settings(block: bytes) -> SdmSettings | None:
+    """Decode SDMOptions || SDMAccessRights || offsets (datasheet field-presence rules).
+
+    Offsets present: UIDOffset if UID mirror and MetaRead == E;
+    SDMReadCtrOffset if ctr mirror and MetaRead == E; PICCDataOffset if
+    MetaRead is a key (0..4); SDMMACInputOffset (+ SDMENCOffset/Length when
+    SDMENCFileData) + SDMMACOffset if FileRead != F; SDMReadCtrLimit if bit5.
+    Returns None when the block is truncated.
+    """
+    if len(block) < 3:
+        return None
+    opts = block[0]
+    ar = int.from_bytes(block[1:3], "little")
+    ctr_ret, meta_read, file_read = (ar >> 8) & 0xF, (ar >> 4) & 0xF, ar & 0xF
+    uid_m, ctr_m = bool(opts & 0x80), bool(opts & 0x40)
+    limit, enc = bool(opts & 0x20), bool(opts & 0x10)
+    pos = 3
+    vals: dict[str, int] = {}
+
+    def take(name: str) -> bool:
+        nonlocal pos
+        if pos + 3 > len(block):
+            return False
+        vals[name] = int.from_bytes(block[pos : pos + 3], "little")
+        pos += 3
+        return True
+
+    wanted: list[str] = []
+    if meta_read == 0xE:
+        if uid_m:
+            wanted.append("uid_offset")
+        if ctr_m:
+            wanted.append("read_ctr_offset")
+    elif 0 <= meta_read <= 4:
+        wanted.append("picc_data_offset")
+    if file_read != 0xF:
+        wanted.append("mac_input_offset")
+        if enc:
+            wanted += ["enc_offset", "enc_length"]
+        wanted.append("mac_offset")
+    if limit:
+        wanted.append("read_ctr_limit_value")
+    for name in wanted:
+        if not take(name):
+            return None
+    return SdmSettings(
+        sdm_options=opts, uid_mirror=uid_m, read_ctr_mirror=ctr_m, read_ctr_limit=limit,
+        enc_file_data=enc, ascii_encoding=bool(opts & 0x01),
+        ctr_ret=ctr_ret, meta_read=meta_read, file_read=file_read, **vals,
+    )
+
+
 def parse_file_settings(file_no: int, data: bytes) -> FileSettings | None:
-    """Parse a GetFileSettings response. SDM flag = bit 6 of the FileOption byte."""
+    """Parse a GetFileSettings response.
+
+    FileType(1) FileOption(1) AccessRights(2) [FileSize(3) [SDM block]].
+    SDM flag = bit 6 of FileOption.
+    """
     if len(data) < 4:
         return None
     file_type = data[0]
@@ -249,13 +349,50 @@ def parse_file_settings(file_no: int, data: bytes) -> FileSettings | None:
     comm = _COMM_MODE.get(file_option & 0x03, f"0x{file_option & 0x03:02X}")
     sdm_enabled = bool(file_option & 0x40)
     access_rights = data[2:4]
+    file_size = int.from_bytes(data[4:7], "little") if len(data) >= 7 else None
     notes: list[str] = []
+    sdm: SdmSettings | None = None
     if sdm_enabled:
         notes.append("SDM/SUN mirroring is ENABLED on this file")
+        if len(data) > 7:
+            sdm = parse_sdm_settings(data[7:])
+            if sdm is None:
+                notes.append("SDM settings block is truncated")
+            elif sdm.meta_read == 0xE:
+                notes.append("SDM mirrors UID/counter in PLAIN text (SDMMetaRead = E) — not AN12196 encrypted PICCData")
+            elif sdm.picc_encrypted:
+                notes.append(f"SDM mirrors ENCRYPTED PICCData under key {sdm.meta_read}")
+            if sdm is not None and sdm.mac_enabled:
+                notes.append(f"SDMMAC enabled under key {sdm.file_read}")
     return FileSettings(
         file_no=file_no, raw=data, file_type=file_type, comm_mode=comm,
         sdm_enabled=sdm_enabled, access_rights_hex=access_rights.hex().upper(), notes=notes,
+        access_rights=_access_nibbles(access_rights), file_size=file_size, sdm=sdm,
     )
+
+
+# --- PICCDataTag (AN12196) --------------------------------------------------
+@dataclass(frozen=True)
+class PiccDataTag:
+    uid_mirrored: bool
+    ctr_mirrored: bool
+    uid_length: int
+
+    @property
+    def acceptable(self) -> bool:
+        """What our backend accepts: UID (7 bytes) AND SDMReadCtr mirrored."""
+        return self.uid_mirrored and self.ctr_mirrored and self.uid_length == 7
+
+
+def parse_picc_data_tag(byte: int) -> PiccDataTag:
+    """Decode the first byte of decrypted PICCData: bit7 UID, bit6 ctr, bits3..0 UID length.
+
+    Tag HQ never decrypts (no keys); this decodes a byte supplied by an operator
+    or by the backend's diagnostics.
+    """
+    if not (0 <= byte <= 0xFF):
+        raise ValueError("PICCDataTag is one byte")
+    return PiccDataTag(bool(byte & 0x80), bool(byte & 0x40), byte & 0x0F)
 
 
 # --- Key versions / ship state --------------------------------------------
