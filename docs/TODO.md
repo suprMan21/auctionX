@@ -98,6 +98,10 @@ S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section
 $2.50) → S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token
 sale) → S-SEC2 (external pentest).
 
+**Production KMS keys (decide at launch):** create a `-prod` pair (`am-tag-sdm-prod`, `am-tag-admin-prod`),
+never shared with staging. Decide **multi-Region vs single-Region at creation**, because it cannot be changed later and chip
+keys cannot be re-derived without the master. Multi-Region is needed if prod must survive a us-east-2 outage.
+
 **S-2FA (MFA enrollment + AAL2 step-up)** has no fixed slot but gates `FEATURE_REQUIRE_2FA` in
 production, so it must land before any real token sale.
 
