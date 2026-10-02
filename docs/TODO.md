@@ -107,6 +107,17 @@ production, so it must land before any real token sale.
 
 ---
 
+## 🟠 STAGING FRONTEND IS STALE (deferred by Boss 2026-10-02)
+
+CloudFront still serves the **2026-05-30 marketplace build**. Since S-ISO1 parked the marketplace
+(2026-09-18), every API it calls returns 404, so the site loads but shows nothing. The current `dev`
+frontend builds cleanly with the marketplace hidden. Deploy when ready (Boss chose to wait):
+```bash
+cd frontend && npm run build && aws s3 sync dist/ s3://auctionx-frontend-staging --profile auctionx --delete \
+  && aws cloudfront create-invalidation --profile auctionx --distribution-id E3JOPXHI8DB4BE --paths '/*'
+```
+Natural moment: alongside S-NFC3-FE.
+
 ## 🔵 HOUSEKEEPING
 
 - [ ] **Route Registry is 6 months stale** (v1.1, 2026-03-07) yet an Every-Session lesson names it the
