@@ -47,7 +47,7 @@ def test_sdm_payload_exact_byte_layout():
         "40"        # FileOption: SDM enabled, CommMode Plain
         "00E0"      # AccessRights 0xE000 LSB first: Read=E Write=K0 RW=K0 Change=K0
         "C1"        # SDMOptions: UID mirror | ReadCtr mirror | ASCII
-        "23FF"      # SDMAccessRights 0xFF23 LSB first: RFU F, CtrRet F, MetaRead K2, FileRead K3
+        "FF23"      # SDMAccessRights 0x23FF LSB first: RFU F | CtrRet F, then MetaRead K2 | FileRead K3
         "200000"    # PICCDataOffset (encrypted PICCData -> no UIDOffset/ReadCtrOffset)
         "430000"    # SDMMACInputOffset
         "430000"    # SDMMACOffset (== input offset -> empty MAC input)
@@ -56,7 +56,7 @@ def test_sdm_payload_exact_byte_layout():
 
 def test_sdm_meta_read_is_a_key_not_plain_mirror():
     body = apdu.sdm_file_settings_payload(picc_data_offset=1, sdm_mac_input_offset=2, sdm_mac_offset=2)
-    meta_read = (int.from_bytes(body[4:6], "little") >> 4) & 0xF
+    meta_read = (int.from_bytes(body[4:6], "little") >> 12) & 0xF
     assert meta_read == apdu.SLOT_SDM_META_READ == 2
     with pytest.raises(ValueError):  # 0x0E = plain UID/ctr mirror, the S-NFC2 bug
         apdu.sdm_file_settings_payload(
@@ -69,8 +69,9 @@ def test_sdm_meta_read_is_a_key_not_plain_mirror():
 def test_access_rights_packing():
     assert apdu.pack_access_rights(0xE, 0x0, 0x0, 0x0) == bytes.fromhex("00E0")
     assert apdu.pack_access_rights(0x1, 0x2, 0x3, 0x4) == bytes.fromhex("3412")
-    assert apdu.pack_sdm_access_rights(2, 3) == bytes.fromhex("23FF")
-    assert apdu.pack_sdm_access_rights(2, 3, ctr_ret=1) == bytes.fromhex("23F1")
+    assert apdu.pack_sdm_access_rights(2, 3) == bytes.fromhex("FF23")
+    # AN12196 Rev 1.8 Table 12/19: MetaRead 2, FileRead 1, CtrRet 1 -> "F1 21"
+    assert apdu.pack_sdm_access_rights(2, 1, ctr_ret=1) == bytes.fromhex("F121")
     with pytest.raises(ValueError):
         apdu.pack_access_rights(0x10, 0, 0, 0)
 
@@ -117,8 +118,10 @@ def test_encode_sequence_shape_and_live_flags():
     # K2 (META) and K3 (FILE) change before K0, and K0 (the auth key) changes last.
     change_keys = [n for n in names if n.startswith("ChangeKey")]
     assert change_keys == ["ChangeKey K2 (META)", "ChangeKey K3 (FILE)", "ChangeKey K0 (APP_MASTER) — last"]
-    assert names.index(change_keys[-1]) > names.index(next(n for n in names if "WriteData" in n))
-    # Auth + 3 ChangeKey + ChangeFileSettings + WriteData need a live channel.
+    # S-NFC2 Ph2: the NDEF write runs AFTER K0 changes, under the new K0 (proves K0 took).
+    assert names.index(change_keys[-1]) < names.index(next(n for n in names if "WriteData" in n))
+    assert names.index(next(n for n in names if "ChangeFileSettings" in n)) < names.index(change_keys[0])
+    # Auth + ChangeFileSettings + 3 ChangeKey + (re-auth + WriteData) run in a secure session.
     live = [s for s in seq if s.get("requires_live_channel")]
     assert len(live) == 6
 

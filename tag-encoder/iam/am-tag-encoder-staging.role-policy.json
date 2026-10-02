@@ -1,0 +1,14 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AmTagEncoderDeriveChipKeys",
+      "Effect": "Allow",
+      "Action": ["kms:GenerateMac", "kms:DescribeKey"],
+      "Resource": [
+        "arn:aws:kms:us-east-2:904183418667:key/9eba0686-6feb-4d96-97c8-17ea04313416",
+        "arn:aws:kms:us-east-2:904183418667:key/37dedbc1-ece2-4366-b90e-7f3503c7243d"
+      ]
+    }
+  ]
+}

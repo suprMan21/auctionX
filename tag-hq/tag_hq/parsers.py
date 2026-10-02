@@ -297,7 +297,8 @@ def parse_sdm_settings(block: bytes) -> SdmSettings | None:
         return None
     opts = block[0]
     ar = int.from_bytes(block[1:3], "little")
-    ctr_ret, meta_read, file_read = (ar >> 8) & 0xF, (ar >> 4) & 0xF, ar & 0xF
+    # [15:12] MetaRead | [11:8] FileRead | [7:4] RFU | [3:0] CtrRet (AN12196 Table 12: "F1 21")
+    ctr_ret, meta_read, file_read = ar & 0xF, (ar >> 12) & 0xF, (ar >> 8) & 0xF
     uid_m, ctr_m = bool(opts & 0x80), bool(opts & 0x40)
     limit, enc = bool(opts & 0x20), bool(opts & 0x10)
     pos = 3

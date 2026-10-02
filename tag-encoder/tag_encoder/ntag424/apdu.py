@@ -1,34 +1,29 @@
 """NTAG 424 DNA WRITE/ENCODE C-APDU builder (S-NFC2 Lane A).
 
 This is the write counterpart to tag-hq's read-only `tag_hq/apdu.py`. It builds
-the byte sequences for the full personalization/encode flow per NXP AN12196 /
-NT4H2421Gx datasheet EV2 secure messaging:
+the PLAIN command structures and cleartext bodies for personalisation per NXP
+AN12196 / NT4H2421Gx; the live EV2 secure messaging that wraps them is in
+`session.py` (pinned to AN12196's worked examples) and the physical sequence
+is driven by `tag_encoder/personalise.py`:
 
-    1. ISO SELECT NDEF application (D2760000850101)         [plain]
-    2. AuthenticateEV2First (AESAuth, key 0)                [starts secure channel]
-    3. ChangeKey K2 (META), K3 (FILE)                       [Full / CMAC session] *
-    4. ChangeFileSettings (SDM: encrypted PICCData under    [Full / CMAC session] *
-       K2 + SDMMAC under K3 into the URL template)
-    5. WriteData (NDEF file: NLEN || URI record)            [Full / CMAC session] *
-    6. ChangeKey K0 (APP_MASTER) — last                     [Full / CMAC session] *
-    7. ISO SELECT NDEF file + ReadBinary (read-back verify) [plain]
+    1. ISO SELECT NDEF application (D2760000850101)             [plain]
+    2. GetKeyVersion K0/K2/K3 (factory 0x00 vs ours)             [plain]
+    3. AuthenticateEV2First (key 0, factory)                    [starts session]
+    4. ChangeFileSettings (SDM: encrypted PICCData under K2 +    [Full]
+       SDMMAC under K3 into the URL template)
+    5. ChangeKey K2 (META), K3 (FILE)                           [Full, case 1]
+    6. ChangeKey K0 (APP_MASTER) — LAST, ends the session       [Full, case 2]
+    7. AuthenticateEV2First (key 0, NEW) + WriteData NDEF       [Plain file]
+    8. GetFileSettings + ISO SELECT NDEF file + ReadBinary      [plain, read-back verify]
 
-  S-NFC3.5: key slot map and SDM settings layout below; keys are passed to
-  nothing printable — the dry-run sequence carries redacted layouts only.
-
-  * Steps 2-5 require a LIVE EV2 secure channel: AuthenticateEV2First does an
-    AES challenge/response that yields session keys (SesAuthENCKey /
-    SesAuthMACKey); ChangeKey/ChangeFileSettings/WriteData payloads must then be
-    encrypted + CMAC'd under those session keys with a per-command counter
-    (CmdCtr). Phase 1 (SIM-ONLY) builds the PLAINTEXT command structures and the
-    wrapping skeleton; it does NOT compute live session crypto. Each function
-    that needs a live channel is marked `REQUIRES_LIVE_CHANNEL` and raises if
-    asked to emit a wire-ready secured APDU. See SIM_PARITY.md.
+Keys are passed to nothing printable — the dry-run sequence carries redacted
+layouts only. The three wire-ready "secured" helpers below still raise
+`RequiresLiveChannel`: a secured APDU only exists inside a live `Session`.
 
 APDUs are `list[int]` (pyscard transmit() wire format), matching tag-hq.
 
-Sources: AN12196 Rev 2.0 (§3 AuthenticateEV2First, §4 ChangeKey,
-ChangeFileSettings/SDM, WriteData), NT4H2421Gx datasheet Rev 3.0 §10/§11.
+Sources: AN12196 Rev 1.8 (§5 secure messaging, §6 personalisation example,
+Tables 14/19/26/27), NT4H2421Gx datasheet Rev 3.0 §10/§11.
 """
 
 from __future__ import annotations
@@ -93,7 +88,12 @@ def pack_access_rights(read: int, write: int, read_write: int, change: int) -> b
 
 
 def pack_sdm_access_rights(meta_read: int, file_read: int, ctr_ret: int = ACCESS_NEVER) -> bytes:
-    """SDMAccessRights, 16 bits = RFU(15..12)=F | SDMCtrRet(11..8) | SDMMetaRead(7..4) | SDMFileRead(3..0), LSB first.
+    """SDMAccessRights, 16 bits = SDMMetaRead(15..12) | SDMFileRead(11..8) | RFU(7..4)=F | SDMCtrRet(3..0), LSB first.
+
+    On the wire: byte0 = RFU|CtrRet, byte1 = MetaRead|FileRead. Pinned by
+    AN12196 Rev 1.8 Table 12/19 (MetaRead 2, FileRead 1, CtrRet 1 -> "F1 21").
+    S-NFC3.5 had this byte-swapped ("23 FF"); caught in S-NFC2 Ph2 before any
+    chip was written.
 
     SDMMetaRead 0..4 = encrypted PICCData under that key; E = plain UID/ctr
     mirror (what S-NFC2 shipped — rejected for S-NFC3.5); F = no mirror.
@@ -101,7 +101,7 @@ def pack_sdm_access_rights(meta_read: int, file_read: int, ctr_ret: int = ACCESS
     for n in (meta_read, file_read, ctr_ret):
         if not (0 <= n <= 0xF):
             raise ValueError("access nibble must be 0..15")
-    value = (0xF << 12) | (ctr_ret << 8) | (meta_read << 4) | file_read
+    value = (meta_read << 12) | (file_read << 8) | (0xF << 4) | ctr_ret
     return value.to_bytes(2, "little")
 
 
@@ -161,9 +161,8 @@ def change_key_plain_payload(key_no: int, new_key: bytes, key_version: int = 0x0
 def change_key(key_no: int, new_key: bytes, key_version: int = 0x01) -> list[int]:
     """REQUIRES_LIVE_CHANNEL — wire-ready ChangeKey cannot be built in SIM mode."""
     raise RequiresLiveChannel(
-        "ChangeKey (0xC4) requires a live EV2 session: payload must be encrypted "
-        "under SesAuthENCKey + CMAC'd under SesAuthMACKey (Phase 2). Use "
-        "change_key_plain_payload() to inspect the cleartext body."
+        "ChangeKey (0xC4) requires a live EV2 session: build it with "
+        "session.Session.wrap_full() over session.change_key_plaintext()."
     )
 
 
@@ -187,7 +186,7 @@ def sdm_file_settings_payload(
         AccessRights     2B  Read=E (free) Write=K0 RW=K0 Change=K0 -> 0xE000, LSB first: 00 E0
         SDMOptions       1B  bit7 UID mirror | bit6 SDMReadCtr mirror | bit0 ASCII
                              (no SDMENCFileData, no ReadCtrLimit)            -> 0xC1
-        SDMAccessRights  2B  RFU=F | CtrRet=F | MetaRead=K2 | FileRead=K3 -> 0xFF23, LSB first: 23 FF
+        SDMAccessRights  2B  MetaRead=K2 | FileRead=K3 | RFU=F | CtrRet=F -> 0x23FF, LSB first: FF 23
         PICCDataOffset   3B LE  (present because MetaRead is a key, 0..4: ENCRYPTED
                                  PICCData. No UIDOffset / SDMReadCtrOffset — those
                                  exist only for the plain mirror, MetaRead = E)
@@ -230,9 +229,8 @@ def sdm_file_settings_payload(
 def change_file_settings(file_no: int, sdm_payload: bytes) -> list[int]:
     """REQUIRES_LIVE_CHANNEL — wire-ready ChangeFileSettings needs a session."""
     raise RequiresLiveChannel(
-        "ChangeFileSettings (0x5F) requires a live EV2 session (encrypt + CMAC "
-        "under session keys, Phase 2). Use sdm_file_settings_payload() to inspect "
-        "the cleartext body."
+        "ChangeFileSettings (0x5F) requires a live EV2 session: build it with "
+        "session.Session.wrap_full() over sdm_file_settings_payload()."
     )
 
 
@@ -260,10 +258,23 @@ def write_data_plain(file_no: int, offset: int, data: bytes) -> list[int]:
 def write_data(file_no: int, offset: int, data: bytes) -> list[int]:
     """REQUIRES_LIVE_CHANNEL for a MACed/Full file. Use write_data_plain otherwise."""
     raise RequiresLiveChannel(
-        "WriteData (0x8D) on a MACed/Full SDM file requires a live EV2 session "
-        "(CMAC/encrypt under session keys, Phase 2). For a Plain-mode file use "
-        "write_data_plain()."
+        "WriteData (0x8D) on a MACed/Full file requires a live EV2 session. Our "
+        "NDEF file is CommMode Plain: use write_data_plain() inside the session."
     )
+
+
+# --- Key state (plain, unauthenticated) ------------------------------------
+
+INS_GET_KEY_VERSION = 0x64
+
+
+def get_key_version(key_no: int) -> list[int]:
+    """GetKeyVersion (Cmd 0x64): returns the key VERSION byte only, never key material.
+
+    Factory keys are version 0x00; the encoder writes the KDF version (1..255),
+    which is how a re-run tells a factory chip from one it already keyed.
+    """
+    return [CLA_NATIVE, INS_GET_KEY_VERSION, 0x00, 0x00, 0x01, key_no & 0xFF, 0x00]
 
 
 # --- Step 6: read-back verify (plain) -------------------------------------
@@ -289,33 +300,25 @@ def encode_apdu_sequence(
     key_version: int = 0x01,
     ndef_file_no: int = FILE_NDEF,
 ) -> list[dict]:
-    """Describe the full personalisation APDU sequence for dry-run output.
+    """Describe the personalisation sequence personalise.py runs, for dry-run output.
 
-    S-NFC3.5: this takes NO key material. ChangeKey steps describe their body
-    layout with the key bytes REDACTED — derived keys are never printed (the
-    live Phase-2 path derives them in memory immediately before the command).
-
-    Order: change the non-auth keys (K2, K3) while authenticated with K0,
-    write the SDM file settings and NDEF template, and change K0 LAST (the
-    auth key itself), so a failure midway never strands an unknown K0.
+    Takes NO key material: ChangeKey steps describe their body layout with the
+    key bytes REDACTED. Order matches `personalise.py`: SDM settings and the
+    non-auth keys (K2, K3) first, K0 LAST (so an abort never strands an unknown
+    K0), then the NDEF template under the new K0, then a plain read-back.
     """
     redacted = "NewKey(16 B, derived in memory — never printed)"
     steps: list[dict] = [
         {"name": "SELECT NDEF application", "apdu": select_ndef_app(), "requires_live_channel": False},
-        {
-            "name": f"AuthenticateEV2First (key {KEY_APP_MASTER}) — cmd1",
-            "apdu": authenticate_ev2_first_cmd1(KEY_APP_MASTER),
-            "note": "card replies E(RndB)+91AF; mutual-auth response is Phase 2 (live key)",
-            "requires_live_channel": True,
-        },
     ]
-    for slot in (SLOT_SDM_META_READ, SLOT_SDM_FILE_READ):
-        steps.append({
-            "name": f"ChangeKey K{slot} ({KEY_SLOT_ROLES[slot]})",
-            "cleartext_layout": f"({redacted} XOR OldKey) || KeyVersion({key_version:02X}) || CRC32(NewKey)",
-            "note": "non-auth key: XOR with old key + CRC32NK; encrypt under SesAuthENCKey + CMAC (Phase 2)",
-            "requires_live_channel": True,
-        })
+    for k in (KEY_APP_MASTER, SLOT_SDM_META_READ, SLOT_SDM_FILE_READ):
+        steps.append({"name": f"GetKeyVersion K{k}", "apdu": get_key_version(k), "requires_live_channel": False})
+    steps.append({
+        "name": f"AuthenticateEV2First (key {KEY_APP_MASTER}, factory) — part 1",
+        "apdu": authenticate_ev2_first_cmd1(KEY_APP_MASTER),
+        "note": "card replies E(K0, RndB) + 91AF; part 2 = E(K0, RndA || RndB<<8) (session.auth_part2)",
+        "requires_live_channel": True,
+    })
     sdm_payload = sdm_file_settings_payload(
         picc_data_offset=picc_data_offset,
         sdm_mac_input_offset=sdm_mac_input_offset,
@@ -324,21 +327,33 @@ def encode_apdu_sequence(
     steps.append({
         "name": "ChangeFileSettings (SDM: encrypted PICCData K2 + SDMMAC K3)",
         "cleartext_body_hex": sdm_payload.hex().upper(),
-        "note": "encrypt + CMAC under session keys (Phase 2). Contains offsets only — no key material.",
+        "note": "CommMode.Full under the session keys. Offsets only — no key material.",
         "requires_live_channel": True,
     })
-    steps.append({
-        "name": f"WriteData (NDEF file {ndef_file_no}, {len(ndef_bytes)}B template)",
-        "plain_framed_apdu": write_data_plain(ndef_file_no, 0, ndef_bytes),
-        "note": "Plain framing shown; write access is K0 after personalisation (Phase 2)",
-        "requires_live_channel": True,
-    })
+    for slot in (SLOT_SDM_META_READ, SLOT_SDM_FILE_READ):
+        steps.append({
+            "name": f"ChangeKey K{slot} ({KEY_SLOT_ROLES[slot]})",
+            "cleartext_layout": f"({redacted} XOR OldKey) || KeyVersion({key_version:02X}) || CRC32NK(NewKey)",
+            "note": "case 1 (non-auth key); CommMode.Full; skipped if GetKeyVersion shows it already set",
+            "requires_live_channel": True,
+        })
     steps.append({
         "name": f"ChangeKey K{SLOT_APP_MASTER} (APP_MASTER) — last",
         "cleartext_layout": f"{redacted} || KeyVersion({key_version:02X})",
-        "note": "auth key: no XOR/CRC; session ends after this command (Phase 2)",
+        "note": "case 2 (auth key): no XOR/CRC, no response MAC; the session ends here",
         "requires_live_channel": True,
     })
+    steps.append({
+        "name": f"AuthenticateEV2First (key {KEY_APP_MASTER}, NEW) + WriteData (NDEF file {ndef_file_no}, "
+                f"{len(ndef_bytes)}B template)",
+        "plain_framed_apdu": write_data_plain(ndef_file_no, 0, ndef_bytes),
+        "note": "NDEF file is CommMode Plain, Write=K0: plain framing inside the new-K0 session (proves K0)",
+        "requires_live_channel": True,
+    })
+    steps.append({"name": "SELECT NDEF application (drops auth)", "apdu": select_ndef_app(), "requires_live_channel": False})
+    steps.append({"name": "GetFileSettings (read-back)", "apdu": [CLA_NATIVE, 0xF5, 0x00, 0x00, 0x01, ndef_file_no, 0x00],
+                  "requires_live_channel": False})
     steps.append({"name": "SELECT NDEF file (read-back)", "apdu": select_ndef_file(), "requires_live_channel": False})
-    steps.append({"name": "ReadBinary (read-back verify)", "apdu": iso_read_binary(0, 0x00), "requires_live_channel": False})
+    steps.append({"name": "ReadBinary (read-back: SUN must verify before enroll)",
+                  "apdu": iso_read_binary(0, len(ndef_bytes)), "requires_live_channel": False})
     return steps

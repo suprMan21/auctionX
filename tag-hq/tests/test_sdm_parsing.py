@@ -41,9 +41,9 @@ _HEAD = bytes.fromhex("004000E0000100")
 
 
 def test_encrypted_picc_layout_as_the_encoder_writes_it():
-    # SDMOptions C1 | SDMAccessRights 0xFF23 LSB-first "23FF" (CtrRet F, Meta K2, File K3)
+    # SDMOptions C1 | SDMAccessRights 0x23FF LSB-first "FF23" (CtrRet F, Meta K2, File K3)
     # PICCDataOffset 0x20 | MACInputOffset 0x43 | MACOffset 0x43
-    data = _HEAD + bytes.fromhex("C1" "23FF" "200000" "430000" "430000")
+    data = _HEAD + bytes.fromhex("C1" "FF23" "200000" "430000" "430000")
     fs = parsers.parse_file_settings(0x02, data)
     assert fs.sdm_enabled and fs.file_size == 256
     assert fs.access_rights == {"read": 0xE, "write": 0, "read_write": 0, "change": 0}
@@ -61,7 +61,7 @@ def test_encrypted_picc_layout_as_the_encoder_writes_it():
 
 def test_plain_mirror_layout_is_flagged():
     # The S-NFC2 shape: MetaRead E -> UIDOffset + SDMReadCtrOffset, no PICCDataOffset.
-    data = _HEAD + bytes.fromhex("C1" "E2FF" "100000" "200000" "300000" "300000")
+    data = _HEAD + bytes.fromhex("C1" "FFE2" "100000" "200000" "300000" "300000")
     fs = parsers.parse_file_settings(0x02, data)
     s = fs.sdm
     assert s is not None and not s.picc_encrypted
@@ -71,21 +71,21 @@ def test_plain_mirror_layout_is_flagged():
 
 
 def test_enc_file_data_and_ctr_limit_fields():
-    # SDMOptions F1 (+ReadCtrLimit +ENCFileData) | 0xFF23 | PICC | MACInput | ENCOffset | ENCLength | MAC
-    data = _HEAD + bytes.fromhex("F1" "23FF" "200000" "430000" "500000" "200000" "700000" "640000")
+    # SDMOptions F1 (+ReadCtrLimit +ENCFileData) | 0x23FF | PICC | MACInput | ENCOffset | ENCLength | MAC
+    data = _HEAD + bytes.fromhex("F1" "FF23" "200000" "430000" "500000" "200000" "700000" "640000")
     s = parsers.parse_file_settings(0x02, data).sdm
     assert s.enc_file_data and s.read_ctr_limit
     assert (s.enc_offset, s.enc_length, s.mac_offset, s.read_ctr_limit_value) == (0x50, 0x20, 0x70, 100)
 
 
 def test_mac_off_has_no_mac_offsets():
-    data = _HEAD + bytes.fromhex("C1" "2FFF" "200000")  # 0xFF2F: Meta K2, File F (MAC off)
+    data = _HEAD + bytes.fromhex("C1" "FF2F" "200000")  # 0x2FFF: Meta K2, File F (MAC off)
     s = parsers.parse_file_settings(0x02, data).sdm
     assert not s.mac_enabled and s.mac_offset is None and s.picc_data_offset == 0x20
 
 
 def test_truncated_sdm_block_is_reported_not_raised():
-    data = _HEAD + bytes.fromhex("C1" "23FF" "2000")
+    data = _HEAD + bytes.fromhex("C1" "FF23" "2000")
     fs = parsers.parse_file_settings(0x02, data)
     assert fs.sdm is None
     assert any("truncated" in n for n in fs.notes)
@@ -94,3 +94,15 @@ def test_truncated_sdm_block_is_reported_not_raised():
 def test_legacy_short_response_still_parses():
     fs = parsers.parse_file_settings(0x02, bytes.fromhex("004000E0"))
     assert fs.sdm_enabled and fs.sdm is None and fs.file_size is None
+
+
+def test_an12196_table12_get_file_settings():
+    """GetFileSettings image built from NXP's ChangeFileSettings body (AN12196 Rev 1.8 Table 19,
+    "4000E0C1F121200000430000430000"): SDMAccessRights wire "F1 21" = MetaRead 2, FileRead 1,
+    CtrRet 1. Pins the byte order independently of our encoder."""
+    fs = parsers.parse_file_settings(0x02, bytes.fromhex("004000E0000100C1F121200000430000430000"))
+    s = fs.sdm
+    assert s is not None
+    assert (s.meta_read, s.file_read, s.ctr_ret) == (2, 1, 1)
+    assert s.picc_encrypted and s.picc_data_offset == 0x20
+    assert s.mac_input_offset == s.mac_offset == 0x43

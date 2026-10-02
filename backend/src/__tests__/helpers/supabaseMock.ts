@@ -37,6 +37,8 @@ const matches = (row: Row, filters: Filter[]): boolean =>
 export interface MockHooks {
   /** Runs immediately before an update is applied (after filters are set). */
   beforeUpdate?: (table: string, patch: Row) => void;
+  /** Return true to make a read on `table` fail like a PostgREST error. */
+  failRead?: (table: string) => boolean;
 }
 
 let idCounter = 0;
@@ -133,6 +135,10 @@ class QueryBuilder {
     }
 
     if (this.mode === 'update') this.hooks.beforeUpdate?.(this.table, this.patch);
+
+    if (this.mode !== 'update' && this.hooks.failRead?.(this.table)) {
+      return { data: null, error: { message: 'simulated read failure' } };
+    }
 
     const hits = rows.filter((r) => matches(r, this.filters));
 

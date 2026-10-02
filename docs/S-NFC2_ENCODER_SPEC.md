@@ -1,5 +1,13 @@
 # S-NFC2 — NTAG 424 DNA Encoder Specification (Phase 1: Simulator-Parity)
 
+> **Status 2026-10-02 — superseded in part.** The §8 hardware gate is CLEARED
+> (GetTTStatus 91 1C on 8/8 samples; supplier order code waived — Decisions DB).
+> S-NFC3.5 replaced the Phase-1 simplified crypto with real AN12196 SDM.
+> **Phase 2 is implemented** (`tag-encoder/tag_encoder/personalise.py`,
+> `ntag424/session.py`); the sequence actually run is in `tag-encoder/README.md`
+> ("Physical encode"). Where this spec's §5 order differs (NDEF is now written
+> AFTER K0 changes, under the new K0), the README is authoritative.
+
 > **Lane F of S-NFC2.** This is the spec for the tag *encoder* — the station that
 > personalizes blank NTAG 424 DNA tags so a tap produces a SUN URL the AuctionX
 > backend `validateScan` accepts. It is derived from the existing simulator/verify code
