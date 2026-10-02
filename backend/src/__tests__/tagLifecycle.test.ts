@@ -122,10 +122,10 @@ beforeEach(async () => {
     ownership_proofs: [],
     reissue_requests: [],
     users: [
-      { id: OWNER, role: 'user', email: 'owner@example.com', country: 'US' },
-      { id: BUYER, role: 'user', email: 'buyer@example.com', country: 'US' },
-      { id: STRANGER, role: 'user', email: 'stranger@example.com', country: 'US' },
-      { id: STAFF, role: 'admin', email: 'staff@example.com', country: 'US' },
+      { id: OWNER, role: 'user', email: 'owner@example.com', billing_country: 'US' },
+      { id: BUYER, role: 'user', email: 'buyer@example.com', billing_country: 'US' },
+      { id: STRANGER, role: 'user', email: 'stranger@example.com', billing_country: 'US' },
+      { id: STAFF, role: 'admin', email: 'staff@example.com', billing_country: 'US' },
     ],
   };
 });

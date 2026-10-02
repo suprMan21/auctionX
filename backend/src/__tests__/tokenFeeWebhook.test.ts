@@ -90,8 +90,8 @@ beforeEach(() => {
       status: 'current', owner_id: OWNER,
     }],
     users: [
-      { id: OWNER, role: 'user', email: 'owner@example.com', country: 'US' },
-      { id: BUYER, role: 'user', email: 'buyer@example.com', country: 'US' },
+      { id: OWNER, role: 'user', email: 'owner@example.com', billing_country: 'US' },
+      { id: BUYER, role: 'user', email: 'buyer@example.com', billing_country: 'US' },
     ],
   };
 });

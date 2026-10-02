@@ -250,8 +250,15 @@ const billingCountryFor = async (
   supabase: SupabaseClient,
   userId: string,
 ): Promise<string | null> => {
-  const { data } = await supabase.from('users').select('country').eq('id', userId).maybeSingle();
-  return (data?.country as string | undefined) ?? null;
+  // `users.billing_country` (added in 20260919000002). NOT `users.country` —
+  // no such column exists. A missing value means charge the USD list price.
+  const { data } = await supabase
+    .from('users')
+    .select('billing_country')
+    .eq('id', userId)
+    .maybeSingle();
+
+  return (data?.billing_country as string | undefined) ?? null;
 };
 
 // ── POST /api/v1/nfc/enroll ─────────────────────────────────────────────────

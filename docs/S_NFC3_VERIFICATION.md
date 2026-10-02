@@ -13,15 +13,15 @@ Scope as confirmed with Boss: **backend + tests only.** Frontend is a separate s
 
 ```
 backend   npx tsc --noEmit       0 errors
-backend   npx vitest run         15 files · 247 passed · 21 skipped
+backend   npx vitest run         16 files · 252 passed · 21 skipped
                                  (baseline 13 files · 127 passed · 21 skipped)
 frontend  npx tsc --noEmit       0 errors
-boundary  npm run lint:boundaries  ✔ 0 violations (118 modules, 290 dependencies)
+boundary  npm run lint:boundaries  ✔ 0 violations (121 modules, 292 dependencies)
 ```
 
-**Net new tests: 120. Skip count unchanged at 21 — no new skips.**
+**Net new tests: 125. Skip count unchanged at 21 — no new skips.**
 
-The boundary lint cruised 118 modules, not 0 — a lint that processed zero files is a
+The boundary lint cruised 121 modules, not 0 — a lint that processed zero files is a
 false green (Every-Session lesson).
 
 | New spec file | Tests | Covers |
@@ -32,6 +32,7 @@ false green (Every-Session lesson).
 | `tokenFeeWebhook.test.ts` | 13 | signature, completion-only-via-webhook, idempotency |
 | `ownershipProof.test.ts` | 11 | independent keccak256, preimage encoding, salt envelope |
 | `tokenFees.test.ts` | 7 | USD list price, CAD gating and fallbacks |
+| `schemaColumnDrift.test.ts` | 5 | every PostgREST column checked against `database.types.ts` (added in v1.1) |
 
 ---
 
@@ -254,3 +255,33 @@ SUN crypto exercised here is the S-NFC2 codec, not the production SDM scheme.
 
 **S-2FA — MFA enrollment + AAL2 step-up** remains a hard gate before `FEATURE_REQUIRE_2FA` can be
 turned on in production.
+
+
+---
+
+## v1.1 — post-review fix (2026-10-01)
+
+Found during Notion close-out by reading `database.types.ts` directly. **Neither bug was
+catchable by the suite as written:** a PostgREST `.select()` string is opaque to TypeScript, and
+the hand-rolled Supabase mock answers happily for a column that does not exist. tsc was at 0
+errors and 247 tests were passing with both bugs present.
+
+| Bug | Impact |
+|---|---|
+| `public_tag_provenance` selected `c.username` | **There is no `users.username`** — renamed to `display_name` project-wide on 2026-05-09 (CLAUDE.md v25.0). `CREATE VIEW` would have aborted and taken the whole `20260919000002` migration with it. |
+| `billingCountryFor` selected `users.country` | No such column on that table. Failed silently to `null`, so the CAD presentment path had nothing to read. Now reads a new nullable `users.billing_country` (CHECK `^[A-Z]{2}$`). |
+
+Third time this class has bitten the project — the same rename caused 12 broken references in
+v25.0.
+
+**Guard added:** `backend/src/__tests__/schemaColumnDrift.test.ts` parses the literal
+`.from()`/`.select()` chains in the S-NFC3 modules and asserts every column exists in
+`database.types.ts`. Proven to fire: injecting `users.country` fails it, removing it passes. Its
+exemption list also records that the committed types file is **still behind S-NFC1.5**
+(`fee_payer`, `lifecycle_status`, `linked_item_id`); those entries should disappear at the next
+regen rather than be kept.
+
+> ⚠️ **STAGED, NOT COMMITTED.** `git commit` failed with
+> `1Password: failed to fill whole buffer` — the SSH agent used for commit signing had locked.
+> Unlock 1Password, then commit using the message at
+> `scratchpad/s-nfc3-fix-commit-msg.txt`. All five files are staged; nothing is lost.

@@ -191,6 +191,25 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 
 -- =============================================================================
+-- 3b. users.billing_country — presentment currency input
+-- =============================================================================
+-- ISO-3166 alpha-2. There is NO `users.country` column anywhere in the schema
+-- (verified against database.types.ts), so the CAD presentment rule — "accounts
+-- with billing country Canada are charged the CAD conversion" — had nothing to
+-- read. Nullable: unknown country means charge the USD list price, which is the
+-- safe default and exactly what happens while FEATURE_CAD_PRESENTMENT is off.
+DO $$ BEGIN
+  ALTER TABLE users ADD COLUMN billing_country TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE users
+    ADD CONSTRAINT users_billing_country_chk
+    CHECK (billing_country IS NULL OR billing_country ~ '^[A-Z]{2}$');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+
+-- =============================================================================
 -- 4. reissue_requests — admin-reviewed re-issue ($10)
 -- =============================================================================
 -- The only path for a holder who skipped a transfer. Not advertised in the UI.
@@ -341,6 +360,12 @@ GRANT  SELECT  ON ownership_proofs TO authenticated;
 --
 -- `creator_name` resolves through items.creator_id — NOT nfc_tags.seller_id,
 -- which is the staff member who encoded the chip and must never be published.
+--
+-- The column is `users.display_name`. There is NO `users.username`: it was renamed
+-- to display_name project-wide (CLAUDE.md v25.0, 2026-05-09 — "12 users.username
+-- references renamed to display_name ... live DB has display_name only"). The
+-- stale `generate_token_name` RPC in 20260301100000 still selects `username` and
+-- would fail if ever called; not fixed here, it belongs to the parked marketplace.
 CREATE OR REPLACE VIEW public_tag_provenance AS
 SELECT
   t.id                                                        AS tag_id,
@@ -352,7 +377,7 @@ SELECT
        THEN t.activated_at END                                AS claim_date,
   CASE WHEN t.disclosure->>'creator_name' = 'true'
         AND i.creator_name_visible
-       THEN c.username END                                    AS creator_name,
+       THEN c.display_name END                                AS creator_name,
   CASE WHEN t.disclosure->>'origin_video' = 'true'
         AND i.origin_released
        THEN i.origin_video_url END                            AS origin_video_url,
