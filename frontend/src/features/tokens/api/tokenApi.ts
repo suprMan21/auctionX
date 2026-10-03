@@ -10,12 +10,25 @@
 import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
 import {
+  disclosureResultSchema,
+  receiptSchema,
+  releaseResultSchema,
+  transferCancelResultSchema,
+  transferCompleteResultSchema,
+  transferInitiateResultSchema,
+  transferStatusSchema,
   incomingTransfersSchema,
   myTokensSchema,
   ownershipLookupSchema,
   tapResultSchema,
   claimResultSchema,
   type ClaimResult,
+  type DisclosureInput,
+  type Receipt,
+  type ReleaseResult,
+  type TransferCompleteResult,
+  type TransferInitiateResult,
+  type TransferStatus,
   type IncomingTransfer,
   type MyToken,
   type OwnershipLookup,
@@ -146,6 +159,60 @@ export const tokenApi = {
 
   lookupOwnership(ownershipId: string): Promise<OwnershipLookup> {
     return request(`/ownership/${encodeURIComponent(ownershipId)}`, ownershipLookupSchema, { auth: 'optional' });
+  },
+
+  /**
+   * Starts a transfer by email. `feePayer` is not sent: the API defaults to
+   * BUYER, and SELLER is not offered until the sender can actually be charged
+   * (today the recipient's browser confirms the PaymentIntent either way).
+   */
+  initiateTransfer(input: { tagId: string; transferType: 'sale' | 'gift'; toEmail: string }): Promise<TransferInitiateResult> {
+    return request('/nfc/transfer/initiate', transferInitiateResultSchema, {
+      method: 'POST',
+      body: input,
+      auth: 'required',
+    });
+  },
+
+  completeTransfer(transferId: string, tapSession: string): Promise<TransferCompleteResult> {
+    return request(`/nfc/transfer/${encodeURIComponent(transferId)}/complete`, transferCompleteResultSchema, {
+      method: 'POST',
+      body: { tapSession },
+      auth: 'required',
+    });
+  },
+
+  async cancelTransfer(transferId: string): Promise<void> {
+    await request(`/nfc/transfer/${encodeURIComponent(transferId)}/cancel`, transferCancelResultSchema, {
+      method: 'POST',
+      auth: 'required',
+    });
+  },
+
+  transferStatus(transferId: string): Promise<TransferStatus> {
+    return request(`/nfc/transfer/${encodeURIComponent(transferId)}`, transferStatusSchema, { auth: 'required' });
+  },
+
+  release(tagId: string): Promise<ReleaseResult> {
+    return request('/nfc/release', releaseResultSchema, {
+      method: 'POST',
+      body: { tagId, confirm: true, confirmPhrase: 'RELEASE' },
+      auth: 'required',
+    });
+  },
+
+  async updateDisclosure(tagId: string, changes: DisclosureInput): Promise<Record<string, boolean>> {
+    return (
+      await request(`/nfc/${encodeURIComponent(tagId)}/disclosure`, disclosureResultSchema, {
+        method: 'PATCH',
+        body: changes,
+        auth: 'required',
+      })
+    ).disclosure;
+  },
+
+  receipt(tagId: string): Promise<Receipt> {
+    return request(`/nfc/${encodeURIComponent(tagId)}/receipt`, receiptSchema, { auth: 'required' });
   },
 };
 

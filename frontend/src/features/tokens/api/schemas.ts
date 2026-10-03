@@ -108,3 +108,74 @@ export const ownershipLookupSchema = z.discriminatedUnion('status', [
   }),
 ]);
 export type OwnershipLookup = z.infer<typeof ownershipLookupSchema>;
+
+// ── Phase 2: transfer, release, disclosure, receipt ─────────────────────────
+
+/** The four owner-controlled disclosure fields (backend DISCLOSURE_FIELDS). */
+export const DISCLOSURE_FIELDS = ['origin_video', 'creator_name', 'claim_date', 'location'] as const;
+export type DisclosureField = (typeof DISCLOSURE_FIELDS)[number];
+export type DisclosureInput = Partial<Record<DisclosureField, boolean>>;
+
+export const transferInitiateResultSchema = z.object({
+  transferId: z.string(),
+  status: z.literal('PENDING'),
+  listAmountUsdCents: z.number(),
+});
+export type TransferInitiateResult = z.infer<typeof transferInitiateResultSchema>;
+
+/** POST /transfer/:id/complete. Still PENDING: only the Stripe webhook completes it. */
+export const transferCompleteResultSchema = z.object({
+  transferId: z.string(),
+  status: z.literal('PENDING'),
+  clientSecret: z.string(),
+  listAmountUsdCents: z.number(),
+  chargedAmount: z.number(),
+  chargedCurrency: z.string(),
+  fxRate: z.number().nullable().optional(),
+});
+export type TransferCompleteResult = z.infer<typeof transferCompleteResultSchema>;
+
+/** GET /transfer/:id. `status` is a text column (PENDING, COMPLETED, CANCELLED, …). */
+export const transferStatusSchema = z.object({
+  transferId: z.string(),
+  tagId: z.string(),
+  status: z.string(),
+  role: z.enum(['sender', 'recipient']),
+  transferType: z.enum(['sale', 'gift']),
+  feePayer: z.string().nullable(),
+  listAmountUsdCents: z.number(),
+  chargedAmount: z.number().nullable(),
+  chargedCurrency: z.string().nullable(),
+  initiatedAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+});
+export type TransferStatus = z.infer<typeof transferStatusSchema>;
+
+export const transferCancelResultSchema = z.object({
+  transferId: z.string(),
+  status: z.literal('CANCELLED'),
+});
+
+export const releaseResultSchema = z.object({
+  tagId: z.string(),
+  lifecycleStatus: z.literal('RELEASED'),
+  irreversible: z.literal(true),
+});
+export type ReleaseResult = z.infer<typeof releaseResultSchema>;
+
+export const disclosureResultSchema = z.object({
+  tagId: z.string(),
+  disclosure: z.record(z.boolean()),
+});
+
+/** GET /:tagId/receipt — the private half of the Ownership ID. */
+export const receiptSchema = z.object({
+  ownershipId: z.string(),
+  ownershipEventId: z.string(),
+  ownershipEventType: z.string(),
+  tagRef: z.string(),
+  saltHex: z.string(),
+  issuedAt: z.string().nullable(),
+  algorithm: z.object({ hash: z.string(), preimage: z.string() }),
+});
+export type Receipt = z.infer<typeof receiptSchema>;

@@ -6,7 +6,7 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import type { StripeElementsOptions } from '@stripe/stripe-js';
-import { stripePromise } from '@/lib/stripe';
+import { stripePromise, stripeAppearance } from '@/lib/stripe';
 import { api } from '@/lib/api';
 
 interface PaymentFormProps {
@@ -111,17 +111,7 @@ export function PaymentForm(props: PaymentFormProps) {
     amount: props.amountCents,
     currency: props.currency.toLowerCase(),
     paymentMethodCreation: 'manual',
-    appearance: {
-      theme: 'night',
-      variables: {
-        colorPrimary: '#7c3aed',
-        colorBackground: '#1a1a24',
-        colorText: '#ffffff',
-        colorDanger: '#ef4444',
-        fontFamily: 'system-ui, sans-serif',
-        borderRadius: '12px',
-      },
-    },
+    appearance: stripeAppearance,
   };
 
   return (

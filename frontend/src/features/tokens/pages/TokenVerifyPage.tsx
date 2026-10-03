@@ -9,6 +9,8 @@ import { BUYER_WARNING, statusCopy, tapFailureCopy } from '../lib/copy';
 import { TokenStatusBadge } from '../components/TokenStatusBadge';
 import { ProvenanceCard } from '../components/ProvenanceCard';
 import { ClaimTokenPanel } from '../components/ClaimTokenPanel';
+import { TransferCompleteFlow } from '../components/TransferCompleteFlow';
+import { loginPathFor } from '@/features/auth/lib/safeNext';
 
 type View =
   | { kind: 'loading' }
@@ -82,6 +84,29 @@ export const TokenVerifyPage = () => {
     };
   }, [location.pathname, location.search, navigate, tokenName]);
 
+  // A tap made before signing in carries no viewer, so after the sign-in round
+  // trip the cached result cannot say a transfer is waiting. Ask instead.
+  const [incomingTransferId, setIncomingTransferId] = useState<string | null>(null);
+  const cachedTap = view.kind === 'result' && view.tap.valid ? view.tap : null;
+  const needsIncomingLookup =
+    Boolean(user) && cachedTap !== null && cachedTap.lifecycleStatus === 'ACTIVE' && !cachedTap.viewer;
+  const lookupTagId = cachedTap?.tagId ?? null;
+  useEffect(() => {
+    if (!needsIncomingLookup || !lookupTagId) return;
+    let cancelled = false;
+    tokenApi
+      .incomingTransfers()
+      .then((incoming) => {
+        if (!cancelled) setIncomingTransferId(incoming.find((t) => t.tagId === lookupTagId)?.transferId ?? null);
+      })
+      .catch(() => {
+        // Not finding it only hides the accept panel; My Tokens still lists it.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsIncomingLookup, lookupTagId]);
+
   // Move focus to the result heading so screen readers announce the outcome.
   useEffect(() => {
     if (view.kind !== 'loading') headingRef.current?.focus();
@@ -146,6 +171,7 @@ export const TokenVerifyPage = () => {
             tap={view.tap}
             claimed={claimed}
             signedIn={Boolean(user)}
+            pendingTransferId={view.tap.viewer?.pendingTransferId ?? incomingTransferId}
             returnTo={returnTo}
             headingRef={headingRef}
             onClaimed={(result) => {
@@ -178,13 +204,15 @@ interface ValidTapViewProps {
   readonly tap: ValidTap;
   readonly claimed: ClaimResult | null;
   readonly signedIn: boolean;
+  /** A PENDING transfer of this token to the signed-in viewer. */
+  readonly pendingTransferId: string | null;
   readonly returnTo: string;
   readonly headingRef: React.RefObject<HTMLHeadingElement | null>;
   readonly onClaimed: (result: ClaimResult) => void;
   readonly onSessionSpent: () => void;
 }
 
-const ValidTapView = ({ tap, claimed, signedIn, returnTo, headingRef, onClaimed, onSessionSpent }: ValidTapViewProps) => {
+const ValidTapView = ({ tap, claimed, signedIn, pendingTransferId, returnTo, headingRef, onClaimed, onSessionSpent }: ValidTapViewProps) => {
   const status = statusCopy(tap.lifecycleStatus);
   const claimable = tap.lifecycleStatus === 'ENROLLED' && !claimed;
   const youOwnThis = Boolean(claimed) || Boolean(tap.viewer?.youOwnThis);
@@ -225,19 +253,30 @@ const ValidTapView = ({ tap, claimed, signedIn, returnTo, headingRef, onClaimed,
         />
       )}
 
-      {tap.viewer?.pendingTransferId && (
+      {pendingTransferId && !youOwnThis && (
+        <TransferCompleteFlow
+          transferId={pendingTransferId}
+          tagId={tap.tagId}
+          tapSession={isSessionLive(tap) ? tap.tapSession!.token : null}
+          onSessionSpent={onSessionSpent}
+        />
+      )}
+
+      {tap.lifecycleStatus === 'ACTIVE' && !signedIn && (
         <section className="glass rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-2">A transfer to you is waiting.</h2>
-          <p className="text-gray-400 text-sm">
-            The owner has started a transfer of this token to you. You will find it under{' '}
-            <Link to="/tokens" className="text-primary-300 underline hover:text-primary-200">My Tokens</Link>.
+          <h2 className="text-lg font-semibold text-white mb-2">Is this token being transferred to you?</h2>
+          <p className="text-gray-400 text-sm mb-4">
+            Sign in with the email address the owner used. You have 10 minutes from your tap.
           </p>
+          <Link to={loginPathFor(returnTo)} className="text-primary-300 underline hover:text-primary-200">
+            Sign in to accept
+          </Link>
         </section>
       )}
 
       <ProvenanceCard provenance={tap.provenance} />
 
-      {tap.lifecycleStatus === 'ACTIVE' && !youOwnThis && (
+      {tap.lifecycleStatus === 'ACTIVE' && !youOwnThis && !pendingTransferId && (
         <aside className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-5 text-sm text-amber-100">
           <p className="font-semibold mb-1">
             <span aria-hidden="true">! </span>Before you pay

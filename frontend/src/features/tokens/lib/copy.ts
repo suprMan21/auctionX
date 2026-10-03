@@ -73,3 +73,53 @@ export const claimErrorCopy = (reason: TokenErrorReason | null, fallback: string
 
 export const BUYER_WARNING =
   'Buying this item? Do not pay until the owner starts a transfer to you. A transfer is the only way ownership moves.';
+
+/** Copy for a refused transfer action (initiate, accept, cancel). */
+export const transferErrorCopy = (error: { reason: TokenErrorReason | null; code: string | null; message: string }): string => {
+  switch (error.reason) {
+    case 'tap_session_invalid':
+      return 'Your tap has expired or was already used. Tap the token again to accept.';
+    case 'transfer_pending':
+      return 'A transfer of this token is already in progress.';
+    case 'token_released':
+      return 'This token was released and can no longer be transferred.';
+    case 'token_retired':
+      return 'This chip was retired and can no longer be transferred.';
+    case 'token_suspended':
+      return 'This token is on hold and cannot be transferred right now.';
+    case 'replay_detected':
+    case 'invalid_signature':
+      return 'We could not verify your tap. Tap the token again to accept.';
+    case '2fa_required':
+      return 'Transfers need two-factor authentication on your account. It is not available yet. We will let you know when it is.';
+    default:
+      break;
+  }
+  switch (error.code) {
+    case 'permission_denied':
+      return 'This transfer belongs to a different account. Sign in with the email address it was sent to.';
+    case 'conflict':
+      return 'This transfer is no longer pending. It may have been cancelled or already completed.';
+    default:
+      return error.message;
+  }
+};
+
+/** Copy for a release the server refused. */
+export const releaseErrorCopy = (reason: TokenErrorReason | null, fallback: string): string => {
+  switch (reason) {
+    case 'transfer_pending':
+      return 'Cancel the pending transfer before you release this token.';
+    case 'token_released':
+      return 'This token has already been released.';
+    case 'token_retired':
+      return 'This chip was retired. There is nothing to release.';
+    case 'token_suspended':
+      return 'This token is on hold and cannot be released right now.';
+    default:
+      return fallback;
+  }
+};
+
+export const formatMoney = (minorUnits: number, currency: string): string =>
+  new Intl.NumberFormat(undefined, { style: 'currency', currency: currency.toUpperCase() }).format(minorUnits / 100);

@@ -3,7 +3,7 @@ import { StrictMode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import type { ClaimResult, IncomingTransfer, MyToken, OwnershipLookup, TapResult } from '../api/schemas';
+import type { ClaimResult, IncomingTransfer, MyToken, OwnershipLookup, TapResult, TransferStatus } from '../api/schemas';
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -18,6 +18,21 @@ const api = vi.hoisted(() => ({
   myTokens: vi.fn<() => Promise<MyToken[]>>(),
   incomingTransfers: vi.fn<() => Promise<IncomingTransfer[]>>(),
   lookupOwnership: vi.fn<(id: string) => Promise<OwnershipLookup>>(),
+  completeTransfer: vi.fn(),
+  transferStatus: vi.fn<(id: string) => Promise<TransferStatus>>(),
+  cancelTransfer: vi.fn<(id: string) => Promise<void>>(),
+  release: vi.fn(),
+  updateDisclosure: vi.fn(),
+  receipt: vi.fn(),
+  initiateTransfer: vi.fn(),
+}));
+
+// Payments never load in unit tests.
+vi.mock('@/lib/stripe', () => ({
+  stripePromise: Promise.resolve(null),
+  stripeAppearance: {},
+  isStripeConfigured: true,
+  isStripeTestMode: false,
 }));
 
 vi.mock('../api/tokenApi', async () => {
@@ -29,6 +44,7 @@ import { TokenApiError } from '../api/tokenApi';
 import { TokenVerifyPage } from './TokenVerifyPage';
 import { MyTokensPage } from './MyTokensPage';
 import { OwnershipLookupPage } from './OwnershipLookupPage';
+import { TokenDetailPage } from './TokenDetailPage';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -221,6 +237,44 @@ describe('TokenVerifyPage', () => {
     expect(api.tap).toHaveBeenCalledTimes(1);
   });
 
+  it('offers accept-and-pay to the recipient of a pending transfer, without the buyer warning', async () => {
+    authState.user = { id: 'user-2' };
+    api.tap.mockResolvedValue(
+      enrolledTap({
+        lifecycleStatus: 'ACTIVE',
+        viewer: { youOwnThis: false, canClaim: false, pendingTransferId: 'tr-1' },
+      }),
+    );
+    renderVerify(TAP_PATH);
+
+    expect(await screen.findByRole('button', { name: 'Accept and continue to payment' })).toBeInTheDocument();
+    expect(screen.queryByText(/Do not pay until the owner starts a transfer to you/)).not.toBeInTheDocument();
+  });
+
+  it('asks a signed-out visitor on an active token to sign in to accept', async () => {
+    api.tap.mockResolvedValue(enrolledTap({ lifecycleStatus: 'ACTIVE' }));
+    renderVerify(TAP_PATH);
+
+    const link = await screen.findByRole('link', { name: 'Sign in to accept' });
+    expect(link).toHaveAttribute('href', '/login?next=%2Fverify%2Fchip_001');
+  });
+
+  it('finds the waiting transfer after a sign-in round trip (cached tap has no viewer)', async () => {
+    api.tap.mockResolvedValue(enrolledTap({ lifecycleStatus: 'ACTIVE' }));
+    const first = renderVerify(TAP_PATH);
+    await screen.findByRole('link', { name: 'Sign in to accept' });
+    first.unmount();
+
+    authState.user = { id: 'user-2' };
+    api.incomingTransfers.mockResolvedValue([
+      { transferId: 'tr-1', tagId: 'tag-1', transferType: 'sale', feePayer: 'BUYER', listAmountUsdCents: 250, initiatedAt: null, provenance: null },
+    ]);
+    renderVerify('/verify/chip_001');
+
+    expect(await screen.findByRole('button', { name: 'Accept and continue to payment' })).toBeInTheDocument();
+    expect(api.tap).toHaveBeenCalledTimes(1);
+  });
+
   it('asks for a tap when there is nothing to verify', async () => {
     renderVerify('/verify/chip_001');
 
@@ -279,7 +333,23 @@ describe('MyTokensPage', () => {
     const link = await screen.findByRole('link', { name: /Token ABCDEF12/ });
     expect(link).toHaveAttribute('href', '/tokens/abcdef12-0000-4000-8000-000000000000');
     expect(screen.getByText('A token is being gifted to you.')).toBeInTheDocument();
-    expect(screen.getByText(/The sender is covering the transfer fee/)).toBeInTheDocument();
+    expect(screen.getByText(/Transfer fee: .*2\.50, paid when you accept/)).toBeInTheDocument();
+    expect(screen.getByText(/To accept, tap the token with your phone/)).toBeInTheDocument();
+  });
+
+  it('waits for a transfer when Stripe returns from a redirect payment', async () => {
+    api.myTokens.mockResolvedValue([]);
+    api.incomingTransfers.mockResolvedValue([]);
+    api.transferStatus.mockResolvedValue({
+      transferId: 'tr-1', tagId: 'tag-1', status: 'COMPLETED', role: 'recipient', transferType: 'sale',
+      feePayer: 'BUYER', listAmountUsdCents: 250, chargedAmount: 250, chargedCurrency: 'usd',
+      initiatedAt: null, completedAt: null,
+    });
+    renderAt('/tokens?transfer=tr-1&redirect_status=succeeded', '/tokens', <MyTokensPage />);
+
+    expect(await screen.findByText('It is yours.')).toBeInTheDocument();
+    expect(api.transferStatus).toHaveBeenCalledWith('tr-1');
+    await waitFor(() => expect(api.myTokens).toHaveBeenCalledTimes(2));
   });
 
   it('surfaces a load failure', async () => {
@@ -288,6 +358,69 @@ describe('MyTokensPage', () => {
     renderAt('/tokens', '/tokens', <MyTokensPage />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Please sign in to continue.');
+  });
+});
+
+// ── Token detail ────────────────────────────────────────────────────────────
+
+const ownedToken = (overrides: Partial<MyToken> = {}): MyToken => ({
+  tagId: 'tag-1',
+  lifecycleStatus: 'ACTIVE',
+  claimedAt: '2026-10-02T00:00:00.000Z',
+  title: 'Signed jersey',
+  disclosure: {},
+  ownershipId: OWNERSHIP_ID,
+  provenance: null,
+  pendingTransfer: null,
+  ...overrides,
+});
+
+describe('TokenDetailPage', () => {
+  const renderDetail = () => renderAt('/tokens/tag-1', '/tokens/:tagId', <TokenDetailPage />);
+
+  it('offers transfer and release on an active token', async () => {
+    api.myTokens.mockResolvedValue([ownedToken()]);
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: 'Signed jersey' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Transfer token…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Release token…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download Receipt' })).toBeInTheDocument();
+  });
+
+  it('blocks release while a transfer is pending, and cancels it after a confirmation', async () => {
+    const pending = ownedToken({
+      pendingTransfer: { transferId: 'tr-1', transferType: 'sale', feePayer: 'BUYER', toEmail: 'buyer@example.com', initiatedAt: null },
+    });
+    api.myTokens.mockResolvedValueOnce([pending]).mockResolvedValue([ownedToken()]);
+    api.cancelTransfer.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderDetail();
+
+    expect(await screen.findByText(/A sale to buyer@example.com is pending/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Release token…' })).not.toBeInTheDocument();
+    expect(screen.getByText('Cancel the pending transfer before you release this token.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel transfer' }));
+    expect(api.cancelTransfer).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Yes, cancel it' }));
+
+    await waitFor(() => expect(api.cancelTransfer).toHaveBeenCalledWith('tr-1'));
+    expect(await screen.findByRole('button', { name: 'Release token…' })).toBeInTheDocument();
+  });
+
+  it('shows the released state after a release', async () => {
+    api.myTokens.mockResolvedValue([ownedToken()]);
+    api.release.mockResolvedValue({ tagId: 'tag-1', lifecycleStatus: 'RELEASED', irreversible: true });
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Release token…' }));
+    await user.click(screen.getByRole('button', { name: 'I understand, continue' }));
+    await user.type(screen.getByLabelText(/Type RELEASE/), 'RELEASE');
+    await user.click(screen.getByRole('button', { name: 'Release forever' }));
+
+    expect(await screen.findByRole('heading', { name: 'Released.' })).toBeInTheDocument();
   });
 });
 

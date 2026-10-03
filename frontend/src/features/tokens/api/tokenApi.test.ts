@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+const getSession = vi.hoisted(() =>
+  vi.fn(async (): Promise<{ data: { session: { access_token: string } | null } }> => ({ data: { session: null } })),
+);
 vi.mock('@/lib/supabase', () => ({
-  supabase: { auth: { getSession: vi.fn(async () => ({ data: { session: null } })) } },
+  supabase: { auth: { getSession } },
 }));
 
 import { tokenApi, TokenApiError, __resetInFlightTaps } from './tokenApi';
@@ -70,5 +73,31 @@ describe('tokenApi', () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
 
     await expect(tokenApi.lookupOwnership('0x' + 'a'.repeat(64))).rejects.toMatchObject({ status: 0, code: 'network' });
+  });
+
+  it('sends release with both confirmations', async () => {
+    getSession.mockResolvedValueOnce({ data: { session: { access_token: 'jwt' } } });
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, { success: true, data: { tagId: 't', lifecycleStatus: 'RELEASED', irreversible: true }, error: null }),
+    );
+
+    await tokenApi.release('t');
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/nfc\/release$/);
+    expect(JSON.parse(String(init.body))).toEqual({ tagId: 't', confirm: true, confirmPhrase: 'RELEASE' });
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer jwt');
+  });
+
+  it('never sends feePayer on initiate (the API default, BUYER, is the only honest one today)', async () => {
+    getSession.mockResolvedValueOnce({ data: { session: { access_token: 'jwt' } } });
+    fetchMock.mockResolvedValue(
+      jsonResponse(201, { success: true, data: { transferId: 'tr', status: 'PENDING', listAmountUsdCents: 250 }, error: null }),
+    );
+
+    await tokenApi.initiateTransfer({ tagId: 't', transferType: 'sale', toEmail: 'a@b.co' });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({ tagId: 't', transferType: 'sale', toEmail: 'a@b.co' });
   });
 });

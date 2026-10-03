@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { tokenApi } from '../api/tokenApi';
 import type { IncomingTransfer, MyToken } from '../api/schemas';
 import { TokenStatusBadge } from '../components/TokenStatusBadge';
+import { TransferProcessing } from '../components/TransferProcessing';
 
 type Load =
   | { kind: 'loading' }
@@ -18,6 +19,11 @@ const formatUsd = (cents: number): string =>
 /** `/tokens` — everything the signed-in account owns, plus transfers waiting for it. */
 export const MyTokensPage = () => {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
+  const [reloadKey, setReloadKey] = useState(0);
+  // Stripe's return_url after a redirect-based payment: /tokens?transfer=<id>&redirect_status=…
+  const [params] = useSearchParams();
+  const returningTransferId = params.get('transfer');
+  const redirectFailed = params.get('redirect_status') === 'failed';
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +37,7 @@ export const MyTokensPage = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   return (
     <main id="main-content" className="min-h-screen bg-dark-800 py-10 px-4">
@@ -40,6 +46,19 @@ export const MyTokensPage = () => {
           <h1 className="text-3xl font-bold text-white">My Tokens</h1>
           <p className="text-gray-400 mt-1">Your collection. Only you can see who owns these.</p>
         </header>
+
+        {returningTransferId && redirectFailed && (
+          <div role="alert" className="glass rounded-2xl p-6 text-red-300">
+            Your payment did not go through. Tap the token again to retry.
+          </div>
+        )}
+        {returningTransferId && !redirectFailed && (
+          <TransferProcessing
+            transferId={returningTransferId}
+            tagId={null}
+            onCompleted={() => setReloadKey((k) => k + 1)}
+          />
+        )}
 
         {load.kind === 'loading' && (
           <div role="status" className="glass rounded-2xl p-8 text-center text-gray-300">
@@ -67,10 +86,10 @@ export const MyTokensPage = () => {
                         {t.transferType === 'gift' ? 'A token is being gifted to you.' : 'A token is being transferred to you.'}
                       </p>
                       <p className="text-gray-400 text-sm mt-1">
-                        {t.feePayer === 'SELLER'
-                          ? 'The sender is covering the transfer fee.'
-                          : `Transfer fee: ${formatUsd(t.listAmountUsdCents)}.`}{' '}
-                        Accepting transfers arrives in the next update.
+                        {/* fee_payer SELLER does not yet charge the sender (the recipient's
+                            browser confirms the PaymentIntent), so never claim the sender pays. */}
+                        {`Transfer fee: ${formatUsd(t.listAmountUsdCents)}, paid when you accept.`}{' '}
+                        To accept, tap the token with your phone. Have the item in hand first.
                       </p>
                       {t.provenance?.creator_name && (
                         <p className="text-gray-300 text-sm mt-2">Creator: {t.provenance.creator_name}</p>
