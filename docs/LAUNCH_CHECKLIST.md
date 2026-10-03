@@ -1,6 +1,6 @@
 # Authentic Materials — Pre-Launch Checklist
 
-**Last Updated:** 2026-03-03 (Module 18)
+**Last Updated:** 2026-10-03 (S-NFC3-FE: token-platform key management added to §4)
 **Status:** Draft — work through all items before going live
 
 ---
@@ -115,6 +115,21 @@
 - [ ] Review S3 bucket policy — ensure `auctionx-media-prod-cl` is not publicly writable
 - [ ] Rotate Supabase service role key if it was ever committed to version control
 - [ ] Verify `content_flags` in `process-payment` are sourced server-side (not from client body)
+
+### Token platform key management (added 2026-10-03)
+
+- [ ] **Move the Ownership ID salt envelope to AWS KMS** (Locked decision, 2026-10-03). Staging uses a raw
+      AES-256 key (`OWNERSHIP_SALT_KEY`) as an interim. In production there must be no exportable key: losing
+      it would mean no owner can ever re-download their Receipt.
+  - Swap the `SaltEnvelopeProvider` in `backend/src/lib/ownership/ownershipProof.ts` for a KMS provider.
+    Envelopes are version-prefixed (`v1.`), so a `v2.` KMS envelope can coexist with `v1.` rows.
+  - Use a dedicated CMK (e.g. `alias/am-ownership-salt-prod`), separate from the `am-tag-*` chip keys.
+    Grant `Encrypt`/`Decrypt` to the backend instance role only, and enable deletion protection (the
+    pending-deletion window is the only way to lose it).
+  - Re-encrypt any staging `v1.` rows only if staging data matters; production starts on KMS.
+- [ ] **Production chip-key KMS pair** (`am-tag-sdm-prod`, `am-tag-admin-prod`), never shared with staging.
+      Decide **multi-Region vs single-Region at creation**: it cannot be changed later.
+- [ ] Never reuse a staging secret in production (salt key, log HMAC key, Stripe keys, webhook secrets).
 
 ---
 
