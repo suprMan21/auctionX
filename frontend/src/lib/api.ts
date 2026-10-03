@@ -523,7 +523,7 @@ export const api = {
   // ── Module 13: NFC Verification (Session M) ──────────────────────────────
 
   /** Register an NTAG 424 DNA tag. */
-  async nfcRegister(input: { tagUid: string; aesKey: string; itemId?: string }): Promise<NfcTag> {
+  async nfcRegister(input: { tagUid: string; itemId?: string }): Promise<NfcTag> {
     const headers = await getAuthHeader();
     const response = await fetch(`${API_URL}/nfc/register`, {
       method: 'POST',

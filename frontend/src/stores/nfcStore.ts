@@ -10,7 +10,7 @@ interface NfcState {
 
   fetchTags: () => Promise<void>;
   fetchTagDetail: (tagId: string) => Promise<void>;
-  registerTag: (input: { tagUid: string; aesKey: string; itemId?: string }) => Promise<NfcTag>;
+  registerTag: (input: { tagUid: string; itemId?: string }) => Promise<NfcTag>;
   transferTag: (input: { tagId: string; toUserId: string; transferType: string; transactionId?: string }) => Promise<void>;
   clearSelected: () => void;
 }

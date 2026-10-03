@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -286,11 +287,11 @@ export function Header() {
                         Create Listing
                       </Link>
                       )}
-                      <Link to="/nfc" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
+                      <Link to="/tokens" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                           <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                         </svg>
-                        NFC Tags
+                        My Tokens
                       </Link>
                       {marketplaceEnabled && (
                       <Link to="/messages" className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5" onClick={() => setUserMenuOpen(false)}>
@@ -400,6 +401,11 @@ export function Header() {
         )}
       </nav>
 
+      {/* The drawer is portalled to <body>: the header's `glass` backdrop-filter
+          makes it the containing block for `fixed` descendants, which shrank the
+          open drawer to the header's height. */}
+      {createPortal(
+        <>
       {/* Mobile drawer backdrop */}
       {menuOpen && (
         <div
@@ -409,15 +415,18 @@ export function Header() {
         />
       )}
 
-      {/* Mobile drawer panel */}
+      {/* Mobile drawer panel. The clipping wrapper stops the off-screen
+          (translate-x-full) panel from widening the page on phones, and the
+          closed panel is `invisible` so its links are not keyboard-reachable. */}
+      <div className="fixed inset-0 z-50 overflow-hidden pointer-events-none lg:hidden">
       <div
         id="mobile-nav"
         role="dialog"
         aria-modal="true"
         aria-label="Mobile navigation"
-        className={`fixed top-0 right-0 z-50 h-full w-80 max-w-[85vw] bg-dark-800 border-l border-white/10
-                     transform transition-transform duration-300 ease-in-out lg:hidden
-                     ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`absolute top-0 right-0 h-full w-80 max-w-[85vw] bg-dark-800 border-l border-white/10
+                     transform transition-[transform,visibility] duration-300 ease-in-out
+                     ${menuOpen ? 'translate-x-0 visible pointer-events-auto' : 'translate-x-full invisible'}`}
       >
         {/* Drawer header */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
@@ -485,11 +494,11 @@ export function Header() {
                   </li>
                 )}
                 <li>
-                  <Link to="/nfc" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
+                  <Link to="/tokens" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                       <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    NFC Tags
+                    My Tokens
                   </Link>
                 </li>
                 {marketplaceEnabled && (
@@ -591,6 +600,10 @@ export function Header() {
           </div>
         </div>
       </div>
+      </div>
+        </>,
+        document.body,
+      )}
     </header>
   );
 }

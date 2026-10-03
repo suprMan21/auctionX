@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from './features/auth/hooks/useAuth';
@@ -25,6 +25,13 @@ import { VerificationPage } from './features/verification/pages/VerificationPage
 const NfcDashboardPage = lazy(() => import('./features/verification/pages/NfcDashboardPage').then(m => ({ default: m.NfcDashboardPage })));
 const NfcTagDetailPage = lazy(() => import('./features/verification/pages/NfcTagDetailPage').then(m => ({ default: m.NfcTagDetailPage })));
 const NfcScanPage = lazy(() => import('./features/verification/pages/NfcScanPage').then(m => ({ default: m.NfcScanPage })));
+import { TokenVerifyPage } from './features/tokens/pages/TokenVerifyPage';
+import { MyTokensPage } from './features/tokens/pages/MyTokensPage';
+import { TokenDetailPage } from './features/tokens/pages/TokenDetailPage';
+import { OwnershipLookupPage } from './features/tokens/pages/OwnershipLookupPage';
+import { hasSunParams } from './features/tokens/lib/tapUrl';
+import { loadTap } from './features/tokens/lib/tapCache';
+import { loginPathFor } from './features/auth/lib/safeNext';
 import { AdminProtectedRoute } from '@/features/admin/components/AdminProtectedRoute';
 import { AdminLayout } from '@/features/admin/AdminLayout';
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
@@ -56,6 +63,7 @@ import { AdminAuctionDetailPage } from '@/features/admin/pages/AdminAuctionDetai
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading, initialized } = useAuth();
+  const location = useLocation();
 
   if (!initialized || loading) {
     return (
@@ -66,7 +74,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!session) {
-    return <Navigate to="/login" replace />;
+    // S-NFC3-FE: come back to the page that asked for sign-in.
+    return <Navigate to={loginPathFor(location.pathname + location.search)} replace />;
   }
 
   return (
@@ -84,6 +93,18 @@ function PublicWithHeader({ children }: { children: React.ReactNode }) {
       {children}
     </>
   );
+}
+
+/**
+ * `/verify/:tokenName` — a chip tap (SUN params) or a remembered tap always goes
+ * to the token verify page. Only with the parked marketplace switched on does a
+ * bare token name fall back to the legacy marketplace verification page.
+ */
+function VerifyRoute({ marketplaceEnabled }: { marketplaceEnabled: boolean }) {
+  const { tokenName = '' } = useParams();
+  const location = useLocation();
+  const legacy = marketplaceEnabled && !hasSunParams(location.search) && !loadTap(tokenName);
+  return legacy ? <VerificationPage /> : <TokenVerifyPage />;
 }
 
 function App() {
@@ -210,7 +231,30 @@ function App() {
           <Route path="/listings/:id" element={<PublicWithHeader><ViewListing /></PublicWithHeader>} />
           </>)}
 
-          {/* NFC Tag Management — static routes before parameterized (lesson #5) */}
+          {/* ── Token platform (S-NFC3-FE) ──────────────────────────────────
+              Static routes before parameterized (lesson #5). */}
+          <Route
+            path="/tokens"
+            element={
+              <ProtectedRoute>
+                <MyTokensPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tokens/:tagId"
+            element={
+              <ProtectedRoute>
+                <TokenDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/ownership/:ownershipId" element={<PublicWithHeader><OwnershipLookupPage /></PublicWithHeader>} />
+
+          {/* ── PARKED marketplace-era NFC pages (S-NFC3-FE, decision D3) ───
+              They call the parked /nfc/register, /transfer and /mint routes.
+              With the marketplace off, /nfc goes to My Tokens instead. */}
+          {marketplaceEnabled ? (<>
           <Route path="/nfc/scan" element={<PublicWithHeader><Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="text-gray-400">Loading...</div></div>}><NfcScanPage /></Suspense></PublicWithHeader>} />
           <Route
             path="/nfc"
@@ -228,8 +272,7 @@ function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* NFC Verification — /verify/create/:verificationId MUST precede /verify/:tokenName */}
+          {/* /verify/create/:verificationId MUST precede /verify/:tokenName */}
           <Route
             path="/verify/create/:verificationId"
             element={
@@ -238,7 +281,12 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/verify/:tokenName" element={<PublicWithHeader><VerificationPage /></PublicWithHeader>} />
+          </>) : (
+          <Route path="/nfc" element={<Navigate to="/tokens" replace />} />
+          )}
+
+          {/* Where a chip tap lands. */}
+          <Route path="/verify/:tokenName" element={<PublicWithHeader><VerifyRoute marketplaceEnabled={marketplaceEnabled} /></PublicWithHeader>} />
           {marketplaceEnabled && (<>
           <Route path="/auctions/:id" element={<PublicWithHeader><AuctionDetailPage /></PublicWithHeader>} />
           <Route path="/seller/:id" element={<PublicWithHeader><SellerProfilePage /></PublicWithHeader>} />

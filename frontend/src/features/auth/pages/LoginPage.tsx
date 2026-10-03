@@ -1,25 +1,34 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { BRAND_LABEL } from '@/constants/branding';
+import { isMarketplaceEnabledOnClient } from '@/lib/featureFlags';
+import { safeNextPath } from '../lib/safeNext';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { signIn, checkProfileComplete, loading, error, clearError, user, initialized } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // S-NFC3-FE: /my-listings is parked with the marketplace, so the default
+  // landing is My Tokens. `?next=` (validated, same-origin only) wins, so a
+  // visitor who signed in to claim a token lands back on its verify page.
+  const defaultLanding = isMarketplaceEnabledOnClient() ? '/my-listings' : '/tokens';
+  const next = safeNextPath(searchParams.get('next'), defaultLanding);
 
   // If a returning visitor hits /login while their session cookie is still good,
   // bounce them straight to the authenticated landing instead of forcing a relogin.
   useEffect(() => {
     if (initialized && user) {
-      navigate('/my-listings', { replace: true });
+      navigate(next, { replace: true });
     }
-  }, [initialized, user, navigate]);
+  }, [initialized, user, navigate, next]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,9 +41,12 @@ export function LoginPage() {
 
       if (session?.user) {
         const isProfileComplete = await checkProfileComplete(session.user.id);
-        navigate(isProfileComplete ? '/my-listings' : '/profile');
+        // An explicit return path beats the profile nudge: a claim has a
+        // 10-minute tap window and must not be detoured.
+        const hasExplicitNext = searchParams.get('next') !== null;
+        navigate(isProfileComplete || hasExplicitNext ? next : '/profile');
       } else {
-        navigate('/my-listings');
+        navigate(next);
       }
     } catch (err) {
       console.error('Login error:', err);
