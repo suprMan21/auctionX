@@ -20,6 +20,7 @@
  *   6. No NFT, IPFS or chain call anywhere in this module.
  */
 
+import { randomUUID } from 'crypto';
 import { Response } from 'express';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { RequestWithId } from '../middleware/requestId';
@@ -221,32 +222,34 @@ const isStaff = async (supabase: SupabaseClient, userId: string): Promise<boolea
   return data?.role === 'admin' || data?.role === 'super_admin';
 };
 
+type MintedProof = ReturnType<typeof mintOwnershipProof>;
+
 /**
- * Mints a new `current` ownership proof and flips the previous one to `stale`,
- * so exactly one current proof exists per tag (enforced by a partial unique
- * index as well).
+ * Mints an ownership proof WITHOUT touching the database.
+ *
+ * Every ownership-moving path calls this BEFORE its first write: minting needs
+ * the salt envelope key, and a missing key must fail the request while nothing
+ * has changed. (2026-10-03: a claim on staging marked chip_001 ACTIVE, then
+ * threw on a missing OWNERSHIP_SALT_KEY, leaving an owned token with no
+ * Ownership ID.)
+ */
+const mintProof = (
+  params: { tagId: string; ownershipEventId: string; ownershipEventType: 'claim' | 'transfer' },
+  ctx: SecurityLogContext,
+): MintedProof => mintOwnershipProof(params, ctx);
+
+/**
+ * Stores a pre-minted proof as the tag's `current` one and flips the previous
+ * one to `stale`, so exactly one current proof exists per tag (enforced by a
+ * partial unique index as well).
  *
  * Old and new IDs are never linked in any public output.
  */
 const rotateOwnershipProof = async (
   supabase: SupabaseClient,
-  params: {
-    tagId: string;
-    ownershipEventId: string;
-    ownershipEventType: 'claim' | 'transfer';
-    ownerId: string;
-  },
-  ctx: SecurityLogContext,
+  minted: MintedProof,
+  params: { tagId: string; ownerId: string },
 ): Promise<string> => {
-  const minted = mintOwnershipProof(
-    {
-      tagId: params.tagId,
-      ownershipEventId: params.ownershipEventId,
-      ownershipEventType: params.ownershipEventType,
-    },
-    ctx,
-  );
-
   await supabase
     .from('ownership_proofs')
     .update({ status: 'stale' })
@@ -502,6 +505,12 @@ export const claimTag = async (req: TagRequest, res: Response) => {
     throw errorFor(code);
   }
 
+  // Mint first: a missing salt key must fail before the tag changes state.
+  const minted = mintProof(
+    { tagId: tag.id, ownershipEventId: tag.id, ownershipEventType: 'claim' },
+    ctx,
+  );
+
   // Conditional update. `eq('lifecycle_status', 'ENROLLED')` makes two
   // simultaneous claims safe. Raw SUN: `lt('sun_counter', n)` burns the counter
   // atomically, so the same tap can never be accepted twice even under a race.
@@ -558,11 +567,7 @@ export const claimTag = async (req: TagRequest, res: Response) => {
     throw errorFor('already_claimed');
   }
 
-  const ownershipId = await rotateOwnershipProof(
-    supabase,
-    { tagId: tag.id, ownershipEventId: tag.id, ownershipEventType: 'claim', ownerId: userId },
-    ctx,
-  );
+  const ownershipId = await rotateOwnershipProof(supabase, minted, { tagId: tag.id, ownerId: userId });
 
   emitSecurityEvent({
     event: 'nfc.claim', tag_id: tag.id, prior_status: 'ENROLLED', result: 'ok',
@@ -1072,6 +1077,14 @@ export const replaceTag = async (req: TagRequest, res: Response) => {
     throw new AppError('conflict', 'The tag being replaced has no current owner');
   }
 
+  // The custody record's id is the ownership event, so it is generated here
+  // and the proof minted BEFORE any write (a missing salt key fails cleanly).
+  const custodyRecordId = randomUUID();
+  const minted = mintProof(
+    { tagId: newTag.id, ownershipEventId: custodyRecordId, ownershipEventType: 'transfer' },
+    ctx,
+  );
+
   // Carry the full history: the new chip inherits the item link and the owner,
   // so the verify page still shows the original origin record.
   await supabase
@@ -1092,9 +1105,10 @@ export const replaceTag = async (req: TagRequest, res: Response) => {
     .eq('id', oldTag.id);
 
   // Custody record, so the chain is auditable internally.
-  const { data: record } = await supabase
+  await supabase
     .from('ownership_transfers')
     .insert({
+      id: custodyRecordId,
       tag_id: newTag.id,
       from_user_id: owner,
       to_user_id: owner,
@@ -1108,9 +1122,7 @@ export const replaceTag = async (req: TagRequest, res: Response) => {
       charged_amount: 0,
       charged_currency: 'usd',
       fx_rate: 1,
-    })
-    .select('id')
-    .single();
+    });
 
   await supabase
     .from('ownership_proofs')
@@ -1118,16 +1130,7 @@ export const replaceTag = async (req: TagRequest, res: Response) => {
     .eq('tag_id', oldTag.id)
     .eq('status', 'current');
 
-  const ownershipId = await rotateOwnershipProof(
-    supabase,
-    {
-      tagId: newTag.id,
-      ownershipEventId: record?.id ?? newTag.id,
-      ownershipEventType: 'transfer',
-      ownerId: owner,
-    },
-    ctx,
-  );
+  const ownershipId = await rotateOwnershipProof(supabase, minted, { tagId: newTag.id, ownerId: owner });
 
   emitReplace('ok');
 

@@ -160,6 +160,19 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(200).json({ received: true, applied: false });
     }
 
+    // Mint BEFORE any write. If the salt key is missing this throws while the
+    // transfer is still PENDING, so Stripe's retry can apply it later. Minting
+    // after completion would leave a COMPLETED transfer with no Ownership ID,
+    // and every retry would then stop at "already completed".
+    const minted = mintOwnershipProof(
+      {
+        tagId: transfer.tag_id,
+        ownershipEventId: transfer.id,
+        ownershipEventType: 'transfer',
+      },
+      ctx,
+    );
+
     // Conditional on PENDING: concurrent deliveries cannot both apply.
     const { data: completed } = await supabase
       .from('ownership_transfers')
@@ -193,15 +206,6 @@ router.post('/', async (req: Request, res: Response) => {
       .update({ status: 'stale' })
       .eq('tag_id', transfer.tag_id)
       .eq('status', 'current');
-
-    const minted = mintOwnershipProof(
-      {
-        tagId: transfer.tag_id,
-        ownershipEventId: transfer.id,
-        ownershipEventType: 'transfer',
-      },
-      ctx,
-    );
 
     await supabase.from('ownership_proofs').insert({
       tag_id: transfer.tag_id,
@@ -244,8 +248,12 @@ router.post('/', async (req: Request, res: Response) => {
       transferId,
       error: err instanceof Error ? err.message : String(err),
     });
-    // 200 so Stripe does not retry forever on an internal DB fault.
-    return res.status(200).json({ received: true, applied: false });
+    // 500 so Stripe retries (with backoff, for up to 3 days). Safe: applying
+    // is conditional on PENDING, so a retry after a partial apply stops at
+    // "already completed". The common failure is now a config fault (e.g. a
+    // missing salt key) thrown BEFORE any write; acknowledging it with a 200
+    // would strand a paid transfer at PENDING with no retry.
+    return res.status(500).json({ received: true, applied: false });
   }
 });
 

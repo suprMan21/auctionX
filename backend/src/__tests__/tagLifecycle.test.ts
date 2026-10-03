@@ -890,6 +890,19 @@ describe('replace', () => {
     });
   });
 
+  it('changes nothing when the salt key is missing (mints before any write)', async () => {
+    withReplacementChip();
+    delete process.env.OWNERSHIP_SALT_KEY;
+    const { replaceTag } = await controllers();
+
+    const out = await call(replaceTag, makeReq(STAFF, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
+
+    expect(out.threw).not.toBeNull();
+    expect(tag().lifecycle_status).toBe('ACTIVE');
+    expect(newTag().lifecycle_status).toBe('ENROLLED');
+    expect(tables.ownership_transfers).toHaveLength(0);
+  });
+
   it('moves the current ownership proof onto the new chip', async () => {
     withReplacementChip();
     const { replaceTag } = await controllers();
