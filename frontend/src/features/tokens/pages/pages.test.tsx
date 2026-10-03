@@ -157,6 +157,15 @@ describe('TokenVerifyPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/two-factor authentication/i);
   });
 
+  it('does not call a chip unregistered when the API route itself is missing', async () => {
+    // Express's bare 404 has no `code`: e.g. the backend is not deployed yet.
+    api.tap.mockRejectedValue(new TokenApiError('Not found', 404, null, null));
+    renderVerify(TAP_PATH);
+
+    expect(await screen.findByRole('heading', { name: 'We could not check this token.' })).toBeInTheDocument();
+    expect(screen.queryByText('This is not a registered token.')).not.toBeInTheDocument();
+  });
+
   it('shows "already used" for a replayed tap', async () => {
     api.tap.mockResolvedValue({ valid: false, reason: 'replay_detected' });
     renderVerify(TAP_PATH);
