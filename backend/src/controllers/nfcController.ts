@@ -5,11 +5,11 @@ import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../lib/errors';
 import { withLogContext } from '../lib/logger';
 import { generatePresignedUrl, verifyS3ObjectExists } from '../lib/s3';
-import { parseSunMessage, recoverPiccData, verifyRecoveredScan } from '../services/nfc/ntag424';
-import type { PiccData } from '../services/nfc/ntag424Codec';
-import type { ScanValidationResult, SunMessageParts } from '../services/nfc/types';
-import { currentSdmKeyVersion, getTagKeyProvider } from '../services/nfc/keys/config';
-import { classify, emitSunVerify, sunFailureCode } from '../services/nfc/sunVerification';
+import { parseSunMessage } from '../services/nfc/ntag424';
+import type { SunMessageParts } from '../services/nfc/types';
+import { currentSdmKeyVersion } from '../services/nfc/keys/config';
+import { sunFailureCode } from '../services/nfc/sunVerification';
+import { resolveAndBurnSun } from '../services/nfc/tapResolver';
 import { securityContext } from '../lib/security/requestContext';
 import { z } from 'zod';
 import { registerTagSchema, scanTagSchema, uploadProofSchema, transferSchema, mintSchema } from '../services/nfc/schemas';
@@ -125,15 +125,6 @@ export const registerTag = async (req: NfcRequest, res: Response) => {
   }
 };
 
-type ScanTagRow = {
-  id: string;
-  tag_uid: string;
-  sun_counter: number;
-  sdm_key_version: number | null;
-  verification_id: string | null;
-  status: string;
-};
-
 /**
  * POST /api/v1/nfc/scan
  * Public endpoint — validates an NTAG 424 DNA SUN scan (AN12196 SDM).
@@ -169,83 +160,11 @@ export const scanTag = async (req: NfcRequest, res: Response) => {
       claimedUid = body.tagUid.toUpperCase();
     }
 
-    const provider = getTagKeyProvider();
-
-    let match: { tag: ScanTagRow; picc: PiccData; version: number } | null = null;
-    let decoded = false;
-    for (let version = currentSdmKeyVersion(); version >= 1 && !match; version--) {
-      const picc = await recoverPiccData(parts.encPiccData, version, provider, { ctx });
-      if (!picc) continue;
-      decoded = true;
-
-      const { data: row, error: rowError } = await supabase
-        .from('nfc_tags')
-        .select('id, tag_uid, sun_counter, sdm_key_version, verification_id, status')
-        .eq('tag_uid', picc.uidHex)
-        .maybeSingle();
-      if (rowError) {
-        logger.error('nfc_scan_lookup_failed', { error: rowError.message });
-        throw new AppError('internal', 'Tag lookup failed');
-      }
-      const tagRow = row as ScanTagRow | null;
-      // The chip must have been encoded under the version that decoded it.
-      if (tagRow && (tagRow.sdm_key_version ?? 1) === version) {
-        match = { tag: tagRow, picc, version };
-      }
-    }
-
-    if (!match) {
-      emitSunVerify(null, 'verify', decoded ? 'unknown_tag' : 'invalid_signature', null, null, 'not_found', ctx);
-      logger.warn('nfc_scan_no_match', { decoded });
-      throw new AppError('not_found', 'No NFC tag matched the scan');
-    }
-
-    const { tag, picc, version } = match;
-
-    let result: ScanValidationResult = await verifyRecoveredScan({
-      picc,
-      cmacHex: parts.cmac,
-      version,
-      lastCounter: tag.sun_counter,
-      expectedUid: claimedUid,
-      provider,
-      audit: { ctx, tagId: tag.id },
-    });
-
-    // Burn the counter atomically. Zero rows -> another request already
-    // consumed this (or a later) counter -> replay.
-    if (result.valid && result.counterValue !== null) {
-      const { data: burned, error: burnError } = await supabase
-        .from('nfc_tags')
-        .update({
-          sun_counter: result.counterValue,
-          status: 'active',
-          activated_at: tag.status === 'registered' ? new Date().toISOString() : undefined,
-        })
-        .eq('id', tag.id)
-        .lt('sun_counter', result.counterValue)
-        .select('id');
-      if (burnError) {
-        // A database failure is not evidence of a replay — don't report it as one.
-        logger.error('nfc_scan_counter_burn_failed', { tagId: tag.id, error: burnError.message });
-        throw new AppError('internal', 'Failed to record scan');
-      }
-      if (!burned || burned.length === 0) {
-        result = { ...result, valid: false, error: 'replay_detected' };
-      }
-    }
-
-    const sunResult = classify(result.error);
-    emitSunVerify(
-      tag.id,
-      'verify',
-      sunResult,
-      result.counterValue,
-      tag.sun_counter,
-      result.valid ? 'ok' : sunFailureCode(sunResult),
+    const { tag, result, sunResult } = await resolveAndBurnSun(
+      supabase,
+      { parts, claimedUid },
       ctx,
     );
-    if (!result.valid) logger.warn('nfc_scan_failed', { tagId: tag.id, reason: sunResult });
 
     // Insert verification event
     const { data: event, error: eventError } = await supabase

@@ -53,6 +53,11 @@ describe('S-NFC3 tag management routes', () => {
     { method: 'post', path: `/api/v1/nfc/transfer/${UUID}/complete` },
     { method: 'post', path: `/api/v1/nfc/transfer/${UUID}/cancel` },
     { method: 'patch', path: `/api/v1/nfc/${UUID}/disclosure` },
+    // S-NFC3-FE reads — the caller's own data, so also behind requireAuth.
+    { method: 'get', path: '/api/v1/nfc/mine' },
+    { method: 'get', path: '/api/v1/nfc/transfers/incoming' },
+    { method: 'get', path: `/api/v1/nfc/transfer/${UUID}` },
+    { method: 'get', path: `/api/v1/nfc/${UUID}/receipt` },
   ] as const;
 
   it.each(TOKEN_ROUTES)('mounts $method $path with the marketplace parked', async ({ method, path }) => {
@@ -95,6 +100,33 @@ describe('S-NFC3 tag management routes', () => {
 
     expect(isUnmounted(res)).toBe(false);
     expect(res.status).toBe(401);
+  });
+
+  it('does not let /nfc/mine fall through to the legacy GET /nfc/:tagId', async () => {
+    const app = await loadApp();
+    // The legacy public route would answer without auth; 401 proves the
+    // static S-NFC3-FE route matched first.
+    const res: Probe = await request(app).get('/api/v1/nfc/mine');
+    expect(res.status).toBe(401);
+  });
+
+  it('mounts POST /nfc/tap publicly (a bad body is a 400, never a 401)', async () => {
+    const app = await loadApp();
+    const res: Probe = await request(app).post('/api/v1/nfc/tap').send({});
+
+    expect(isUnmounted(res)).toBe(false);
+    expect(res.status).toBe(400);
+    expect(res.body?.success).toBe(false);
+  });
+
+  it('treats a bad bearer token on /nfc/tap as anonymous, not 401', async () => {
+    const app = await loadApp();
+    const res: Probe = await request(app)
+      .post('/api/v1/nfc/tap')
+      .set('Authorization', 'Bearer not-a-real-token')
+      .send({});
+
+    expect(res.status).toBe(400);
   });
 
   it('mounts the ownership lookup unauthenticated', async () => {

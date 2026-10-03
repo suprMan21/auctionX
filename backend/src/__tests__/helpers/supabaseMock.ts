@@ -5,6 +5,7 @@
  *   .from(t).select(cols).eq(c, v).maybeSingle() / .single() / .limit(n)
  *   .from(t).insert(row).select(cols).single()
  *   .from(t).update(patch).eq(c, v)[.eq(...)][.lt(c, v)][.select().maybeSingle()]
+ *   S-NFC3-FE: .in(c, values), .is(c, null), .gt(c, v) (tap-session expiry)
  *
  * S-NFC3.5: `.lt()` (the conditional counter burn) and an optional
  * `beforeUpdate` hook, so a test can play a concurrent request that wins the
@@ -23,16 +24,29 @@ export type Tables = Record<string, Row[]>;
 
 interface Filter {
   column: string;
-  op: 'eq' | 'lt';
+  op: 'eq' | 'lt' | 'gt' | 'in' | 'is';
   value: unknown;
 }
 
 const matches = (row: Row, filters: Filter[]): boolean =>
-  filters.every((f) =>
-    f.op === 'eq'
-      ? row[f.column] === f.value
-      : (row[f.column] as number) < (f.value as number),
-  );
+  filters.every((f) => {
+    const cell = row[f.column];
+    switch (f.op) {
+      case 'eq':
+        return cell === f.value;
+      case 'is':
+        // PostgREST `is null`: a missing column reads as null too.
+        return (cell ?? null) === f.value;
+      case 'in':
+        return (f.value as unknown[]).includes(cell);
+      // Numbers compare numerically; ISO timestamps compare lexically, which is
+      // chronological for same-format UTC strings.
+      case 'lt':
+        return cell !== null && cell !== undefined && (cell as number) < (f.value as number);
+      case 'gt':
+        return cell !== null && cell !== undefined && (cell as number) > (f.value as number);
+    }
+  });
 
 export interface MockHooks {
   /** Runs immediately before an update is applied (after filters are set). */
@@ -96,6 +110,21 @@ class QueryBuilder {
     return this;
   }
 
+  gt(column: string, value: unknown): this {
+    this.filters.push({ column, op: 'gt', value });
+    return this;
+  }
+
+  in(column: string, values: unknown[]): this {
+    this.filters.push({ column, op: 'in', value: values });
+    return this;
+  }
+
+  is(column: string, value: null): this {
+    this.filters.push({ column, op: 'is', value });
+    return this;
+  }
+
   limit(n: number): this {
     this.limitN = n;
     return this;
@@ -122,6 +151,11 @@ class QueryBuilder {
       if (this.table === 'reissue_requests' && row.status === 'PENDING') {
         if (rows.some((r) => r.tag_id === row.tag_id && r.requester_id === row.requester_id && r.status === 'PENDING')) {
           return { data: null, error: { message: 'duplicate open reissue request' } };
+        }
+      }
+      if (this.table === 'nfc_tap_sessions') {
+        if (rows.some((r) => r.token_hash === row.token_hash)) {
+          return { data: null, error: { message: 'duplicate token_hash' } };
         }
       }
       if (this.table === 'nfc_tags') {

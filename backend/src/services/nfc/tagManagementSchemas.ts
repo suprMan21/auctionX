@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod';
+import { TAP_SESSION_TOKEN_PATTERN } from './tapSession';
 
 const uuid = z.string().uuid();
 
@@ -16,6 +17,23 @@ const sunScan = z.object({
   tagUid: z.string().min(1).max(32),
   sunMessage: z.string().min(1).max(2048),
 });
+
+/**
+ * S-NFC3-FE: a tap session minted by POST /nfc/tap. Accepted by claim and
+ * transfer completion in place of a raw SUN scan — same proof of possession,
+ * without making the visitor tap twice.
+ */
+const tapSessionBody = z.object({
+  tapSession: z.string().regex(TAP_SESSION_TOKEN_PATTERN, 'Invalid tap session'),
+}).strict();
+
+/** Either a raw SUN scan or a tap session; never both (each arm is strict). */
+const possessionProof = z.union([sunScan.extend({}).strict(), tapSessionBody]);
+
+/** POST /nfc/tap: the full tapped URL. */
+export const tapSchema = z.object({
+  sunMessage: z.string().min(1).max(2048),
+}).strict();
 
 /**
  * Staff enrollment. S-NFC3.5: NO key field — chip keys are derived from the
@@ -32,7 +50,7 @@ export const enrollSchema = z.object({
  * Origin claim. Requires a fresh SUN scan: claiming is the moment ownership
  * binds, so possession of the physical chip must be proven, not asserted.
  */
-export const claimSchema = sunScan.extend({}).strict();
+export const claimSchema = possessionProof;
 
 export const transferInitiateSchema = z.object({
   tagId: uuid,
@@ -47,7 +65,7 @@ export const transferInitiateSchema = z.object({
   { message: 'Provide exactly one of toUserId or toEmail' },
 );
 
-export const transferCompleteSchema = sunScan.extend({}).strict();
+export const transferCompleteSchema = possessionProof;
 
 export const releaseSchema = z.object({
   tagId: uuid,

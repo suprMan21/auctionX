@@ -7,7 +7,7 @@
 
 import { Router, RequestHandler, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, optionalAuth } from '../middleware/auth';
 import { AppError, toAppError } from '../lib/errors';
 import {
   enrollTag,
@@ -22,6 +22,13 @@ import {
   updateDisclosure,
 } from '../controllers/tagManagementController';
 import { ownershipAuthProbeDetector, resolveOwnershipId } from '../controllers/ownershipController';
+import {
+  tapTag,
+  listMyTokens,
+  listIncomingTransfers,
+  getTransfer,
+  getReceipt,
+} from '../controllers/tokenReadController';
 
 /**
  * Wraps an async handler so a thrown AppError becomes the project's standard
@@ -32,12 +39,27 @@ import { ownershipAuthProbeDetector, resolveOwnershipId } from '../controllers/o
  * cross-cutting edit well outside this session. Wrapping here keeps the new
  * surface compliant without touching parked behaviour.
  */
-const SUN_REASONS = new Set(['replay_detected', 'invalid_signature']);
+/**
+ * Closed set of machine-readable reasons a client may branch on. S-NFC3.5 added
+ * the SUN pair; S-NFC3-FE adds the lifecycle codes and `tap_session_invalid`
+ * so the frontend never has to pattern-match human error text.
+ */
+const CLIENT_REASONS = new Set([
+  'replay_detected',
+  'invalid_signature',
+  'tap_session_invalid',
+  'already_claimed',
+  'token_released',
+  'token_retired',
+  'token_suspended',
+  'transfer_pending',
+  '2fa_required',
+]);
 
 const sunReason = (details: unknown): string | null => {
   if (!details || typeof details !== 'object') return null;
   const reason = (details as { reason?: unknown }).reason;
-  return typeof reason === 'string' && SUN_REASONS.has(reason) ? reason : null;
+  return typeof reason === 'string' && CLIENT_REASONS.has(reason) ? reason : null;
 };
 
 const handle =
@@ -48,9 +70,8 @@ const handle =
     } catch (err) {
       const appError: AppError = toAppError(err);
       if (res.headersSent) return next(err);
-      // S-NFC3.5: a failed SUN check carries a closed-set `reason`
-      // (`replay_detected` | `invalid_signature`). Nothing else from
-      // `details` is ever echoed.
+      // A closed-set `reason` (CLIENT_REASONS) is the only thing from
+      // `details` that is ever echoed.
       const reason = sunReason(appError.details);
       res.status(appError.status).json({
         success: false,
@@ -75,6 +96,24 @@ const mutationLimit = rateLimit({
   message: { success: false, data: null, error: 'Too many requests. Please slow down.' },
 });
 
+/** Public tap verification: same budget as the legacy POST /nfc/scan. */
+const tapLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, data: null, error: 'Too many scan requests. Please slow down.' },
+});
+
+/** Signed-in reads (My Tokens, transfer polling). Polling needs headroom. */
+const readLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, data: null, error: 'Too many requests. Please slow down.' },
+});
+
 export const tagManagementRoutes = Router();
 
 // Every route runs the probe detector first: an Ownership ID or Receipt
@@ -89,14 +128,23 @@ tagManagementRoutes.post('/release', requireAuth, mutationLimit, handle(releaseT
 tagManagementRoutes.post('/replace', requireAuth, mutationLimit, handle(replaceTag));
 tagManagementRoutes.post('/reissue-request', requireAuth, mutationLimit, handle(requestReissue));
 
+// S-NFC3-FE reads. `/tap` is public (optional auth personalises it); the rest
+// are the caller's own data.
+tagManagementRoutes.post('/tap', optionalAuth, tapLimit, handle(tapTag));
+tagManagementRoutes.get('/mine', requireAuth, readLimit, handle(listMyTokens));
+tagManagementRoutes.get('/transfers/incoming', requireAuth, readLimit, handle(listIncomingTransfers));
+
 // `/transfer/initiate` MUST be registered before `/transfer/:id/...`, otherwise
 // Express matches "initiate" as an `:id`.
 tagManagementRoutes.post('/transfer/initiate', requireAuth, mutationLimit, handle(initiateTransfer));
 tagManagementRoutes.post('/transfer/:id/complete', requireAuth, mutationLimit, handle(completeTransfer));
 tagManagementRoutes.post('/transfer/:id/cancel', requireAuth, mutationLimit, handle(cancelTransfer));
+tagManagementRoutes.get('/transfer/:id', requireAuth, readLimit, handle(getTransfer));
 
 // ── Parameterized route LAST ────────────────────────────────────────────────
 tagManagementRoutes.patch('/:tagId/disclosure', requireAuth, mutationLimit, handle(updateDisclosure));
+// Two segments, so it cannot collide with routes/nfc.ts `GET /:tagId`.
+tagManagementRoutes.get('/:tagId/receipt', requireAuth, readLimit, handle(getReceipt));
 
 // ── Ownership lookup (mounted separately at /api/v1/ownership) ───────────────
 export const ownershipRoutes = Router();
@@ -110,5 +158,7 @@ const lookupLimit = rateLimit({
 });
 
 // Deliberately unauthenticated: an Ownership ID is publishable and the view it
-// resolves to is public. Signing in only adds the "you own this" flag.
-ownershipRoutes.get('/:ownershipId', lookupLimit, handle(resolveOwnershipId));
+// resolves to is public. Signing in only adds the "you own this" flag, which
+// needs optionalAuth to identify the caller (S-NFC3-FE: before it, req.user was
+// never set here and the flag was always false).
+ownershipRoutes.get('/:ownershipId', optionalAuth, lookupLimit, handle(resolveOwnershipId));

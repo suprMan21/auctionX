@@ -56,6 +56,10 @@ export const securityResultSchema = z.enum([
   'payment_required',
   'conflict',
   'internal',
+  // S-NFC3-FE: a tap session that is unknown, expired, already used, bound to
+  // another chip, or superseded by a newer tap. One code for all five on
+  // purpose — telling a caller WHICH would help someone probing tokens.
+  'tap_session_invalid',
 ]);
 
 export type SecurityResult = z.infer<typeof securityResultSchema>;
@@ -184,6 +188,23 @@ const ownershipAuthAttemptSchema = envelopeSchema.extend({
   event: z.literal('ownership.auth_attempt'),
 }).strict();
 
+/**
+ * S-NFC3-FE: a tap session was minted (`issue`) or redeemed (`consume`).
+ * Never carries the token or its hash.
+ */
+const tapSessionSchema = envelopeSchema.extend({
+  event: z.literal('nfc.tap_session'),
+  action: z.enum(['issue', 'consume']),
+  tag_id: uuid.nullable(),
+  purpose: z.enum(['claim', 'transfer_complete']).nullable(),
+}).strict();
+
+/** S-NFC3-FE: an owner opened their Receipt (the private half of the proof). */
+const ownershipReceiptSchema = envelopeSchema.extend({
+  event: z.literal('ownership.receipt'),
+  tag_id: uuid.nullable(),
+}).strict();
+
 const kmsOpSchema = envelopeSchema.extend({
   event: z.literal('kms.op'),
   operation: z.enum(['Encrypt', 'Decrypt', 'GenerateDataKey', 'GenerateMac']),
@@ -207,6 +228,8 @@ export const securityEventSchema = z.discriminatedUnion('event', [
   ownershipLookupSchema,
   ownershipAuthAttemptSchema,
   kmsOpSchema,
+  tapSessionSchema,
+  ownershipReceiptSchema,
 ]);
 
 export type SecurityEvent = z.infer<typeof securityEventSchema>;
