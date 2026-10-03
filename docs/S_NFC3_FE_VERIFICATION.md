@@ -118,7 +118,7 @@ Lifecycle errors now carry a closed-set `reason` (`CLIENT_REASONS`), so the fron
 - **Recipient email on transfer initiate:** not built. Log it in the Feature Backlog.
 - **Mobile drawer leftovers:** it still shows "Search listings" (search is parked) and empty dividers. Small cleanup for a later session.
 
-## Phase 2 (frontend only): built 2026-10-03, not live yet
+## Phase 2 (frontend only): ✅ LIVE on staging 2026-10-03
 
 Commit `27233fe` on `feature/s-nfc3-fe-ph2`, merged into `dev`.
 
@@ -155,3 +155,23 @@ Probe on 2026-10-03: `POST /api/v1/webhooks/stripe-token-fees` with a signature 
    - The second account taps the chip, signs in, accepts, and pays with 4242….
    - Confirm "It is yours." and that the transfer row is COMPLETED.
    - Check the new Receipt and disclosure toggles. **Do not release `chip_001`**: release is terminal.
+
+### Live smoke result (2026-10-03) ✅
+
+- Webhook: Claude created Stripe sandbox endpoint `we_1UMaScD8XmCocfaEeI7gmmul` (`payment_intent.succeeded`). Its secret is at `op://AM_Development/Stripe/token-fee-webhook-secret`; Boss set it in App Runner. The probe went from "Missing signature or secret" to "Invalid signature".
+- test@ started a transfer, cancelled it, and started it again, to the new account **test2@authentic-materials.com** (uid `885d30e1-…`).
+- test2 tapped `chip_001`, accepted, and paid $2.50 USD (4242).
+- Transfer `28a5543f` is **COMPLETED** (23:12:47 UTC), and the owner is now test2. Ownership ID `0xcbfa9f6e…` (claim) went stale; the new `0xfd85a6ab…` (transfer) is current.
+
+**Found and fixed during the smoke:**
+
+| Problem | Fix |
+|---|---|
+| Accepting an email transfer: setting `to_user_id` violated `ownership_transfers_target_chk` (PENDING = exactly one target). The update failed silently, the PaymentIntent was still created, and the webhook refused the paid transfer | Migration `20261003000002` (PENDING = at least one target; applied to staging). `completeTransfer` checks the update and fails before any PaymentIntent. The webhook returns 500 on paid-but-no-recipient so Stripe retries (`78c4005`) |
+| "Payments are not available": the live bundle had no Stripe pk (`.env.op` is not read by a plain build) | pk added to the gitignored `frontend/.env.production`; confirmed pk/sk are the same account |
+| A Figma html-to-design capture script (386 KB) loaded on every page, including login | Removed from `index.html` (`3a5f801`) |
+| First payment declined | A real card in test mode (`test_mode_live_card`). Not a bug |
+
+The stuck transfer was repaired as follows: test2's re-accept recorded the recipient under the fixed constraint, then Boss resent `evt_3UMbsrD8XmCocfaE0cJZg7ZE` from the Stripe dashboard.
+
+**Backend:** 422 passed / 21 skipped. **Frontend:** 91 passed.
