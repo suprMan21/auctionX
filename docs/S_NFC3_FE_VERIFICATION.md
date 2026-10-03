@@ -118,11 +118,40 @@ Lifecycle errors now carry a closed-set `reason` (`CLIENT_REASONS`), so the fron
 - **Recipient email on transfer initiate:** not built. Log it in the Feature Backlog.
 - **Mobile drawer leftovers:** it still shows "Search listings" (search is parked) and empty dividers. Small cleanup for a later session.
 
-## Next: Phase 2 (frontend only)
+## Phase 2 (frontend only): built 2026-10-03, not live yet
 
-- Transfer: initiate, complete with Stripe, cancel.
-- Release (double confirm).
-- Disclosure settings.
-- Ownership panel and Receipt download.
+Commit `27233fe` on `feature/s-nfc3-fe-ph2`, merged into `dev`.
 
-**Blocked on Boss for live payment:** register the token-fee webhook, and resolve the duplicate "Stripe" 1Password items.
+| Feature | Where |
+|---|---|
+| Initiate (sale/gift by email) | `TransferInitiateDialog` on `/tokens/:tagId` |
+| Cancel (inline confirm) | `TokenDetailPage` → transfer section |
+| Accept + pay | `TransferCompleteFlow` on the verify page → Stripe Elements (`clientSecret`) → `confirmPayment` (`redirect: 'if_required'`, return URL `/tokens?transfer=<id>`) → `TransferProcessing` polls `GET /transfer/:id` every 2s, up to 60s |
+| Release | `ReleaseTokenDialog`: warning → type `RELEASE` (re-checked on submit) → `POST /release`. Hidden while a transfer is pending |
+| Disclosure | `DisclosureSettings`: four switches, live preview, PATCH sends only the changed fields |
+| Ownership + Receipt | `OwnershipPanel`: copy ID, public lookup link, Receipt JSON built client-side from `GET /:tagId/receipt` |
+
+**Checks:** `tsc --noEmit` 0 errors · vitest **91 passed** (was 59) · `vite build` OK · eslint has no new errors (2 pre-existing Phase 1 errors remain in `MyTokensPage.tsx:13` and `TokenVerifyPage.tsx:45`).
+
+**Tests added:** each dialog's states and errors, release keyboard bypass, polling (stops on COMPLETED / CANCELLED / timeout / unmount; fake timers), Stripe mocked at `@stripe/react-stripe-js`, axe-core on the new dialogs (+ a self-check that axe does report violations under happy-dom). `axe-core` is now an explicit devDependency.
+
+### Decisions made in the build
+
+- **"I'll pay the fee" (feePayer SELLER) is not offered.** In `completeTransfer`, SELLER only changes the billing country used for the charge. The PaymentIntent's client secret still goes to the recipient, who pays. Offering it would be a false promise. The My Tokens incoming copy no longer says "the sender is covering the fee". To offer it for real, the backend needs a sender-side payment step. Logged as follow-up.
+- No recipient email exists yet, so the timeout copy says "check My Tokens in a few minutes", not "we'll email you".
+- A cached tap made while signed out has no `viewer`. After sign-in, the verify page looks up `/transfers/incoming` to find the waiting transfer.
+
+### Live verification (blocked on Boss)
+
+Probe on 2026-10-03: `POST /api/v1/webhooks/stripe-token-fees` with a signature header returns `Missing signature or secret`. **`STRIPE_TOKEN_FEE_WEBHOOK_SECRET` is not set on App Runner.**
+
+1. Resolve the duplicate "Stripe" 1Password items, so the frontend `VITE_STRIPE_PUBLISHABLE_KEY` and the backend secret key come from the **same** sandbox account.
+2. In Stripe (sandbox), add an endpoint at `https://vw7zy9mkyg.us-east-2.awsapprunner.com/api/v1/webhooks/stripe-token-fees` for the event `payment_intent.succeeded`.
+3. Set its `whsec_…` as `STRIPE_TOKEN_FEE_WEBHOOK_SECRET` in App Runner.
+4. Deploy the frontend (S3 sync + CloudFront invalidation, as above).
+5. Smoke test, with `chip_001` owned by test@:
+   - test@ starts a transfer to a second account.
+   - Cancel it, then start it again.
+   - The second account taps the chip, signs in, accepts, and pays with 4242….
+   - Confirm "It is yours." and that the transfer row is COMPLETED.
+   - Check the new Receipt and disclosure toggles. **Do not release `chip_001`**: release is terminal.
