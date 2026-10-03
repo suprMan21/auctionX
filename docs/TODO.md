@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-03 (S-NFC3-FE Phase 2 built; live smoke blocked on the Stripe webhook)
+**Last updated:** 2026-10-03 (S-NFC3-FE Phase 2 live; first paid transfer completed)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -68,11 +68,8 @@ Live on staging: `chip_001` tapped → genuine/unclaimed → claimed by test@ �
 
 ## 🟡 AFTER
 
-**S-NFC3-FE Phase 2: built (`27233fe`), awaiting live smoke.** Boss: dedupe the Stripe 1Password items, register the
-sandbox webhook (`payment_intent.succeeded` → `/api/v1/webhooks/stripe-token-fees`), set
-`STRIPE_TOKEN_FEE_WEBHOOK_SECRET` in App Runner (probe 2026-10-03: still unset), deploy the frontend. Steps are in
-`docs/S_NFC3_FE_VERIFICATION.md`. Follow-up: "sender pays the fee" needs a backend sender-side payment step (UI hides
-it for now). → **S-ADMIN1 → S-ADMIN2** (admin console, see below) →
+**S-NFC3-FE Phase 2: ✅ live 2026-10-03** (first paid transfer test@ → test2@ completed). Next small item: recipient email on
+initiate (Postmark; Feature Backlog). → **S-ADMIN1 → S-ADMIN2** (admin console, see below; now also admin-set pricing + vouchers and the stuck-payment queue, which files auto GitHub Issues) →
 S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat $2.50) →
 S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token sale) → S-SEC2 (external pentest).
 
