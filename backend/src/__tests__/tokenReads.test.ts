@@ -398,6 +398,18 @@ describe('claim via tap session', () => {
     expect(tag().current_owner_id).toBe(OWNER);
   });
 
+  it('leaves the token ENROLLED when the salt key is missing (staging 2026-10-03)', async () => {
+    const token = await tapFor(1);
+    delete process.env.OWNERSHIP_SALT_KEY;
+    const { claimTag } = await writes();
+
+    const out = await call(claimTag, makeReq(OWNER, { tapSession: token }));
+
+    expect(out.threw).not.toBeNull();
+    expect(tag()).toMatchObject({ lifecycle_status: 'ENROLLED', current_owner_id: null });
+    expect(tables.ownership_proofs).toHaveLength(0);
+  });
+
   it('keeps the legacy raw-scan body working', async () => {
     const { claimTag } = await writes();
     const out = await call(claimTag, makeReq(OWNER, { tagUid: TAG_UID, sunMessage: sunFor(1) }));

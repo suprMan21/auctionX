@@ -73,10 +73,14 @@ const handle =
       // A closed-set `reason` (CLIENT_REASONS) is the only thing from
       // `details` that is ever echoed.
       const reason = sunReason(appError.details);
+      // A non-AppError (thrown by a library or a missing config) carries an
+      // internal message; never send it to the client. 2026-10-03: a claim
+      // returned "OWNERSHIP_SALT_KEY is not set …" verbatim.
+      const message = err instanceof AppError ? appError.message : 'Internal server error';
       res.status(appError.status).json({
         success: false,
         data: null,
-        error: appError.message,
+        error: message,
         code: appError.code,
         ...(reason ? { reason } : {}),
       });

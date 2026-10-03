@@ -129,6 +129,20 @@ describe('S-NFC3 tag management routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('never sends an internal error message to the client', async () => {
+    // A parseable SUN URL with no Supabase env reaches createClient, which
+    // throws a plain Error ("supabaseUrl is required"): exactly the kind of
+    // internal message that must not reach the client.
+    delete process.env.SUPABASE_URL;
+    const app = await loadApp();
+    const res: Probe = await request(app)
+      .post('/api/v1/nfc/tap')
+      .send({ sunMessage: 'https://am.example/verify/x?picc_data=EF963FF7828658A599F3041510671E88&cmac=94EED9EE65337086' });
+
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(res.body?.error).toBe('Internal server error');
+  });
+
   it('mounts the ownership lookup unauthenticated', async () => {
     const app = await loadApp();
     const res: Probe = await request(app).get('/api/v1/ownership/0x' + 'a'.repeat(64));

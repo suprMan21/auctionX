@@ -105,6 +105,21 @@ const transfer = (): Row => tables.ownership_transfers[0];
 const tag = (): Row => tables.nfc_tags[0];
 
 describe('POST /api/v1/webhooks/stripe-token-fees', () => {
+  it('leaves the transfer PENDING and asks Stripe to retry when the salt key is missing', async () => {
+    // 2026-10-03 regression: minting used to run AFTER completion, so a missing
+    // key left a COMPLETED transfer with no Ownership ID that no retry could fix.
+    delete process.env.OWNERSHIP_SALT_KEY;
+    constructEventAsync.mockResolvedValue(succeededEvent());
+    const app = await buildApp();
+
+    const res = await post(app);
+
+    expect(res.status).toBe(500);
+    expect(transfer().status).toBe('PENDING');
+    expect(tag().current_owner_id).not.toBe(BUYER);
+    expect(tables.ownership_proofs.filter((p) => p.status === 'current' && p.owner_id === BUYER)).toHaveLength(0);
+  });
+
   it('completes the transfer and moves ownership on payment_intent.succeeded', async () => {
     constructEventAsync.mockResolvedValue(succeededEvent());
     const app = await buildApp();
