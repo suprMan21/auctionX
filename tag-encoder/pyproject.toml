@@ -15,6 +15,10 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 tag-encoder = "tag_encoder.cli:main"
 
+# Explicit, because iam/ and providers/ sit beside the package and break flat-layout discovery.
+[tool.setuptools.packages.find]
+include = ["tag_encoder*"]
+
 [tool.pytest.ini_options]
 # "." makes tag_encoder importable; ".." makes the sibling tag-hq package
 # importable so the NDEF round-trip test can exercise tag_hq.parsers directly.
