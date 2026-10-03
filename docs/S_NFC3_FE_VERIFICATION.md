@@ -79,6 +79,16 @@ Lifecycle errors now carry a closed-set `reason` (`CLIENT_REASONS`), so the fron
 4. **`playwright.config.ts` couldn't load.** It used `__dirname` in an ES module, so no e2e test could start.
 5. **Drift guard checked constants against the wrong table.** It checked every column constant against `nfc_tags`. It now resolves `.select(CONST)` to the chain's own table, and covers the three new modules.
 
+## Live staging (2026-10-03)
+
+1. **First tap: "not a registered token".** App Runner was still deploying, so `/nfc/tap` returned Express's bare 404, and the page treated any 404 as an unknown chip. Fixed (`6732e86`): "unregistered" now appears only for the tap handler's own `code: not_found`. About 70 seconds later the route was live.
+2. **Second tap: genuine, unclaimed.** This was the first live end-to-end tap through `/nfc/tap` (KMS-derived SDM keys, counter burn, tap session issued).
+3. **Claim failed and left `chip_001` half-claimed.** `OWNERSHIP_SALT_KEY` is not set in App Runner. The claim set the tag `ACTIVE` with test@ as owner, then threw while minting, so no Ownership ID was created. The raw error message also reached the browser.
+   - **Root cause:** claim, `/replace` and the token-fee webhook all wrote state first and minted after.
+   - **Fix (`9ecb422`):** mint before any write in all three; the webhook returns 500 on an apply failure so Stripe retries (it used to be 200, no retry); token routes never echo a non-`AppError` message. Four regression tests; the wrapper test is mutation-checked.
+   - **Repair (Boss approved):** `chip_001` (`253ed5ca…`) was reset to `ENROLLED` with no owner and no claim date, using a conditional REST `PATCH`. It had no proofs. `sun_counter` stays at 5.
+4. **One intermittent backend test failure.** Seen once in about 45 full runs (the run right after a mutation check); 0 of 30 on re-run. The test name was not captured. Watch for it.
+
 ## Deviations from the plan
 
 - **No Zustand store.** Pages hold local state; nothing is shared across routes yet. Phase 2 can add one if transfer polling needs it.
@@ -86,6 +96,11 @@ Lifecycle errors now carry a closed-set `reason` (`CLIENT_REASONS`), so the fron
 - **Partial Playwright run.** The new token a11y specs ran against a local Vite server with the API intercepted. The full e2e suite still needs the backend and `op`, and was not run.
 
 ## Outstanding
+
+### Before claiming again (Boss)
+
+1. Create the key; the command is in `docs/TODO.md`. **Back it up**: losing it means no owner can re-download a Receipt.
+2. Paste the literal base64 value into App Runner as `OWNERSHIP_SALT_KEY`. App Runner does not resolve `op://`.
 
 ### Deploy (Boss)
 
