@@ -54,8 +54,23 @@ export const TokenVerifyPage = () => {
         })
         .catch((err: unknown) => {
           if (cancelled) return;
-          if (err instanceof TokenApiError && err.status === 404) setView({ kind: 'unknown-tag' });
-          else setView({ kind: 'error', message: err instanceof Error ? err.message : 'Something went wrong.' });
+          // Only the tap handler's own "no chip matched" (code not_found) means
+          // an unregistered chip. A bare 404 (route not deployed, wrong API URL)
+          // must not tell a collector a genuine token is fake.
+          if (err instanceof TokenApiError && err.status === 404 && err.code === 'not_found') {
+            setView({ kind: 'unknown-tag' });
+          }
+          else {
+            setView({
+              kind: 'error',
+              message:
+                err instanceof TokenApiError && err.status === 404
+                  ? 'The verification service is not available right now. Please try again shortly.'
+                  : err instanceof Error
+                    ? err.message
+                    : 'Something went wrong.',
+            });
+          }
         });
     } else {
       const cached = loadTap(tokenName);
