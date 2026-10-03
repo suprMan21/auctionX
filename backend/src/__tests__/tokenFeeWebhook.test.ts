@@ -250,15 +250,32 @@ describe('POST /api/v1/webhooks/stripe-token-fees', () => {
     expect(eventsNamed('payment.webhook')[0]).toMatchObject({ result: 'forbidden' });
   });
 
-  it('will not complete a transfer that has no resolved recipient', async () => {
+  it('will not complete a transfer that has no resolved recipient, and asks Stripe to retry', async () => {
     tables.ownership_transfers[0].to_user_id = null;
     constructEventAsync.mockResolvedValue(succeededEvent());
     const app = await buildApp();
 
     const res = await post(app);
 
+    // Paid but unapplied: a 200 would drop the event for good (2026-10-03).
+    expect(res.status).toBe(500);
     expect(res.body.applied).toBe(false);
     expect(transfer().status).toBe('PENDING');
+  });
+
+  it('applies on the retry once the recipient has been resolved', async () => {
+    tables.ownership_transfers[0].to_user_id = null;
+    constructEventAsync.mockResolvedValue(succeededEvent());
+    const app = await buildApp();
+    expect((await post(app)).status).toBe(500);
+
+    tables.ownership_transfers[0].to_user_id = BUYER;
+    const retry = await post(app);
+
+    expect(retry.status).toBe(200);
+    expect(retry.body.applied).toBe(true);
+    expect(transfer().status).toBe('COMPLETED');
+    expect(tag().current_owner_id).toBe(BUYER);
   });
 
   it('will not complete a CANCELLED transfer', async () => {

@@ -485,6 +485,28 @@ describe('transfer', () => {
     expect(tables.ownership_transfers[0].to_user_id).toBe(BUYER);
   });
 
+  it('never creates a payment when the recipient cannot be recorded', async () => {
+    await claimFirst();
+    const { initiateTransfer, completeTransfer } = await controllers();
+    await call(
+      initiateTransfer,
+      makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toEmail: 'buyer@example.com' }),
+    );
+    const transferId = String(tables.ownership_transfers[0].id);
+    // 2026-10-03 staging: a CHECK constraint rejected this exact update.
+    hooks.failUpdate = (table, patch) => table === 'ownership_transfers' && 'to_user_id' in patch;
+
+    const out = await call(
+      completeTransfer,
+      makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }),
+    );
+
+    expect(out.threw).not.toBeNull();
+    expect(stripeCreate).not.toHaveBeenCalled();
+    expect(tables.ownership_transfers[0].to_user_id).toBeNull();
+    expect(tables.ownership_transfers[0].status).toBe('PENDING');
+  });
+
   it('rejects a stale SUN on completion', async () => {
     await claimFirst();
     const { initiateTransfer, completeTransfer } = await controllers();

@@ -836,8 +836,27 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
   }
 
   // Resolve the recipient onto the row now that they have been identified.
+  // This MUST land before any PaymentIntent exists: the webhook can only move
+  // ownership to `to_user_id`, so a payment taken without it strands the money
+  // (2026-10-03 staging: a CHECK violation here failed silently, the buyer paid,
+  // and the transfer stayed PENDING).
   if (transfer.to_user_id === null) {
-    await supabase.from('ownership_transfers').update({ to_user_id: userId }).eq('id', transfer.id);
+    const { data: resolved, error: resolveError } = await supabase
+      .from('ownership_transfers')
+      .update({ to_user_id: userId })
+      .eq('id', transfer.id)
+      .eq('status', 'PENDING')
+      .select('id')
+      .maybeSingle();
+
+    if (resolveError || !resolved) {
+      withLogContext({ requestId: ctx.requestId, route: ctx.route }).error('transfer_recipient_resolve_failed', {
+        transferId: transfer.id,
+        error: resolveError?.message ?? 'no row updated',
+      });
+      emitTransfer('internal');
+      throw new AppError('internal', 'We could not start this payment. You have not been charged. Please try again.');
+    }
   }
 
   const payerId = transfer.fee_payer === 'SELLER' ? transfer.from_user_id : userId;

@@ -156,8 +156,12 @@ router.post('/', async (req: Request, res: Response) => {
         eventType: event.type, signatureValid: true, transferId,
         idempotentReplay: false, result: 'internal',
       });
+      // The fee is PAID but ownership has nowhere to go. Acknowledging with 200
+      // would drop the event for good and strand the payment (2026-10-03). 500
+      // makes Stripe retry with backoff for up to 3 days, so the transfer
+      // applies by itself once the recipient is resolved.
       log.error('token_fee_webhook_no_recipient', { transferId });
-      return res.status(200).json({ received: true, applied: false });
+      return res.status(500).json({ received: true, applied: false });
     }
 
     // Mint BEFORE any write. If the salt key is missing this throws while the

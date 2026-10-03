@@ -53,6 +53,11 @@ export interface MockHooks {
   beforeUpdate?: (table: string, patch: Row) => void;
   /** Return true to make a read on `table` fail like a PostgREST error. */
   failRead?: (table: string) => boolean;
+  /**
+   * Return true to make an update on `table` fail like a PostgREST error (e.g.
+   * a CHECK violation), leaving the rows untouched.
+   */
+  failUpdate?: (table: string, patch: Row) => boolean;
 }
 
 let idCounter = 0;
@@ -169,6 +174,10 @@ class QueryBuilder {
     }
 
     if (this.mode === 'update') this.hooks.beforeUpdate?.(this.table, this.patch);
+
+    if (this.mode === 'update' && this.hooks.failUpdate?.(this.table, this.patch)) {
+      return { data: null, error: { message: 'simulated update failure' } };
+    }
 
     if (this.mode !== 'update' && this.hooks.failRead?.(this.table)) {
       return { data: null, error: { message: 'simulated read failure' } };
