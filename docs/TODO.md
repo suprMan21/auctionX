@@ -20,8 +20,9 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
       has **three**: two LOGIN (`4jjqf5cazuxgjnk23lpwstzqoe`, `sejob6wh6bcjs4eyoimp4ugkk4`) and one
       API_CREDENTIAL (`tbocfigu7g5kfogpyuddhwpqgu`). `op://AM_Development/Stripe/...` is ambiguous
       across them, so backend and frontend can silently resolve to different accounts.
-- [ ] **Back up `Ownership Salt Key`** (created 2026-10-03 and set in App Runner staging). Losing it means
-      no owner can ever re-download their Receipt. Production needs its OWN key at launch.
+- `Ownership Salt Key` (staging): 1Password is the only copy, and that's enough for staging (Boss, 2026-10-03).
+  **Production:** the salt envelope moves to AWS KMS at launch, so there is no raw key to back up.
+  See `docs/LAUNCH_CHECKLIST.md` §4.
 - [ ] **Optional: `Security/log-hmac-key`** (without it, `to_email_hash` is just omitted from logs). Piping into
       `op item create` does NOT work (stdin is read as a JSON template), so use a variable:
       ```bash
