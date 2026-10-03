@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-02 (S-NFC3.5 deployed; session close-out)
+**Last updated:** 2026-10-03 (S-NFC2 Ph2 hardware run done; session close-out)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -48,21 +48,17 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 S-DB1 (S-NFC3 migrations live) · S-NFC3.5 real AN12196 SDM with KMS-derived keys (deployed, KMS confirmed live) ·
 `public_tag_provenance` enumeration hole closed · `/replace` staff-only.
 
-## 🟢 IN PROGRESS — S-NFC2 Ph2 (physical encode). Code done 2026-10-02 (`2326035`); hardware run pending
+## ✅ Shipped 2026-10-03 — S-NFC2 Ph2 (physical encode)
 
-Encoder `personalise` + EV2 secure messaging (NXP-vector-pinned) + staff `GET /nfc/enroll/precheck/:tagUid`
-are on `dev`. Runbook: `tag-encoder/README.md` → "Physical encode". Fixed en route: SDMAccessRights byte swap.
-- [ ] **Boss: push `dev`** so App Runner deploys the precheck endpoint (the encoder fails closed without it).
-- [ ] **Encoder IAM identity** (Boss, console, ~10 min): role `am-tag-encoder-staging` + user `am-tag-encoder`
-      with MFA, from `tag-encoder/iam/*.json`; `~/.aws/config` profile `am-encoder` per the README.
-- [ ] Fill the staff-login 1Password item names in `tag-encoder/encoder.env.op`.
-- [ ] ACR1252U + blank plain NTAG 424 DNA chips; run the emulator rehearsal, then ONE real chip.
-- [ ] Phone tap → `tag-encoder … tapcheck --url …` → HTTP 200 on staging. Confirms SDM file-settings bytes on silicon.
-- [ ] Then the session-end Notion close-out (lesson: SDMAccessRights byte order; decision: audit ledger keys on tag id, not UID).
+First real NTAG 424 DNA (`chip_001`) encoded under the staging KMS roots; phone tap → `tapcheck` HTTP 200, valid.
+Details: `docs/S_NFC2_PH2_VERIFICATION.md`. Runbook: `tag-encoder/README.md` → "Physical encode".
+- [ ] **Boss: push `dev`** (`1bea0d5` encoder install fix + staff login, plus this close-out).
+- [ ] **Boss: confirm** audit ledger keys on tag id (not UID), and K1/K4 left at factory per the slot map.
+- [ ] Not fixed: public `GET /nfc/by-uid` logs the raw UID (`nfc_tag_viewed_by_uid`). Fold into S-SEC1 or fix sooner.
 
 ## 🟡 AFTER
 
-S-NFC3-FE / S-NFC2 Ph2 (whichever is not done first) → **S-ADMIN1 → S-ADMIN2** (admin console, see below) →
+**S-NFC3-FE** (token lifecycle frontend + staging frontend redeploy) → **S-ADMIN1 → S-ADMIN2** (admin console, see below) →
 S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat $2.50) →
 S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token sale) → S-SEC2 (external pentest).
 
