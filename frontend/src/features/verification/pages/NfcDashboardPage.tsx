@@ -24,8 +24,7 @@ function TagStatusBadge({ status }: { status: NfcTag['status'] }) {
 export function NfcDashboardPage() {
   const { tags, loading, error, refetch } = useNfcTags();
   const [registerOpen, setRegisterOpen] = useState(false);
-  const [formData, setFormData] = useState({ tagUid: '', aesKey: '', itemId: '' });
-  const [showAesKey, setShowAesKey] = useState(false);
+  const [formData, setFormData] = useState({ tagUid: '', itemId: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -50,11 +49,10 @@ export function NfcDashboardPage() {
     try {
       await api.nfcRegister({
         tagUid: result.data.tagUid,
-        aesKey: result.data.aesKey,
         itemId: result.data.itemId || undefined,
       });
       setRegisterOpen(false);
-      setFormData({ tagUid: '', aesKey: '', itemId: '' });
+      setFormData({ tagUid: '', itemId: '' });
       refetch();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Registration failed');
@@ -134,25 +132,6 @@ export function NfcDashboardPage() {
               error={formErrors.tagUid}
               helperText="8-14 hex characters from the NTAG 424 DNA chip"
             />
-            <div className="relative">
-              <Input
-                label="AES Key"
-                type={showAesKey ? 'text' : 'password'}
-                placeholder="32 hex characters"
-                value={formData.aesKey}
-                onChange={(e) => setFormData((d) => ({ ...d, aesKey: e.target.value }))}
-                error={formErrors.aesKey}
-                helperText="The 16-byte AES key for SUN message validation"
-              />
-              <button
-                type="button"
-                onClick={() => setShowAesKey((s) => !s)}
-                className="absolute right-3 top-9 text-gray-400 hover:text-white text-xs"
-                aria-label={showAesKey ? 'Hide AES key' : 'Show AES key'}
-              >
-                {showAesKey ? 'Hide' : 'Show'}
-              </button>
-            </div>
             <Input
               label="Item ID (optional)"
               placeholder="UUID of the listing to link"

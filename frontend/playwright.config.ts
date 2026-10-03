@@ -1,8 +1,11 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { defineConfig, devices } from '@playwright/test';
 
-dotenv.config({ path: path.resolve(__dirname, '.env.test') });
+// ES module: no __dirname (this threw before any e2e test could start).
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(configDir, '.env.test') });
 
 export default defineConfig({
   testDir: './src/test/e2e',

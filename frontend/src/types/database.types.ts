@@ -984,6 +984,64 @@ export type Database = {
           },
         ]
       }
+      nfc_tap_sessions: {
+        Row: {
+          consumed_at: string | null
+          consumed_by: string | null
+          consumed_for: string | null
+          counter_value: number
+          created_at: string
+          expires_at: string
+          id: string
+          tag_id: string
+          token_hash: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          consumed_by?: string | null
+          consumed_for?: string | null
+          counter_value: number
+          created_at?: string
+          expires_at: string
+          id?: string
+          tag_id: string
+          token_hash: string
+        }
+        Update: {
+          consumed_at?: string | null
+          consumed_by?: string | null
+          consumed_for?: string | null
+          counter_value?: number
+          created_at?: string
+          expires_at?: string
+          id?: string
+          tag_id?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfc_tap_sessions_consumed_by_fkey"
+            columns: ["consumed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfc_tap_sessions_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfc_tap_sessions_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
+          },
+        ]
+      }
       nft_metadata: {
         Row: {
           chain: string

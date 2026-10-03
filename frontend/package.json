@@ -11,11 +11,12 @@
     "preview": "vite preview",
     "test:preflight": "vitest run --config vitest.preflight.config.ts",
     "test:integration": "vitest run src/test/integration",
+    "test:unit": "vitest run src/features",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:postflight": "vitest run src/test/postflight",
     "test:coverage": "vitest run --coverage",
-    "test:all": "npm run test:preflight && npm run test:integration && npm run test:e2e"
+    "test:all": "npm run test:preflight && npm run test:unit && npm run test:integration && npm run test:e2e"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",

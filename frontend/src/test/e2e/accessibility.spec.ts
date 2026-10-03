@@ -33,6 +33,71 @@ test.describe('Accessibility Compliance (WCAG 2.2 AA)', () => {
   });
 });
 
+// S-NFC3-FE: the token pages. The API is intercepted so these run without a
+// backend; the tap response is a real-shaped genuine, unclaimed token.
+test.describe('Token pages (WCAG 2.2 AA)', () => {
+  const scan = async (page: import('@playwright/test').Page) =>
+    new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze();
+
+  test('verify page with no tap has no accessibility violations', async ({ page }) => {
+    await page.goto('/verify/chip_001');
+    await expect(page.getByRole('heading', { name: 'Tap the token to verify it.' })).toBeVisible();
+    expect((await scan(page)).violations).toEqual([]);
+  });
+
+  test('verify page showing a genuine token has no accessibility violations', async ({ page }) => {
+    await page.route('**/api/v1/nfc/tap', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          error: null,
+          data: {
+            valid: true,
+            tagId: '55555555-5555-4555-8555-555555555555',
+            lifecycleStatus: 'ENROLLED',
+            provenance: {
+              tag_id: '55555555-5555-4555-8555-555555555555',
+              lifecycle_status: 'ENROLLED',
+              is_valid: false,
+              claim_date: null,
+              creator_name: 'Disclosed Creator',
+              origin_video_url: null,
+              origin_location: 'Studio session',
+              origin_date: null,
+              current_ownership_id: null,
+              enrolled_at: '2026-10-01T00:00:00.000Z',
+            },
+            tapSession: { token: 'S'.repeat(43), expiresAt: new Date(Date.now() + 600_000).toISOString() },
+            viewer: null,
+          },
+        }),
+      }),
+    );
+    await page.goto('/verify/chip_001?picc_data=EF963FF7828658A599F3041510671E88&cmac=94EED9EE65337086');
+    await expect(page.getByRole('heading', { name: 'Unclaimed.' })).toBeVisible();
+    expect((await scan(page)).violations).toEqual([]);
+  });
+
+  test('ownership lookup page has no accessibility violations', async ({ page }) => {
+    await page.route('**/api/v1/ownership/*', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          error: null,
+          data: { status: 'stale', message: 'This Ownership ID is no longer current' },
+        }),
+      }),
+    );
+    await page.goto('/ownership/0x' + 'ab'.repeat(32));
+    await expect(page.getByRole('heading', { name: 'No longer current.' })).toBeVisible();
+    expect((await scan(page)).violations).toEqual([]);
+  });
+});
+
 test.describe('Keyboard Navigation', () => {
   test('login form should be fully keyboard navigable', async ({ page }) => {
     await page.goto('/login');

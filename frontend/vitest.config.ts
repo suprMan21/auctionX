@@ -8,7 +8,9 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/test/integration/**/*.test.{ts,tsx}'],
+    // Feature unit tests live next to their code (S-NFC3-FE). Preflight,
+    // postflight and Playwright e2e keep their own configs/runners.
+    include: ['src/test/integration/**/*.test.{ts,tsx}', 'src/features/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

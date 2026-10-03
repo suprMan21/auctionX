@@ -35,6 +35,10 @@ const TARGET_FILES = [
   'routes/tokenFeeWebhook.ts',
   // S-NFC3.5: scan / register now select explicit nfc_tags columns.
   'controllers/nfcController.ts',
+  // S-NFC3-FE: tap resolution, tap sessions, token reads.
+  'services/nfc/tapResolver.ts',
+  'services/nfc/tapSession.ts',
+  'controllers/tokenReadController.ts',
 ];
 
 /**
@@ -82,7 +86,10 @@ const parseKnownColumns = (): Map<string, Set<string>> => {
  * chain. Deliberately simple: it only understands literal, single-line-ish
  * chains, which is how every query in these files is written.
  */
-const extractSelects = (source: string): Array<{ table: string; columns: string[] }> => {
+const extractSelects = (
+  source: string,
+  constants: ReadonlyMap<string, string> = new Map(),
+): Array<{ table: string; columns: string[] }> => {
   const results: Array<{ table: string; columns: string[] }> = [];
   const fromRe = /\.from\(\s*'([a-z_]+)'\s*\)/g;
   let match: RegExpExecArray | null;
@@ -95,10 +102,12 @@ const extractSelects = (source: string): Array<{ table: string; columns: string[
     const rest = source.slice(match.index);
     const statementEnd = rest.indexOf(';');
     const window = rest.slice(0, statementEnd === -1 ? 600 : statementEnd);
-    const sel = /\.select\(\s*(?:`([^`]*)`|'([^']*)')\s*\)/.exec(window);
+    // A literal, a template, or a SCREAMING_CASE column constant (S-NFC3-FE),
+    // which is resolved and attributed to THIS chain's table.
+    const sel = /\.select\(\s*(?:`([^`]*)`|'([^']*)'|([A-Z][A-Z0-9_]*))\s*\)/.exec(window);
     if (!sel) continue;
 
-    let raw = (sel[1] ?? sel[2] ?? '').trim();
+    let raw = (sel[1] ?? sel[2] ?? (sel[3] ? constants.get(sel[3]) ?? '' : '')).trim();
     // Drop embedded resources (`listing:listings(title, ...)`), innermost first:
     // their columns belong to another table.
     while (/\([^()]*\)/.test(raw)) raw = raw.replace(/[\w:!]*\([^()]*\)/g, '');
@@ -117,12 +126,12 @@ const extractSelects = (source: string): Array<{ table: string; columns: string[
   return results;
 };
 
-/** Column lists held in a `const X = '...'` and interpolated into selects. */
-const extractColumnConstants = (source: string): string[] => {
-  const out: string[] = [];
-  const re = /const\s+\w*COLUMNS\w*\s*(?::\s*\w+\s*)?=\s*\n?\s*'([^']+)'/g;
+/** Column lists held in a `const X = '...'`, by name. */
+const extractColumnConstants = (source: string): Map<string, string> => {
+  const out = new Map<string, string>();
+  const re = /const\s+(\w*COLUMNS\w*)\s*(?::\s*\w+\s*)?=\s*\n?\s*'([^']+)'/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(source)) !== null) out.push(m[1]);
+  while ((m = re.exec(source)) !== null) out.set(m[1], m[2]);
   return out;
 };
 
@@ -163,14 +172,16 @@ describe('PostgREST column drift (S-NFC3 surface)', () => {
       }
     };
 
-    for (const { table, columns } of extractSelects(source)) check(table, columns);
+    const constants = extractColumnConstants(source);
+    for (const { table, columns } of extractSelects(source, constants)) check(table, columns);
 
-    // Interpolated column constants, attributed to the table they are used with.
-    for (const constant of extractColumnConstants(source)) {
+    // Constants interpolated into a template (`${TAG_COLUMNS}, sdm_key_version`)
+    // are not resolved by extractSelects; every such constant is an nfc_tags
+    // column list, so check it there.
+    for (const [name, constant] of constants) {
+      if (!source.includes('${' + name + '}')) continue;
       const columns = constant.split(',').map((c) => c.trim()).filter(Boolean);
-      if (/\b(lifecycle_status|tag_uid|sun_counter)\b/.test(constant)) {
-        check('nfc_tags', columns);
-      }
+      check('nfc_tags', columns);
     }
 
     expect(unknown).toEqual([]);

@@ -86,14 +86,10 @@ export const tagUidSchema = z
   .max(14, 'Tag UID must be at most 14 hex characters')
   .regex(/^[0-9a-fA-F]+$/, 'Tag UID must be a hex string');
 
-export const aesKeySchema = z
-  .string()
-  .length(32, 'AES key must be exactly 32 hex characters')
-  .regex(/^[0-9a-fA-F]+$/, 'AES key must be a hex string');
-
 export const registerTagFormSchema = z.object({
   tagUid: tagUidSchema,
-  aesKey: aesKeySchema,
+  // S-NFC3.5: no key field. Chip keys are derived from the KMS root and never
+  // cross the API (the backend rejects key material outright).
   itemId: z.string().uuid('Must be a valid UUID').optional().or(z.literal('')),
 });
 
