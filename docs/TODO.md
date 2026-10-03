@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-03 (S-NFC2 Ph2 hardware run done; session close-out)
+**Last updated:** 2026-10-03 (S-NFC3-FE Phase 1 live on staging; session close-out)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -20,15 +20,15 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
       has **three**: two LOGIN (`4jjqf5cazuxgjnk23lpwstzqoe`, `sejob6wh6bcjs4eyoimp4ugkk4`) and one
       API_CREDENTIAL (`tbocfigu7g5kfogpyuddhwpqgu`). `op://AM_Development/Stripe/...` is ambiguous
       across them, so backend and frontend can silently resolve to different accounts.
-- [ ] **Create the two new secrets** (references already in `backend/.env.op`):
+- [ ] **Back up `Ownership Salt Key`** (created 2026-10-03 and set in App Runner staging). Losing it means
+      no owner can ever re-download their Receipt. Production needs its OWN key at launch.
+- [ ] **Optional: `Security/log-hmac-key`** (without it, `to_email_hash` is just omitted from logs). Piping into
+      `op item create` does NOT work (stdin is read as a JSON template), so use a variable:
       ```bash
-      openssl rand -base64 32 | op item create --category=password \
-        --title='Ownership Salt Key' --vault=AM_Development 'key[password]=-'
-      openssl rand -base64 32 | op item create --category=password \
-        --title='Security' --vault=AM_Development 'log-hmac-key[password]=-'
+      KEY="$(openssl rand -base64 32)" && op item create --category=password \
+        --title='Security' --vault=AM_Development "log-hmac-key[password]=$KEY" >/dev/null && unset KEY
       ```
-      ⚠️ `OWNERSHIP_SALT_KEY` must be **backed up before any real claim in production** — losing it
-      means no owner can ever re-download their Receipt.
+      Then paste the literal into App Runner as `SECURITY_LOG_HMAC_KEY`.
 - [ ] **Register the Stripe token-fee webhook** (sandbox first): `POST /api/v1/webhooks/stripe-token-fees`,
       event `payment_intent.succeeded`. Put the `whsec_...` in
       `op://AM_Development/Stripe/token-fee-webhook-secret`, then paste the **literal** value into
@@ -52,13 +52,23 @@ S-DB1 (S-NFC3 migrations live) · S-NFC3.5 real AN12196 SDM with KMS-derived key
 
 First real NTAG 424 DNA (`chip_001`) encoded under the staging KMS roots; phone tap → `tapcheck` HTTP 200, valid.
 Details: `docs/S_NFC2_PH2_VERIFICATION.md`. Runbook: `tag-encoder/README.md` → "Physical encode".
-- [ ] **Boss: push `dev`** (`1bea0d5` encoder install fix + staff login, plus this close-out).
 - [ ] **Boss: confirm** audit ledger keys on tag id (not UID), and K1/K4 left at factory per the slot map.
 - [ ] Not fixed: public `GET /nfc/by-uid` logs the raw UID (`nfc_tag_viewed_by_uid`). Fold into S-SEC1 or fix sooner.
 
+## ✅ Shipped 2026-10-03 — S-NFC3-FE Phase 1 (tap, verify, claim, My Tokens)
+
+Live on staging: `chip_001` tapped → genuine/unclaimed → claimed by test@ → one current Ownership ID
+(`0xcbfa9f6e…`), public lookup resolves. Details: `docs/S_NFC3_FE_VERIFICATION.md`.
+- [ ] **Boss: redeploy the frontend.** The live build predates `6732e86`: a bare 404 still reads as
+      "not a registered token". Command under §Frontend deploy below.
+- [ ] Follow-ups: recipient email on transfer initiate (Postmark; not built); mobile drawer still shows
+      "Search listings" + empty dividers while the marketplace is parked; one unexplained backend test failure
+      (1 in ~45 runs, name not captured; watch for it).
+
 ## 🟡 AFTER
 
-**S-NFC3-FE** (token lifecycle frontend + staging frontend redeploy) → **S-ADMIN1 → S-ADMIN2** (admin console, see below) →
+**S-NFC3-FE Phase 2** (transfer + Stripe, release, disclosure, Receipt; frontend only. Needs the token-fee webhook
+registered and the Stripe 1Password duplicates resolved first) → **S-ADMIN1 → S-ADMIN2** (admin console, see below) →
 S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat $2.50) →
 S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token sale) → S-SEC2 (external pentest).
 
@@ -74,16 +84,14 @@ production, so it must land before any real token sale.
 
 ---
 
-## 🟠 STAGING FRONTEND IS STALE (deferred by Boss 2026-10-02)
+## 🚀 Frontend deploy (staging)
 
-CloudFront still serves the **2026-05-30 marketplace build**. Since S-ISO1 parked the marketplace
-(2026-09-18), every API it calls returns 404, so the site loads but shows nothing. The current `dev`
-frontend builds cleanly with the marketplace hidden. Deploy when ready (Boss chose to wait):
+Claude's shell cannot use the `auctionx` profile (op plugin needs a TTY), so Boss runs it:
 ```bash
 cd frontend && npm run build && aws s3 sync dist/ s3://auctionx-frontend-staging --profile auctionx --delete \
   && aws cloudfront create-invalidation --profile auctionx --distribution-id E3JOPXHI8DB4BE --paths '/*'
 ```
-Natural moment: alongside S-NFC3-FE.
+Deploy order: backend (push `dev`, wait for App Runner **Running**) BEFORE frontend.
 
 ## 🛠️ ADMIN CONSOLE (new section, Boss 2026-10-02)
 

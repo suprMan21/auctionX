@@ -87,7 +87,8 @@ Lifecycle errors now carry a closed-set `reason` (`CLIENT_REASONS`), so the fron
    - **Root cause:** claim, `/replace` and the token-fee webhook all wrote state first and minted after.
    - **Fix (`9ecb422`):** mint before any write in all three; the webhook returns 500 on an apply failure so Stripe retries (it used to be 200, no retry); token routes never echo a non-`AppError` message. Four regression tests; the wrapper test is mutation-checked.
    - **Repair (Boss approved):** `chip_001` (`253ed5ca…`) was reset to `ENROLLED` with no owner and no claim date, using a conditional REST `PATCH`. It had no proofs. `sun_counter` stays at 5.
-4. **One intermittent backend test failure.** Seen once in about 45 full runs (the run right after a mutation check); 0 of 30 on re-run. The test name was not captured. Watch for it.
+4. **Claim succeeded** after the key was set in App Runner. Checked in the database: `chip_001` is `ACTIVE` and owned by test@ (`0b211aed…`). It has exactly one `current` proof (`0xcbfa9f6e18975e21871e8010249aad22664985900be0893d0143edfe3425b9b5`, `claim`, salt envelope `v1.`). The tap session was consumed for `claim` at counter 13. `GET /ownership/<id>` resolves to `current` with provenance and no owner identity.
+5. **One intermittent backend test failure.** Seen once in about 45 full runs (the run right after a mutation check); 0 of 30 on re-run. The test name was not captured. Watch for it.
 
 ## Deviations from the plan
 
@@ -96,11 +97,6 @@ Lifecycle errors now carry a closed-set `reason` (`CLIENT_REASONS`), so the fron
 - **Partial Playwright run.** The new token a11y specs ran against a local Vite server with the API intercepted. The full e2e suite still needs the backend and `op`, and was not run.
 
 ## Outstanding
-
-### Before claiming again (Boss)
-
-1. Create the key; the command is in `docs/TODO.md`. **Back it up**: losing it means no owner can re-download a Receipt.
-2. Paste the literal base64 value into App Runner as `OWNERSHIP_SALT_KEY`. App Runner does not resolve `op://`.
 
 ### Deploy (Boss)
 
