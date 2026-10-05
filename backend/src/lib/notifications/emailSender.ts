@@ -18,8 +18,8 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
   const from = process.env.POSTMARK_FROM_EMAIL;
 
   if (!token || token.startsWith('FILL_IN')) {
+    // Never log the raw address: CloudWatch is not a place for PII.
     console.warn('[EMAIL] POSTMARK_SERVER_TOKEN not configured — skipping delivery', {
-      to: payload.to,
       subject: payload.subject,
     });
     return false;
@@ -37,7 +37,7 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
     });
     return true;
   } catch (err) {
-    console.error('[EMAIL] Postmark delivery failed', { to: payload.to, subject: payload.subject, err });
+    console.error('[EMAIL] Postmark delivery failed', { subject: payload.subject, err });
     return false;
   }
 }

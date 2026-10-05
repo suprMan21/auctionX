@@ -97,6 +97,11 @@ vi.mock('../lib/stripe', () => ({
   getStripe: () => ({ paymentIntents: { create: stripeCreate } }),
 }));
 
+const sendEmail = vi.fn();
+vi.mock('../lib/notifications/emailSender', () => ({
+  sendEmail: (payload: unknown) => sendEmail(payload),
+}));
+
 /** Minimal Express req/res doubles — the controllers only use a few fields. */
 const makeReq = (userId: string | null, body: Row = {}, params: Row = {}) => ({
   requestId: 'test-req',
@@ -139,6 +144,9 @@ beforeEach(async () => {
   vi.resetModules();
   stripeCreate.mockReset();
   stripeCreate.mockResolvedValue({ id: 'pi_test_123', client_secret: 'cs_test_123' });
+  sendEmail.mockReset();
+  sendEmail.mockResolvedValue(true);
+  process.env.FRONTEND_URL = 'https://am.example';
 
   process.env.OWNERSHIP_SALT_KEY = randomBytes(32).toString('base64');
   process.env.SUPABASE_URL = 'https://example.supabase.co';
@@ -579,6 +587,97 @@ describe('transfer', () => {
     expect(reasonOf(out)).toBe('replay_detected');
     expect(stripeCreate).not.toHaveBeenCalled();
     expect(eventsNamed('nfc.sun_verify').at(-1)).toMatchObject({ sun_result: 'replay_detected' });
+  });
+
+  it('emails a no-account recipient on initiate, without naming the sender', async () => {
+    await claimFirst();
+    const { initiateTransfer } = await controllers();
+
+    await call(
+      initiateTransfer,
+      makeReq(OWNER, { tagId: TAG_ID, transferType: 'gift', toEmail: 'NewBuyer@Example.com' }),
+    );
+
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    const mail = sendEmail.mock.calls[0][0] as { to: string; subject: string; html: string; text: string };
+    expect(mail.to).toBe('newbuyer@example.com');
+    expect(mail.subject).toMatch(/gifted to you/i);
+    expect(mail.html).toContain('https://am.example/tokens');
+    expect(mail.text).toContain('$2.50');
+    for (const body of [mail.html, mail.text, mail.subject]) {
+      expect(body).not.toContain('owner@example.com');
+      expect(body).not.toContain(OWNER);
+      expect(body).not.toContain('\u2014'); // Brand Voice: no em dashes
+    }
+  });
+
+  it('emails an existing account at its own address when initiated by user id', async () => {
+    await claimFirst();
+    const { initiateTransfer } = await controllers();
+
+    await call(initiateTransfer, makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toUserId: BUYER }));
+
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect((sendEmail.mock.calls[0][0] as { to: string; subject: string }).to).toBe('buyer@example.com');
+    expect((sendEmail.mock.calls[0][0] as { subject: string }).subject).toMatch(/transferred to you/i);
+  });
+
+  it('still creates the transfer when the email cannot be sent', async () => {
+    await claimFirst();
+    const { initiateTransfer } = await controllers();
+    sendEmail.mockRejectedValueOnce(new Error('postmark down'));
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const out = await call(
+      initiateTransfer,
+      makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toEmail: 'newbuyer@example.com' }),
+    );
+
+    quiet.mockRestore();
+    expect(out.threw).toBeNull();
+    expect(out.status).toBe(201);
+    expect(tables.ownership_transfers[0].status).toBe('PENDING');
+  });
+
+  it('sends no email when initiation is refused', async () => {
+    await claimFirst();
+    const { initiateTransfer } = await controllers();
+
+    await call(initiateTransfer, makeReq(STRANGER, { tagId: TAG_ID, transferType: 'sale', toUserId: BUYER }));
+
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('sends the recipient a short notice when the sender cancels', async () => {
+    await claimFirst();
+    const { initiateTransfer, cancelTransfer } = await controllers();
+    await call(initiateTransfer, makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toEmail: 'newbuyer@example.com' }));
+    sendEmail.mockClear();
+    const transferId = String(tables.ownership_transfers[0].id);
+
+    await call(cancelTransfer, makeReq(OWNER, {}, { id: transferId }));
+
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    const mail = sendEmail.mock.calls[0][0] as { to: string; subject: string };
+    expect(mail.to).toBe('newbuyer@example.com');
+    expect(mail.subject).toMatch(/cancelled/i);
+  });
+
+  it('refuses a cancel that loses the race, and sends nothing', async () => {
+    await claimFirst();
+    const { initiateTransfer, cancelTransfer } = await controllers();
+    await call(initiateTransfer, makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toUserId: BUYER }));
+    sendEmail.mockClear();
+    const transferId = String(tables.ownership_transfers[0].id);
+    // The webhook completes the transfer between the cancel's read and its write.
+    hooks.beforeUpdate = (table) => {
+      if (table === 'ownership_transfers') tables.ownership_transfers[0].status = 'COMPLETED';
+    };
+
+    const out = await call(cancelTransfer, makeReq(OWNER, {}, { id: transferId }));
+
+    expect(out.threw?.message).toMatch(/no longer pending/i);
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 
   it('lets the sender cancel a pending transfer, and refuses cancel by others', async () => {
