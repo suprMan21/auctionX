@@ -64,6 +64,7 @@ import {
   REISSUE_FEE_CENTS,
   resolveCharge,
 } from '../lib/tokenFees';
+import { notifyTransferRecipient } from '../lib/notifications/transferEmails';
 
 interface TagRequest extends RequestWithId, AuthRequest {}
 
@@ -669,6 +670,16 @@ export const initiateTransfer = async (req: TagRequest, res: Response) => {
   });
   emitTransfer('ok', created.id);
 
+  // After the row exists, never before: an email for a transfer that failed
+  // to persist would point the recipient at nothing. Delivery never blocks.
+  await notifyTransferRecipient(supabase, 'initiated', {
+    transferId: created.id,
+    transferType: transferType === 'gift' ? 'GIFT' : 'SALE',
+    toUserId: toUserId ?? null,
+    toEmail: toEmail?.trim().toLowerCase() ?? null,
+    feeCents: TRANSFER_FEE_CENTS,
+  });
+
   return ok(res, {
     transferId: created.id,
     status: 'PENDING',
@@ -917,7 +928,7 @@ export const cancelTransfer = async (req: TagRequest, res: Response) => {
 
   const { data: transfer } = await supabase
     .from('ownership_transfers')
-    .select('id, tag_id, from_user_id, to_email, status, transfer_type, fee_payer')
+    .select('id, tag_id, from_user_id, to_user_id, to_email, status, transfer_type, fee_payer, transfer_fee_cents')
     .eq('id', pathParam(req.params.id))
     .maybeSingle();
 
@@ -947,11 +958,20 @@ export const cancelTransfer = async (req: TagRequest, res: Response) => {
     throw new AppError('conflict', 'This transfer is no longer pending');
   }
 
-  await supabase
+  // Zero rows means a webhook or another cancel won the race. Check before
+  // telling the recipient anything.
+  const { data: cancelled, error: cancelError } = await supabase
     .from('ownership_transfers')
     .update({ status: 'CANCELLED' })
     .eq('id', transfer.id)
-    .eq('status', 'PENDING');
+    .eq('status', 'PENDING')
+    .select('id')
+    .maybeSingle();
+
+  if (cancelError || !cancelled) {
+    emitTransfer('conflict');
+    throw new AppError('conflict', 'This transfer is no longer pending');
+  }
 
   emitSecurityEvent({
     event: 'transfer.state_change',
@@ -960,6 +980,14 @@ export const cancelTransfer = async (req: TagRequest, res: Response) => {
     ip: ctx.ip, route: ctx.route,
   });
   emitTransfer('ok');
+
+  await notifyTransferRecipient(supabase, 'cancelled', {
+    transferId: transfer.id,
+    transferType: transfer.transfer_type === 'GIFT' ? 'GIFT' : 'SALE',
+    toUserId: transfer.to_user_id,
+    toEmail: transfer.to_email,
+    feeCents: transfer.transfer_fee_cents ?? TRANSFER_FEE_CENTS,
+  });
 
   return ok(res, { transferId: transfer.id, status: 'CANCELLED' });
 };
