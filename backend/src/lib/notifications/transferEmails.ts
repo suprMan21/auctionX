@@ -151,7 +151,15 @@ export async function notifyTransferRecipient(
         : transferCancelledEmail();
 
     const sent = await sendEmail({ to, ...message });
-    if (!sent) {
+    if (sent) {
+      // Success must be visible too, or a quiet log cannot tell "sent" from
+      // "this code never ran".
+      console.log('[EMAIL] transfer recipient email accepted by Postmark', {
+        transferId: recipient.transferId,
+        kind,
+        to_email_hash: hashEmailForLog(to),
+      });
+    } else {
       console.warn('[EMAIL] transfer recipient email not delivered', {
         transferId: recipient.transferId,
         kind,
