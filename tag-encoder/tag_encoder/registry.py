@@ -1,8 +1,14 @@
 """Tag registry client — the backend's nfc_tags, as the encoder sees it.
 
 Two calls, both staff-only on the backend:
-    GET  /api/v1/nfc/enroll/precheck/:tagUid -> { exists, lifecycleStatus }
-    POST /api/v1/nfc/enroll  { tagUid, itemId? } -> { tagId, lifecycleStatus: ENROLLED }
+    GET  /api/v1/nfc/enroll/precheck/:tagUid?serial=&sigSha256=
+         -> { exists, lifecycleStatus, uidMatches }
+    POST /api/v1/nfc/enroll  { tagUid, itemId?, chipSerial?, sigSha256?, sdmKeyVersion? }
+         -> { tagId, lifecycleStatus: ENROLLED }
+
+S-NFC-ID: with a serial + signature fingerprint, `exists` means THIS physical
+chip (same fingerprint) or this serial is already registered. A UID shared
+with another chip is reported in `uidMatches` but is not a refusal.
 
 precheck runs BEFORE any write to the chip (a RETIRED UID is never re-personalised,
 Locked 2026-10-02); enroll runs only AFTER the read-back verified. No key
@@ -17,6 +23,7 @@ import json
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -33,12 +40,20 @@ class RegistryError(RuntimeError):
 class Precheck:
     exists: bool
     lifecycle_status: str | None
+    uid_matches: int = 0
 
 
 class Registry(Protocol):
-    def precheck(self, uid_hex: str) -> Precheck: ...
+    def precheck(self, uid_hex: str, serial_hex: str | None = None, sig_sha256: str | None = None) -> Precheck: ...
 
-    def enroll(self, uid_hex: str, item_id: str | None) -> str:
+    def enroll(
+        self,
+        uid_hex: str,
+        item_id: str | None,
+        serial_hex: str | None = None,
+        sig_sha256: str | None = None,
+        key_version: int | None = None,
+    ) -> str:
         """Returns the new nfc_tags.id."""
         ...
 
@@ -77,18 +92,33 @@ class BackendRegistry:
         except (urllib.error.URLError, TimeoutError) as exc:
             raise RegistryError(f"backend unreachable: {exc}") from exc
 
-    def precheck(self, uid_hex: str) -> Precheck:
-        status, payload = self._call("GET", f"/api/v1/nfc/enroll/precheck/{uid_hex}")
+    def precheck(self, uid_hex: str, serial_hex: str | None = None, sig_sha256: str | None = None) -> Precheck:
+        query = {k: v for k, v in (("serial", serial_hex), ("sigSha256", sig_sha256)) if v}
+        qs = f"?{urllib.parse.urlencode(query)}" if query else ""
+        status, payload = self._call("GET", f"/api/v1/nfc/enroll/precheck/{uid_hex}{qs}")
         if status != 200 or not payload.get("success"):
             # Fail closed: anything but a definite answer stops the encode.
             raise RegistryError(f"precheck failed (HTTP {status}): {payload.get('error', 'no detail')}")
         data = payload["data"]
-        return Precheck(bool(data["exists"]), data.get("lifecycleStatus"))
+        return Precheck(bool(data["exists"]), data.get("lifecycleStatus"), int(data.get("uidMatches") or 0))
 
-    def enroll(self, uid_hex: str, item_id: str | None) -> str:
+    def enroll(
+        self,
+        uid_hex: str,
+        item_id: str | None,
+        serial_hex: str | None = None,
+        sig_sha256: str | None = None,
+        key_version: int | None = None,
+    ) -> str:
         body: dict = {"tagUid": uid_hex}
         if item_id:
             body["itemId"] = item_id
+        if serial_hex:
+            body["chipSerial"] = serial_hex
+        if sig_sha256:
+            body["sigSha256"] = sig_sha256
+        if key_version is not None:
+            body["sdmKeyVersion"] = key_version
         status, payload = self._call("POST", "/api/v1/nfc/enroll", body)
         if status != 201 or not payload.get("success"):
             raise RegistryError(f"enroll failed (HTTP {status}): {payload.get('error', 'no detail')}")
@@ -129,18 +159,39 @@ def backend_registry_from_env() -> BackendRegistry:
 class MemoryRegistry:
     """In-process registry for the emulator and tests."""
 
-    rows: dict[str, str] = field(default_factory=dict)  # uid -> lifecycle status
+    rows: dict[str, str] = field(default_factory=dict)  # v1 rows: uid -> lifecycle status
+    chips: list[dict] = field(default_factory=list)  # v2 rows: {uid, serial, sig, status}
     fail_enroll: bool = False
 
-    def precheck(self, uid_hex: str) -> Precheck:
-        status = self.rows.get(uid_hex.upper())
-        return Precheck(status is not None, status)
+    def precheck(self, uid_hex: str, serial_hex: str | None = None, sig_sha256: str | None = None) -> Precheck:
+        uid = uid_hex.upper()
+        if serial_hex is None:  # v1: the UID is the identity
+            status = self.rows.get(uid)
+            return Precheck(status is not None, status)
+        hit = next(
+            (c for c in self.chips if (sig_sha256 and c["sig"] == sig_sha256) or (serial_hex and c["serial"] == serial_hex)),
+            None,
+        )
+        same_uid = sum(1 for c in self.chips if c["uid"] == uid) + (1 if uid in self.rows else 0)
+        return Precheck(hit is not None, hit["status"] if hit else None, same_uid)
 
-    def enroll(self, uid_hex: str, item_id: str | None) -> str:
+    def enroll(
+        self,
+        uid_hex: str,
+        item_id: str | None,
+        serial_hex: str | None = None,
+        sig_sha256: str | None = None,
+        key_version: int | None = None,
+    ) -> str:
         if self.fail_enroll:
             raise RegistryError("enroll failed (simulated)")
         uid = uid_hex.upper()
-        if uid in self.rows:
-            raise RegistryError("enroll failed (HTTP 409): UID already exists")
-        self.rows[uid] = "ENROLLED"
-        return f"00000000-0000-4000-8000-{len(self.rows):012d}"
+        if serial_hex is None:
+            if uid in self.rows:
+                raise RegistryError("enroll failed (HTTP 409): UID already exists")
+            self.rows[uid] = "ENROLLED"
+        else:
+            if any(c["serial"] == serial_hex or (sig_sha256 and c["sig"] == sig_sha256) for c in self.chips):
+                raise RegistryError("enroll failed (HTTP 409): chip already exists")
+            self.chips.append({"uid": uid, "serial": serial_hex, "sig": sig_sha256, "status": "ENROLLED"})
+        return f"00000000-0000-4000-8000-{len(self.rows) + len(self.chips):012d}"

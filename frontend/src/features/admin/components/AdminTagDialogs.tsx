@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useId, useState } from 'react';
-import { adminApi, type AdminTag } from '../api/adminApi';
+import { adminApi, chipLabel, type AdminTag } from '../api/adminApi';
 import { AdminDialog, ADMIN_BUTTON_CLASS, ADMIN_FIELD_CLASS } from './AdminDialog';
 
 export const REASON_MIN = 10;
@@ -72,7 +72,7 @@ export const AdminSuspendDialog = ({ open, tag, suspend, onClose, onDone }: Susp
     <AdminDialog
       open={open}
       onClose={onClose}
-      title={suspend ? `Suspend chip …${tag.uidSuffix}` : `Lift suspension on chip …${tag.uidSuffix}`}
+      title={suspend ? `Suspend chip ${chipLabel(tag)}` : `Lift suspension on chip ${chipLabel(tag)}`}
       description={suspend
         ? 'The token will verify as invalid (reason: suspended) and cannot be transferred until the suspension is lifted. The tap counter is not changed.'
         : 'The token returns to Active and verifies normally again.'}
@@ -149,7 +149,7 @@ export const AdminResetDialog = ({ open, tag, onClose, onDone }: ResetDialogProp
       open={open}
       onClose={onClose}
       danger
-      title={`Reset token on chip …${tag.uidSuffix}`}
+      title={`Reset token on chip ${chipLabel(tag)}`}
       description={
         <>
           <p>
@@ -157,7 +157,7 @@ export const AdminResetDialog = ({ open, tag, onClose, onDone }: ResetDialogProp
             owner gets a new Ownership ID.
           </p>
           <p className="mt-2 font-semibold text-red-300">
-            Chip …{tag.uidSuffix} is retired permanently and marked for destruction. This cannot be undone.
+            Chip {chipLabel(tag)} is retired permanently and marked for destruction. This cannot be undone.
           </p>
         </>
       }
@@ -175,7 +175,7 @@ export const AdminResetDialog = ({ open, tag, onClose, onDone }: ResetDialogProp
             <option value="">Choose a chip…</option>
             {candidates.map((c) => (
               <option key={c.id} value={c.id}>
-                …{c.uidSuffix} (enrolled {c.registeredAt ? new Date(c.registeredAt).toLocaleDateString() : '—'})
+                {chipLabel(c)} (enrolled {c.registeredAt ? new Date(c.registeredAt).toLocaleDateString() : '—'})
               </option>
             ))}
           </select>

@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { adminApi, type AdminTagDetailResponse } from '../api/adminApi';
+import { adminApi, chipLabel, type AdminTagDetailResponse } from '../api/adminApi';
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
 import { AdminResetDialog, AdminSuspendDialog } from '../components/AdminTagDialogs';
 import { ADMIN_BUTTON_CLASS } from '../components/AdminDialog';
@@ -83,7 +83,7 @@ export const AdminTagDetailPage = () => {
         <div className="space-y-2">
           <Link to="/admin/tags" className="text-primary-300 text-sm hover:underline">← Tags</Link>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <span className="font-mono">Chip …{tag.uidSuffix}</span>
+            <span className="font-mono">Chip {chipLabel(tag)}</span>
             <AdminLifecycleBadge status={tag.lifecycleStatus} />
           </h1>
         </div>

@@ -36,6 +36,8 @@ export interface SunCheckInput {
   readonly tagId: string | null;
   /** The chip UID the caller says they are holding (row's tag_uid). */
   readonly tagUid: string;
+  /** The row's chip_serial (null on v1 rows). A v2 URL must carry exactly this `sn`. */
+  readonly chipSerial: string | null;
   readonly sunMessage: string;
   /** nfc_tags.sdm_key_version (null on legacy rows = 1). */
   readonly keyVersion: number | null;
@@ -126,6 +128,7 @@ export const verifyFreshSun = async (
     version: input.keyVersion ?? 1,
     lastCounter: input.lastCounter,
     expectedUid: input.tagUid,
+    expectedSerial: input.chipSerial,
     provider: getTagKeyProvider(),
     audit: { ctx, tagId: input.tagId },
   });

@@ -18,9 +18,10 @@ import type { SunMessageParts } from './types';
  *   SDMMAC     = AES-CMAC(KSesSDMFileReadMAC, file[SDMMACInputOffset : SDMMACOffset])
  *   on wire    = even-numbered bytes of SDMMAC (indices 1,3,...,15) -> 8 bytes
  *
- * Our URL layout has no SDMENCFileData and SDMMACInputOffset == SDMMACOffset,
- * so the MAC input is the empty string. `extractMacInput` implements the
- * general range so a non-empty layout works too.
+ * Our URL layouts have no SDMENCFileData. v1: SDMMACInputOffset ==
+ * SDMMACOffset, so the MAC input is the empty string. v2 (S-NFC-ID,
+ * `?sn=<serial>&picc_data=…&cmac=…`): the range starts at the serial value, see
+ * `v2MacInput`. `extractMacInput` implements the general range.
  */
 
 const BLOCK = 16;
@@ -232,36 +233,55 @@ export const verifySdmMac = (
 
 const HEX_PICC = /^[0-9A-Fa-f]{32}$/;
 const HEX_MAC = /^[0-9A-Fa-f]{16}$/;
+/** The encoder writes the serial in uppercase; the chip MACs exactly those bytes. */
+export const CHIP_SERIAL_PATTERN = /^[0-9A-F]{16}$/;
 
-/** Strict hex validation of the two mirrored fields. */
+/** Strict hex validation of the mirrored fields (and the serial, when present). */
 export const isWellFormedSun = (parts: SunMessageParts): boolean =>
-  HEX_PICC.test(parts.encPiccData) && HEX_MAC.test(parts.cmac);
+  HEX_PICC.test(parts.encPiccData) &&
+  HEX_MAC.test(parts.cmac) &&
+  (parts.serial === undefined || CHIP_SERIAL_PATTERN.test(parts.serial));
 
 /**
- * Parse SUN URL parameters: `picc_data`/`e` (ENCPICCData) and `cmac`/`c` (SDMMAC).
- * Returns null unless both are present and well-formed hex of the right length.
+ * v2 MAC input: the URL bytes the chip MACs, from the serial value up to the
+ * cmac value — `<SERIAL>&picc_data=<ENCPICCData>&cmac=` in ASCII. The chip
+ * mirrors ENCPICCData as uppercase hex, so it is normalised here.
+ */
+export const v2MacInput = (serial: string, encPiccHex: string): Buffer =>
+  Buffer.from(`${serial}&picc_data=${encPiccHex.toUpperCase()}&cmac=`, 'ascii');
+
+/**
+ * Parse SUN URL parameters: `picc_data`/`e` (ENCPICCData), `cmac`/`c` (SDMMAC)
+ * and, on v2 chips, `sn` (our chip serial). Returns null unless the required
+ * pair is present and every present field is well-formed.
  */
 export const parseSunMessage = (url: string): SunMessageParts | null => {
   try {
     const parsed = new URL(url);
     const encPiccData = parsed.searchParams.get('picc_data') ?? parsed.searchParams.get('e');
     const cmac = parsed.searchParams.get('cmac') ?? parsed.searchParams.get('c');
+    const serial = parsed.searchParams.get('sn');
     if (!encPiccData || !cmac) return null;
-    const parts = { encPiccData, cmac };
+    const parts: SunMessageParts = serial === null ? { encPiccData, cmac } : { encPiccData, cmac, serial };
     return isWellFormedSun(parts) ? parts : null;
   } catch {
     return null;
   }
 };
 
-/** `{baseUrl}/verify/{tokenName}?picc_data=<hex>&cmac=<hex>` (uppercase hex). */
+/** `{baseUrl}/verify/{tokenName}?[sn=<hex>&]picc_data=<hex>&cmac=<hex>` (uppercase hex). */
 export const buildSunUrl = (
   baseUrl: string,
   tokenName: string,
   encPiccHex: string,
   cmacHex: string,
+  serial?: string,
 ): string => {
   const trimmed = baseUrl.replace(/\/$/, '');
-  const params = new URLSearchParams({ picc_data: encPiccHex, cmac: cmacHex });
+  const params = new URLSearchParams(
+    serial === undefined
+      ? { picc_data: encPiccHex, cmac: cmacHex }
+      : { sn: serial, picc_data: encPiccHex, cmac: cmacHex },
+  );
   return `${trimmed}/verify/${encodeURIComponent(tokenName)}?${params.toString()}`;
 };

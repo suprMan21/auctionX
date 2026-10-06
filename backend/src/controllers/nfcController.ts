@@ -74,6 +74,7 @@ export const registerTag = async (req: NfcRequest, res: Response) => {
       .select('id')
       .eq('tenant_id', tenantId)
       .eq('tag_uid', tagUid)
+      .is('chip_serial', null) // S-NFC-ID: UID uniqueness now covers v1 rows only
       .maybeSingle();
 
     if (existingTag) {
@@ -672,6 +673,9 @@ export const mintNft = async (req: NfcRequest, res: Response) => {
 /**
  * GET /api/v1/nfc/by-uid/:tagUid
  * Public endpoint — look up a tag by its physical UID.
+ *
+ * S-NFC-ID: v1 chips only. From key version 2 chips may share a UID, so a UID
+ * does not name one chip; v2 chips are addressed by their serial (the tap URL).
  */
 export const getTagByUid = async (req: NfcRequest, res: Response) => {
   const logger = withLogContext({ requestId: req.requestId, route: req.path });
@@ -684,6 +688,7 @@ export const getTagByUid = async (req: NfcRequest, res: Response) => {
       .from('nfc_tags')
       .select(PUBLIC_TAG_COLUMNS)
       .eq('tag_uid', tagUid.toUpperCase())
+      .is('chip_serial', null)
       .maybeSingle();
 
     if (error || !tag) {

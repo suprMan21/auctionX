@@ -25,6 +25,7 @@ from tag_encoder.ntag424.encode import (
     sdm_mac,
     session_mac_key,
     truncate_sdm_mac,
+    v2_mac_input,
     verify_sdm_mac,
     verify_sun,
 )
@@ -128,7 +129,7 @@ OTHER_ROOT = bytes.fromhex("77" * 32)
 
 def _provider_for(v):
     root = H(v["rootKey"])
-    if v["role"] == "APP_MASTER":
+    if v["role"] in ("APP_MASTER", "APP_KEY1", "APP_KEY4"):
         return LocalKeyProvider(OTHER_ROOT, root, allow_local_keys=True)
     return LocalKeyProvider(root, OTHER_ROOT, allow_local_keys=True)
 
@@ -136,19 +137,31 @@ def _provider_for(v):
 @pytest.mark.parametrize("v", VECTORS["kdf"], ids=[v["name"] for v in VECTORS["kdf"]])
 def test_kdf_vectors(v):
     uid = H(v["uid"]) if v["uid"] else None
-    assert kdf_message(v["role"], v["version"], uid).hex().upper() == v["message"]
+    serial = H(v["serial"]) if v["serial"] else None
+    assert kdf_message(v["role"], v["version"], uid, serial).hex().upper() == v["message"]
     assert kdf_info(v["role"], v["version"]).hex().upper() == v["info"]
-    assert _provider_for(v).derive_key(v["role"], v["version"], uid).hex().upper() == v["key"]
+    assert _provider_for(v).derive_key(v["role"], v["version"], uid, serial).hex().upper() == v["key"]
 
 
 @pytest.mark.parametrize("v", VECTORS["kdfChain"], ids=[v["name"] for v in VECTORS["kdfChain"]])
 def test_kdf_chain_into_sdm(v):
     p = LocalKeyProvider(H(v["rootKey"]), OTHER_ROOT, allow_local_keys=True)
     meta = p.derive_key("META", v["version"])
-    file_key = p.derive_key("FILE", v["version"], H(v["uid"]))
+    serial = H(v["serial"]) if v["serial"] else None
+    file_key = p.derive_key("FILE", v["version"], H(v["uid"]), serial)
     assert (meta.hex().upper(), file_key.hex().upper()) == (v["sdmMetaReadKey"], v["sdmFileReadKey"])
-    r = encode_sun(v["uid"], v["counter"], meta, file_key, "https://am.example", "tok", v["piccPadding"])
+    r = encode_sun(v["uid"], v["counter"], meta, file_key, "https://am.example", "tok", v["piccPadding"], serial)
     assert (r.enc_picc_hex, r.cmac_hex) == (v["encPiccData"], v["truncatedCmac"])
+    if serial is not None:
+        assert v2_mac_input(serial, r.enc_picc_hex).hex().upper() == v["macInput"]
+        assert f"?sn={v['serial']}&picc_data={r.enc_picc_hex}&cmac={r.cmac_hex}" in r.sun_url
+        res = verify_sun(r.enc_picc_hex, r.cmac_hex, meta, lambda _u: file_key, 4, v["uid"], serial)
+        assert res.valid
+        # the same tap under the twin chip's serial (same UID) must not verify
+        twin = next(c for c in VECTORS["kdfChain"] if c["uid"] == v["uid"] and c["serial"] not in ("", v["serial"]))
+        twin_file = p.derive_key("FILE", v["version"], H(v["uid"]), H(twin["serial"]))
+        assert twin_file != file_key
+        assert not verify_sun(r.enc_picc_hex, r.cmac_hex, meta, lambda _u: twin_file, 4, v["uid"], H(twin["serial"])).valid
 
 
 # --- verify pipeline (mirror of backend validateSunScan) ---------------------

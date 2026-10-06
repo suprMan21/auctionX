@@ -19,13 +19,19 @@ import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEv
  */
 
 const vectors = loadSharedVectors();
-const sdmKdf = vectors.kdf.filter((v) => v.role !== 'APP_MASTER');
-const adminKdf = vectors.kdf.filter((v) => v.role === 'APP_MASTER');
+const ADMIN_ROLES = ['APP_MASTER', 'APP_KEY1', 'APP_KEY4'];
+const sdmKdf = vectors.kdf.filter((v) => !ADMIN_ROLES.includes(v.role));
+const adminKdf = vectors.kdf.filter((v) => ADMIN_ROLES.includes(v.role));
 
 const requestFor = (v: KdfVector): TagKeyRequest =>
   v.role === 'META'
     ? { role: 'META', version: v.version }
-    : { role: v.role as 'FILE', version: v.version, uid: hex(v.uid) };
+    : {
+        role: v.role as 'FILE',
+        version: v.version,
+        uid: hex(v.uid),
+        ...(v.serial ? { serial: hex(v.serial) } : {}),
+      };
 
 class FakeKms implements KmsMacClient {
   readonly inputs: Array<{ KeyId?: string; MacAlgorithm?: string; Message?: Uint8Array }> = [];
@@ -112,7 +118,7 @@ describe('KMS provider reproduces the same vectors (KMS and local agree)', () =>
 describe('the backend can never derive an application master key (amended 2026-10-01)', () => {
   it.each(adminKdf.map((v) => [v.name, v] as const))('local provider refuses %s', async (_n, v) => {
     const p = createLocalTagKeyProvider({ sdmRootKeyHex: v.rootKey, allowLocalKeys: true });
-    const req = { role: 'APP_MASTER', version: v.version, uid: hex(v.uid) } as unknown as TagKeyRequest;
+    const req = { role: v.role, version: v.version, uid: hex(v.uid), serial: hex(v.serial) } as unknown as TagKeyRequest;
     await expect(p.deriveKey(req, testAudit)).rejects.toThrow(/not permitted/);
   });
 
@@ -135,11 +141,22 @@ describe('request validation', () => {
     await expect(p().deriveKey({ role: 'META', version: 256 }, testAudit)).rejects.toThrow();
   });
 
-  it('different UIDs and versions give different FILE keys', async () => {
-    const a = await p().deriveKey({ role: 'FILE', version: 1, uid: hex('04A27E02936980') }, testAudit);
+  it('different UIDs, versions and serials give different FILE keys', async () => {
+    const uid = hex('04A27E02936980');
+    const a = await p().deriveKey({ role: 'FILE', version: 1, uid }, testAudit);
     const b = await p().deriveKey({ role: 'FILE', version: 1, uid: hex('04DE5F1EACC040') }, testAudit);
-    const c = await p().deriveKey({ role: 'FILE', version: 2, uid: hex('04A27E02936980') }, testAudit);
-    expect(new Set([toHex(a), toHex(b), toHex(c)]).size).toBe(3);
+    const c = await p().deriveKey({ role: 'FILE', version: 2, uid, serial: hex('5A1E7C0D93B2468F') }, testAudit);
+    // S-NFC-ID: same UID, other chip -> other key
+    const d = await p().deriveKey({ role: 'FILE', version: 2, uid, serial: hex('C3D24B19E0F7A651') }, testAudit);
+    expect(new Set([toHex(a), toHex(b), toHex(c), toHex(d)]).size).toBe(4);
+  });
+
+  it('S-NFC-ID: v2 FILE needs an 8-byte serial; v1 and META take none', async () => {
+    const uid = hex('04A27E02936980');
+    await expect(p().deriveKey({ role: 'FILE', version: 2, uid }, testAudit)).rejects.toThrow(/serial/);
+    await expect(p().deriveKey({ role: 'FILE', version: 2, uid, serial: hex('0102') }, testAudit)).rejects.toThrow();
+    await expect(p().deriveKey({ role: 'FILE', version: 1, uid, serial: hex('5A1E7C0D93B2468F') }, testAudit)).rejects.toThrow();
+    await expect(p().deriveKey({ role: 'META', version: 2, serial: hex('5A1E7C0D93B2468F') }, testAudit)).rejects.toThrow();
   });
 });
 

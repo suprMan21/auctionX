@@ -74,6 +74,9 @@ class _FileSettings:
 class EmulatedNtag424:
     uid: bytes = bytes.fromhex("04A1B2C3D4E5F6")
     tag_tamper: bool = False
+    # Read_Sig bytes: per physical chip. Random so two software chips (even with one UID)
+    # have different fingerprints, as the duplicate-UID silicon does. Never a valid NXP sig.
+    signature: bytes = field(default_factory=lambda: os.urandom(56))
     keys: list[bytes] = field(default_factory=lambda: [bytes(16)] * 5)
     key_versions: list[int] = field(default_factory=lambda: [0] * 5)
     ndef: bytearray = field(default_factory=lambda: bytearray(256))
@@ -182,8 +185,10 @@ class EmulatedNtag424:
             ctr_le = self.sdm_read_ctr.to_bytes(3, "little")
             picc = bytes([0xC7]) + self.uid + ctr_le + self._rnd(5)
             enc = encrypt_picc_block(picc, self.keys[st.meta_read])
-            mac = sdm_mac(self.keys[st.file_read], self.uid, ctr_le, bytes(image[st.mac_in_off : st.mac_off]))
+            # The PICCData mirror lands first: the MAC input range covers the
+            # MIRRORED bytes (AN12196: e.g. "<ENCPICCData>&cmac=").
             image[st.picc_off : st.picc_off + 32] = enc.hex().upper().encode("ascii")
+            mac = sdm_mac(self.keys[st.file_read], self.uid, ctr_le, bytes(image[st.mac_in_off : st.mac_off]))
             image[st.mac_off : st.mac_off + 16] = mac.hex().upper().encode("ascii")
         return bytes(image[offset : offset + length]), SW_OK_ISO
 
@@ -208,7 +213,7 @@ class EmulatedNtag424:
         return (bytes(5), SW_OK) if self.tag_tamper else (b"", SW_ILLEGAL_CMD)
 
     def _read_sig(self, body: bytes) -> tuple[bytes, int]:
-        return bytes(56), 0x9190  # not an NXP signature: emulator chips are never "genuine"
+        return self.signature, 0x9190  # not an NXP signature: emulator chips are never "genuine"
 
     def _get_key_version(self, body: bytes) -> tuple[bytes, int]:
         if not body or body[0] > 4:

@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { adminApi, type AdminTag, type AdminTagLifecycleStatus } from '../api/adminApi';
+import { adminApi, chipLabel, type AdminTag, type AdminTagLifecycleStatus } from '../api/adminApi';
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
 
 const STATUS_OPTIONS: ReadonlyArray<{ label: string; value: '' | AdminTagLifecycleStatus }> = [
@@ -156,7 +156,7 @@ export const AdminTagsPage = () => {
                       to={`/admin/tags/${row.id}`}
                       className="font-mono text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
-                      …{row.uidSuffix}
+                      {chipLabel(row)}
                     </Link>
                   </td>
                   <td className="px-4 py-3"><AdminLifecycleBadge status={row.lifecycleStatus} /></td>

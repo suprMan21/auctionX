@@ -4,8 +4,10 @@ Locked spec (Decisions DB 2026-10-01), byte-identical to the backend
 (`backend/src/services/nfc/keys/keyDerivation.ts`); both are pinned by the
 shared OpenSSL vectors in `test-vectors/ntag424_sdm_vectors.json`:
 
-    msg  = "AM-NTAG424-KDF" || 0x00 || role_ascii || 0x00 || version(1 byte) || uid_bytes
-           (uid_bytes empty for META; exactly 7 bytes otherwise)
+    msg  = "AM-NTAG424-KDF" || 0x00 || role_ascii || 0x00 || version(1 byte) || uid_bytes || serial
+           (uid_bytes empty for META; exactly 7 bytes otherwise.
+            serial empty for META and at version 1; exactly 8 bytes for per-chip
+            roles at version >= 2 — S-NFC-ID KDF v2, our own per-chip serial)
     prk  = HMAC-SHA256(root, msg)      -- KMS GenerateMac (providers/) or local HMAC
     key  = HKDF-Expand(prk, info = "NTAG424-DNA/" || role || "/AES128/v" || version, L = 16)
 
@@ -14,7 +16,12 @@ cannot restrict GenerateMac by message content):
 
     META        fleet-wide SDMMetaReadKey   -> SDM root   (backend + encoder)
     FILE        per-UID SDMFileReadKey      -> SDM root   (backend + encoder)
-    APP_MASTER  per-UID application master  -> ADMIN root (encoder ONLY)
+    APP_MASTER  per-chip application master -> ADMIN root (encoder ONLY)
+    APP_KEY1    per-chip spare key K1       -> ADMIN root (encoder ONLY, v2+)
+    APP_KEY4    per-chip spare key K4       -> ADMIN root (encoder ONLY, v2+)
+
+K1/K4 are unused by SUN; v2 sets them so no slot on the chip still opens
+with the factory key (S-NFC-ID, Boss 2026-10-06).
 
 Derived keys exist only in memory for one encode: never cached, never
 persisted, never printed.
@@ -27,6 +34,7 @@ import hmac
 from typing import Optional, Protocol, runtime_checkable
 
 UID_LEN = 7
+SERIAL_LEN = 8
 KEY_LEN = 16
 ROOT_LEN = 32
 KDF_LABEL = b"AM-NTAG424-KDF"
@@ -34,29 +42,49 @@ KDF_LABEL = b"AM-NTAG424-KDF"
 ROLE_META = "META"
 ROLE_FILE = "FILE"
 ROLE_APP_MASTER = "APP_MASTER"
+ROLE_APP_KEY1 = "APP_KEY1"
+ROLE_APP_KEY4 = "APP_KEY4"
 
 #: Which root each role is derived from. The backend only ever holds "sdm".
-ROLE_ROOT = {ROLE_META: "sdm", ROLE_FILE: "sdm", ROLE_APP_MASTER: "admin"}
+ROLE_ROOT = {
+    ROLE_META: "sdm",
+    ROLE_FILE: "sdm",
+    ROLE_APP_MASTER: "admin",
+    ROLE_APP_KEY1: "admin",
+    ROLE_APP_KEY4: "admin",
+}
+
+#: First KDF version that binds per-chip keys to our serial (S-NFC-ID).
+SERIAL_KDF_VERSION = 2
+_V2_ONLY_ROLES = frozenset({ROLE_APP_KEY1, ROLE_APP_KEY4})
 
 
-def validate_request(role: str, version: int, uid: Optional[bytes]) -> bytes:
-    """Validate (role, version, uid); returns the uid bytes to append (b"" for META)."""
+def validate_request(role: str, version: int, uid: Optional[bytes], serial: Optional[bytes] = None) -> bytes:
+    """Validate the request; returns the bytes appended after the version (b"" for META)."""
     if role not in ROLE_ROOT:
         raise ValueError(f"unknown key role {role!r}")
     if not isinstance(version, int) or not (1 <= version <= 255):
         raise ValueError("key version must be an int in 1..255")
     if role == ROLE_META:
-        if uid:
-            raise ValueError("META keys are fleet-wide and take no UID")
+        if uid or serial:
+            raise ValueError("META keys are fleet-wide and take no UID or serial")
         return b""
     if not isinstance(uid, (bytes, bytearray)) or len(uid) != UID_LEN:
         raise ValueError(f"{role} keys require a {UID_LEN}-byte UID")
-    return bytes(uid)
+    if version < SERIAL_KDF_VERSION:
+        if role in _V2_ONLY_ROLES:
+            raise ValueError(f"{role} exists from key version {SERIAL_KDF_VERSION}")
+        if serial:
+            raise ValueError("version 1 keys take no serial")
+        return bytes(uid)
+    if not isinstance(serial, (bytes, bytearray)) or len(serial) != SERIAL_LEN:
+        raise ValueError(f"{role} keys at version >= {SERIAL_KDF_VERSION} require a {SERIAL_LEN}-byte serial")
+    return bytes(uid) + bytes(serial)
 
 
-def kdf_message(role: str, version: int, uid: Optional[bytes] = None) -> bytes:
-    uid_bytes = validate_request(role, version, uid)
-    return KDF_LABEL + b"\x00" + role.encode("ascii") + b"\x00" + bytes([version]) + uid_bytes
+def kdf_message(role: str, version: int, uid: Optional[bytes] = None, serial: Optional[bytes] = None) -> bytes:
+    tail = validate_request(role, version, uid, serial)
+    return KDF_LABEL + b"\x00" + role.encode("ascii") + b"\x00" + bytes([version]) + tail
 
 
 def kdf_info(role: str, version: int) -> bytes:
@@ -83,8 +111,10 @@ def hkdf_expand(prk: bytes, info: bytes, length: int) -> bytes:
 class KeyProvider(Protocol):
     """Role-aware chip-key derivation. Local and KMS providers implement this."""
 
-    def derive_key(self, role: str, version: int, uid: Optional[bytes] = None) -> bytes:
-        """Returns a 16-byte AES-128 key. Deterministic for (root, role, version, uid)."""
+    def derive_key(
+        self, role: str, version: int, uid: Optional[bytes] = None, serial: Optional[bytes] = None
+    ) -> bytes:
+        """Returns a 16-byte AES-128 key. Deterministic for (root, role, version, uid, serial)."""
         ...
 
 
@@ -92,7 +122,7 @@ class LocalKeyProvider:
     """Offline / staging provider: the HMAC step runs in-process.
 
     Takes TWO 32-byte roots (SDM root for META/FILE, ADMIN root for
-    APP_MASTER) and refuses to construct without an explicit
+    APP_MASTER/APP_KEY1/APP_KEY4) and refuses to construct without an explicit
     ``allow_local_keys=True`` — production encodes use the KMS provider.
     Produces exactly the same keys as KmsKeyProvider for the same root bytes.
     """
@@ -110,7 +140,9 @@ class LocalKeyProvider:
     def __repr__(self) -> str:  # never show root material
         return "LocalKeyProvider(<roots redacted>)"
 
-    def derive_key(self, role: str, version: int, uid: Optional[bytes] = None) -> bytes:
-        msg = kdf_message(role, version, uid)
+    def derive_key(
+        self, role: str, version: int, uid: Optional[bytes] = None, serial: Optional[bytes] = None
+    ) -> bytes:
+        msg = kdf_message(role, version, uid, serial)
         prk = hmac.new(self._roots[ROLE_ROOT[role]], msg, hashlib.sha256).digest()
         return hkdf_expand(prk, kdf_info(role, version), KEY_LEN)

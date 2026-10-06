@@ -1,5 +1,8 @@
 """S-NFC2 Phase 2 — physical personalisation flow, against the software NTAG 424.
 
+This file pins the v1 flow (key_version=1, UID identity); the v2 flow
+(per-chip serial, K1/K4, duplicate UIDs) is in test_personalise_v2.py.
+
 What these prove: stage ordering, refusals before any write, the RETIRED rule,
 fail-closed registry, K0-last resume after a mid-encode abort, the read-back
 gate before enroll, a phone-tap SUN that verifies as the backend would, and an
@@ -24,7 +27,7 @@ from tag_encoder.personalise import EncodeFailed, EncodeJob, Refused, personalis
 from tag_encoder.registry import MemoryRegistry, RegistryError
 
 UID = bytes.fromhex("04A1B2C3D4E5F6")
-JOB = EncodeJob(item="item_ph2_001", token="tok_ph2_001", base_url="https://staging.example")
+JOB = EncodeJob(item="item_ph2_001", token="tok_ph2_001", base_url="https://staging.example", key_version=1)
 KEYS = LocalKeyProvider(bytes.fromhex("11" * 32), bytes.fromhex("22" * 32), allow_local_keys=True)
 
 
@@ -96,7 +99,7 @@ def test_registered_uid_is_refused_before_any_write(status):
 
 def test_registry_outage_fails_closed():
     class Down(MemoryRegistry):
-        def precheck(self, uid_hex):
+        def precheck(self, uid_hex, *rest):
             raise RegistryError("backend unreachable")
 
     card = EmulatedNtag424(uid=UID)
@@ -218,7 +221,7 @@ def test_audit_rejects_unlisted_fields():
 
 def test_url_too_long_is_refused_before_touching_the_chip():
     card = EmulatedNtag424(uid=UID)
-    job = EncodeJob(item="x", token="t" * 300, base_url="https://staging.example")
+    job = EncodeJob(item="x", token="t" * 300, base_url="https://staging.example", key_version=1)
     with pytest.raises(Refused):
         personalise(card, KEYS, MemoryRegistry(), job, audit=AuditLog(None), originality=lambda u, s: True)
     assert card.log == []

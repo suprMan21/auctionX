@@ -11,6 +11,11 @@
  * `.order()`, `.range()`, `select(cols, { count: 'exact' })`, and `.rpc()`
  * answered by the `rpc` hook (database functions cannot run in memory).
  *
+ * S-NFC-ID: `.or('a.eq.x,b.eq.y')` (eq terms only), `maybeSingle()` errors on
+ * more than one row exactly as PostgREST does (so an ambiguous duplicate-UID
+ * lookup cannot pass silently), and nfc_tags inserts enforce the v2 identity
+ * indexes (UID unique among v1 rows only; serial and fingerprint unique).
+ *
  * S-NFC3.5: `.lt()` (the conditional counter burn) and an optional
  * `beforeUpdate` hook, so a test can play a concurrent request that wins the
  * race between our read and our conditional write.
@@ -28,7 +33,7 @@ export type Tables = Record<string, Row[]>;
 
 interface Filter {
   column: string;
-  op: 'eq' | 'lt' | 'gt' | 'gte' | 'lte' | 'in' | 'is' | 'ilike';
+  op: 'eq' | 'lt' | 'gt' | 'gte' | 'lte' | 'in' | 'is' | 'ilike' | 'or';
   value: unknown;
 }
 
@@ -38,6 +43,8 @@ const matches = (row: Row, filters: Filter[]): boolean =>
     switch (f.op) {
       case 'eq':
         return cell === f.value;
+      case 'or':
+        return (f.value as Array<[string, string]>).some(([column, value]) => row[column] === value);
       case 'is':
         // PostgREST `is null`: a missing column reads as null too.
         return (cell ?? null) === f.value;
@@ -149,6 +156,16 @@ class QueryBuilder {
     return this;
   }
 
+  or(expr: string): this {
+    const terms = expr.split(',').map((term) => {
+      const m = /^([a-z0-9_]+)\.eq\.(.+)$/.exec(term);
+      if (!m) throw new Error(`supabaseMock: unsupported or() term ${term}`);
+      return [m[1], m[2]] as [string, string];
+    });
+    this.filters.push({ column: '', op: 'or', value: terms });
+    return this;
+  }
+
   is(column: string, value: null): this {
     this.filters.push({ column, op: 'is', value });
     return this;
@@ -214,8 +231,15 @@ class QueryBuilder {
         }
       }
       if (this.table === 'nfc_tags') {
-        if (rows.some((r) => r.tag_uid === row.tag_uid)) {
+        const v1 = (r: Row) => (r.chip_serial ?? null) === null;
+        if (v1(row) && rows.some((r) => v1(r) && r.tag_uid === row.tag_uid)) {
           return { data: null, error: { message: 'duplicate tag_uid' } };
+        }
+        if (row.chip_serial && rows.some((r) => r.chip_serial === row.chip_serial)) {
+          return { data: null, error: { message: 'duplicate chip_serial' } };
+        }
+        if (row.originality_sig_sha256 && rows.some((r) => r.originality_sig_sha256 === row.originality_sig_sha256)) {
+          return { data: null, error: { message: 'duplicate originality_sig_sha256' } };
         }
       }
 
@@ -260,6 +284,9 @@ class QueryBuilder {
 
   async maybeSingle(): Promise<{ data: Row | null; error: unknown }> {
     const { data, error } = this.apply();
+    if (!error && data && data.length > 1) {
+      return { data: null, error: { message: 'JSON object requested, multiple (or no) rows returned' } };
+    }
     return { data: data && data.length > 0 ? data[0] : null, error };
   }
 

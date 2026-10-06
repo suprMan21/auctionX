@@ -50,7 +50,14 @@ _SIBLING_TAG_HQ = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(o
 if os.path.isdir(_SIBLING_TAG_HQ) and _SIBLING_TAG_HQ not in sys.path:
     sys.path.append(_SIBLING_TAG_HQ)
 
-from .keyprovider import ROLE_APP_MASTER, ROLE_FILE, ROLE_META, KeyProvider, LocalKeyProvider
+from .keyprovider import (
+    ROLE_APP_MASTER,
+    ROLE_FILE,
+    ROLE_META,
+    SERIAL_KDF_VERSION,
+    KeyProvider,
+    LocalKeyProvider,
+)
 from .ntag424 import apdu as apdu_mod
 from .ntag424.encode import build_sdm_template, encode_sun, verify_sun
 
@@ -58,7 +65,7 @@ DEFAULT_BASE_URL = "https://authentic-materials.com"
 # Chips keyed under the STAGING KMS roots point at the staging frontend: the
 # production domain will never verify staging keys.
 STAGING_BASE_URL = "https://d1bwev65w7rqzl.cloudfront.net"
-DEFAULT_KEY_VERSION = 1
+DEFAULT_KEY_VERSION = 2  # S-NFC-ID KDF v2: per-chip serial in the URL and the keys
 
 # PUBLIC dev roots. Deliberately recognisable; anything encoded under them is
 # forgeable by anyone who reads this file. Opt-in only via --dev-roots.
@@ -107,25 +114,29 @@ def cmd_encode(args: argparse.Namespace) -> int:
     uid = bytes.fromhex(uid_hex)
     token = args.token or args.item
 
+    serial = _serial_arg(args)
+
     meta_key = provider.derive_key(ROLE_META, args.key_version)
-    file_key = provider.derive_key(ROLE_FILE, args.key_version, uid)
-    result = encode_sun(uid, args.counter, meta_key, file_key, args.base_url, token)
+    file_key = provider.derive_key(ROLE_FILE, args.key_version, uid, serial)
+    result = encode_sun(uid, args.counter, meta_key, file_key, args.base_url, token, serial=serial)
     del meta_key, file_key  # no references survive the command
 
     if args.dry_run:
         # The APP_MASTER key is exercised (derivable) but never shown.
-        provider.derive_key(ROLE_APP_MASTER, args.key_version, uid)
-        template = build_sdm_template(args.base_url, token)
+        provider.derive_key(ROLE_APP_MASTER, args.key_version, uid, serial)
+        template = build_sdm_template(args.base_url, token, serial)
         seq = apdu_mod.encode_apdu_sequence(
             ndef_bytes=template.ndef_bytes,
             picc_data_offset=template.picc_data_offset,
             sdm_mac_input_offset=template.sdm_mac_input_offset,
             sdm_mac_offset=template.sdm_mac_offset,
             key_version=args.key_version,
+            serial_kdf=serial is not None,
         )
         print("=== DRY RUN — no reader, nothing written ===")
         print(f"item={args.item}  uid={uid_hex}  counter={args.counter}  keyVersion={args.key_version}")
-        print("keys: K0 APP_MASTER / K2 META / K3 FILE derived in memory — not printed")
+        spare = " / K1+K4 APP_KEY1/4" if serial is not None else ""
+        print(f"keys: K0 APP_MASTER / K2 META / K3 FILE{spare} derived in memory — not printed")
         print(f"SDM offsets: PICCData={template.picc_data_offset} MACInput={template.sdm_mac_input_offset} "
               f"MAC={template.sdm_mac_offset}")
         print(f"SUN URL (simulated tap): {result.sun_url}")
@@ -152,6 +163,7 @@ def cmd_encode(args: argparse.Namespace) -> int:
         "uid": uid_hex,
         "counter": args.counter,
         "keyVersion": args.key_version,
+        "serial": serial.hex().upper() if serial is not None else None,
         "baseUrl": args.base_url,
         "tokenName": token,
         **result.as_dict(),
@@ -186,16 +198,37 @@ def cmd_read(args: argparse.Namespace) -> int:
     return 0
 
 
+def _serial_arg(args: argparse.Namespace) -> bytes | None:
+    """v2 needs an 8-byte serial: --serial, else (encode only) a fresh random one."""
+    if args.key_version < SERIAL_KDF_VERSION:
+        if getattr(args, "serial", None):
+            raise SystemExit("error: --serial is only valid with --key-version >= 2")
+        return None
+    if getattr(args, "serial", None):
+        try:
+            raw = bytes.fromhex(args.serial)
+        except ValueError:
+            raw = b""
+        if len(raw) != 8:
+            raise SystemExit("error: --serial must be 16 hex chars (8 bytes)")
+        return raw
+    if args.command == "verify":
+        raise SystemExit("error: --serial is required with --key-version >= 2 (the sn= value from the URL)")
+    return os.urandom(8)
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     provider = _provider(args)
+    serial = _serial_arg(args)
     meta_key = provider.derive_key(ROLE_META, args.key_version)
     res = verify_sun(
         args.picc,
         args.cmac,
         meta_key,
-        lambda uid: provider.derive_key(ROLE_FILE, args.key_version, uid),
+        lambda uid: provider.derive_key(ROLE_FILE, args.key_version, uid, serial),
         args.last_counter,
         args.uid,
+        serial,
     )
     del meta_key
     out: dict = {"valid": res.valid, "decryptedUid": res.uid_hex, "counterValue": res.counter}
@@ -332,6 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
     enc.add_argument("--token", help="SUN token name (defaults to --item)")
     enc.add_argument("--base-url", default=DEFAULT_BASE_URL, help="SUN base URL")
     enc.add_argument("--dry-run", action="store_true", help="print APDU sequence + SUN, write nothing")
+    enc.add_argument("--serial", help="v2 chip serial, 16 hex chars (default: random)")
     key_args(enc)
     enc.set_defaults(func=cmd_encode)
 
@@ -344,6 +378,7 @@ def build_parser() -> argparse.ArgumentParser:
     vf.add_argument("--picc", required=True, help="ENCPICCData hex (32 chars)")
     vf.add_argument("--cmac", required=True, help="SDMMAC hex (16 chars)")
     vf.add_argument("--last-counter", type=int, default=-1, help="last accepted counter (replay gate)")
+    vf.add_argument("--serial", help="v2 chip serial: the sn= value from the URL (16 hex chars)")
     key_args(vf)
     vf.set_defaults(func=cmd_verify)
 

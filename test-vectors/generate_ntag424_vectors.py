@@ -93,16 +93,17 @@ def truncate_even(full_cmac: bytes) -> bytes:
     return bytes(full_cmac[i] for i in range(1, 16, 2))
 
 
-def kdf_message(role: str, version: int, uid: bytes) -> bytes:
-    return KDF_LABEL + b"\x00" + role.encode("ascii") + b"\x00" + bytes([version]) + uid
+def kdf_message(role: str, version: int, uid: bytes, serial: bytes = b"") -> bytes:
+    # v1: per-chip roles append UID(7). v2+ (S-NFC-ID): UID(7) || serial(8).
+    return KDF_LABEL + b"\x00" + role.encode("ascii") + b"\x00" + bytes([version]) + uid + serial
 
 
 def kdf_info(role: str, version: int) -> bytes:
     return f"NTAG424-DNA/{role}/AES128/v{version}".encode("ascii")
 
 
-def kdf_vector(name: str, root: bytes, role: str, version: int, uid: bytes) -> dict:
-    msg = kdf_message(role, version, uid)
+def kdf_vector(name: str, root: bytes, role: str, version: int, uid: bytes, serial: bytes = b"") -> dict:
+    msg = kdf_message(role, version, uid, serial)
     prk = hmac_sha256(root, msg)
     info = kdf_info(role, version)
     key = hkdf_expand(prk, info, 16)
@@ -112,6 +113,7 @@ def kdf_vector(name: str, root: bytes, role: str, version: int, uid: bytes) -> d
         "role": role,
         "version": version,
         "uid": h(uid),
+        "serial": h(serial),
         "message": h(msg),
         "prk": h(prk),
         "info": h(info),
@@ -230,25 +232,51 @@ def main() -> int:
     ]
     uid_a = bytes.fromhex("04A27E02936980")
     uid_b = bytes.fromhex("04DE5F1EACC040")
+    # S-NFC-ID: v2 per-chip keys take our own 8-byte serial after the UID.
+    # serial_a and serial_a2 on the SAME UID model the duplicate-UID chips.
+    serial_a = bytes.fromhex("5A1E7C0D93B2468F")
+    serial_a2 = bytes.fromhex("C3D24B19E0F7A651")
+    serial_b = bytes.fromhex("0123456789ABCDEF")
     kdf: list[dict] = []
     for rname, root in roots:
-        for version in (1, 2):
-            kdf.append(kdf_vector(f"{rname}_META_v{version}", root, "META", version, b""))
-            for uname, uid in (("uidA", uid_a), ("uidB", uid_b)):
-                kdf.append(kdf_vector(f"{rname}_FILE_v{version}_{uname}", root, "FILE", version, uid))
-            kdf.append(kdf_vector(f"{rname}_APP_MASTER_v{version}_uidA", root, "APP_MASTER", version, uid_a))
+        kdf.append(kdf_vector(f"{rname}_META_v1", root, "META", 1, b""))
+        for uname, uid in (("uidA", uid_a), ("uidB", uid_b)):
+            kdf.append(kdf_vector(f"{rname}_FILE_v1_{uname}", root, "FILE", 1, uid))
+        kdf.append(kdf_vector(f"{rname}_APP_MASTER_v1_uidA", root, "APP_MASTER", 1, uid_a))
+
+        kdf.append(kdf_vector(f"{rname}_META_v2", root, "META", 2, b""))
+        for uname, uid, serial in (("uidA_snA", uid_a, serial_a), ("uidA_snA2", uid_a, serial_a2), ("uidB_snB", uid_b, serial_b)):
+            kdf.append(kdf_vector(f"{rname}_FILE_v2_{uname}", root, "FILE", 2, uid, serial))
+        for role in ("APP_MASTER", "APP_KEY1", "APP_KEY4"):
+            kdf.append(kdf_vector(f"{rname}_{role}_v2_uidA_snA", root, role, 2, uid_a, serial_a))
+
+    def key_of(name: str) -> bytes:
+        return bytes.fromhex(next(v for v in kdf if v["name"] == name)["key"])
 
     # End-to-end: KDF-derived keys feeding real SDM (provider -> codec chain).
     root = roots[0][1]
-    meta = bytes.fromhex(next(v for v in kdf if v["name"] == "root_a_META_v1")["key"])
-    file_a = bytes.fromhex(next(v for v in kdf if v["name"] == "root_a_FILE_v1_uidA")["key"])
-    file_b = bytes.fromhex(next(v for v in kdf if v["name"] == "root_a_FILE_v1_uidB")["key"])
+    meta = key_of("root_a_META_v1")
     chain = [
-        {"rootKey": h(root), "version": 1, **sdm_vector(
-            "kdf_chain_root_a_v1_uidA_ctr5", meta, file_a, uid_a, 5, bytes.fromhex("0102030405"))},
-        {"rootKey": h(root), "version": 1, **sdm_vector(
-            "kdf_chain_root_a_v1_uidB_ctr5", meta, file_b, uid_b, 5, bytes.fromhex("0102030405"))},
+        {"rootKey": h(root), "version": 1, "serial": "", **sdm_vector(
+            "kdf_chain_root_a_v1_uidA_ctr5", meta, key_of("root_a_FILE_v1_uidA"), uid_a, 5, bytes.fromhex("0102030405"))},
+        {"rootKey": h(root), "version": 1, "serial": "", **sdm_vector(
+            "kdf_chain_root_a_v1_uidB_ctr5", meta, key_of("root_a_FILE_v1_uidB"), uid_b, 5, bytes.fromhex("0102030405"))},
     ]
+
+    # v2 chain: the MAC input is the URL text from the serial value up to the
+    # cmac value: "<SERIAL>&picc_data=<ENCPICCDATA>&cmac=" (ASCII, uppercase hex),
+    # exactly the bytes the chip MACs between SDMMACInputOffset and SDMMACOffset.
+    meta2 = key_of("root_a_META_v2")
+    for vname, uid, serial, fname in (
+        ("kdf_chain_root_a_v2_uidA_snA_ctr5", uid_a, serial_a, "root_a_FILE_v2_uidA_snA"),
+        ("kdf_chain_root_a_v2_uidA_snA2_ctr5", uid_a, serial_a2, "root_a_FILE_v2_uidA_snA2"),
+    ):
+        pad = bytes.fromhex("0102030405")
+        plain = bytes([0xC7]) + uid + (5).to_bytes(3, "little") + pad
+        enc = aes_cbc_encrypt(meta2, plain)
+        mac_input = (h(serial) + "&picc_data=" + h(enc) + "&cmac=").encode("ascii")
+        chain.append({"rootKey": h(root), "version": 2, "serial": h(serial), **sdm_vector(
+            vname, meta2, key_of(fname), uid, 5, pad, mac_input=mac_input)})
 
     picc_data_tags = [
         {"byte": "C7", "uidMirrored": True, "ctrMirrored": True, "uidLength": 7, "accept": True},
@@ -277,7 +305,8 @@ def main() -> int:
             "sessionMacKey": "AES-CMAC(SDMFileReadKey, SV2)",
             "mac": "AES-CMAC(sessionMacKey, bytes[SDMMACInputOffset:SDMMACOffset])",
             "truncation": "even-numbered bytes (indices 1,3,...,15) of the 16-byte CMAC",
-            "kdfMessage": "'AM-NTAG424-KDF' || 00 || role_ascii || 00 || version(1) || uid(0 or 7)",
+            "kdfMessage": "'AM-NTAG424-KDF' || 00 || role_ascii || 00 || version(1) || uid(0 or 7) || serial(0, or 8 for per-chip roles at version >= 2)",
+            "v2MacInput": "ASCII '<SERIAL hex>&picc_data=<ENCPICCData hex>&cmac=' (URL ?sn=<serial>&picc_data=..&cmac=..)",
             "kdfPrk": "HMAC-SHA256(root, message)",
             "kdfKey": "HKDF-Expand(prk, info='NTAG424-DNA/'||role||'/AES128/v'||version_decimal, L=16)",
         },

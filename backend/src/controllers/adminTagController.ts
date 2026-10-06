@@ -47,11 +47,12 @@ const pathParam = (value: string | string[] | undefined): string =>
  */
 // One literal on purpose: schemaColumnDrift.test.ts reads `*COLUMNS` constants.
 const ADMIN_TAG_COLUMNS =
-  'id, tag_uid, lifecycle_status, current_owner_id, seller_id, linked_item_id, sdm_key_version, sun_counter, registered_at, activated_at, suspended_at, suspended_reason, retired_at, retired_reason, replaced_by_tag_id, destruction_status';
+  'id, tag_uid, chip_serial, lifecycle_status, current_owner_id, seller_id, linked_item_id, sdm_key_version, sun_counter, registered_at, activated_at, suspended_at, suspended_reason, retired_at, retired_reason, replaced_by_tag_id, destruction_status';
 
 type AdminTagRow = {
   id: string;
   tag_uid: string;
+  chip_serial: string | null;
   lifecycle_status: string | null;
   current_owner_id: string | null;
   seller_id: string | null;
@@ -68,10 +69,14 @@ type AdminTagRow = {
   destruction_status: string | null;
 };
 
-/** The admin-facing shape. The UID is reduced to its suffix. */
+/**
+ * The admin-facing shape. The UID is reduced to its suffix; so is the serial
+ * (S-NFC-ID), which is what tells apart two chips that share a UID.
+ */
 const toAdminTag = (row: AdminTagRow) => ({
   id: row.id,
   uidSuffix: uidSuffix(row.tag_uid),
+  serialSuffix: row.chip_serial ? row.chip_serial.slice(-4) : null,
   lifecycleStatus: row.lifecycle_status,
   ownerAccountId: row.current_owner_id,
   creatorAccountId: row.seller_id,

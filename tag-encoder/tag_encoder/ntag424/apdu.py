@@ -64,14 +64,20 @@ KEY_APP_4 = 0x04
 
 # --- S-NFC3.5 key-slot map (AN12196 SDM, encrypted PICCData) ----------------
 #   K0  AppMaster        role APP_MASTER, per-UID, ADMIN root (encoder only)
-#   K1  reserved         unused, left at factory value
+#   K1  spare            v1: left at factory. v2 (S-NFC-ID): APP_KEY1, per-chip, ADMIN root
 #   K2  SDMMetaReadKey   role META, fleet-wide, SDM root (decrypts PICCData)
-#   K3  SDMFileReadKey   role FILE, per-UID, SDM root (SDM session MAC key)
-#   K4  reserved         unused, left at factory value
+#   K3  SDMFileReadKey   role FILE, per-chip, SDM root (SDM session MAC key)
+#   K4  spare            v1: left at factory. v2 (S-NFC-ID): APP_KEY4, per-chip, ADMIN root
 SLOT_APP_MASTER = KEY_APP_MASTER
 SLOT_SDM_META_READ = KEY_APP_2
 SLOT_SDM_FILE_READ = KEY_APP_3
-KEY_SLOT_ROLES = {SLOT_APP_MASTER: "APP_MASTER", SLOT_SDM_META_READ: "META", SLOT_SDM_FILE_READ: "FILE"}
+KEY_SLOT_ROLES = {
+    SLOT_APP_MASTER: "APP_MASTER",
+    KEY_APP_1: "APP_KEY1",
+    SLOT_SDM_META_READ: "META",
+    SLOT_SDM_FILE_READ: "FILE",
+    KEY_APP_4: "APP_KEY4",
+}
 
 # Access-condition nibble values (datasheet §8.2.3.3).
 ACCESS_FREE = 0xE
@@ -299,20 +305,35 @@ def encode_apdu_sequence(
     sdm_mac_offset: int,
     key_version: int = 0x01,
     ndef_file_no: int = FILE_NDEF,
+    serial_kdf: bool = False,
 ) -> list[dict]:
     """Describe the personalisation sequence personalise.py runs, for dry-run output.
 
     Takes NO key material: ChangeKey steps describe their body layout with the
     key bytes REDACTED. Order matches `personalise.py`: SDM settings and the
-    non-auth keys (K2, K3) first, K0 LAST (so an abort never strands an unknown
-    K0), then the NDEF template under the new K0, then a plain read-back.
+    non-auth keys (K2, K3; plus K1, K4 with `serial_kdf`) first, K0 LAST (so an
+    abort never strands an unknown K0), then the NDEF template under the new K0,
+    then a plain read-back. With `serial_kdf` (v2) the template carrying the
+    serial is first written unauthenticated, before any key changes.
     """
+    change_slots = (
+        (KEY_APP_1, SLOT_SDM_META_READ, SLOT_SDM_FILE_READ, KEY_APP_4)
+        if serial_kdf
+        else (SLOT_SDM_META_READ, SLOT_SDM_FILE_READ)
+    )
     redacted = "NewKey(16 B, derived in memory — never printed)"
     steps: list[dict] = [
         {"name": "SELECT NDEF application", "apdu": select_ndef_app(), "requires_live_channel": False},
     ]
-    for k in (KEY_APP_MASTER, SLOT_SDM_META_READ, SLOT_SDM_FILE_READ):
+    for k in (KEY_APP_MASTER, *sorted(change_slots)):
         steps.append({"name": f"GetKeyVersion K{k}", "apdu": get_key_version(k), "requires_live_channel": False})
+    if serial_kdf:
+        steps.append({
+            "name": f"WriteData (NDEF file {ndef_file_no}, {len(ndef_bytes)}B template with serial) — unauthenticated",
+            "plain_framed_apdu": write_data_plain(ndef_file_no, 0, ndef_bytes),
+            "note": "factory file 02 is Write=E; the serial is on the chip before any key is derived from it",
+            "requires_live_channel": False,
+        })
     steps.append({
         "name": f"AuthenticateEV2First (key {KEY_APP_MASTER}, factory) — part 1",
         "apdu": authenticate_ev2_first_cmd1(KEY_APP_MASTER),
@@ -330,7 +351,7 @@ def encode_apdu_sequence(
         "note": "CommMode.Full under the session keys. Offsets only — no key material.",
         "requires_live_channel": True,
     })
-    for slot in (SLOT_SDM_META_READ, SLOT_SDM_FILE_READ):
+    for slot in change_slots:
         steps.append({
             "name": f"ChangeKey K{slot} ({KEY_SLOT_ROLES[slot]})",
             "cleartext_layout": f"({redacted} XOR OldKey) || KeyVersion({key_version:02X}) || CRC32NK(NewKey)",

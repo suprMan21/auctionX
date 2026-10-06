@@ -15,6 +15,7 @@ import {
   parsePiccPlaintext,
   parseSunMessage,
   truncateSdmMac,
+  v2MacInput,
   verifySdmMac,
 } from '../services/nfc/ntag424Codec';
 import { validateSunScan } from '../services/nfc/ntag424';
@@ -305,5 +306,57 @@ describe('end-to-end: local provider -> simulateTap -> validateSunScan (KDF chai
 
   it('malformed input -> malformed', async () => {
     expect((await validate('https://am.example/verify/tok?picc_data=00&cmac=11', 0)).error).toBe('malformed');
+  });
+});
+
+describe('S-NFC-ID v2: serial in the URL, the KDF and the MAC input (shared OpenSSL vectors)', () => {
+  const v2 = vectors.kdfChain.filter((v) => v.version === 2);
+  const provider = createLocalTagKeyProvider({ sdmRootKeyHex: v2[0].rootKey, allowLocalKeys: true });
+
+  it('there are two v2 chain vectors on ONE UID with different serials', () => {
+    expect(v2).toHaveLength(2);
+    expect(v2[0].uid).toBe(v2[1].uid);
+    expect(v2[0].serial).not.toBe(v2[1].serial);
+    expect(v2[0].sdmFileReadKey).not.toBe(v2[1].sdmFileReadKey);
+  });
+
+  it.each(v2.map((v) => [v.name, v] as const))('%s: simulator reproduces OpenSSL byte for byte', async (_n, v) => {
+    const out = await simulateTap({
+      tagUid: v.uid, counter: v.counter, version: 2, baseUrl: 'https://am.example', tokenName: 'tok',
+      provider, audit: testAudit, padding: hex(v.piccPadding), serial: v.serial,
+    });
+    expect(toHex(v2MacInput(v.serial, out.piccData))).toBe(v.macInput);
+    expect(out.piccData).toBe(v.encPiccData);
+    expect(out.cmac).toBe(v.truncatedCmac);
+    expect(out.sunUrl).toContain(`?sn=${v.serial}&picc_data=${v.encPiccData}&cmac=${v.truncatedCmac}`);
+    expect(parseSunMessage(out.sunUrl)).toEqual({ encPiccData: v.encPiccData, cmac: v.truncatedCmac, serial: v.serial });
+  });
+
+  const validate = (url: string, expectedSerial: string | null | undefined, version = 2) =>
+    validateSunScan({
+      parts: parseSunMessage(url), version, lastCounter: 0, expectedUid: v2[0].uid, expectedSerial,
+      provider, audit: testAudit,
+    });
+
+  const urlOf = (v: (typeof v2)[number]) =>
+    `https://am.example/verify/tok?sn=${v.serial}&picc_data=${v.encPiccData}&cmac=${v.truncatedCmac}`;
+
+  it('accepts each chip under its own serial', async () => {
+    for (const v of v2) expect((await validate(urlOf(v), v.serial)).valid).toBe(true);
+  });
+
+  it("a URL naming the twin's serial is uid_mismatch for the named tag", async () => {
+    expect((await validate(urlOf(v2[0]), v2[1].serial)).error).toBe('uid_mismatch');
+  });
+
+  it("chip A's PICCData + MAC under chip B's serial fails the MAC", async () => {
+    const forged = urlOf(v2[0]).replace(v2[0].serial, v2[1].serial);
+    expect((await validate(forged, undefined)).error).toBe('invalid_signature');
+  });
+
+  it('a v2 URL against a v1 row, or a v1-shaped URL against a v2 row, never verifies', async () => {
+    expect((await validate(urlOf(v2[0]), null, 1)).valid).toBe(false);
+    const stripped = urlOf(v2[0]).replace(`sn=${v2[0].serial}&`, '');
+    expect((await validate(stripped, undefined, 2)).valid).toBe(false);
   });
 });

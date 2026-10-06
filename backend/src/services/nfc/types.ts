@@ -1,6 +1,8 @@
 export interface SunMessageParts {
   encPiccData: string;
   cmac: string;
+  /** S-NFC-ID v2 chips: the `sn` URL parameter, 16 uppercase hex. Absent on v1 chips. */
+  serial?: string;
 }
 
 /**

@@ -16,6 +16,8 @@ SDM_ROOT = bytes.fromhex("11" * 32)
 ADMIN_ROOT = bytes.fromhex("22" * 32)
 UID_A = bytes.fromhex("04A27E02936980")
 UID_B = bytes.fromhex("04DE5F1EACC040")
+SERIAL_A = bytes.fromhex("5A1E7C0D93B2468F")
+SERIAL_B = bytes.fromhex("C3D24B19E0F7A651")
 
 
 def _p(**kw):
@@ -35,7 +37,9 @@ def test_roots_must_be_32_bytes_and_distinct():
 
 
 def test_role_to_root_map():
-    assert ROLE_ROOT == {"META": "sdm", "FILE": "sdm", "APP_MASTER": "admin"}
+    assert ROLE_ROOT == {
+        "META": "sdm", "FILE": "sdm", "APP_MASTER": "admin", "APP_KEY1": "admin", "APP_KEY4": "admin",
+    }
 
 
 def test_app_master_comes_from_admin_root_only():
@@ -60,10 +64,12 @@ def test_deterministic_and_distinct():
         p.derive_key("META", 2),
         p.derive_key("FILE", 1, UID_A),
         p.derive_key("FILE", 1, UID_B),
-        p.derive_key("FILE", 2, UID_A),
+        p.derive_key("FILE", 2, UID_A, SERIAL_A),
+        p.derive_key("FILE", 2, UID_A, SERIAL_B),  # same UID, other chip
         p.derive_key("APP_MASTER", 1, UID_A),
+        p.derive_key("APP_MASTER", 2, UID_A, SERIAL_A),
     }
-    assert len(keys) == 6
+    assert len(keys) == 8
     assert all(len(k) == 16 for k in keys)
 
 
@@ -83,8 +89,35 @@ def test_rejects_bad_requests(role, version, uid):
         _p().derive_key(role, version, uid)
 
 
+@pytest.mark.parametrize(
+    "role,version,serial",
+    [
+        ("FILE", 2, None),            # v2 per-chip keys need the serial
+        ("APP_MASTER", 2, b"\x01\x02"),  # wrong serial length
+        ("FILE", 1, bytes(8)),        # v1 takes no serial
+        ("APP_KEY1", 1, None),        # K1/K4 roles exist from v2
+        ("APP_KEY4", 1, None),
+    ],
+)
+def test_rejects_bad_serial_requests(role, version, serial):
+    with pytest.raises(ValueError):
+        _p().derive_key(role, version, UID_A, serial)
+
+
+def test_meta_takes_no_serial():
+    with pytest.raises(ValueError):
+        _p().derive_key("META", 2, None, bytes(8))
+
+
+def test_spare_keys_come_from_admin_root_only():
+    a = _p().derive_key("APP_KEY1", 2, UID_A, SERIAL_A)
+    b = LocalKeyProvider(bytes.fromhex("33" * 32), ADMIN_ROOT, allow_local_keys=True).derive_key("APP_KEY1", 2, UID_A, SERIAL_A)
+    assert a == b and a != _p().derive_key("APP_KEY4", 2, UID_A, SERIAL_A)
+
+
 def test_kdf_message_layout():
     assert kdf_message("FILE", 1, UID_A) == b"AM-NTAG424-KDF\x00FILE\x00\x01" + UID_A
+    assert kdf_message("FILE", 2, UID_A, SERIAL_A) == b"AM-NTAG424-KDF\x00FILE\x00\x02" + UID_A + SERIAL_A
     assert kdf_message("META", 3) == b"AM-NTAG424-KDF\x00META\x00\x03"
 
 

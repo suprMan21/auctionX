@@ -108,8 +108,10 @@ class KmsKeyProvider:
                     "(spec=%r usage=%r enabled=%r)" % (name, key_id, spec, usage, enabled)
                 )
 
-    def derive_key(self, role: str, version: int, uid: Optional[bytes] = None) -> bytes:
-        msg = kdf_message(role, version, uid)  # validates role / version / uid
+    def derive_key(
+        self, role: str, version: int, uid: Optional[bytes] = None, serial: Optional[bytes] = None
+    ) -> bytes:
+        msg = kdf_message(role, version, uid, serial)  # validates role / version / uid / serial
         key_id = self.key_ids[ROLE_ROOT[role]]
         resp = self.client.generate_mac(KeyId=key_id, MacAlgorithm=KMS_MAC_ALGORITHM, Message=msg)
         mac = resp.get("Mac")

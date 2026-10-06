@@ -2,9 +2,14 @@
  * Resolve + verify + burn a public SUN tap — shared by POST /nfc/scan and
  * POST /nfc/tap (S-NFC3-FE).
  *
- * Identification is ONE META decrypt per live key version (current first):
- * PICCData yields the UID, the UID selects the row. No trial decryption across
- * stored per-tag keys (the S-NFC2 path did up to 500).
+ * Identification:
+ *   v2 (S-NFC-ID, URL carries `sn`): the serial selects the row, the row's
+ *       sdm_key_version selects the META key — one decrypt, then the decrypted
+ *       UID must equal the row's tag_uid. The UID alone never selects a v2 row:
+ *       chips can share a UID.
+ *   v1 (no `sn`): ONE META decrypt per live key version (current first);
+ *       PICCData yields the UID, the UID selects the v1 row (chip_serial null).
+ * No trial decryption across stored per-tag keys (the S-NFC2 path did up to 500).
  *
  * The counter burn is the conditional `lt('sun_counter', n)` update: zero rows
  * means another request already consumed this (or a later) counter -> replay.
@@ -18,11 +23,13 @@ import { recoverPiccData, verifyRecoveredScan } from './ntag424';
 import type { PiccData } from './ntag424Codec';
 import type { ScanValidationResult, SunMessageParts } from './types';
 import { currentSdmKeyVersion, getTagKeyProvider } from './keys/config';
+import { SERIAL_KDF_VERSION } from './keys/keyDerivation';
 import { classify, emitSunVerify, sunFailureCode, type SunResult } from './sunVerification';
 
 export type ResolvedTagRow = {
   id: string;
   tag_uid: string;
+  chip_serial: string | null;
   sun_counter: number;
   sdm_key_version: number | null;
   verification_id: string | null;
@@ -32,7 +39,7 @@ export type ResolvedTagRow = {
 };
 
 const RESOLVE_COLUMNS =
-  'id, tag_uid, sun_counter, sdm_key_version, verification_id, status, lifecycle_status, current_owner_id';
+  'id, tag_uid, chip_serial, sun_counter, sdm_key_version, verification_id, status, lifecycle_status, current_owner_id';
 
 export interface ResolvedTap {
   readonly tag: ResolvedTagRow;
@@ -53,20 +60,45 @@ export const resolveAndBurnSun = async (
 
   let match: { tag: ResolvedTagRow; picc: PiccData; version: number } | null = null;
   let decoded = false;
-  for (let version = currentSdmKeyVersion(); version >= 1 && !match; version--) {
+
+  const lookupFailed = (error: { message: string }): never => {
+    logger.error('nfc_scan_lookup_failed', { error: error.message });
+    throw new AppError('internal', 'Tag lookup failed');
+  };
+
+  if (params.parts.serial !== undefined) {
+    const { data: row, error: rowError } = await supabase
+      .from('nfc_tags')
+      .select(RESOLVE_COLUMNS)
+      .eq('chip_serial', params.parts.serial)
+      .maybeSingle();
+    if (rowError) lookupFailed(rowError);
+    const tagRow = row as ResolvedTagRow | null;
+    const version = tagRow?.sdm_key_version ?? 1;
+    if (tagRow && version >= SERIAL_KDF_VERSION) {
+      const picc = await recoverPiccData(params.parts.encPiccData, version, provider, { ctx, tagId: tagRow.id });
+      decoded = picc !== null;
+      if (picc && picc.uidHex === tagRow.tag_uid.toUpperCase()) {
+        match = { tag: tagRow, picc, version };
+      }
+    }
+  }
+
+  // v1 chips only (no serial). v1 keys take no serial, so only v1 versions are tried.
+  const v1Top = params.parts.serial === undefined ? Math.min(currentSdmKeyVersion(), SERIAL_KDF_VERSION - 1) : 0;
+  for (let version = v1Top; version >= 1 && !match; version--) {
     const picc = await recoverPiccData(params.parts.encPiccData, version, provider, { ctx });
     if (!picc) continue;
     decoded = true;
 
+    // v1 rows only: a v2 chip sharing this UID is never selected without its serial.
     const { data: row, error: rowError } = await supabase
       .from('nfc_tags')
       .select(RESOLVE_COLUMNS)
       .eq('tag_uid', picc.uidHex)
+      .is('chip_serial', null)
       .maybeSingle();
-    if (rowError) {
-      logger.error('nfc_scan_lookup_failed', { error: rowError.message });
-      throw new AppError('internal', 'Tag lookup failed');
-    }
+    if (rowError) lookupFailed(rowError);
     const tagRow = row as ResolvedTagRow | null;
     // The chip must have been encoded under the version that decoded it.
     if (tagRow && (tagRow.sdm_key_version ?? 1) === version) {
@@ -84,7 +116,9 @@ export const resolveAndBurnSun = async (
 
   let result: ScanValidationResult = await verifyRecoveredScan({
     picc,
+    encPiccHex: params.parts.encPiccData,
     cmacHex: params.parts.cmac,
+    serial: params.parts.serial,
     version,
     lastCounter: tag.sun_counter,
     expectedUid: params.claimedUid,

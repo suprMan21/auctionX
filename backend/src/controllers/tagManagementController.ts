@@ -46,9 +46,12 @@ import {
   sunFailureCode,
 } from '../services/nfc/sunVerification';
 import { currentSdmKeyVersion } from '../services/nfc/keys/config';
+import { parseSunMessage } from '../services/nfc/ntag424';
 import { consumeTapSession } from '../services/nfc/tapSession';
 import {
+  enrollPrecheckQuerySchema,
   enrollSchema,
+  enrollTagUidSchema,
   claimSchema,
   transferInitiateSchema,
   transferCompleteSchema,
@@ -89,6 +92,9 @@ type TagRow = {
   disclosure: Record<string, boolean> | null;
   linked_item_id: string | null;
 };
+
+/** A tag row with what the SUN check needs (S-NFC-ID adds the serial). */
+type SunTagRow = TagRow & { sdm_key_version: number | null; chip_serial: string | null };
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -305,16 +311,23 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
   if (!parsed.success) {
     throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
   }
-  const { tagUid, tenantId, itemId } = parsed.data;
+  const { tagUid, tenantId, itemId, chipSerial, sigSha256 } = parsed.data;
+  const sdmKeyVersion = parsed.data.sdmKeyVersion ?? currentSdmKeyVersion();
+  if ((sdmKeyVersion >= 2) !== (chipSerial !== undefined)) {
+    throw new AppError('invalid_argument', 'Key version 2 and later chips must be enrolled with their chipSerial');
+  }
 
   // No key material crosses this API: the chip's SDM keys are derived from
   // the KMS root at encode time and again at verify time. Only the KDF
-  // version is recorded, so a rotated META key still serves this chip.
+  // version (and, from v2, the chip's serial) is recorded, so a rotated META
+  // key still serves this chip.
   const { data, error } = await supabase
     .from('nfc_tags')
     .insert({
       tag_uid: tagUid.toUpperCase(),
-      sdm_key_version: currentSdmKeyVersion(),
+      chip_serial: chipSerial ?? null,
+      originality_sig_sha256: sigSha256 ?? null,
+      sdm_key_version: sdmKeyVersion,
       seller_id: userId,
       tenant_id: tenantId ?? 'auctionx',
       linked_item_id: itemId ?? null,
@@ -331,7 +344,7 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
       ip: ctx.ip, route: ctx.route,
     });
     logger.error('nfc_enroll_failed', { error: error?.message });
-    throw new AppError('conflict', 'Tag could not be enrolled — the UID may already exist');
+    throw new AppError('conflict', 'Tag could not be enrolled — this chip, serial or v1 UID may already exist');
   }
 
   emitSecurityEvent({
@@ -345,16 +358,21 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
 
 // ── GET /api/v1/nfc/enroll/precheck/:tagUid ─────────────────────────────────
 
-const tagUidParam = enrollSchema.shape.tagUid;
+const tagUidParam = enrollTagUidSchema;
 
 /**
  * S-NFC2 Ph2 encoder guard: may this physical chip be personalised?
  *
- * Called by the encoding station BEFORE any write to the chip. A UID that
+ * Called by the encoding station BEFORE any write to the chip. A chip that
  * already exists is never re-personalised, and a RETIRED one never comes back
  * (Locked 2026-10-02: retired chips are never reused). Unlike the public
  * GET /by-uid, a lookup failure is an error, never "not found", so an outage
  * cannot read as "this UID is free". Staff only.
+ *
+ * S-NFC-ID: with `?serial=&sigSha256=` (v2 encoder) "this chip" means the same
+ * physical fingerprint or the same serial. A UID shared with other chips is
+ * reported in `uidMatches` but is not a refusal. Without them, the v1 rule
+ * (the UID is the chip) applies against v1 rows.
  */
 export const enrollPrecheck = async (req: TagRequest, res: Response) => {
   const ctx = securityContext(req, '/api/v1/nfc/enroll/precheck', 'staff');
@@ -374,21 +392,52 @@ export const enrollPrecheck = async (req: TagRequest, res: Response) => {
   if (!parsed.success) {
     throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
   }
+  const query = enrollPrecheckQuerySchema.safeParse(req.query ?? {});
+  if (!query.success) {
+    throw new AppError('invalid_argument', 'Validation failed', query.error.issues);
+  }
+  const tagUid = parsed.data.toUpperCase();
+  const { serial, sigSha256 } = query.data;
 
-  const { data, error } = await supabase
-    .from('nfc_tags')
-    .select('id, lifecycle_status')
-    .eq('tag_uid', parsed.data.toUpperCase())
-    .maybeSingle();
-
-  if (error) {
-    logger.error('nfc_enroll_precheck_failed', { error: error.message });
+  const registryDown = (message: string): never => {
+    logger.error('nfc_enroll_precheck_failed', { error: message });
     throw new AppError('unavailable', 'Tag registry lookup failed');
+  };
+
+  if (serial === undefined && sigSha256 === undefined) {
+    const { data, error } = await supabase
+      .from('nfc_tags')
+      .select('id, lifecycle_status')
+      .eq('tag_uid', tagUid)
+      .is('chip_serial', null)
+      .maybeSingle();
+    if (error) registryDown(error.message);
+    return ok(res, {
+      exists: Boolean(data),
+      lifecycleStatus: (data?.lifecycle_status as string | null | undefined) ?? null,
+      uidMatches: data ? 1 : 0,
+    });
   }
 
+  // Both values are regex-validated hex, so they are safe inside the filter.
+  const identity = [
+    serial !== undefined ? `chip_serial.eq.${serial}` : null,
+    sigSha256 !== undefined ? `originality_sig_sha256.eq.${sigSha256}` : null,
+  ].filter(Boolean).join(',');
+  const [{ data: hits, error: hitError }, { count, error: countError }] = await Promise.all([
+    supabase.from('nfc_tags').select('id, lifecycle_status').or(identity),
+    supabase.from('nfc_tags').select('id', { count: 'exact', head: true }).eq('tag_uid', tagUid),
+  ]);
+  if (hitError) registryDown(hitError.message);
+  if (countError) registryDown(countError.message);
+
+  const rows = (hits ?? []) as { id: string; lifecycle_status: string | null }[];
+  // RETIRED wins: it is the stronger refusal (never reused, Locked 2026-10-02).
+  const hit = rows.find((r) => r.lifecycle_status === 'RETIRED') ?? rows[0];
   return ok(res, {
-    exists: Boolean(data),
-    lifecycleStatus: (data?.lifecycle_status as string | null | undefined) ?? null,
+    exists: rows.length > 0,
+    lifecycleStatus: hit?.lifecycle_status ?? null,
+    uidMatches: count ?? 0,
   });
 };
 
@@ -452,18 +501,25 @@ export const claimTag = async (req: TagRequest, res: Response) => {
     viaSession = true;
   } else {
     const { tagUid, sunMessage } = body;
-    const { data: tagRow } = await supabase
+    // S-NFC-ID: chips can share a UID, so a v2 URL's serial picks the row; a
+    // serial-less (v1) URL can only ever name a v1 row. A forged serial lands
+    // on a row whose keys the tap cannot satisfy.
+    const urlSerial = parseSunMessage(sunMessage)?.serial;
+    const byUid = supabase
       .from('nfc_tags')
-      .select(`${TAG_COLUMNS}, sdm_key_version`)
-      .eq('tag_uid', tagUid.toUpperCase())
-      .maybeSingle();
+      .select(`${TAG_COLUMNS}, sdm_key_version, chip_serial`)
+      .eq('tag_uid', tagUid.toUpperCase());
+    const { data: tagRow } = await (urlSerial === undefined
+      ? byUid.is('chip_serial', null)
+      : byUid.eq('chip_serial', urlSerial)
+    ).maybeSingle();
 
     if (!tagRow) {
       emitUnknownTagSun('claim', ctx);
       throw errorFor('not_found');
     }
 
-    const sunTag = tagRow as unknown as TagRow & { sdm_key_version: number | null };
+    const sunTag = tagRow as unknown as SunTagRow;
 
     // Possession first: a claim on a tag the caller cannot actually tap is
     // rejected before the lifecycle state is even considered.
@@ -471,6 +527,7 @@ export const claimTag = async (req: TagRequest, res: Response) => {
       {
         tagId: sunTag.id,
         tagUid: sunTag.tag_uid,
+        chipSerial: sunTag.chip_serial,
         sunMessage,
         keyVersion: sunTag.sdm_key_version,
         lastCounter: sunTag.sun_counter,
@@ -763,7 +820,7 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
 
   const { data: tagRow } = await supabase
     .from('nfc_tags')
-    .select(`${TAG_COLUMNS}, sdm_key_version`)
+    .select(`${TAG_COLUMNS}, sdm_key_version, chip_serial`)
     .eq('id', transfer.tag_id)
     .maybeSingle();
 
@@ -771,7 +828,7 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
     emitUnknownTagSun('transfer_complete', ctx);
     throw errorFor('not_found');
   }
-  const tag = tagRow as unknown as TagRow & { sdm_key_version: number | null };
+  const tag = tagRow as unknown as SunTagRow;
 
   // Rule 2: a fresh tap by the RECIPIENT. This is what stops a remote buyer
   // from completing a transfer for goods they never received.
@@ -801,6 +858,7 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
       {
         tagId: tag.id,
         tagUid: tag.tag_uid,
+        chipSerial: tag.chip_serial,
         sunMessage,
         keyVersion: tag.sdm_key_version,
         lastCounter: tag.sun_counter,

@@ -11,6 +11,8 @@ describe('tapUrl', () => {
   it('recognises long and short SUN parameters', () => {
     expect(hasSunParams(`?picc_data=${PICC}&cmac=${CMAC}`)).toBe(true);
     expect(hasSunParams(`?e=${PICC}&c=${CMAC}`)).toBe(true);
+    // S-NFC-ID v2 chips put their serial first
+    expect(hasSunParams(`?sn=5A1E7C0D93B2468F&picc_data=${PICC}&cmac=${CMAC}`)).toBe(true);
   });
 
   it('rejects missing or non-hex parameters', () => {
@@ -22,6 +24,7 @@ describe('tapUrl', () => {
   it('strips only the SUN parameters', () => {
     expect(withoutSunParams(`?picc_data=${PICC}&cmac=${CMAC}`)).toBe('');
     expect(withoutSunParams(`?ref=qr&e=${PICC}&c=${CMAC}`)).toBe('?ref=qr');
+    expect(withoutSunParams(`?sn=5A1E7C0D93B2468F&picc_data=${PICC}&cmac=${CMAC}&ref=qr`)).toBe('?ref=qr');
   });
 });
 

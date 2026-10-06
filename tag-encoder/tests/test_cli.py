@@ -9,25 +9,26 @@ from tag_encoder.cli import main
 from tag_encoder.keyprovider import LocalKeyProvider
 
 UID = "04A27E02936980"
+SERIAL = "5A1E7C0D93B2468F"
 
 
-def _all_dev_secrets(uid_hex: str, versions=(1,)) -> list[str]:
-    """Every root and derived key the CLI could touch for this UID, as lowercase hex."""
+def _all_dev_secrets(uid_hex: str, serial_hex: str | None = None) -> list[str]:
+    """Every root and derived key the CLI could touch for this chip, as lowercase hex."""
     p = LocalKeyProvider(cli._DEV_SDM_ROOT, cli._DEV_ADMIN_ROOT, allow_local_keys=True)
     uid = bytes.fromhex(uid_hex)
     out = [cli._DEV_SDM_ROOT.hex(), cli._DEV_ADMIN_ROOT.hex()]
-    for v in versions:
-        out += [
-            p.derive_key("META", v).hex(),
-            p.derive_key("FILE", v, uid).hex(),
-            p.derive_key("APP_MASTER", v, uid).hex(),
-        ]
+    out += [p.derive_key("META", 1).hex(), p.derive_key("FILE", 1, uid).hex(), p.derive_key("APP_MASTER", 1, uid).hex()]
+    if serial_hex:
+        sn = bytes.fromhex(serial_hex)
+        out.append(p.derive_key("META", 2).hex())
+        for role in ("FILE", "APP_MASTER", "APP_KEY1", "APP_KEY4"):
+            out.append(p.derive_key(role, 2, uid, sn).hex())
     return out
 
 
-def _assert_no_secrets(text: str, uid_hex: str) -> None:
+def _assert_no_secrets(text: str, uid_hex: str, serial_hex: str | None = None) -> None:
     low = text.lower()
-    for s in _all_dev_secrets(uid_hex):
+    for s in _all_dev_secrets(uid_hex, serial_hex):
         assert s not in low
 
 
@@ -51,45 +52,71 @@ def test_encode_json_output_has_no_keys(capsys):
     assert rc == 0
     cap = capsys.readouterr()
     out = json.loads(cap.out)
-    assert out["item"] == "abc" and out["counter"] == 3 and out["keyVersion"] == 1
+    assert out["item"] == "abc" and out["counter"] == 3 and out["keyVersion"] == 2
     assert len(out["uid"]) == 14 and out["uid"].startswith("04")
-    assert out["sunUrl"].startswith("https://authentic-materials.com/verify/abc?picc_data=")
+    assert len(out["serial"]) == 16
+    assert out["sunUrl"].startswith(f"https://authentic-materials.com/verify/abc?sn={out['serial']}&picc_data=")
     assert not any("key" in k.lower() and k != "keyVersion" for k in out)
-    _assert_no_secrets(cap.out + cap.err, out["uid"])
+    _assert_no_secrets(cap.out + cap.err, out["uid"], out["serial"])
+
+
+def test_encode_v1_has_no_serial(capsys):
+    assert main(["encode", "--item", "abc", "--key-version", "1", "--dev-roots"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["serial"] is None and "?picc_data=" in out["sunUrl"]
 
 
 def test_dry_run_prints_sequence_but_no_keys(capsys):
-    rc = main(["encode", "--item", "abc", "--uid", UID, "--dry-run", "--dev-roots"])
+    rc = main(["encode", "--item", "abc", "--uid", UID, "--serial", SERIAL, "--dry-run", "--dev-roots"])
     assert rc == 0
     cap = capsys.readouterr()
+    assert "ChangeKey K1 (APP_KEY1)" in cap.out and "ChangeKey K4 (APP_KEY4)" in cap.out
+    assert "unauthenticated" in cap.out  # the serial is written before any key change
     assert "DRY RUN" in cap.out and "AuthenticateEV2First" in cap.out
     assert "[secure session]" in cap.out and "SUN URL" in cap.out
     assert "never printed" in cap.out
     assert "cleartext body: 4000E0C1FF23" in cap.out  # SDM settings with encrypted PICCData
-    _assert_no_secrets(cap.out + cap.err, UID)
+    _assert_no_secrets(cap.out + cap.err, UID, SERIAL)
 
 
 def test_encode_then_verify_roundtrip(capsys):
     assert main(["encode", "--item", "x", "--uid", UID, "--counter", "7", "--dev-roots"]) == 0
     out = json.loads(capsys.readouterr().out)
     rc = main(["verify", "--uid", UID, "--picc", out["encPiccHex"], "--cmac", out["cmacHex"],
-               "--last-counter", "6", "--dev-roots"])
+               "--serial", out["serial"], "--last-counter", "6", "--dev-roots"])
     cap = capsys.readouterr()
     assert rc == 0
     res = json.loads(cap.out)
     assert res == {"valid": True, "decryptedUid": UID, "counterValue": 7}
-    _assert_no_secrets(cap.out + cap.err, UID)
+    _assert_no_secrets(cap.out + cap.err, UID, out["serial"])
+
+
+def test_verify_v2_needs_the_serial(capsys):
+    _enc()
+    out = json.loads(capsys.readouterr().out)
+    with pytest.raises(SystemExit):
+        main(["verify", "--picc", out["encPiccHex"], "--cmac", out["cmacHex"], "--dev-roots"])
+
+
+def test_verify_rejects_other_serial(capsys):
+    """Same UID, other chip's serial: other keys, so the MAC fails."""
+    _enc()
+    out = json.loads(capsys.readouterr().out)
+    rc = main(["verify", "--uid", UID, "--picc", out["encPiccHex"], "--cmac", out["cmacHex"],
+               "--serial", "C3D24B19E0F7A651", "--last-counter", "4", "--dev-roots"])
+    assert rc == 1
+    assert json.loads(capsys.readouterr().out)["error"] == "invalid_signature"
 
 
 def _enc(counter=5):
-    main(["encode", "--item", "x", "--uid", UID, "--counter", str(counter), "--dev-roots"])
+    main(["encode", "--item", "x", "--uid", UID, "--serial", SERIAL, "--counter", str(counter), "--dev-roots"])
 
 
 def test_verify_rejects_replay(capsys):
     _enc()
     out = json.loads(capsys.readouterr().out)
     rc = main(["verify", "--uid", UID, "--picc", out["encPiccHex"], "--cmac", out["cmacHex"],
-               "--last-counter", "5", "--dev-roots"])
+               "--serial", SERIAL, "--last-counter", "5", "--dev-roots"])
     assert rc == 1
     assert json.loads(capsys.readouterr().out)["error"] == "replay_detected"
 
@@ -98,7 +125,7 @@ def test_verify_rejects_bad_mac(capsys):
     _enc()
     out = json.loads(capsys.readouterr().out)
     rc = main(["verify", "--uid", UID, "--picc", out["encPiccHex"], "--cmac", "0000000000000000",
-               "--last-counter", "4", "--dev-roots"])
+               "--serial", SERIAL, "--last-counter", "4", "--dev-roots"])
     assert rc == 1
     assert json.loads(capsys.readouterr().out)["error"] == "invalid_signature"
 
@@ -107,7 +134,7 @@ def test_verify_rejects_other_uid(capsys):
     _enc()
     out = json.loads(capsys.readouterr().out)
     rc = main(["verify", "--uid", "04DE5F1EACC040", "--picc", out["encPiccHex"], "--cmac", out["cmacHex"],
-               "--dev-roots"])
+               "--serial", SERIAL, "--dev-roots"])
     assert rc == 1
     assert json.loads(capsys.readouterr().out)["error"] == "uid_mismatch"
 

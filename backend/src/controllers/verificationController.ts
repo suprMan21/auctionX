@@ -333,6 +333,7 @@ export const getVerificationByToken = async (req: VerificationRequest, res: Resp
           .from('nfc_tags')
           .select('id')
           .eq('tag_uid', verif.nfc_tag_uid)
+          .is('chip_serial', null) // S-NFC-ID: a UID names a v1 chip only
           .maybeSingle()
       : { data: null };
 

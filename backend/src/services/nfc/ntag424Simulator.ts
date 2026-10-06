@@ -4,6 +4,7 @@ import {
   buildSunUrl,
   computeSdmMac,
   encryptPiccBlock,
+  v2MacInput,
 } from './ntag424Codec';
 import { SDM_URL_MAC_INPUT } from './ntag424';
 import type { KeyAuditContext, TagKeyProvider } from './keys/tagKeyProvider';
@@ -24,6 +25,8 @@ export interface SimulateTapParams {
   readonly audit: KeyAuditContext;
   /** 5 PICCData padding bytes; random (as on silicon) when omitted. */
   readonly padding?: Buffer;
+  /** S-NFC-ID: the chip serial (16 uppercase hex). Required iff version >= 2. */
+  readonly serial?: string;
 }
 
 export interface SimulateTapResult {
@@ -50,15 +53,17 @@ export const simulateTap = async (p: SimulateTapParams): Promise<SimulateTapResu
     metaKey.fill(0);
   }
 
-  const fileKey = await p.provider.deriveKey({ role: 'FILE', version: p.version, uid }, p.audit);
+  const piccData = enc.toString('hex').toUpperCase();
+  const serial = p.serial === undefined ? undefined : Buffer.from(p.serial, 'hex');
+  const fileKey = await p.provider.deriveKey({ role: 'FILE', version: p.version, uid, serial }, p.audit);
   let mac: Buffer;
   try {
-    mac = computeSdmMac(fileKey, uid, counterLE, SDM_URL_MAC_INPUT);
+    const macInput = p.serial === undefined ? SDM_URL_MAC_INPUT : v2MacInput(p.serial, piccData);
+    mac = computeSdmMac(fileKey, uid, counterLE, macInput);
   } finally {
     fileKey.fill(0);
   }
 
-  const piccData = enc.toString('hex').toUpperCase();
   const cmac = mac.toString('hex').toUpperCase();
-  return { sunUrl: buildSunUrl(p.baseUrl, p.tokenName, piccData, cmac), piccData, cmac };
+  return { sunUrl: buildSunUrl(p.baseUrl, p.tokenName, piccData, cmac, p.serial), piccData, cmac };
 };

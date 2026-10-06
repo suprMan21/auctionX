@@ -887,6 +887,7 @@ export type Database = {
         Row: {
           activated_at: string | null
           aes_key_enc: string | null
+          chip_serial: string | null
           created_at: string
           current_owner_id: string | null
           destruction_status: string | null
@@ -898,6 +899,7 @@ export type Database = {
             | null
           linked_item_id: string | null
           metadata: Json | null
+          originality_sig_sha256: string | null
           registered_at: string
           replaced_by_tag_id: string | null
           retired_at: string | null
@@ -916,6 +918,7 @@ export type Database = {
         Insert: {
           activated_at?: string | null
           aes_key_enc?: string | null
+          chip_serial?: string | null
           created_at?: string
           current_owner_id?: string | null
           destruction_status?: string | null
@@ -927,6 +930,7 @@ export type Database = {
             | null
           linked_item_id?: string | null
           metadata?: Json | null
+          originality_sig_sha256?: string | null
           registered_at?: string
           replaced_by_tag_id?: string | null
           retired_at?: string | null
@@ -945,6 +949,7 @@ export type Database = {
         Update: {
           activated_at?: string | null
           aes_key_enc?: string | null
+          chip_serial?: string | null
           created_at?: string
           current_owner_id?: string | null
           destruction_status?: string | null
@@ -956,6 +961,7 @@ export type Database = {
             | null
           linked_item_id?: string | null
           metadata?: Json | null
+          originality_sig_sha256?: string | null
           registered_at?: string
           replaced_by_tag_id?: string | null
           retired_at?: string | null

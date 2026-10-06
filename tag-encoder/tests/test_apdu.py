@@ -77,7 +77,7 @@ def test_access_rights_packing():
 
 
 def test_key_slot_map():
-    assert apdu.KEY_SLOT_ROLES == {0: "APP_MASTER", 2: "META", 3: "FILE"}
+    assert apdu.KEY_SLOT_ROLES == {0: "APP_MASTER", 1: "APP_KEY1", 2: "META", 3: "FILE", 4: "APP_KEY4"}
 
 
 def test_write_data_plain_framing():

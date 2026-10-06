@@ -1,41 +1,60 @@
 """Physical personalisation of one NTAG 424 DNA chip — S-NFC2 Phase 2.
 
 Order (every stage must pass before the next; nothing is written until
-stage 5):
+the serial stage):
 
   1 identify     SELECT NDEF app, GetVersion -> AM-SEALED acceptance tuple, 7-byte NXP UID
   2 gate         GetTTStatus (0xF7) must be ABSENT (91 1C) -> plain stock, TagTamper rejected
-  3 originality  Read_Sig -> NXP ECDSA (secp224r1) originality signature over the UID
-  4 registry     backend precheck: UID must not exist at all; RETIRED is never reused
-  5 key state    GetKeyVersion K0/K2/K3: factory (0) -> personalise; ours -> resume
-  6 personalise  AuthEV2First(K0 factory) -> ChangeFileSettings (SDM) -> ChangeKey K2, K3
-                 -> ChangeKey K0 (last, ends the session)
-  7 ndef         AuthEV2First(K0 new) -> WriteData NDEF template (Plain file)
-  8 read-back    GetFileSettings must match; ISOReadBinary must return our template with
+  3 originality  Read_Sig -> NXP ECDSA (secp224r1) originality signature over the UID;
+                 its SHA-256 is the chip's physical fingerprint (sent at precheck + enroll)
+  4 key state    GetKeyVersion K0..K4: factory (0) -> personalise; ours -> resume
+  5 serial       (v2) the chip's serial: read back off the NDEF if an earlier run wrote
+                 one, else a fresh random 8 bytes. Must exist on the chip whenever any
+                 key is already ours, because v2 keys are derived from it.
+  6 registry     backend precheck on (UID, serial, fingerprint): the fingerprint or the
+                 serial must not exist; RETIRED is never reused. A shared UID alone is
+                 not a refusal at v2 (S-NFC-ID: duplicate-UID chips are real).
+  7 pre-write    (v2, factory file only) WriteData the NDEF template, unauthenticated
+                 (factory file 02 is Write=E), so the serial is on the chip before
+                 any key depends on it
+  8 personalise  AuthEV2First(K0 factory) -> ChangeFileSettings (SDM)
+                 -> ChangeKey K1, K2, K3, K4 (K1/K4 v2 only) -> ChangeKey K0 (last)
+  9 ndef         AuthEV2First(K0 new) -> WriteData NDEF template (Plain file)
+ 10 read-back    GetFileSettings must match; ISOReadBinary must return our template with
                  a SUN that verifies under the derived keys (decrypt, UID, SDMMAC)
-  9 enroll       backend POST /nfc/enroll -> ENROLLED; only now is the chip "encoded"
+ 11 enroll       backend POST /nfc/enroll -> ENROLLED; only now is the chip "encoded"
 
 Changing K0 last means a failure at any point leaves either a factory K0 (re-run
 starts over, ChangeKey uses the right old key from GetKeyVersion) or our K0
-(re-run resumes at stage 7). No blockchain write anywhere (G5).
+(re-run resumes at stage 9). No blockchain write anywhere (G5).
 
-Keys: META (fleet), FILE and APP_MASTER (per UID) are derived via the
-KeyProvider only after the chip has passed stages 1-5, held as bytearrays for
-this one chip and zeroized in `finally`. Nothing here prints or logs them.
+Keys: META (fleet), FILE, APP_MASTER, APP_KEY1 and APP_KEY4 (per chip) are
+derived via the KeyProvider only after the chip has passed stages 1-6, held as
+bytearrays for this one chip and zeroized in `finally`. Nothing here prints or
+logs them.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 from dataclasses import dataclass
 from typing import Callable
 
 from . import __version__ as ENCODER_VERSION
 from .audit import AuditLog, operator_identity
-from .keyprovider import ROLE_APP_MASTER, ROLE_FILE, ROLE_META, KeyProvider
+from .keyprovider import (
+    ROLE_APP_KEY1,
+    ROLE_APP_KEY4,
+    ROLE_APP_MASTER,
+    ROLE_FILE,
+    ROLE_META,
+    SERIAL_KDF_VERSION,
+    KeyProvider,
+)
 from .ntag424 import apdu as A
 from .ntag424 import session as sm
-from .ntag424.encode import SdmTemplate, build_sdm_template, verify_sun
+from .ntag424.encode import SERIAL_LEN, SdmTemplate, build_sdm_template, serial_from_ndef, verify_sun
 from .registry import Registry, RegistryError, item_uuid_or_none
 from .transport import SW_ADDITIONAL_FRAME, SW_ISO_OK, SW_NATIVE_OK, CardIO
 
@@ -72,7 +91,11 @@ class EncodeJob:
     item: str
     token: str
     base_url: str
-    key_version: int = 1
+    key_version: int = SERIAL_KDF_VERSION
+
+    @property
+    def uses_serial(self) -> bool:
+        return self.key_version >= SERIAL_KDF_VERSION
 
 
 @dataclass(frozen=True)
@@ -82,11 +105,13 @@ class EncodeOutcome:
     readback_counter: int
     resumed: bool
     readback_url: str  # operator display only; never logged
+    serial_hex: str | None = None
 
     def as_dict(self) -> dict:
         return {
             "tagId": self.tag_id,
             "uid": self.uid_hex,
+            "serial": self.serial_hex,
             "readbackCounter": self.readback_counter,
             "resumed": self.resumed,
             "readbackUrl": self.readback_url,
@@ -98,6 +123,11 @@ def nxp_originality(uid: bytes, signature: bytes) -> bool:
     from tag_hq import genuineness  # lazy: optional dependency
 
     return genuineness.verify_originality(uid, signature).genuine
+
+
+def signature_fingerprint(signature: bytes) -> str:
+    """SHA-256 of the raw Read_Sig bytes, lowercase hex: one physical chip, one value."""
+    return hashlib.sha256(bytes(signature)).hexdigest()
 
 
 def _zero(*bufs: bytearray) -> None:
@@ -152,7 +182,20 @@ class _Chip:
             raise EncodeFailed("response_mac_mismatch", self.stage, f"INS {ins:02X}") from exc
 
 
-def _expect_readback(chip: _Chip, template: SdmTemplate, uid: bytes, meta: bytes, file_key: bytes) -> tuple[int, str]:
+def _read_ndef(chip: _Chip) -> bytes:
+    """The NDEF file image as any phone would read it (SDM mirrors, if on, are harmless here)."""
+    chip.select_app()
+    chip.tx(A.select_ndef_file(), SW_ISO_OK)
+    head = chip.tx(A.iso_read_binary(0, 2), SW_ISO_OK)
+    nlen = int.from_bytes(head[:2], "big") if len(head) >= 2 else 0
+    if nlen == 0 or nlen > MAX_WRITE_DATA:
+        return head
+    return chip.tx(A.iso_read_binary(0, nlen + 2), SW_ISO_OK)
+
+
+def _expect_readback(
+    chip: _Chip, template: SdmTemplate, uid: bytes, meta: bytes, file_key: bytes, serial: bytes | None
+) -> tuple[int, str]:
     """Stage 8. Returns (SDMReadCtr seen, URL as a phone would read it)."""
     from tag_hq import parsers  # read-only, pure; reused per the S-NFC2 spec
 
@@ -179,7 +222,7 @@ def _expect_readback(chip: _Chip, template: SdmTemplate, uid: bytes, meta: bytes
         raise EncodeFailed("readback_ndef_mismatch", chip.stage, "NDEF differs outside the SDM mirrors")
 
     picc_hex, mac_hex = image[p : p + 32].decode("ascii"), image[m : m + 16].decode("ascii")
-    res = verify_sun(picc_hex, mac_hex, meta, lambda _uid: file_key, -1, uid.hex().upper())
+    res = verify_sun(picc_hex, mac_hex, meta, lambda _uid: file_key, -1, uid.hex().upper(), serial)
     if not res.valid:
         raise EncodeFailed("readback_sun_invalid", chip.stage, res.error or "")
     summary = parsers.parse_ndef(image)
@@ -204,15 +247,18 @@ def personalise(
         "event": "personalise", "operator": operator_identity(), "item": job.item, "token": job.token,
         "key_version": job.key_version, "mode": mode, "encoder_version": ENCODER_VERSION,
     }
+    # Size check up front with a dummy serial: the real one is only known at stage 5.
     try:
-        template = build_sdm_template(job.base_url, job.token)
+        probe = build_sdm_template(job.base_url, job.token, bytes(SERIAL_LEN) if job.uses_serial else None)
     except ValueError as exc:
         raise Refused("url_too_long", "identify", str(exc)) from exc
-    if len(template.ndef_bytes) > MAX_WRITE_DATA:
-        raise Refused("url_too_long", "identify", f"NDEF {len(template.ndef_bytes)} B > {MAX_WRITE_DATA} B")
+    if len(probe.ndef_bytes) > MAX_WRITE_DATA:
+        raise Refused("url_too_long", "identify", f"NDEF {len(probe.ndef_bytes)} B > {MAX_WRITE_DATA} B")
 
-    meta = file_key = master = bytearray()
+    slots = (0, 1, 2, 3, 4) if job.uses_serial else (0, 2, 3)
+    meta = file_key = master = key1 = key4 = bytearray()
     resumed = False
+    serial: bytes | None = None
     try:
         # 1 identify
         from tag_hq import parsers
@@ -240,11 +286,35 @@ def personalise(
         sig, _ = card.transmit(READ_SIG)
         if not originality(uid, sig):
             raise Refused("originality_failed", "originality")
+        sig_sha256 = signature_fingerprint(sig)
 
-        # 4 registry (fail closed: any error stops the encode)
+        # 4 key state
+        chip.stage = "key_state"
+        kv = {k: chip.tx(A.get_key_version(k), SW_NATIVE_OK)[0] for k in slots}
+        if kv[0] == job.key_version:
+            resumed = True
+        elif kv[0] != FACTORY_KEY_VERSION:
+            raise Refused("foreign_keys", "key_state", f"K0 version {kv[0]:#04x}")
+        for slot in slots[1:]:
+            if kv[slot] not in (FACTORY_KEY_VERSION, job.key_version):
+                raise Refused("foreign_keys", "key_state", f"K{slot} version {kv[slot]:#04x}")
+        any_ours = any(kv[k] == job.key_version for k in slots)
+
+        # 5 serial (v2): keys depend on it, so a chip with any of our keys must carry it
+        on_chip: bytes | None = None
+        if job.uses_serial:
+            chip.stage = "serial"
+            on_chip = serial_from_ndef(_read_ndef(chip))
+            if on_chip is None and any_ours:
+                raise EncodeFailed("serial_missing", "serial", "keys already set but no serial on the chip")
+            serial = on_chip if on_chip is not None else rng(SERIAL_LEN)
+        serial_hex = serial.hex().upper() if serial is not None else None
+        template = build_sdm_template(job.base_url, job.token, serial)
+
+        # 6 registry (fail closed: any error stops the encode)
         chip.stage = "registry"
         try:
-            pre = registry.precheck(uid_hex)
+            pre = registry.precheck(uid_hex, serial_hex, sig_sha256)
         except RegistryError as exc:
             raise Refused("registry_unavailable", "registry", str(exc)) from exc
         if pre.lifecycle_status == "RETIRED":
@@ -252,22 +322,22 @@ def personalise(
         if pre.exists:
             raise Refused("already_registered", "registry", f"lifecycle {pre.lifecycle_status}")
 
-        # 5 key state
-        chip.stage = "key_state"
-        kv = {k: chip.tx(A.get_key_version(k), SW_NATIVE_OK)[0] for k in (0, 2, 3)}
-        if kv[0] == job.key_version:
-            resumed = True
-        elif kv[0] != FACTORY_KEY_VERSION:
-            raise Refused("foreign_keys", "key_state", f"K0 version {kv[0]:#04x}")
-        for slot in (2, 3):
-            if kv[slot] not in (FACTORY_KEY_VERSION, job.key_version):
-                raise Refused("foreign_keys", "key_state", f"K{slot} version {kv[slot]:#04x}")
+        # 7 pre-write (v2): the serial lands on the chip before any key depends on it
+        if job.uses_serial and on_chip is None:
+            chip.stage = "prewrite"
+            chip.select_app()
+            chip.tx(A.write_data_plain(A.FILE_NDEF, 0, template.ndef_bytes), SW_NATIVE_OK)
+            if serial_from_ndef(_read_ndef(chip)) != serial:
+                raise EncodeFailed("serial_write_failed", "prewrite", "serial did not read back")
 
         meta = bytearray(keys.derive_key(ROLE_META, job.key_version))
-        file_key = bytearray(keys.derive_key(ROLE_FILE, job.key_version, uid))
-        master = bytearray(keys.derive_key(ROLE_APP_MASTER, job.key_version, uid))
+        file_key = bytearray(keys.derive_key(ROLE_FILE, job.key_version, uid, serial))
+        master = bytearray(keys.derive_key(ROLE_APP_MASTER, job.key_version, uid, serial))
+        if job.uses_serial:
+            key1 = bytearray(keys.derive_key(ROLE_APP_KEY1, job.key_version, uid, serial))
+            key4 = bytearray(keys.derive_key(ROLE_APP_KEY4, job.key_version, uid, serial))
 
-        # 6 personalise (skipped on resume: K0 is changed last, so ours means 6 completed)
+        # 8 personalise (skipped on resume: K0 is changed last, so ours means 8 completed)
         if not resumed:
             chip.stage = "personalise"
             s = chip.authenticate(FACTORY_KEY)
@@ -279,7 +349,10 @@ def personalise(
                     sdm_mac_input_offset=template.sdm_mac_input_offset,
                     sdm_mac_offset=template.sdm_mac_offset,
                 ))
-                for slot, new in ((A.SLOT_SDM_META_READ, meta), (A.SLOT_SDM_FILE_READ, file_key)):
+                changes = [(A.SLOT_SDM_META_READ, meta), (A.SLOT_SDM_FILE_READ, file_key)]
+                if job.uses_serial:
+                    changes = [(A.KEY_APP_1, key1), *changes, (A.KEY_APP_4, key4)]
+                for slot, new in changes:
                     if kv[slot] == job.key_version:
                         continue  # an earlier run already set it
                     plain = sm.change_key_plaintext(slot, A.KEY_APP_MASTER, bytes(new), FACTORY_KEY, job.key_version)
@@ -289,7 +362,7 @@ def personalise(
             finally:
                 s.zeroize()
 
-        # 7 NDEF template, under the NEW K0 (this also proves K0 took)
+        # 9 NDEF template, under the NEW K0 (this also proves K0 took)
         chip.stage = "ndef"
         s = chip.authenticate(bytes(master))
         if s is None:
@@ -299,14 +372,14 @@ def personalise(
         finally:
             s.zeroize()
 
-        # 8 read-back
+        # 10 read-back
         chip.stage = "readback"
-        counter, url = _expect_readback(chip, template, uid, bytes(meta), bytes(file_key))
+        counter, url = _expect_readback(chip, template, uid, bytes(meta), bytes(file_key), serial)
 
-        # 9 enroll: only now does the chip count as encoded
+        # 11 enroll: only now does the chip count as encoded
         chip.stage = "enroll"
         try:
-            tag_id = registry.enroll(uid_hex, item_uuid_or_none(job.item))
+            tag_id = registry.enroll(uid_hex, item_uuid_or_none(job.item), serial_hex, sig_sha256, job.key_version)
         except RegistryError as exc:
             raise EncodeFailed("enroll_failed", "enroll", str(exc)) from exc
     except EncodeError as exc:
@@ -317,7 +390,8 @@ def personalise(
         audit.write(**base_audit, result="failed", reason="internal_error", stage=chip.stage, resumed=resumed)
         raise EncodeFailed("internal_error", chip.stage, type(exc).__name__) from exc
     finally:
-        _zero(meta, file_key, master)
+        _zero(meta, file_key, master, key1, key4)
 
+    # The serial is an identifier like the UID, so it stays out of the ledger (tag_id links it).
     audit.write(**base_audit, result="encoded", tag_id=tag_id, readback_counter=counter, resumed=resumed)
-    return EncodeOutcome(tag_id, uid_hex, counter, resumed, url)
+    return EncodeOutcome(tag_id, uid_hex, counter, resumed, url, serial_hex)

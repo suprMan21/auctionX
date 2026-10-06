@@ -28,9 +28,11 @@ export interface SdmVector {
 export interface KdfVector {
   name: string;
   rootKey: string;
-  role: 'META' | 'FILE' | 'APP_MASTER';
+  role: 'META' | 'FILE' | 'APP_MASTER' | 'APP_KEY1' | 'APP_KEY4';
   version: number;
   uid: string;
+  /** S-NFC-ID: '' at v1 and for META; 16 hex for per-chip roles at v2+. */
+  serial: string;
   message: string;
   prk: string;
   info: string;
@@ -40,6 +42,7 @@ export interface KdfVector {
 export interface ChainVector extends SdmVector {
   rootKey: string;
   version: number;
+  serial: string;
 }
 
 export interface PiccDataTagVector {

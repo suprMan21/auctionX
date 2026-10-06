@@ -9,6 +9,9 @@
 
 import { z } from 'zod';
 import { TAP_SESSION_TOKEN_PATTERN } from './tapSession';
+import { CHIP_SERIAL_PATTERN } from './ntag424Codec';
+
+const SIG_SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 const uuid = z.string().uuid();
 
@@ -40,10 +43,33 @@ export const tapSchema = z.object({
  * KMS root, never sent over the API. `.strict()` turns a legacy `aesKey` into
  * a 400 rather than silently accepting key material.
  */
-export const enrollSchema = z.object({
+const enrollFields = z.object({
   tagUid: z.string().regex(/^[0-9a-fA-F]{14}$/, 'tagUid must be a 7-byte UID in hex'),
   tenantId: z.string().min(1).max(64).optional(),
   itemId: uuid.optional(),
+  /** S-NFC-ID: the serial the encoder wrote into the chip's URL (v2+ chips). */
+  chipSerial: z.string().regex(CHIP_SERIAL_PATTERN, 'chipSerial must be 16 uppercase hex').optional(),
+  /** SHA-256 of the chip's NXP Read_Sig bytes: its physical fingerprint. */
+  sigSha256: z.string().regex(SIG_SHA256_PATTERN, 'sigSha256 must be 64 lowercase hex').optional(),
+  /** The KDF version the encoder personalised with. Defaults to the backend's current version. */
+  sdmKeyVersion: z.number().int().min(1).max(255).optional(),
+}).strict();
+
+/** The 7-byte UID path parameter (precheck). */
+export const enrollTagUidSchema = enrollFields.shape.tagUid;
+
+export const enrollSchema = enrollFields.refine(
+  (v) => v.chipSerial === undefined || (v.sdmKeyVersion !== undefined && v.sdmKeyVersion >= 2 && v.sigSha256 !== undefined),
+  { message: 'A chipSerial needs sdmKeyVersion >= 2 and sigSha256' },
+).refine(
+  (v) => v.chipSerial !== undefined || v.sdmKeyVersion === undefined || v.sdmKeyVersion < 2,
+  { message: 'sdmKeyVersion >= 2 needs a chipSerial' },
+);
+
+/** Encoder precheck query (S-NFC-ID). Both absent = the v1 UID-only check. */
+export const enrollPrecheckQuerySchema = z.object({
+  serial: z.string().regex(CHIP_SERIAL_PATTERN, 'serial must be 16 uppercase hex').optional(),
+  sigSha256: z.string().regex(SIG_SHA256_PATTERN, 'sigSha256 must be 64 lowercase hex').optional(),
 }).strict();
 
 /**

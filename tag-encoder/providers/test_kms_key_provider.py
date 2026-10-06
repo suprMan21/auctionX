@@ -70,10 +70,11 @@ def test_same_key_for_both_roots_is_refused():
 @pytest.mark.parametrize("v", VECTORS["kdf"], ids=[v["name"] for v in VECTORS["kdf"]])
 def test_reproduces_openssl_kdf_vectors_and_routes_by_role(v):
     root = bytes.fromhex(v["rootKey"])
-    admin = v["role"] == "APP_MASTER"
+    admin = v["role"] in ("APP_MASTER", "APP_KEY1", "APP_KEY4")
     p, fake = _kms(OTHER_ROOT if admin else root, root if admin else OTHER_ROOT)
     uid = bytes.fromhex(v["uid"]) if v["uid"] else None
-    assert p.derive_key(v["role"], v["version"], uid).hex().upper() == v["key"]
+    serial = bytes.fromhex(v["serial"]) if v["serial"] else None
+    assert p.derive_key(v["role"], v["version"], uid, serial).hex().upper() == v["key"]
     key_id, message = fake.calls[0]
     assert key_id == (DEFAULT_ADMIN_KEY_ALIAS if admin else DEFAULT_SDM_KEY_ALIAS)
     assert message.hex().upper() == v["message"]

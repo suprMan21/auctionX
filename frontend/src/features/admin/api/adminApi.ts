@@ -611,6 +611,8 @@ export interface AdminTagListParams {
 export interface AdminTag {
   id: string;
   uidSuffix: string;
+  /** S-NFC-ID: last 4 of the chip serial (v2 chips); tells apart chips sharing a UID. */
+  serialSuffix?: string | null;
   lifecycleStatus: AdminTagLifecycleStatus | null;
   ownerAccountId: string | null;
   creatorAccountId: string | null;
@@ -626,6 +628,10 @@ export interface AdminTag {
   replacedByTagId: string | null;
   destructionStatus: 'PENDING' | 'DESTROYED' | null;
 }
+
+/** `…936980`, or `…936980 · sn …46F8` for a v2 chip (chips can share a UID). */
+export const chipLabel = (tag: Pick<AdminTag, 'uidSuffix' | 'serialSuffix'>): string =>
+  tag.serialSuffix ? `…${tag.uidSuffix} · sn …${tag.serialSuffix}` : `…${tag.uidSuffix}`;
 
 export interface AdminTagListResponse {
   success: true;
