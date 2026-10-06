@@ -125,6 +125,18 @@ export STAGING_FE_BUCKET="auctionx-frontend-staging"
 export STAGING_BACKEND_URL="https://vw7zy9mkyg.us-east-2.awsapprunner.com"
 export STAGING_FRONTEND_URL="https://d1bwev65w7rqzl.cloudfront.net"
 
+# --- Claude read-only AWS (infra/iam/claude-readonly-staging) ---------------
+# Read the key once, now, while the op session is fresh. ~/.aws/claude-ro-env-creds.sh
+# echoes it as the claude-ro-base credential_process, so the AWS CLI never needs
+# a live op session. The key can ONLY sts:AssumeRole into claude-readonly-staging.
+# Non-fatal: if the item is missing, the session still starts.
+if CLAUDE_RO_AWS_CREDENTIALS="$("$HOME/.aws/op-credential-process.sh" "AWS - Claude ReadOnly Staging" 2>/dev/null)"; then
+  export CLAUDE_RO_AWS_CREDENTIALS
+else
+  unset CLAUDE_RO_AWS_CREDENTIALS
+  echo "NOTE: Claude read-only AWS creds not loaded (1Password item 'AWS - Claude ReadOnly Staging' missing?)" >&2
+fi
+
 echo "Session active (1Password + GitHub SSH + AWS staging identifiers). Launch 'claude' to inherit."
 
 # Unified cleanup: revokes 1Password session AND tears down ssh-agent.
