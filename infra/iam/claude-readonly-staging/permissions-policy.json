@@ -1,0 +1,76 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadStagingBackendLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:StartQuery",
+        "logs:StartLiveTail"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-2:904183418667:log-group:/aws/apprunner/auctionX_backend_staging/*",
+        "arn:aws:logs:us-east-2:904183418667:log-group:/aws/apprunner/auctionX_backend_staging/*:*"
+      ]
+    },
+    {
+      "Sid": "LogsAccountLevelReads",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:GetQueryResults",
+        "logs:StopQuery",
+        "logs:DescribeQueries"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "StagingDeployStatus",
+      "Effect": "Allow",
+      "Action": ["apprunner:ListOperations"],
+      "Resource": "arn:aws:apprunner:us-east-2:904183418667:service/auctionX_backend_staging/*"
+    },
+    {
+      "Sid": "ListServices",
+      "Effect": "Allow",
+      "Action": ["apprunner:ListServices"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Metrics",
+      "Effect": "Allow",
+      "Action": ["cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics", "cloudwatch:ListMetrics"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "FrontendInvalidationStatus",
+      "Effect": "Allow",
+      "Action": ["cloudfront:ListInvalidations", "cloudfront:GetInvalidation"],
+      "Resource": "arn:aws:cloudfront::904183418667:distribution/E3JOPXHI8DB4BE"
+    },
+    {
+      "Sid": "NeverSecretsOrWrites",
+      "Effect": "Deny",
+      "Action": [
+        "apprunner:DescribeService",
+        "apprunner:Update*",
+        "apprunner:Start*",
+        "apprunner:Delete*",
+        "kms:*",
+        "secretsmanager:*",
+        "ssm:GetParameter*",
+        "s3:*",
+        "iam:*",
+        "sts:AssumeRole",
+        "logs:CreateExportTask",
+        "logs:PutSubscriptionFilter",
+        "logs:Put*",
+        "logs:Delete*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
