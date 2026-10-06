@@ -1,0 +1,10 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::904183418667:user/claude-readonly-staging" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
