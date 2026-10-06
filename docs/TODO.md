@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-03 (S-NFC3-FE Phase 2 live; first paid transfer completed)
+**Last updated:** 2026-10-05 (transfer recipient email live; Claude read-only AWS role pending test)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -37,6 +37,11 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [ ] **Confirm CAD presentment on the sandbox account.** Shipped USD-only behind
       `FEATURE_CAD_PRESENTMENT=false`; if CAD is available set it plus `USD_CAD_RATE`.
 
+### Claude read-only AWS (2026-10-05)
+- [ ] Console steps in `infra/iam/claude-readonly-staging/README.md` (policy, user, key in 1Password as
+      `AWS - Claude ReadOnly Staging`, role), then restart via `amCode` and have Claude run the 3-step test.
+      Local wiring (`~/.aws` profiles + helper, session script) is done.
+
 ### S-ISO1 carry-over
 
 - [ ] **Stripe dashboard (S-ISO1 §8)** — disable the Stripe **Connect** webhook endpoint; confirm no
@@ -62,14 +67,14 @@ Live on staging: `chip_001` tapped → genuine/unclaimed → claimed by test@ �
 (`0xcbfa9f6e…`), public lookup resolves. Details: `docs/S_NFC3_FE_VERIFICATION.md`.
 - [ ] **Boss: redeploy the frontend.** The live build predates `6732e86`: a bare 404 still reads as
       "not a registered token". Command under §Frontend deploy below.
-- [ ] Follow-ups: recipient email on transfer initiate (Postmark; not built); mobile drawer still shows
+- [ ] Follow-ups: mobile drawer still shows
       "Search listings" + empty dividers while the marketplace is parked; one unexplained backend test failure
       (1 in ~45 runs, name not captured; watch for it).
 
 ## 🟡 AFTER
 
-**S-NFC3-FE Phase 2: ✅ live 2026-10-03** (first paid transfer test@ → test2@ completed). Next small item: recipient email on
-initiate (Postmark; Feature Backlog). → **S-ADMIN1 → S-ADMIN2** (admin console, see below; now also admin-set pricing + vouchers and the stuck-payment queue, which files auto GitHub Issues) →
+**S-NFC3-FE Phase 2: ✅ live 2026-10-03** (first paid transfer test@ → test2@ completed). Recipient email on initiate + cancel ✅ live
+2026-10-05 (`docs/S_NFC3_FE_RECIPIENT_EMAIL_VERIFICATION.md`). → **S-ADMIN1 → S-ADMIN2** (admin console, see below; now also admin-set pricing + vouchers and the stuck-payment queue, which files auto GitHub Issues) →
 S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat $2.50) →
 S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token sale) → S-SEC2 (external pentest).
 
