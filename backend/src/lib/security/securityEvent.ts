@@ -151,6 +151,17 @@ const replaceSchema = envelopeSchema.extend({
   new_tag_id: uuid.nullable(),
 }).strict();
 
+/**
+ * S-ADMIN1: an admin action on a token. The typed reason is NOT logged here
+ * (free text); it lives in the append-only audit_logs row.
+ */
+const adminTagActionSchema = envelopeSchema.extend({
+  event: z.literal('admin.tag_action'),
+  action: z.enum(['suspend', 'unsuspend', 'reset']),
+  tag_id: uuid.nullable(),
+  new_tag_id: uuid.nullable(),
+}).strict();
+
 const reissueRequestSchema = envelopeSchema.extend({
   event: z.literal('nfc.reissue_request'),
   tag_id: uuid.nullable(),
@@ -222,6 +233,7 @@ export const securityEventSchema = z.discriminatedUnion('event', [
   releaseSchema,
   replaceSchema,
   reissueRequestSchema,
+  adminTagActionSchema,
   disclosureChangeSchema,
   authzDeniedSchema,
   twoFactorGateSchema,

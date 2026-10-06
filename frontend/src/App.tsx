@@ -40,6 +40,8 @@ import { AdminUserDetailPage } from '@/features/admin/pages/AdminUserDetailPage'
 import { AdminModerationPage } from '@/features/admin/pages/AdminModerationPage';
 import { AdminAuditLogPage } from '@/features/admin/pages/AdminAuditLogPage';
 import { AdminHealthPage } from '@/features/admin/pages/AdminHealthPage';
+import { AdminTagsPage } from '@/features/admin/pages/AdminTagsPage';
+import { AdminTagDetailPage } from '@/features/admin/pages/AdminTagDetailPage';
 import { NotificationsPage } from './features/notifications/pages/NotificationsPage';
 import { NotificationPreferencesPage } from './features/notifications/pages/NotificationPreferencesPage';
 import { SettingsPayoutsPage } from './pages/SettingsPayoutsPage';
@@ -385,6 +387,9 @@ function App() {
               <Route path="verifications/:userId" element={<AdminVerificationDetailPage />} />
               {marketplaceEnabled && <Route path="seller-verification" element={<AdminSellerVerificationPage />} />}
               {marketplaceEnabled && <Route path="escrow" element={<AdminEscrowPage />} />}
+              {/* S-ADMIN1: token admin console (manage_nfc enforced by the API). */}
+              <Route path="tags" element={<AdminTagsPage />} />
+              <Route path="tags/:tagId" element={<AdminTagDetailPage />} />
               <Route path="audit-logs" element={<AdminAuditLogPage />} />
               <Route path="health" element={<AdminHealthPage />} />
             </Route>

@@ -889,6 +889,7 @@ export type Database = {
           aes_key_enc: string | null
           created_at: string
           current_owner_id: string | null
+          destruction_status: string | null
           disclosure: Json
           id: string
           item_id: string | null
@@ -898,10 +899,15 @@ export type Database = {
           linked_item_id: string | null
           metadata: Json | null
           registered_at: string
+          replaced_by_tag_id: string | null
+          retired_at: string | null
+          retired_reason: string | null
           sdm_key_version: number | null
           seller_id: string
           status: string
           sun_counter: number
+          suspended_at: string | null
+          suspended_reason: string | null
           tag_uid: string
           tenant_id: string
           updated_at: string
@@ -912,6 +918,7 @@ export type Database = {
           aes_key_enc?: string | null
           created_at?: string
           current_owner_id?: string | null
+          destruction_status?: string | null
           disclosure?: Json
           id?: string
           item_id?: string | null
@@ -921,10 +928,15 @@ export type Database = {
           linked_item_id?: string | null
           metadata?: Json | null
           registered_at?: string
+          replaced_by_tag_id?: string | null
+          retired_at?: string | null
+          retired_reason?: string | null
           sdm_key_version?: number | null
           seller_id: string
           status?: string
           sun_counter?: number
+          suspended_at?: string | null
+          suspended_reason?: string | null
           tag_uid: string
           tenant_id?: string
           updated_at?: string
@@ -935,6 +947,7 @@ export type Database = {
           aes_key_enc?: string | null
           created_at?: string
           current_owner_id?: string | null
+          destruction_status?: string | null
           disclosure?: Json
           id?: string
           item_id?: string | null
@@ -944,10 +957,15 @@ export type Database = {
           linked_item_id?: string | null
           metadata?: Json | null
           registered_at?: string
+          replaced_by_tag_id?: string | null
+          retired_at?: string | null
+          retired_reason?: string | null
           sdm_key_version?: number | null
           seller_id?: string
           status?: string
           sun_counter?: number
+          suspended_at?: string | null
+          suspended_reason?: string | null
           tag_uid?: string
           tenant_id?: string
           updated_at?: string
@@ -974,6 +992,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfc_tags_replaced_by_tag_id_fkey"
+            columns: ["replaced_by_tag_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfc_tags_replaced_by_tag_id_fkey"
+            columns: ["replaced_by_tag_id"]
+            isOneToOne: false
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
           },
           {
             foreignKeyName: "nfc_tags_verification_id_fkey"
@@ -2674,6 +2706,29 @@ export type Database = {
       }
     }
     Functions: {
+      admin_nfc_actor_email: { Args: { p_admin: string }; Returns: string }
+      admin_reset_token: {
+        Args: {
+          p_admin: string
+          p_custody_id: string
+          p_new_tag: string
+          p_old_tag: string
+          p_ownership_id: string
+          p_reason: string
+          p_salt_enc: string
+          p_tag_ref: string
+        }
+        Returns: Json
+      }
+      admin_set_tag_suspension: {
+        Args: {
+          p_admin: string
+          p_reason: string
+          p_suspend: boolean
+          p_tag: string
+        }
+        Returns: string
+      }
       apply_payment_penalty: {
         Args: { p_offer_id: string; p_settlement_id: string; p_user_id: string }
         Returns: number
@@ -2759,6 +2814,7 @@ export type Database = {
         | "view_audit_logs"
         | "review_sellers"
         | "manage_escrow"
+        | "manage_nfc"
       auction_status:
         | "DRAFT"
         | "SCHEDULED"
@@ -3009,6 +3065,7 @@ export const Constants = {
         "view_audit_logs",
         "review_sellers",
         "manage_escrow",
+        "manage_nfc",
       ],
       auction_status: [
         "DRAFT",

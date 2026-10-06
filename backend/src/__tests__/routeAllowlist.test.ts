@@ -78,6 +78,7 @@ const KEPT_ADMIN = [
   '/api/v1/admin/users',
   '/api/v1/admin/audit-logs',
   '/api/v1/admin/verifications',
+  '/api/v1/admin/tags',            // S-ADMIN1
 ] as const;
 
 const originalFlag = process.env.FEATURE_MARKETPLACE;

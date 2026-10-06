@@ -11,6 +11,7 @@ import escrowRouter from './escrow';
 import sellerVerificationRouter from './sellerVerification';
 import yotiVerificationsRouter from './verifications';
 import healthRouter from './health';
+import tagsRouter from './tags';
 
 const router = Router();
 
@@ -33,6 +34,7 @@ router.use('/health', healthRouter);
 router.use('/users', usersRouter);            // account admin — anonymous ownership still needs suspend/ban
 router.use('/audit-logs', auditLogsRouter);   // compliance / chain-of-custody evidence trail
 router.use('/verifications', yotiVerificationsRouter); // Yoti ID review (Premier, S-TIER1)
+router.use('/tags', tagsRouter);              // S-ADMIN1 token admin: inventory, suspend, atomic reset
 
 // ── Parked: marketplace admin. Nothing deleted; see docs/PARKED_MARKETPLACE.md
 if (isMarketplaceEnabled()) {

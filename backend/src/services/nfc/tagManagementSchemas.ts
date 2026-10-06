@@ -78,12 +78,6 @@ export const releaseSchema = z.object({
   confirmPhrase: z.literal('RELEASE'),
 }).strict();
 
-export const replaceSchema = z.object({
-  oldTagId: uuid,
-  /** Must already be ENROLLED and unclaimed. */
-  newTagId: uuid,
-}).strict();
-
 export const reissueRequestSchema = z.object({
   tagId: uuid,
 }).strict();

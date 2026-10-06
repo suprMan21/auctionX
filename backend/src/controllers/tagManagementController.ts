@@ -2,12 +2,13 @@
  * S-NFC3 — Tag Management API (rev 2).
  *
  * The complete token lifecycle with no marketplace dependency:
- *   enroll -> origin claim -> two-sided transfer -> release / replace / re-issue
+ *   enroll -> origin claim -> two-sided transfer -> release / re-issue request
+ *   (the token reset itself is admin-only: controllers/adminTagController.ts)
  *
  * Lifecycle (nfc_tags.lifecycle_status):
  *   ENROLLED --claim--> ACTIVE --transfer--> ACTIVE (new owner)
  *   ACTIVE --release--> RELEASED (terminal)
- *   ACTIVE --replace/reissue--> RETIRED (terminal)
+ *   ACTIVE|SUSPENDED --admin reset--> RETIRED (terminal)
  *   ACTIVE <--admin--> SUSPENDED
  *
  * Invariants this file is responsible for:
@@ -20,7 +21,6 @@
  *   6. No NFT, IPFS or chain call anywhere in this module.
  */
 
-import { randomUUID } from 'crypto';
 import { Response } from 'express';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { RequestWithId } from '../middleware/requestId';
@@ -53,7 +53,6 @@ import {
   transferInitiateSchema,
   transferCompleteSchema,
   releaseSchema,
-  replaceSchema,
   reissueRequestSchema,
   disclosureSchema,
   DISCLOSURE_FIELDS,
@@ -65,6 +64,7 @@ import {
   resolveCharge,
 } from '../lib/tokenFees';
 import { notifyTransferRecipient } from '../lib/notifications/transferEmails';
+import { hasManageNfc } from '../lib/admin/tokenAdmin';
 
 interface TagRequest extends RequestWithId, AuthRequest {}
 
@@ -217,12 +217,6 @@ const loadTag = async (
   return data as unknown as TagRow;
 };
 
-const isStaff = async (supabase: SupabaseClient, userId: string): Promise<boolean> => {
-  const { data } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
-  // user_role enum is lowercase (Every-Session lesson).
-  return data?.role === 'admin' || data?.role === 'super_admin';
-};
-
 type MintedProof = ReturnType<typeof mintOwnershipProof>;
 
 /**
@@ -301,7 +295,8 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
   const userId = req.user?.id;
   if (!userId) throw new AppError('unauthenticated', 'Authentication required');
 
-  if (!(await isStaff(supabase, userId))) {
+  // S-ADMIN1: token admins are admin_users rows with manage_nfc.
+  if (!(await hasManageNfc(supabase, userId))) {
     emitAuthzDenied('tag', null, 'role', ctx);
     throw errorFor('forbidden');
   }
@@ -369,7 +364,8 @@ export const enrollPrecheck = async (req: TagRequest, res: Response) => {
   const userId = req.user?.id;
   if (!userId) throw new AppError('unauthenticated', 'Authentication required');
 
-  if (!(await isStaff(supabase, userId))) {
+  // S-ADMIN1: token admins are admin_users rows with manage_nfc.
+  if (!(await hasManageNfc(supabase, userId))) {
     emitAuthzDenied('tag', null, 'role', ctx);
     throw errorFor('forbidden');
   }
@@ -1066,129 +1062,10 @@ export const releaseTag = async (req: TagRequest, res: Response) => {
   return ok(res, { tagId: tag.id, lifecycleStatus: 'RELEASED', irreversible: true });
 };
 
-// ── POST /api/v1/nfc/replace ────────────────────────────────────────────────
-
-/**
- * Moves the custody chain to a new ENROLLED chip; the old one is RETIRED.
- * Owner or admin — the physical chip failed, the ownership did not.
- */
-export const replaceTag = async (req: TagRequest, res: Response) => {
-  const ctx = securityContext(req, '/api/v1/nfc/replace', 'user');
-  const supabase = getServiceClient();
-
-  const userId = req.user?.id;
-  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
-
-  const parsed = replaceSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
-  }
-  const { oldTagId, newTagId } = parsed.data;
-
-  const oldTag = await loadTag(supabase, oldTagId);
-  const newTag = await loadTag(supabase, newTagId);
-
-  const emitReplace = (result: SecurityResult) =>
-    emitSecurityEvent({
-      event: 'nfc.replace', old_tag_id: oldTag.id, new_tag_id: newTag.id, result,
-      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
-      ip: ctx.ip, route: ctx.route,
-    });
-
-  // Staff only (Decisions DB 2026-10-02: token reset is admin-only). Owners
-  // used to be able to call this directly, which let them move their token onto
-  // any enrolled chip with no review, no $10 re-issue fee and no tap of the new
-  // chip. Owners file /reissue-request instead; S-ADMIN1 replaces this endpoint
-  // with a single-transaction admin reset.
-  const staff = await isStaff(supabase, userId);
-  if (!staff) {
-    emitAuthzDenied('tag', oldTag.id, 'role', ctx);
-    emitReplace('forbidden');
-    throw errorFor('forbidden');
-  }
-
-  const terminal = terminalStateError(oldTag.lifecycle_status);
-  if (terminal) {
-    emitReplace(terminal);
-    throw errorFor(terminal);
-  }
-
-  if (newTag.lifecycle_status !== 'ENROLLED') {
-    emitReplace('conflict');
-    throw new AppError('conflict', 'The replacement tag must be enrolled and unclaimed');
-  }
-
-  const owner = oldTag.current_owner_id;
-  if (!owner) {
-    emitReplace('conflict');
-    throw new AppError('conflict', 'The tag being replaced has no current owner');
-  }
-
-  // The custody record's id is the ownership event, so it is generated here
-  // and the proof minted BEFORE any write (a missing salt key fails cleanly).
-  const custodyRecordId = randomUUID();
-  const minted = mintProof(
-    { tagId: newTag.id, ownershipEventId: custodyRecordId, ownershipEventType: 'transfer' },
-    ctx,
-  );
-
-  // Carry the full history: the new chip inherits the item link and the owner,
-  // so the verify page still shows the original origin record.
-  await supabase
-    .from('nfc_tags')
-    .update({
-      lifecycle_status: 'ACTIVE',
-      current_owner_id: owner,
-      linked_item_id: oldTag.linked_item_id,
-      disclosure: oldTag.disclosure ?? undefined,
-      activated_at: new Date().toISOString(),
-      status: 'active',
-    })
-    .eq('id', newTag.id);
-
-  await supabase
-    .from('nfc_tags')
-    .update({ lifecycle_status: 'RETIRED', current_owner_id: null, status: 'retired' })
-    .eq('id', oldTag.id);
-
-  // Custody record, so the chain is auditable internally.
-  await supabase
-    .from('ownership_transfers')
-    .insert({
-      id: custodyRecordId,
-      tag_id: newTag.id,
-      from_user_id: owner,
-      to_user_id: owner,
-      transfer_type: 'REISSUE',
-      status: 'COMPLETED',
-      reissued_token: true,
-      requires_reverification: false,
-      completed_at: new Date().toISOString(),
-      initiated_at: new Date().toISOString(),
-      list_amount_usd_cents: 0,
-      charged_amount: 0,
-      charged_currency: 'usd',
-      fx_rate: 1,
-    });
-
-  await supabase
-    .from('ownership_proofs')
-    .update({ status: 'stale' })
-    .eq('tag_id', oldTag.id)
-    .eq('status', 'current');
-
-  const ownershipId = await rotateOwnershipProof(supabase, minted, { tagId: newTag.id, ownerId: owner });
-
-  emitReplace('ok');
-
-  return ok(res, {
-    oldTagId: oldTag.id,
-    newTagId: newTag.id,
-    oldLifecycleStatus: 'RETIRED',
-    newLifecycleStatus: 'ACTIVE',
-    ownershipId,
-  });
-};
+// ── POST /api/v1/nfc/replace — REMOVED (S-ADMIN1) ──────────────────────────
+// The non-atomic replace is gone. The token reset is admin-only and runs as one
+// database transaction: POST /api/v1/admin/tags/:tagId/reset
+// (controllers/adminTagController.ts). The route now answers 410.
 
 // ── POST /api/v1/nfc/reissue-request ────────────────────────────────────────
 

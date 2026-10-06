@@ -17,7 +17,6 @@ import {
   completeTransfer,
   cancelTransfer,
   releaseTag,
-  replaceTag,
   requestReissue,
   updateDisclosure,
 } from '../controllers/tagManagementController';
@@ -62,7 +61,7 @@ const sunReason = (details: unknown): string | null => {
   return typeof reason === 'string' && CLIENT_REASONS.has(reason) ? reason : null;
 };
 
-const handle =
+export const handle =
   (fn: (req: never, res: Response) => Promise<unknown>): RequestHandler =>
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -129,7 +128,17 @@ tagManagementRoutes.post('/enroll', requireAuth, mutationLimit, handle(enrollTag
 tagManagementRoutes.get('/enroll/precheck/:tagUid', requireAuth, mutationLimit, handle(enrollPrecheck));
 tagManagementRoutes.post('/claim', requireAuth, mutationLimit, handle(claimTag));
 tagManagementRoutes.post('/release', requireAuth, mutationLimit, handle(releaseTag));
-tagManagementRoutes.post('/replace', requireAuth, mutationLimit, handle(replaceTag));
+// S-ADMIN1: the non-atomic owner/staff replace is gone. The token reset is
+// admin-only and transactional at POST /api/v1/admin/tags/:tagId/reset. 410
+// (not 404) so an old client or script learns the endpoint moved on purpose.
+tagManagementRoutes.post('/replace', requireAuth, mutationLimit, (_req: Request, res: Response) => {
+  res.status(410).json({
+    success: false,
+    data: null,
+    error: 'This endpoint was removed. Token resets are performed by an administrator.',
+    code: 'gone',
+  });
+});
 tagManagementRoutes.post('/reissue-request', requireAuth, mutationLimit, handle(requestReissue));
 
 // S-NFC3-FE reads. `/tap` is public (optional auth personalises it); the rest

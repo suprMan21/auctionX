@@ -17,7 +17,7 @@ interface RateLimitConfig {
 
 // Tiered limits based on action severity
 const PROFILES: Record<string, RateLimitConfig> = {
-  // Destructive: suspend, ban, unban — tight
+  // Destructive: suspend, ban, unban, token reset — tight
   destructive: {
     windowMs: 60_000,
     maxRequests: 10,
@@ -41,7 +41,8 @@ function getProfile(req: Request): RateLimitConfig {
   if (req.method === 'GET') return PROFILES.read;
 
   const path = req.path.toLowerCase();
-  if (path.includes('/suspend') || path.includes('/ban') || path.includes('/unban')) {
+  // `/suspend` also matches `/unsuspend`. `/reset` = S-ADMIN1 token reset.
+  if (path.includes('/suspend') || path.includes('/ban') || path.includes('/unban') || path.includes('/reset')) {
     return PROFILES.destructive;
   }
 

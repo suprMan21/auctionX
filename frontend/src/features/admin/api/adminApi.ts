@@ -394,6 +394,43 @@ export const adminApi = {
       },
     );
   },
+
+  // ─── Token Admin Endpoints (S-ADMIN1) ───────────────────────────────────────
+  // All require manage_nfc. Responses use the { success, data, error } envelope.
+
+  /** GET /admin/tags — tag inventory with optional filters. */
+  listTags(params: AdminTagListParams = {}): Promise<AdminTagListResponse> {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== '') qs.set(key, String(value));
+    }
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    return adminFetch<AdminTagListResponse>(`/tags${query}`);
+  },
+
+  /** GET /admin/tags/:tagId — timeline, custody, taps, audit. */
+  getTag(tagId: string): Promise<AdminTagDetailResponse> {
+    return adminFetch<AdminTagDetailResponse>(`/tags/${encodeURIComponent(tagId)}`);
+  },
+
+  /** POST /admin/tags/:tagId/suspend | /unsuspend — typed reason required. */
+  setTagSuspension(tagId: string, suspend: boolean, reason: string): Promise<AdminTagSuspensionResponse> {
+    return adminFetch<AdminTagSuspensionResponse>(
+      `/tags/${encodeURIComponent(tagId)}/${suspend ? 'suspend' : 'unsuspend'}`,
+      { method: 'POST', body: JSON.stringify({ reason }) },
+    );
+  },
+
+  /** POST /admin/tags/:tagId/reset — atomic token reset onto an ENROLLED chip. */
+  resetTag(
+    tagId: string,
+    body: { newTagId: string; reason: string; confirmUidSuffix: string },
+  ): Promise<AdminTagResetResponse> {
+    return adminFetch<AdminTagResetResponse>(
+      `/tags/${encodeURIComponent(tagId)}/reset`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+  },
 };
 
 // ─── Yoti Verifications Response Types (S22) ────────────────────────────────
@@ -553,4 +590,103 @@ export interface EscrowReleaseResponse {
   settlementId: string;
   status: 'RELEASED';
   payoutCreated: boolean;
+}
+
+// ─── Token Admin Types (S-ADMIN1) ───────────────────────────────────────────
+
+export type AdminTagLifecycleStatus =
+  | 'ENROLLED' | 'CLAIMED' | 'ASSOCIATED' | 'ACTIVE' | 'RELEASED' | 'TRANSFERRED' | 'RETIRED' | 'SUSPENDED';
+
+export interface AdminTagListParams {
+  status?: AdminTagLifecycleStatus;
+  uidSuffix?: string;
+  itemId?: string;
+  creatorId?: string;
+  keyVersion?: number;
+  page?: number;
+  limit?: number;
+}
+
+/** A chip as admins see it. Never the full UID, keys, salts or Ownership ID. */
+export interface AdminTag {
+  id: string;
+  uidSuffix: string;
+  lifecycleStatus: AdminTagLifecycleStatus | null;
+  ownerAccountId: string | null;
+  creatorAccountId: string | null;
+  itemId: string | null;
+  sdmKeyVersion: number | null;
+  sunCounter: number;
+  registeredAt: string | null;
+  activatedAt: string | null;
+  suspendedAt: string | null;
+  suspendedReason: string | null;
+  retiredAt: string | null;
+  retiredReason: string | null;
+  replacedByTagId: string | null;
+  destructionStatus: 'PENDING' | 'DESTROYED' | null;
+}
+
+export interface AdminTagListResponse {
+  success: true;
+  data: { tags: AdminTag[]; pagination: { page: number; limit: number; total: number } };
+}
+
+export interface AdminTagCustodyRow {
+  id: string;
+  type: string;
+  status: string | null;
+  fromAccountId: string | null;
+  toAccountId: string | null;
+  initiatedAt: string | null;
+  completedAt: string | null;
+  chargedAmount: number | null;
+  chargedCurrency: string | null;
+  reissue: boolean;
+}
+
+export interface AdminTagTapRow {
+  id: string;
+  at: string;
+  type: string;
+  valid: boolean | null;
+  counter: number | null;
+  accountId: string | null;
+}
+
+export interface AdminTagAuditRow {
+  id: string;
+  action: string;
+  adminEmail: string;
+  reason: string | null;
+  changes: unknown;
+  at: string | null;
+}
+
+export interface AdminTagDetailResponse {
+  success: true;
+  data: {
+    tag: AdminTag;
+    replacesTagIds: string[];
+    ownershipId: { status: 'current' | 'none'; issuedAt: string | null; anchoredAt: string | null };
+    custody: AdminTagCustodyRow[];
+    taps: AdminTagTapRow[];
+    audit: AdminTagAuditRow[];
+  };
+}
+
+export interface AdminTagSuspensionResponse {
+  success: true;
+  data: { tagId: string; lifecycleStatus: AdminTagLifecycleStatus };
+}
+
+export interface AdminTagResetResponse {
+  success: true;
+  data: {
+    oldTagId: string;
+    newTagId: string;
+    oldLifecycleStatus: 'RETIRED';
+    newLifecycleStatus: 'ACTIVE';
+    destructionStatus: 'PENDING';
+  };
 }

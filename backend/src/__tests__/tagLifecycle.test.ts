@@ -39,6 +39,9 @@ const BUYER = '22222222-2222-4222-8222-222222222222';
 const STRANGER = '33333333-3333-4333-8333-333333333333';
 const STAFF = '44444444-4444-4444-8444-444444444444';
 const TAG_ID = '55555555-5555-4555-8555-555555555555';
+const LEGACY_ROLE_ADMIN = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const ROLE_NFC = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const ROLE_NO_NFC = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 let META_KEY: Buffer;
 const FILE_KEYS = new Map<string, Buffer>();
@@ -169,6 +172,19 @@ beforeEach(async () => {
       { id: BUYER, role: 'user', email: 'buyer@example.com', billing_country: 'US' },
       { id: STRANGER, role: 'user', email: 'stranger@example.com', billing_country: 'US' },
       { id: STAFF, role: 'admin', email: 'staff@example.com', billing_country: 'US' },
+      // A users.role admin with NO admin_users row: the pre-S-ADMIN1 staff check
+      // would have let them in; the manage_nfc rule must not.
+      { id: LEGACY_ROLE_ADMIN, role: 'admin', email: 'legacy@example.com', billing_country: 'US' },
+    ],
+    // S-ADMIN1: token admins are active admin_users rows whose role has manage_nfc.
+    admin_roles: [
+      { role_id: ROLE_NFC, role_name: 'admin', permissions: ['view_users', 'view_audit_logs', 'manage_nfc'] },
+      { role_id: ROLE_NO_NFC, role_name: 'moderator', permissions: ['view_users', 'moderate_listings'] },
+    ],
+    admin_users: [
+      { admin_id: STAFF, role_id: ROLE_NFC, is_active: true },
+      { admin_id: STRANGER, role_id: ROLE_NO_NFC, is_active: true },
+      { admin_id: BUYER, role_id: ROLE_NFC, is_active: false },
     ],
   };
 });
@@ -796,6 +812,28 @@ describe('enroll', () => {
     expect(eventsNamed('authz.denied')[0]).toMatchObject({ reason: 'role' });
   });
 
+  it.each([
+    ['a users.role admin with no admin_users row', LEGACY_ROLE_ADMIN],
+    ['an admin whose role lacks manage_nfc', STRANGER],
+    ['an inactive admin_users row', BUYER],
+  ])('refuses %s (S-ADMIN1: manage_nfc is the only gate)', async (_label, actor) => {
+    const { enrollTag } = await controllers();
+
+    const out = await call(enrollTag, makeReq(actor, { tagUid: 'AABBCCDDEEFF00' }));
+
+    expect(out.threw?.message).toMatch(/forbidden/i);
+    expect(tables.nfc_tags.find((t) => t.tag_uid === 'AABBCCDDEEFF00')).toBeUndefined();
+  });
+
+  it('fails closed when the admin lookup errors', async () => {
+    hooks = { failRead: (table) => table === 'admin_users' };
+    const { enrollTag } = await controllers();
+
+    const out = await call(enrollTag, makeReq(STAFF, { tagUid: 'AABBCCDDEEFF00' }));
+
+    expect(out.threw?.message).toMatch(/forbidden/i);
+  });
+
   it('lets staff enroll a tag into ENROLLED with no owner', async () => {
     const { enrollTag } = await controllers();
 
@@ -967,113 +1005,9 @@ describe('after a completed transfer', () => {
 });
 
 // ── Replace ─────────────────────────────────────────────────────────────────
-
-describe('replace', () => {
-  const NEW_TAG_ID = '88888888-8888-4888-8888-888888888888';
-  const ITEM_ID = '99999999-9999-4999-8999-999999999999';
-
-  const withReplacementChip = () => {
-    tables.nfc_tags[0] = baseTag({
-      lifecycle_status: 'ACTIVE',
-      current_owner_id: OWNER,
-      linked_item_id: ITEM_ID,
-      disclosure: { origin_video: true, creator_name: false, claim_date: true, location: false },
-    });
-    tables.nfc_tags.push(baseTag({
-      id: NEW_TAG_ID,
-      tag_uid: 'BBCCDDEEFF0011',
-      lifecycle_status: 'ENROLLED',
-      current_owner_id: null,
-      linked_item_id: null,
-    }));
-  };
-
-  const newTag = (): Row => tables.nfc_tags.find((t) => t.id === NEW_TAG_ID) as Row;
-
-  it('carries the item link, owner and disclosure to the new chip and retires the old', async () => {
-    withReplacementChip();
-    const { replaceTag } = await controllers();
-
-    const out = await call(replaceTag, makeReq(STAFF, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
-
-    expect(out.threw).toBeNull();
-    expect(tag().lifecycle_status).toBe('RETIRED');
-    expect(tag().current_owner_id).toBeNull();
-
-    // The verify page must still show the original origin record.
-    expect(newTag().lifecycle_status).toBe('ACTIVE');
-    expect(newTag().current_owner_id).toBe(OWNER);
-    expect(newTag().linked_item_id).toBe(ITEM_ID);
-    expect((newTag().disclosure as Row).origin_video).toBe(true);
-
-    expect(eventsNamed('nfc.replace')[0]).toMatchObject({
-      result: 'ok', old_tag_id: TAG_ID, new_tag_id: NEW_TAG_ID,
-    });
-  });
-
-  it('changes nothing when the salt key is missing (mints before any write)', async () => {
-    withReplacementChip();
-    delete process.env.OWNERSHIP_SALT_KEY;
-    const { replaceTag } = await controllers();
-
-    const out = await call(replaceTag, makeReq(STAFF, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
-
-    expect(out.threw).not.toBeNull();
-    expect(tag().lifecycle_status).toBe('ACTIVE');
-    expect(newTag().lifecycle_status).toBe('ENROLLED');
-    expect(tables.ownership_transfers).toHaveLength(0);
-  });
-
-  it('moves the current ownership proof onto the new chip', async () => {
-    withReplacementChip();
-    const { replaceTag } = await controllers();
-
-    await call(replaceTag, makeReq(STAFF, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
-
-    const current = tables.ownership_proofs.filter((p) => p.status === 'current');
-    expect(current).toHaveLength(1);
-    expect(current[0].tag_id).toBe(NEW_TAG_ID);
-    expect(current[0].owner_id).toBe(OWNER);
-  });
-
-  it('refuses a replacement chip that is not ENROLLED', async () => {
-    withReplacementChip();
-    (tables.nfc_tags.find((t) => t.id === NEW_TAG_ID) as Row).lifecycle_status = 'ACTIVE';
-    const { replaceTag } = await controllers();
-
-    const out = await call(replaceTag, makeReq(STAFF, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
-
-    expect(out.threw?.message).toMatch(/enrolled and unclaimed/i);
-    expect(tag().lifecycle_status).toBe('ACTIVE');
-  });
-
-  it('refuses replace by the OWNER — reset is admin-only (Decisions DB 2026-10-02)', async () => {
-    withReplacementChip();
-    const { replaceTag } = await controllers();
-
-    const out = await call(replaceTag, makeReq(OWNER, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
-
-    expect(out.threw?.message).toMatch(/forbidden/i);
-    // Nothing moved: old chip still live with its owner, new chip untouched.
-    expect(tag().lifecycle_status).toBe('ACTIVE');
-    expect(tag().current_owner_id).toBe(OWNER);
-    expect(newTag().lifecycle_status).toBe('ENROLLED');
-    expect(newTag().current_owner_id).toBeNull();
-    expect(eventsNamed('nfc.replace')[0]).toMatchObject({ result: 'forbidden' });
-  });
-
-  it('refuses replace by a stranger but allows staff', async () => {
-    withReplacementChip();
-    const { replaceTag } = await controllers();
-
-    const denied = await call(replaceTag, makeReq(STRANGER, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
-    expect(denied.threw?.message).toMatch(/forbidden/i);
-
-    const allowed = await call(replaceTag, makeReq(STAFF, { oldTagId: TAG_ID, newTagId: NEW_TAG_ID }));
-    expect(allowed.threw).toBeNull();
-    expect(newTag().current_owner_id).toBe(OWNER);
-  });
-});
+// POST /nfc/replace was removed in S-ADMIN1 (route answers 410, see
+// tagManagementRoutes.test.ts). The token reset is an admin-only database
+// transaction, covered in adminTags.test.ts and verified live on staging.
 
 // ── Re-issue ────────────────────────────────────────────────────────────────
 

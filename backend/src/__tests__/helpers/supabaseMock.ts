@@ -7,6 +7,10 @@
  *   .from(t).update(patch).eq(c, v)[.eq(...)][.lt(c, v)][.select().maybeSingle()]
  *   S-NFC3-FE: .in(c, values), .is(c, null), .gt(c, v) (tap-session expiry)
  *
+ * S-ADMIN1: `.ilike(c, '%suffix')` (suffix match only), `.gte()`, `.lte()`,
+ * `.order()`, `.range()`, `select(cols, { count: 'exact' })`, and `.rpc()`
+ * answered by the `rpc` hook (database functions cannot run in memory).
+ *
  * S-NFC3.5: `.lt()` (the conditional counter burn) and an optional
  * `beforeUpdate` hook, so a test can play a concurrent request that wins the
  * race between our read and our conditional write.
@@ -24,7 +28,7 @@ export type Tables = Record<string, Row[]>;
 
 interface Filter {
   column: string;
-  op: 'eq' | 'lt' | 'gt' | 'in' | 'is';
+  op: 'eq' | 'lt' | 'gt' | 'gte' | 'lte' | 'in' | 'is' | 'ilike';
   value: unknown;
 }
 
@@ -45,6 +49,18 @@ const matches = (row: Row, filters: Filter[]): boolean =>
         return cell !== null && cell !== undefined && (cell as number) < (f.value as number);
       case 'gt':
         return cell !== null && cell !== undefined && (cell as number) > (f.value as number);
+      case 'gte':
+        return cell !== null && cell !== undefined && (cell as number) >= (f.value as number);
+      case 'lte':
+        return cell !== null && cell !== undefined && (cell as number) <= (f.value as number);
+      case 'ilike': {
+        // Only the leading-wildcard suffix form the admin search uses.
+        const pattern = String(f.value);
+        if (!pattern.startsWith('%') || pattern.slice(1).includes('%')) {
+          throw new Error(`supabaseMock: unsupported ilike pattern ${pattern}`);
+        }
+        return typeof cell === 'string' && cell.toUpperCase().endsWith(pattern.slice(1).toUpperCase());
+      }
     }
   });
 
@@ -58,6 +74,11 @@ export interface MockHooks {
    * a CHECK violation), leaving the rows untouched.
    */
   failUpdate?: (table: string, patch: Row) => boolean;
+  /**
+   * Answers `.rpc(fn, args)`. Without it an rpc call throws, so a test can never
+   * pass against a database function the mock silently ignored.
+   */
+  rpc?: (fn: string, args: Row) => { data: unknown; error: { message: string } | null };
 }
 
 let idCounter = 0;
@@ -76,6 +97,9 @@ class QueryBuilder {
   private patch: Row = {};
   private inserted: Row | null = null;
   private limitN: number | null = null;
+  private rangeFrom: number | null = null;
+  private rangeTo: number | null = null;
+  private orderBy: { column: string; ascending: boolean } | null = null;
   /** Set once a terminal .select() follows an insert/update. */
   private wantsRows = false;
 
@@ -87,7 +111,7 @@ class QueryBuilder {
     if (!this.tables[table]) this.tables[table] = [];
   }
 
-  select(_cols?: string): this {
+  select(_cols?: string, _opts?: { count?: string }): this {
     if (this.mode === 'select') this.wantsRows = true;
     else this.wantsRows = true;
     return this;
@@ -135,7 +159,33 @@ class QueryBuilder {
     return this;
   }
 
-  private apply(): { data: Row[] | null; error: { message: string } | null } {
+  gte(column: string, value: unknown): this {
+    this.filters.push({ column, op: 'gte', value });
+    return this;
+  }
+
+  lte(column: string, value: unknown): this {
+    this.filters.push({ column, op: 'lte', value });
+    return this;
+  }
+
+  ilike(column: string, value: string): this {
+    this.filters.push({ column, op: 'ilike', value });
+    return this;
+  }
+
+  order(column: string, opts: { ascending?: boolean } = {}): this {
+    this.orderBy = { column, ascending: opts.ascending ?? true };
+    return this;
+  }
+
+  range(from: number, to: number): this {
+    this.rangeFrom = from;
+    this.rangeTo = to;
+    return this;
+  }
+
+  private apply(): { data: Row[] | null; error: { message: string } | null; count?: number } {
     const rows = this.tables[this.table];
 
     if (this.mode === 'insert') {
@@ -190,7 +240,22 @@ class QueryBuilder {
       return { data: hits, error: null };
     }
 
-    return { data: this.limitN === null ? hits : hits.slice(0, this.limitN), error: null };
+    if (this.orderBy) {
+      const { column, ascending } = this.orderBy;
+      hits.sort((a, b) => {
+        const x = a[column] as string | number | null | undefined;
+        const y = b[column] as string | number | null | undefined;
+        if (x === y) return 0;
+        if (x === null || x === undefined) return 1;
+        if (y === null || y === undefined) return -1;
+        return (x < y ? -1 : 1) * (ascending ? 1 : -1);
+      });
+    }
+    const count = hits.length;
+    let out = hits;
+    if (this.rangeFrom !== null && this.rangeTo !== null) out = out.slice(this.rangeFrom, this.rangeTo + 1);
+    if (this.limitN !== null) out = out.slice(0, this.limitN);
+    return { data: out, error: null, count };
   }
 
   async maybeSingle(): Promise<{ data: Row | null; error: unknown }> {
@@ -215,6 +280,10 @@ class QueryBuilder {
 
 export const createMockSupabase = (tables: Tables, hooks: MockHooks = {}) => ({
   from: (table: string) => new QueryBuilder(tables, table, hooks),
+  rpc: async (fn: string, args: Row) => {
+    if (!hooks.rpc) throw new Error(`supabaseMock: rpc('${fn}') called with no rpc hook`);
+    return hooks.rpc(fn, args);
+  },
 });
 
 export type MockSupabase = ReturnType<typeof createMockSupabase>;

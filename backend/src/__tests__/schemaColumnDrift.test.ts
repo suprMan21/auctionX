@@ -39,6 +39,9 @@ const TARGET_FILES = [
   'services/nfc/tapResolver.ts',
   'services/nfc/tapSession.ts',
   'controllers/tokenReadController.ts',
+  // S-ADMIN1: token admin console + the manage_nfc lookup.
+  'controllers/adminTagController.ts',
+  'lib/admin/tokenAdmin.ts',
 ];
 
 /**
@@ -104,7 +107,7 @@ const extractSelects = (
     const window = rest.slice(0, statementEnd === -1 ? 600 : statementEnd);
     // A literal, a template, or a SCREAMING_CASE column constant (S-NFC3-FE),
     // which is resolved and attributed to THIS chain's table.
-    const sel = /\.select\(\s*(?:`([^`]*)`|'([^']*)'|([A-Z][A-Z0-9_]*))\s*\)/.exec(window);
+    const sel = /\.select\(\s*(?:`([^`]*)`|'([^']*)'|([A-Z][A-Z0-9_]*))\s*(?:,\s*\{[^}]*\})?\s*\)/.exec(window);
     if (!sel) continue;
 
     let raw = (sel[1] ?? sel[2] ?? (sel[3] ? constants.get(sel[3]) ?? '' : '')).trim();
