@@ -77,21 +77,30 @@ No command prints key material. Any future local server **must bind to
 
 ### What `personalise` does to each chip
 
+Default is key version 2 (S-NFC-ID, 2026-10-06): a per-chip serial in the URL (`?sn=`) and in the keys,
+all five key slots set. `--key-version 1` keeps the old UID-only flow.
+
 | # | Stage | Writes? | Refuses / fails when |
 |---|---|---|---|
 | 1 | identify: GetVersion | no | not the AM-SEALED acceptance tuple, non-NXP UID |
 | 2 | gate: GetTTStatus `0xF7` | no | command exists → TagTamper (Locked: rejected) |
-| 3 | originality: Read_Sig + NXP P-224 verify | no | signature does not verify |
-| 4 | registry precheck (staff API) | no | UID exists at all; **RETIRED is never reused**; backend unreachable (fails closed) |
-| 5 | key state: GetKeyVersion K0/K2/K3 | no | a version that is neither factory (0) nor ours |
-| 6 | Auth K0 (factory) → ChangeFileSettings → ChangeKey K2, K3 → ChangeKey **K0 last** | yes | any SW / MAC error (re-run resumes) |
-| 7 | Auth K0 (new) → WriteData NDEF template | yes | new K0 rejected |
-| 8 | read-back: GetFileSettings + ReadBinary; the SUN must verify under the derived keys | no | settings or NDEF differ, SUN invalid |
-| 9 | enroll (staff API) → `ENROLLED` | DB | API error (chip is fine; re-run resumes and enrolls) |
+| 3 | originality: Read_Sig + NXP P-224 verify; SHA-256 of Read_Sig = fingerprint | no | signature does not verify |
+| 4 | key state: GetKeyVersion K0..K4 | no | a version that is neither factory (0) nor ours |
+| 5 | serial: read back off the NDEF, else 8 random bytes | no | a key is already ours but no serial is on the chip |
+| 6 | registry precheck (staff API, serial + fingerprint) | no | this chip or serial exists; **RETIRED is never reused**; backend unreachable (fails closed) |
+| 7 | pre-write: WriteData template with the serial, unauthenticated (factory file is Write=E) | yes | serial does not read back |
+| 8 | Auth K0 (factory) → ChangeFileSettings → ChangeKey K1, K2, K3, K4 → ChangeKey **K0 last** | yes | any SW / MAC error (re-run resumes) |
+| 9 | Auth K0 (new) → WriteData NDEF template | yes | new K0 rejected |
+| 10 | read-back: GetFileSettings + ReadBinary; the SUN must verify under the derived keys | no | settings or NDEF differ, SUN invalid |
+| 11 | enroll (staff API) → `ENROLLED` | DB | API error (chip is fine; re-run resumes and enrolls) |
 
-K1 and K4 stay at factory (locked slot map). No blockchain write (G5).
-An abort at any point is safe to re-run on the same chip: K0 changes last, and
-GetKeyVersion tells the encoder which old key each slot holds.
+No blockchain write (G5). An abort at any point is safe to re-run on the same chip: the serial is on the
+chip before any key depends on it, K0 changes last, and GetKeyVersion tells the encoder which old key each
+slot holds. **After an API change, wait for the App Runner deploy to report SUCCEEDED before encoding**
+(2026-10-06: an encode mid-deploy failed at enroll and had to be resumed).
+
+To census a batch without writing anything, use `tag-hq/survey.py` (full UID + fingerprint per chip).
+Compare FULL UIDs — the console's 6-character suffix is shared by neighbouring chips from one lot.
 
 ### One-time setup (Boss, AWS console, ~10 min)
 

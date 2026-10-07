@@ -90,6 +90,11 @@ They remain in staging (A is RETIRED and frozen by design; its audit rows are ap
 
 ## Physical reset test — BLOCKED (duplicate-UID chips)
 
+> **⚠️ Correction 2026-10-07 (S-NFC-ID):** the duplicate-UID finding below is WRONG. The UIDs were compared by
+> their last six hex characters only. A full-UID survey found five chips with five different UIDs ending
+> `…936980` (e.g. chip_001 `04A27E02936980`, chip_002 `04927E02936980`). The "refused by precheck" step was
+> inferred, never observed. See `docs/S_NFC_ID_VERIFICATION.md`. The text below is kept as the original record.
+
 The planned live reset `chip_001` → `chip_002` did not run. Fingerprinting each chip alone on the ACR1252:
 
 | Chip | UID (GetVersion) | Read_Sig SHA-256 | NXP originality | File 02 settings | NDEF |

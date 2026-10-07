@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-05 (transfer recipient email live; Claude read-only AWS role pending test)
+**Last updated:** 2026-10-07 (S-NFC-ID KDF v2 live; duplicate-UID finding retracted)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -58,7 +58,7 @@ S-DB1 (S-NFC3 migrations live) · S-NFC3.5 real AN12196 SDM with KMS-derived key
 
 First real NTAG 424 DNA (`chip_001`) encoded under the staging KMS roots; phone tap → `tapcheck` HTTP 200, valid.
 Details: `docs/S_NFC2_PH2_VERIFICATION.md`. Runbook: `tag-encoder/README.md` → "Physical encode".
-- [ ] **Boss: confirm** audit ledger keys on tag id (not UID), and K1/K4 left at factory per the slot map.
+- [ ] **Boss: confirm** audit ledger keys on tag id (not UID). (K1/K4: now set on every v2 chip — S-NFC-ID.)
 - [ ] Not fixed: public `GET /nfc/by-uid` logs the raw UID (`nfc_tag_viewed_by_uid`). Fold into S-SEC1 or fix sooner.
 
 ## ✅ Shipped 2026-10-03 — S-NFC3-FE Phase 1 (tap, verify, claim, My Tokens)
@@ -75,7 +75,9 @@ Live on staging: `chip_001` tapped → genuine/unclaimed → claimed by test@ �
 
 **S-NFC3-FE Phase 2: ✅ live 2026-10-03** (first paid transfer test@ → test2@ completed). Recipient email on initiate + cancel ✅ live
 2026-10-05 (`docs/S_NFC3_FE_RECIPIENT_EMAIL_VERIFICATION.md`). → **S-ADMIN1 Ph1 ✅ live 2026-10-05** → **chip identity
-fix (KDF v2 / per-chip serial, Proposed — duplicate-UID chips found)** → S-ADMIN1 Ph2 (re-issue queue + $10) → S-ADMIN1
+fix: S-NFC-ID ✅ live 2026-10-07** (KDF v2 per-chip serial + K1/K4; duplicate-UID finding was a suffix misread —
+`docs/S_NFC_ID_VERIFICATION.md`) → **S-ADMIN1 physical reset test** (S03 → chip_003, reset chip_002 → chip_003; never
+retire chip_001) → S-ADMIN1 Ph2 (re-issue queue + $10) → S-ADMIN1
 Ph3 (stuck-payment queue + GitHub Issues, admin pricing + vouchers) → S-ADMIN2 (users/roles) →
 S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat $2.50) →
 S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token sale) → S-SEC2 (external pentest).
