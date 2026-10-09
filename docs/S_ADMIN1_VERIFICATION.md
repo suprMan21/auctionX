@@ -88,7 +88,20 @@ They remain in staging (A is RETIRED and frozen by design; its audit rows are ap
 - Frontend: Boss deploying at close-out (build + S3 sync + invalidation). Smoke: `/admin/tags`, open test row
   `…0036B2`, Suspend → Lift suspension, audit rows appear. Do NOT reset `chip_001`.
 
-## Physical reset test — BLOCKED (duplicate-UID chips)
+## Physical reset test — ✅ DONE 2026-10-09 (on real silicon)
+
+| Step | Result |
+|---|---|
+| Encode S03 as `chip_003` (v2, UID `048A7D02936980`, serial `7F6509CC4DAE6CA9`) | ✅ tag `02a2e02b…`, read-back verified, 04:32:55Z |
+| Claim `chip_002` (test2@) | ✅ ACTIVE, owner test2@ |
+| Admin console Reset `chip_002` → `chip_003` | ✅ one `tag_reset` audit row (Boss, reason given); `chip_002` RETIRED, `destruction_status` PENDING, `replaced_by_tag_id` → `chip_003`; old proof `stale`; `chip_003` ACTIVE, owner test2@, new current Ownership ID |
+| Phone taps | ✅ `chip_002` reads retired, `chip_003` opens test2@'s token (Boss) |
+| Suspend → tap → lift on `chip_003` | ✅ `tag_suspend` + `tag_unsuspend` audit rows with reasons |
+| `chip_001` | untouched (ACTIVE, test2@) |
+
+S-ADMIN1 Ph1 acceptance criteria are now all met on silicon. The original "blocked" record follows.
+
+### Original record (2026-10-05)
 
 > **⚠️ Correction 2026-10-07 (S-NFC-ID):** the duplicate-UID finding below is WRONG. The UIDs were compared by
 > their last six hex characters only. A full-UID survey found five chips with five different UIDs ending
