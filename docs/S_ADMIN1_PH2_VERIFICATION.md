@@ -5,8 +5,8 @@
 **Plan:** `docs/plans/2026-10-09-s-admin1-ph2.md`
 **Backlog:** https://app.notion.com/p/3ed3baf6966481eb84abe7dc88798a4a (AC 4)
 
-Status: **code complete and tested; live money run and silicon run still to do** (needs the evidence bucket,
-the second migration and a deploy — see "Boss actions").
+Status: **✅ LIVE and verified on silicon 2026-10-09** — real chip, real photos, sandbox $10 payment, webhook,
+fulfil, phone taps. AC 4 met; all S-ADMIN1 acceptance criteria now met.
 
 ---
 
@@ -90,12 +90,44 @@ live check re-ran **19/19 ok** against the staging schema (0 leftover rows).
 - The S3 media bucket is publicly readable by path (`PublicReadGetObject`), so evidence goes in its own private
   bucket: `infra/s3/reissue-evidence-staging/`.
 
-## Boss actions (in order)
+## Live run on silicon (staging, 2026-10-09) — ✅
 
-1. ~~Push M2~~ ✅ done 2026-10-09, live check 19/19.
-2. **Evidence bucket:** follow `infra/s3/reissue-evidence-staging/README.md` (bucket, policy, **CORS**, lifecycle,
-   backend IAM inline policy, `REISSUE_EVIDENCE_BUCKET` env on App Runner).
-3. **Push the branch** / merge to `dev` → App Runner deploy; frontend build + sync (grep `dist/assets` for `pk_test_`).
-4. **Live run:** encode a spare chip (v2), tap `chip_003` as test2@ → "Chip coming loose?" → photos → submit;
-   approve in `/admin/reissue-requests`; pay $10 in the sandbox from the email link; confirm PAID; Fulfil onto the
-   spare with the serial suffix; tap both chips (old reads retired, new opens test2@'s token). Never `chip_001`.
+Request `5391a018-4abf-49f2-be77-62994f6fc3c7`. Spare chip encoded as `chip_004` (v2, serial `…8A0351DE`, tag
+`7c9960df…`, enrolled 06:34Z).
+
+| Step | Time (UTC) | Result |
+|---|---|---|
+| test2@ taps `chip_003`, 3 live-camera photos uploaded | 06:49:07–08 | ✅ 3 presigned PUTs; keys under test2@'s own prefix in the private bucket |
+| Request filed | 06:49:09 | ✅ PENDING, $10 snapshot, tap session consumed `reissue_request` by test2@ |
+| Boss approves | 06:50:01 | ✅ `reissue_approve` audit row with reason; "approved — pay on the website" email (Postmark accepted) |
+| test2@ pays from the web pay page | 06:50:16 | ✅ one PaymentIntent `pi_3UOXdED8X…` |
+| Stripe webhook `token_reissue_fee` | 06:51:07 | ✅ AWAITING_PAYMENT → PAID; "payment received" email |
+| Boss fulfils onto `chip_004` (serial-suffix confirmation) | 06:52:52 | ✅ `tag_reset` + `reissue_fulfil` audit rows, same transaction timestamp; "replacement active" email |
+| End state | — | `chip_003` RETIRED, destruction PENDING, replaced_by → `chip_004`, old proof `stale`; `chip_004` ACTIVE test2@, one `current` proof, REISSUE custody row; `chip_001` untouched (ACTIVE, test2@) |
+| Phone taps (Boss) | — | ✅ `chip_003` reads retired; `chip_004` opens test2@'s token |
+
+## Problems found during the live run (all fixed)
+
+1. **CHECK constraints that evaluate to NULL pass.** M1's waive-reason and fulfil-paid CHECKs let NULLs through.
+   Found by the rolled-back live check; fixed by M2 (`coalesce`), 19/19 after Boss pushed it.
+2. **Silent 500.** The first two real photo uploads returned "Internal server error" and left no log line: the
+   token routes' error wrapper (`routes/tagManagement.ts` `handle`) never logged non-AppErrors. It now logs
+   `unhandled_route_error` (route pattern, request id, error name + message; never the body). Commit `7ce0e27`.
+3. **Root cause of the 500: App Runner has `AWS_ACCESS_KEY_ID` but no `AWS_SECRET_ACCESS_KEY`**, so the S3 client
+   got an undefined secret. Fix: the evidence client uses static keys only when both are set, otherwise the default
+   chain; Boss attached `ReissueEvidenceStaging` to the App Runner **instance role** `am-backend-staging-instance`.
+   No long-lived secret. (The policy was first put on IAM user `auctionx-s3-access`, which App Runner cannot use.)
+4. **Presigned PUT would have been rejected by S3:** newer AWS SDKs sign a CRC32 of the (empty) body into presigned
+   URLs. Fixed with `requestChecksumCalculation: 'WHEN_REQUIRED'`; test asserts no checksum params and that
+   content-type + content-length are signed. Commit `7ce0e27`.
+5. **Deploys:** pushes to `dev` did not reliably start an App Runner deployment (no push-triggered deploy between
+   10-06 and 02:25 tonight; the 02:43 one did trigger). Settings saves (`UPDATE_SERVICE`) do not pick up new code
+   reliably. Check with `claude-ro` `list-operations` + an unauthenticated route probe before testing.
+
+## Follow-ups
+
+- **Encoder auto-naming** (Boss, 2026-10-09, option 1): when `--item` is omitted, name the chip `chip_NNN` (next in
+  sequence), with a backend uniqueness check BEFORE any chip write.
+- Optional: remove `ReissueEvidenceStaging` from IAM user `auctionx-s3-access` (unused).
+- `chip_003` is RETIRED / destruction PENDING (keep or destroy at Boss's discretion); `chip_002` likewise.
+- `claude-ro` cannot read the evidence bucket's settings (only the media bucket's).

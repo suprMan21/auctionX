@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-09 (S-ADMIN1 Ph1 reset + suspend verified on silicon)
+**Last updated:** 2026-10-09 (S-ADMIN1 Ph2 re-issue live + verified on silicon)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -76,7 +76,7 @@ Live on staging: `chip_001` tapped → genuine/unclaimed → claimed by test@ �
 **S-NFC3-FE Phase 2: ✅ live 2026-10-03** (first paid transfer test@ → test2@ completed). Recipient email on initiate + cancel ✅ live
 2026-10-05 (`docs/S_NFC3_FE_RECIPIENT_EMAIL_VERIFICATION.md`). → **S-ADMIN1 Ph1 ✅ live 2026-10-05** → **chip identity
 fix: S-NFC-ID ✅ live 2026-10-07** (KDF v2 per-chip serial + K1/K4; duplicate-UID finding was a suffix misread —
-`docs/S_NFC_ID_VERIFICATION.md`) → **S-ADMIN1 physical reset test ✅ 2026-10-09** (chip_002 → chip_003) → S-ADMIN1 Ph2 (re-issue queue + $10) → S-ADMIN1
+`docs/S_NFC_ID_VERIFICATION.md`) → **S-ADMIN1 physical reset test ✅ 2026-10-09** (chip_002 → chip_003) → **S-ADMIN1 Ph2 ✅ 2026-10-09** (re-issue chip_003 → chip_004, $10) → S-ADMIN1
 Ph3 (stuck-payment queue + GitHub Issues, admin pricing + vouchers) → S-ADMIN2 (users/roles) →
 S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat $2.50) →
 S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token sale) → S-SEC2 (external pentest).
@@ -107,27 +107,26 @@ Deploy order: backend (push `dev`, wait for App Runner **Running**) BEFORE front
 Re-scoped from the parked S26/S28 for the token platform (Decisions DB, 2026-10-02). Lands **before S-TIER1**: no public
 token sale without admin tooling.
 
-- **S-ADMIN1 Ph1 ✅ live 2026-10-05** (`docs/S_ADMIN1_VERIFICATION.md`): `manage_nfc` gate (admin_users), `/admin/tags`
-  inventory + detail, suspend/unsuspend, **atomic reset RPC** (`admin_reset_token`), retired-chip freeze trigger,
-  append-only `audit_logs`, `/nfc/replace` → 410. DB behaviour verified live on test rows.
-  - [ ] Physical reset + phone taps — **blocked**: needs a chip with a unique UID (see below).
-  - [ ] Phone tap of a suspended token (AC5 end to end).
-- **S-ADMIN1 Ph2:** re-issue queue (approve → $10 PaymentIntent `kind=reissue_fee`, idempotency key = request id,
-  webhook-confirmed, then `admin_reset_token`; reject = no charge) + owner override RPC.
+- **S-ADMIN1 Ph1 ✅ live 2026-10-05, verified on silicon 2026-10-09** (`docs/S_ADMIN1_VERIFICATION.md`).
+- **S-ADMIN1 Ph2 ✅ live + verified on silicon 2026-10-09** (`docs/S_ADMIN1_PH2_VERIFICATION.md`): owner-only re-issue for a
+  chip coming loose (live tap + live-camera photos, private bucket), web-only $10, approve / waive / reject / fulfil,
+  serial-suffix confirmation. Owner override dropped (Boss).
+  - [ ] **Encoder auto-naming** (Boss 2026-10-09): no `--item` → next `chip_NNN`, backend uniqueness check before any
+        chip write.
+  - [ ] Boss (optional): remove inline policy `ReissueEvidenceStaging` from IAM user `auctionx-s3-access` (unused; the
+        instance role has it).
+  - [ ] Boss: decide on App Runner auto-deploy (pushes did not reliably deploy on 2026-10-09).
+  - [ ] Pre-launch: media bucket `auctionx-media-prod-cl` is publicly readable by path (`PublicReadGetObject`); fine for
+        listing images, review before launch (LAUNCH_CHECKLIST already flags its policy).
 - **S-ADMIN1 Ph3** (Boss 2026-10-05: S-ADMIN1, not S-ADMIN2): stuck-payment queue + Re-apply + ~10-min sweep + auto
-  GitHub Issues; admin-set prices (effective-dated) + free-transfer vouchers.
+  GitHub Issues; admin-set prices (effective-dated) + free-transfer vouchers. Ph2 already logs
+  `reissue_fee_paid_but_not_payable` for a payment on a cancelled request: feed it into the stuck-payment queue.
 - **S-ADMIN2: users, roles and permissions.** User search and detail, suspend/reactivate, roles + `manage_users`,
-  audit viewer, admin MFA (needs S-2FA). Owners stay anonymous except to support, with a logged reason.
+  audit viewer, admin MFA (needs S-2FA). Owners stay anonymous except to support, with a logged reason. Owner
+  override, if ever wanted, belongs here with verified identity.
 
 Locked decisions behind it: reset is **admin-only**; retired chips are **never reused** (now a DB trigger); token-admin
 authz = admin_users + `manage_nfc` (2026-10-05).
-
-### ⚠️ Duplicate-UID chips (found 2026-10-05)
-
-Two physical NTAG 424 chips report UID …936980 (`chip_001`'s) and both pass NXP originality with different
-signatures. **Do not encode chips from the current batch; ask the supplier.** Proposed fix (Decisions + Ideas DB):
-per-chip serial covered by the SDM MAC, keys from (UID, serial, role, version) as KDF v2; plus store the originality
-signature fingerprint at enroll.
 
 ## 🔵 HOUSEKEEPING
 
