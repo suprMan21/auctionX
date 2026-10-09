@@ -99,6 +99,8 @@ They remain in staging (A is RETIRED and frozen by design; its audit rows are ap
 | Suspend → tap → lift on `chip_003` | ✅ `tag_suspend` + `tag_unsuspend` audit rows with reasons |
 | `chip_001` | untouched (ACTIVE, test2@) |
 
+`chip_002` is kept by Boss for physical adhesion tests (still taps as retired); mark it DESTROYED only once it is.
+
 S-ADMIN1 Ph1 acceptance criteria are now all met on silicon. The original "blocked" record follows.
 
 ### Original record (2026-10-05)
