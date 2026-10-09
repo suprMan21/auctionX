@@ -37,11 +37,13 @@ upload endpoint answers 503; it never falls back to the media bucket.
 4. **Lifecycle.** Bucket → Management → Create lifecycle rule: name
    `expire-evidence-after-90-days`, prefix `reissue-evidence/`, expire current
    versions after **90 days** (`lifecycle.json` has the same rule).
-5. **Backend access.** The backend signs S3 calls as IAM user **`auctionx-s3-access`**
-   (its key is App Runner's `AWS_ACCESS_KEY_ID`; confirmed 2026-10-09 by matching the key
-   under IAM → Users → Security credentials, since the console cannot search by key).
-   On that user: Permissions → Add permissions → Create inline policy → JSON → paste
-   `backend-access-policy.json`, name `ReissueEvidenceStaging`.
+5. **Backend access.** Attach `backend-access-policy.json` as an inline policy named
+   `ReissueEvidenceStaging` to the App Runner **instance role `am-backend-staging-instance`**
+   (IAM → Roles). The evidence client uses static keys only when BOTH `AWS_ACCESS_KEY_ID`
+   and `AWS_SECRET_ACCESS_KEY` are set; staging has only the key id (no secret), so it uses
+   the instance role. No long-lived secret needed. (2026-10-09: the policy was first put on
+   IAM user `auctionx-s3-access`, but App Runner has no secret for it, so the first live
+   photo upload failed with a silent 500.)
 6. **App Runner env.** Add `REISSUE_EVIDENCE_BUCKET=am-reissue-evidence-staging`
    and deploy.
 
