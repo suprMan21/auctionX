@@ -102,8 +102,7 @@ cd frontend && npm run build
 grep -l "pk_test_" dist/assets/*.js            # must print a file
 aws s3 sync dist/ s3://auctionx-frontend-staging --profile auctionx --delete
 aws cloudfront create-invalidation --profile auctionx --distribution-id E3JOPXHI8DB4BE --paths '/*'
-aws cloudfront create-invalidation --profile auctionx --paths '/*' --distribution-id \
-  "$(aws cloudfront list-distributions --profile auctionx --query "DistributionList.Items[?DomainName=='d3l1h87n1juy75.cloudfront.net'].Id" --output text)"
+aws cloudfront create-invalidation --profile auctionx --distribution-id E35K71RCQGYBAW --paths '/*'   # authentic-materials.com
 ```
 Backend: after `git push origin dev`, run `scripts/verify-backend-deploy.sh` (pushes do not always deploy).
 Deploy order: backend (push `dev`, wait for App Runner **Running**) BEFORE frontend.
