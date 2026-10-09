@@ -10,6 +10,7 @@ import { OwnershipPanel } from '../components/OwnershipPanel';
 import { DisclosureSettings } from '../components/DisclosureSettings';
 import { TransferInitiateDialog } from '../components/TransferInitiateDialog';
 import { ReleaseTokenDialog } from '../components/ReleaseTokenDialog';
+import { ReplacementSection } from '../components/ReplacementSection';
 import { tokenDisplayName } from './MyTokensPage';
 
 type Load =
@@ -105,6 +106,8 @@ export const TokenDetailPage = () => {
             />
 
             <ProvenanceCard provenance={load.token.provenance} />
+
+            <ReplacementSection tagId={load.token.tagId} lifecycleStatus={load.token.lifecycleStatus} />
 
             {load.token.lifecycleStatus === 'ACTIVE' && (
               <section aria-labelledby="release-heading" className="rounded-2xl border border-red-500/30 p-6">

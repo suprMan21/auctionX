@@ -1,0 +1,11 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://d1bwev65w7rqzl.cloudfront.net",
+      "http://localhost:5173"
+    ],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["content-type", "content-length"],
+    "MaxAgeSeconds": 300
+  }
+]

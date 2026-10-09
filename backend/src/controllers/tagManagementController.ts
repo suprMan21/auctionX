@@ -57,9 +57,12 @@ import {
   transferCompleteSchema,
   releaseSchema,
   reissueRequestSchema,
+  reissuePhotoUrlSchema,
+  reissueRequestIdSchema,
   disclosureSchema,
   DISCLOSURE_FIELDS,
 } from '../services/nfc/tagManagementSchemas';
+import { evidenceUploadUrl, evidenceObjectIsValid, isOwnEvidenceKey } from '../lib/reissueEvidence';
 import { getStripe } from '../lib/stripe';
 import {
   TRANSFER_FEE_CENTS,
@@ -1125,14 +1128,128 @@ export const releaseTag = async (req: TagRequest, res: Response) => {
 // database transaction: POST /api/v1/admin/tags/:tagId/reset
 // (controllers/adminTagController.ts). The route now answers 410.
 
+// ── Re-issue (owner side) — S-ADMIN1 Ph2 ────────────────────────────────────
+//
+// A re-issue replaces a chip that is coming loose, BEFORE it falls off, for the
+// registered owner. A chip that has already come off is not replaced (Boss,
+// 2026-10-09: otherwise anyone could peel a chip and claim it "fell off").
+//
+//   request (tap + photos) -> admin approves -> owner pays on the WEBSITE
+//   -> webhook marks PAID -> admin fulfils onto a new chip
+//
+// Not advertised in the UI. Payment is web only (no app store fees).
+
+const REISSUE_OWNER_COLUMNS =
+  'id, tag_id, requester_id, status, payment_status, stripe_payment_intent_id, list_amount_usd_cents, charged_amount, charged_currency, fx_rate, created_at, reviewed_at, paid_at, fulfilled_at, new_tag_id';
+
+type ReissueOwnerRow = {
+  id: string;
+  tag_id: string;
+  requester_id: string;
+  status: string;
+  payment_status: string | null;
+  stripe_payment_intent_id: string | null;
+  list_amount_usd_cents: number | null;
+  charged_amount: number | null;
+  charged_currency: string | null;
+  fx_rate: number | null;
+  created_at: string;
+  reviewed_at: string | null;
+  paid_at: string | null;
+  fulfilled_at: string | null;
+  new_tag_id: string | null;
+};
+
+const emitReissueStep = (
+  ctx: SecurityLogContext,
+  action: 'request' | 'photo_url' | 'pay' | 'cancel',
+  tagId: string | null,
+  reissueRequestId: string | null,
+  result: SecurityResult,
+): void => {
+  emitSecurityEvent({
+    event: 'nfc.reissue_request', action, tag_id: tagId, reissue_request_id: reissueRequestId, result,
+    request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
+    ip: ctx.ip, route: ctx.route,
+  });
+};
+
+/** What the owner sees. No reviewer identity or admin reason (internal). */
+const toOwnerReissue = (row: ReissueOwnerRow) => ({
+  id: row.id,
+  tagId: row.tag_id,
+  status: row.status,
+  paymentStatus: row.payment_status,
+  listAmountUsdCents: row.list_amount_usd_cents,
+  chargedAmount: row.charged_amount,
+  chargedCurrency: row.charged_currency,
+  createdAt: row.created_at,
+  reviewedAt: row.reviewed_at,
+  paidAt: row.paid_at,
+  fulfilledAt: row.fulfilled_at,
+  newTagId: row.new_tag_id,
+});
+
+/**
+ * Loads a request the caller filed. Anyone else's request is reported as not
+ * found (no existence oracle), with an authz.denied event for the probe.
+ */
+const loadOwnReissue = async (
+  supabase: SupabaseClient,
+  rawId: string | string[] | undefined,
+  userId: string,
+  ctx: SecurityLogContext,
+): Promise<ReissueOwnerRow> => {
+  const parsed = reissueRequestIdSchema.safeParse(pathParam(rawId));
+  if (!parsed.success) throw errorFor('not_found');
+
+  const { data, error } = await supabase
+    .from('reissue_requests')
+    .select(REISSUE_OWNER_COLUMNS)
+    .eq('id', parsed.data)
+    .maybeSingle();
+
+  if (error) throw new AppError('unavailable', 'Request could not be loaded');
+  const row = data as unknown as ReissueOwnerRow | null;
+  if (!row) throw errorFor('not_found');
+  if (row.requester_id !== userId) {
+    emitAuthzDenied('reissue', row.id, 'not_owner', ctx);
+    throw errorFor('not_found');
+  }
+  return row;
+};
+
+// ── POST /api/v1/nfc/reissue-request/photo-url ──────────────────────────────
+
+/** One presigned PUT for one evidence photo, under the caller's own prefix. */
+export const reissuePhotoUrl = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/reissue-request/photo-url', 'user');
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const parsed = reissuePhotoUrlSchema.safeParse(req.body);
+  if (!parsed.success) {
+    emitReissueStep(ctx, 'photo_url', null, null, 'invalid_argument');
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+
+  const { uploadUrl, key } = await evidenceUploadUrl(userId, parsed.data.sizeBytes);
+  emitReissueStep(ctx, 'photo_url', null, null, 'ok');
+  return ok(res, { uploadUrl, key, contentType: parsed.data.contentType });
+};
+
 // ── POST /api/v1/nfc/reissue-request ────────────────────────────────────────
 
 /**
- * The only path for a holder who skipped a transfer. Admin review of the
- * internal custody record, $10. Not advertised in the UI.
+ * Files a re-issue request. Requires, in this order (cheap checks first, the
+ * single-use tap is spent last so a rejected request does not waste it):
+ *   1. the caller is the registered owner of an ACTIVE token;
+ *   2. no request is already open for the token;
+ *   3. 1–3 photos under the caller's own prefix, really uploaded, JPEG, size-capped;
+ *   4. a live tap session for THIS chip that is still its latest tap.
  *
- * Creates the request only; approval and the RETIRE of the old tag happen in
- * admin review.
+ * Prices the request (snapshot) and creates NO PaymentIntent: the fee is
+ * charged only after an admin approves (Locked 2026-09-19).
  */
 export const requestReissue = async (req: TagRequest, res: Response) => {
   const ctx = securityContext(req, '/api/v1/nfc/reissue-request', 'user');
@@ -1143,22 +1260,56 @@ export const requestReissue = async (req: TagRequest, res: Response) => {
 
   const parsed = reissueRequestSchema.safeParse(req.body);
   if (!parsed.success) {
+    emitReissueStep(ctx, 'request', null, null, 'invalid_argument');
     throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
   }
+  const { tagId, tapSession, photoKeys } = parsed.data;
 
-  const tag = await loadTag(supabase, parsed.data.tagId);
-
-  const emitReissue = (result: SecurityResult) =>
-    emitSecurityEvent({
-      event: 'nfc.reissue_request', tag_id: tag.id, result,
-      request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
-      ip: ctx.ip, route: ctx.route,
-    });
+  const tag = await loadTag(supabase, tagId);
 
   const terminal = terminalStateError(tag.lifecycle_status);
   if (terminal) {
-    emitReissue(terminal);
+    emitReissueStep(ctx, 'request', tag.id, null, terminal);
     throw errorFor(terminal);
+  }
+
+  // Owner only. A holder whose transfer was skipped is NOT served here: AM
+  // cannot tell bought from stolen without a real transfer.
+  await assertTagOwner(supabase, tag, userId, ctx);
+
+  // Same rule as the one-open-per-tag index: PENDING, or APPROVED and not yet
+  // fulfilled. Checked here so a duplicate does not spend the owner's tap.
+  const { data: existing, error: openError } = await supabase
+    .from('reissue_requests')
+    .select('id, status, fulfilled_at')
+    .eq('tag_id', tag.id)
+    .in('status', ['PENDING', 'APPROVED']);
+  if (openError) throw new AppError('unavailable', 'Request could not be checked');
+  const open = ((existing ?? []) as Array<{ status: string; fulfilled_at: string | null }>)
+    .filter((r) => r.status === 'PENDING' || !r.fulfilled_at);
+  if (open.length > 0) {
+    emitReissueStep(ctx, 'request', tag.id, null, 'conflict');
+    throw new AppError('conflict', 'A replacement request is already open for this token');
+  }
+
+  if (!photoKeys.every((key) => isOwnEvidenceKey(key, userId))) {
+    emitReissueStep(ctx, 'request', tag.id, null, 'invalid_argument');
+    throw new AppError('invalid_argument', 'A photo could not be found. Please take it again.');
+  }
+  const photosValid = await Promise.all(photoKeys.map(evidenceObjectIsValid));
+  if (!photosValid.every(Boolean)) {
+    emitReissueStep(ctx, 'request', tag.id, null, 'invalid_argument');
+    throw new AppError('invalid_argument', 'A photo could not be found. Please take it again.');
+  }
+
+  const session = await consumeTapSession(
+    supabase,
+    { token: tapSession, userId, purpose: 'reissue_request' },
+    ctx,
+  );
+  if (!session || session.tagId !== tag.id || session.counterValue !== tag.sun_counter) {
+    emitReissueStep(ctx, 'request', tag.id, null, 'tap_session_invalid');
+    throw errorFor('tap_session_invalid');
   }
 
   const charge = resolveCharge(REISSUE_FEE_CENTS, await billingCountryFor(supabase, userId));
@@ -1169,6 +1320,8 @@ export const requestReissue = async (req: TagRequest, res: Response) => {
       tag_id: tag.id,
       requester_id: userId,
       status: 'PENDING',
+      tap_session_id: session.id,
+      photo_keys: photoKeys,
       list_amount_usd_cents: charge.listAmountUsdCents,
       charged_amount: charge.chargedAmount,
       charged_currency: charge.chargedCurrency,
@@ -1178,11 +1331,21 @@ export const requestReissue = async (req: TagRequest, res: Response) => {
     .single();
 
   if (error || !created) {
-    emitReissue('conflict');
-    throw new AppError('conflict', 'A re-issue request is already open for this token');
+    // 23505: the one-open-request index (a concurrent request won the race).
+    const conflict = error?.code === '23505';
+    emitReissueStep(ctx, 'request', tag.id, null, conflict ? 'conflict' : 'internal');
+    if (!conflict) {
+      withLogContext({ requestId: ctx.requestId, route: ctx.route }).error('reissue_request_insert_failed', {
+        tagId: tag.id,
+        error: error?.message ?? 'no row returned',
+      });
+    }
+    throw conflict
+      ? new AppError('conflict', 'A replacement request is already open for this token')
+      : new AppError('internal', 'Your request could not be saved. Please try again.');
   }
 
-  emitReissue('ok');
+  emitReissueStep(ctx, 'request', tag.id, created.id, 'ok');
 
   return ok(res, {
     reissueRequestId: created.id,
@@ -1191,6 +1354,184 @@ export const requestReissue = async (req: TagRequest, res: Response) => {
     chargedAmount: charge.chargedAmount,
     chargedCurrency: charge.chargedCurrency,
   }, 201);
+};
+
+// ── GET /api/v1/nfc/reissue-requests/mine ───────────────────────────────────
+
+export const listMyReissueRequests = async (req: TagRequest, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const { data, error } = await getServiceClient()
+    .from('reissue_requests')
+    .select(REISSUE_OWNER_COLUMNS)
+    .eq('requester_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) throw new AppError('unavailable', 'Requests could not be loaded');
+  return ok(res, { requests: ((data ?? []) as unknown as ReissueOwnerRow[]).map(toOwnerReissue) });
+};
+
+// ── POST /api/v1/nfc/reissue-requests/:id/pay ───────────────────────────────
+
+/**
+ * Creates (or returns) the PaymentIntent for an APPROVED request awaiting
+ * payment. Nothing here marks it paid: only the token-fee webhook does.
+ *
+ * The PaymentIntent id is stored BEFORE the client secret is returned, so a
+ * payment can never exist that the webhook cannot bind to its request
+ * (lesson 2026-10-03: a payment taken without its row strands the money).
+ */
+export const payReissue = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/reissue-requests/:id/pay', 'user');
+  const logger = withLogContext({ requestId: ctx.requestId, route: ctx.route });
+  const supabase = getServiceClient();
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const row = await loadOwnReissue(supabase, req.params.id, userId, ctx);
+
+  if (row.status !== 'APPROVED' || row.payment_status !== 'AWAITING_PAYMENT' || row.fulfilled_at) {
+    emitReissueStep(ctx, 'pay', row.tag_id, row.id, 'conflict');
+    throw new AppError('failed_precondition', 'This request is not waiting for payment');
+  }
+  if (!row.charged_amount || !row.charged_currency) {
+    logger.error('reissue_pay_unpriced', { reissueRequestId: row.id });
+    throw new AppError('internal', 'We could not start this payment. You have not been charged.');
+  }
+
+  // The token may have changed hands since approval.
+  const tag = await loadTag(supabase, row.tag_id);
+  if (tag.current_owner_id !== userId) {
+    emitAuthzDenied('reissue', row.id, 'not_owner', ctx);
+    emitReissueStep(ctx, 'pay', row.tag_id, row.id, 'forbidden');
+    throw errorFor('forbidden');
+  }
+
+  const stripe = getStripe();
+
+  if (row.stripe_payment_intent_id) {
+    const existing = await stripe.paymentIntents.retrieve(row.stripe_payment_intent_id);
+    emitReissueStep(ctx, 'pay', row.tag_id, row.id, 'ok');
+    return ok(res, {
+      reissueRequestId: row.id,
+      clientSecret: existing.client_secret,
+      chargedAmount: row.charged_amount,
+      chargedCurrency: row.charged_currency,
+      listAmountUsdCents: row.list_amount_usd_cents,
+    });
+  }
+
+  const intent = await stripe.paymentIntents.create(
+    {
+      amount: row.charged_amount,
+      currency: row.charged_currency,
+      metadata: {
+        // Everything the webhook needs, and nothing else.
+        reissue_request_id: row.id,
+        tag_id: row.tag_id,
+        kind: 'token_reissue_fee',
+      },
+      automatic_payment_methods: { enabled: true },
+    },
+    // Keyed by request id: a retried call reuses the same PaymentIntent.
+    { idempotencyKey: `token-reissue-fee-${row.id}` },
+  );
+
+  const { data: stored, error: storeError } = await supabase
+    .from('reissue_requests')
+    .update({ stripe_payment_intent_id: intent.id })
+    .eq('id', row.id)
+    .eq('payment_status', 'AWAITING_PAYMENT')
+    .is('stripe_payment_intent_id', null)
+    .select('id')
+    .maybeSingle();
+
+  if (storeError || !stored) {
+    // A concurrent call may have stored the SAME intent (same idempotency key).
+    const { data: again } = await supabase
+      .from('reissue_requests')
+      .select('stripe_payment_intent_id')
+      .eq('id', row.id)
+      .maybeSingle();
+    if (again?.stripe_payment_intent_id !== intent.id) {
+      logger.error('reissue_pay_store_failed', {
+        reissueRequestId: row.id,
+        error: storeError?.message ?? 'no row updated',
+      });
+      emitReissueStep(ctx, 'pay', row.tag_id, row.id, 'internal');
+      throw new AppError('internal', 'We could not start this payment. You have not been charged. Please try again.');
+    }
+  }
+
+  emitReissueStep(ctx, 'pay', row.tag_id, row.id, 'ok');
+  return ok(res, {
+    reissueRequestId: row.id,
+    clientSecret: intent.client_secret,
+    chargedAmount: row.charged_amount,
+    chargedCurrency: row.charged_currency,
+    listAmountUsdCents: row.list_amount_usd_cents,
+  });
+};
+
+// ── POST /api/v1/nfc/reissue-requests/:id/cancel ────────────────────────────
+
+/**
+ * The owner withdraws a request that is still PENDING or awaiting payment.
+ * An open PaymentIntent is cancelled in Stripe FIRST: if it already succeeded,
+ * the request is paid and can no longer be cancelled here.
+ */
+export const cancelReissue = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/reissue-requests/:id/cancel', 'user');
+  const logger = withLogContext({ requestId: ctx.requestId, route: ctx.route });
+  const supabase = getServiceClient();
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  const row = await loadOwnReissue(supabase, req.params.id, userId, ctx);
+
+  const cancellable =
+    row.status === 'PENDING' ||
+    (row.status === 'APPROVED' && row.payment_status === 'AWAITING_PAYMENT' && !row.fulfilled_at);
+  if (!cancellable) {
+    emitReissueStep(ctx, 'cancel', row.tag_id, row.id, 'conflict');
+    throw new AppError('failed_precondition', 'This request can no longer be cancelled');
+  }
+
+  if (row.stripe_payment_intent_id) {
+    const stripe = getStripe();
+    try {
+      await stripe.paymentIntents.cancel(row.stripe_payment_intent_id);
+    } catch {
+      const intent = await stripe.paymentIntents.retrieve(row.stripe_payment_intent_id);
+      if (intent.status !== 'canceled') {
+        emitReissueStep(ctx, 'cancel', row.tag_id, row.id, 'conflict');
+        throw new AppError('failed_precondition', 'This request has already been paid and can no longer be cancelled');
+      }
+    }
+  }
+
+  let update = supabase
+    .from('reissue_requests')
+    .update({ status: 'CANCELLED' })
+    .eq('id', row.id)
+    .eq('status', row.status);
+  update = row.payment_status === null
+    ? update.is('payment_status', null)
+    : update.eq('payment_status', row.payment_status);
+  const { data: cancelled, error } = await update.select('id').maybeSingle();
+
+  if (error || !cancelled) {
+    if (error) logger.error('reissue_cancel_failed', { reissueRequestId: row.id, error: error.message });
+    emitReissueStep(ctx, 'cancel', row.tag_id, row.id, error ? 'internal' : 'conflict');
+    throw error
+      ? new AppError('internal', 'The request could not be cancelled. Please try again.')
+      : new AppError('failed_precondition', 'This request changed while you were cancelling it. Please refresh.');
+  }
+
+  emitReissueStep(ctx, 'cancel', row.tag_id, row.id, 'ok');
+  return ok(res, { reissueRequestId: row.id, status: 'CANCELLED' });
 };
 
 // ── PATCH /api/v1/nfc/:tagId/disclosure ─────────────────────────────────────

@@ -25,6 +25,12 @@ const api = vi.hoisted(() => ({
   updateDisclosure: vi.fn(),
   receipt: vi.fn(),
   initiateTransfer: vi.fn(),
+  // S-ADMIN1 Ph2 re-issue
+  myReissueRequests: vi.fn(),
+  requestReissue: vi.fn(),
+  uploadReissuePhoto: vi.fn(),
+  payReissue: vi.fn(),
+  cancelReissue: vi.fn(),
 }));
 
 // Payments never load in unit tests.
@@ -101,6 +107,7 @@ beforeEach(() => {
   sessionStorage.clear();
   authState.user = null;
   Object.values(api).forEach((fn) => fn.mockReset());
+  api.myReissueRequests.mockResolvedValue([]);
 });
 
 // ── Verify page ─────────────────────────────────────────────────────────────

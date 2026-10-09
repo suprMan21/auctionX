@@ -1010,32 +1010,5 @@ describe('after a completed transfer', () => {
 // transaction, covered in adminTags.test.ts and verified live on staging.
 
 // ── Re-issue ────────────────────────────────────────────────────────────────
-
-describe('reissue request', () => {
-  it('opens a PENDING request priced at $10 and refuses a duplicate', async () => {
-    await claimFirst();
-    const { requestReissue } = await controllers();
-
-    const out = await call(requestReissue, makeReq(BUYER, { tagId: TAG_ID }));
-
-    expect(out.threw).toBeNull();
-    expect(tables.reissue_requests[0]).toMatchObject({
-      status: 'PENDING', requester_id: BUYER, list_amount_usd_cents: 1000,
-    });
-    expect(eventsNamed('nfc.reissue_request')[0]).toMatchObject({ result: 'ok' });
-
-    const dup = await call(requestReissue, makeReq(BUYER, { tagId: TAG_ID }));
-    expect(dup.threw?.message).toMatch(/already open/i);
-    expect(tables.reissue_requests).toHaveLength(1);
-  });
-
-  it('refuses a re-issue request on a released token', async () => {
-    tables.nfc_tags[0] = baseTag({ lifecycle_status: 'RELEASED' });
-    const { requestReissue } = await controllers();
-
-    const out = await call(requestReissue, makeReq(BUYER, { tagId: TAG_ID }));
-
-    expect(out.threw?.message).toMatch(/released/i);
-    expect(eventsNamed('nfc.reissue_request')[0]).toMatchObject({ result: 'token_released' });
-  });
-});
+// S-ADMIN1 Ph2: owner-only with a live tap + photos, web payment, admin queue.
+// Covered end to end in reissue.test.ts.

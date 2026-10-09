@@ -22,7 +22,15 @@ import {
   ownershipLookupSchema,
   tapResultSchema,
   claimResultSchema,
+  myReissueRequestsSchema,
+  reissueCancelSchema,
+  reissueCreatedSchema,
+  reissuePaySchema,
+  reissuePhotoUrlSchema,
   type ClaimResult,
+  type OwnerReissue,
+  type ReissueCreated,
+  type ReissuePay,
   type DisclosureInput,
   type Receipt,
   type ReleaseResult,
@@ -213,6 +221,54 @@ export const tokenApi = {
 
   receipt(tagId: string): Promise<Receipt> {
     return request(`/nfc/${encodeURIComponent(tagId)}/receipt`, receiptSchema, { auth: 'required' });
+  },
+
+  // ── Re-issue (S-ADMIN1 Ph2) ──────────────────────────────────────────────
+
+  /**
+   * Uploads one evidence photo straight to the private evidence bucket through a
+   * presigned PUT. Returns the key to cite in the request. The server checks the
+   * object exists (and is a small JPEG) when the request is submitted.
+   */
+  async uploadReissuePhoto(photo: Blob): Promise<string> {
+    const { uploadUrl, key } = await request('/nfc/reissue-request/photo-url', reissuePhotoUrlSchema, {
+      method: 'POST',
+      body: { contentType: 'image/jpeg', sizeBytes: photo.size },
+      auth: 'required',
+    });
+    let res: Response;
+    try {
+      res = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
+    } catch {
+      throw new TokenApiError('A photo could not be uploaded. Check your connection and try again.', 0, 'network', null);
+    }
+    if (!res.ok) {
+      throw new TokenApiError('A photo could not be uploaded. Please try again.', res.status, 'upload_failed', null);
+    }
+    return key;
+  },
+
+  /** Spends the tap session, whatever the outcome (except a network failure). */
+  requestReissue(input: { tagId: string; tapSession: string; photoKeys: string[] }): Promise<ReissueCreated> {
+    return request('/nfc/reissue-request', reissueCreatedSchema, { method: 'POST', body: input, auth: 'required' });
+  },
+
+  async myReissueRequests(): Promise<OwnerReissue[]> {
+    return (await request('/nfc/reissue-requests/mine', myReissueRequestsSchema, { auth: 'required' })).requests;
+  },
+
+  payReissue(requestId: string): Promise<ReissuePay> {
+    return request(`/nfc/reissue-requests/${encodeURIComponent(requestId)}/pay`, reissuePaySchema, {
+      method: 'POST',
+      auth: 'required',
+    });
+  },
+
+  async cancelReissue(requestId: string): Promise<void> {
+    await request(`/nfc/reissue-requests/${encodeURIComponent(requestId)}/cancel`, reissueCancelSchema, {
+      method: 'POST',
+      auth: 'required',
+    });
   },
 };
 

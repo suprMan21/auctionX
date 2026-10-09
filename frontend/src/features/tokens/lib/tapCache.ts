@@ -10,7 +10,7 @@
  * wrapped and the page works without it.
  */
 
-import { tapResultSchema, type TapResult } from '../api/schemas';
+import { tapResultSchema, type TapResult, type ValidTap } from '../api/schemas';
 
 const PREFIX = 'am.tap.';
 const MAX_AGE_MS = 10 * 60 * 1000;
@@ -49,3 +49,7 @@ export const forgetTapSession = (tokenName: string): void => {
   const current = loadTap(tokenName);
   if (current && current.valid) saveTap(tokenName, { ...current, tapSession: null });
 };
+
+/** True while the tap's one-time session can still prove possession (10 minutes). */
+export const isSessionLive = (tap: ValidTap, now: number = Date.now()): boolean =>
+  Boolean(tap.tapSession && new Date(tap.tapSession.expiresAt).getTime() > now);

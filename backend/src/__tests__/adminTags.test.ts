@@ -159,7 +159,7 @@ describe('router gate', () => {
     const list = await request(app).get('/admin/tags');
     const reset = await request(app)
       .post(`/admin/tags/${OLD_TAG}/reset`)
-      .send({ newTagId: NEW_TAG, reason: REASON, confirmUidSuffix: '936980' });
+      .send({ newTagId: NEW_TAG, reason: REASON, confirmSuffix: '936980' });
 
     expect(list.status).toBe(403);
     expect(reset.status).toBe(403);
@@ -322,7 +322,7 @@ describe('suspend', () => {
 // ── Token reset ─────────────────────────────────────────────────────────────
 
 describe('reset', () => {
-  const body = (overrides: Row = {}) => ({ newTagId: NEW_TAG, reason: REASON, confirmUidSuffix: '936980', ...overrides });
+  const body = (overrides: Row = {}) => ({ newTagId: NEW_TAG, reason: REASON, confirmSuffix: '936980', ...overrides });
 
   it('calls admin_reset_token once with a freshly minted proof for the NEW chip', async () => {
     rpcAnswer(() => ({ data: { old_tag_id: OLD_TAG, new_tag_id: NEW_TAG, owner_id: OWNER }, error: null }));
@@ -351,7 +351,7 @@ describe('reset', () => {
     rpcAnswer(() => ({ data: {}, error: null }));
     const { resetTag } = await controllers();
 
-    const out = await call(resetTag, makeReq(body({ confirmUidSuffix: '936980'.toLowerCase() }), { tagId: OLD_TAG }));
+    const out = await call(resetTag, makeReq(body({ confirmSuffix: '936980'.toLowerCase() }), { tagId: OLD_TAG }));
 
     expect(out.threw).toBeNull();
   });
@@ -361,11 +361,27 @@ describe('reset', () => {
     const { resetTag } = await controllers();
 
     // The NEW chip's suffix — the classic slip.
-    const out = await call(resetTag, makeReq(body({ confirmUidSuffix: 'ACC040' }), { tagId: OLD_TAG }));
+    const out = await call(resetTag, makeReq(body({ confirmSuffix: 'ACC040' }), { tagId: OLD_TAG }));
 
     expect(out.threw?.code).toBe('invalid_argument');
     expect(rpcCalls).toHaveLength(0);
     expect(adminEvents()[0]).toMatchObject({ action: 'reset', result: 'invalid_argument' });
+  });
+
+  // S-ADMIN1 Ph2: every chip in the current lot ends in …936980, so a v2 chip
+  // is confirmed on the last 6 of its SERIAL, never the shared UID suffix.
+  it('confirms a v2 chip on its serial suffix and refuses the shared UID suffix', async () => {
+    tables.nfc_tags[0] = { ...tables.nfc_tags[0], chip_serial: '7F6509CC4DAE6CA9', sdm_key_version: 2 };
+    rpcAnswer(() => ({ data: {}, error: null }));
+    const { resetTag } = await controllers();
+
+    const byUid = await call(resetTag, makeReq(body({ confirmSuffix: '936980' }), { tagId: OLD_TAG }));
+    expect(byUid.threw?.code).toBe('invalid_argument');
+    expect(rpcCalls).toHaveLength(0);
+
+    const bySerial = await call(resetTag, makeReq(body({ confirmSuffix: 'ae6ca9' }), { tagId: OLD_TAG }));
+    expect(bySerial.threw).toBeNull();
+    expect(rpcCalls).toHaveLength(1);
   });
 
   it('touches nothing when the salt key is missing (mints before any database call)', async () => {

@@ -42,6 +42,9 @@ const TARGET_FILES = [
   // S-ADMIN1: token admin console + the manage_nfc lookup.
   'controllers/adminTagController.ts',
   'lib/admin/tokenAdmin.ts',
+  // S-ADMIN1 Ph2: re-issue queue + email lookup.
+  'controllers/adminReissueController.ts',
+  'lib/notifications/reissueEmails.ts',
 ];
 
 /**

@@ -33,7 +33,7 @@ export type Tables = Record<string, Row[]>;
 
 interface Filter {
   column: string;
-  op: 'eq' | 'lt' | 'gt' | 'gte' | 'lte' | 'in' | 'is' | 'ilike' | 'or';
+  op: 'eq' | 'lt' | 'gt' | 'gte' | 'lte' | 'in' | 'is' | 'ilike' | 'or' | 'notnull';
   value: unknown;
 }
 
@@ -48,6 +48,8 @@ const matches = (row: Row, filters: Filter[]): boolean =>
       case 'is':
         // PostgREST `is null`: a missing column reads as null too.
         return (cell ?? null) === f.value;
+      case 'notnull':
+        return (cell ?? null) !== null;
       case 'in':
         return (f.value as unknown[]).includes(cell);
       // Numbers compare numerically; ISO timestamps compare lexically, which is
@@ -171,6 +173,15 @@ class QueryBuilder {
     return this;
   }
 
+  /** Only the `not(col, 'is', null)` form (IS NOT NULL). */
+  not(column: string, operator: string, value: unknown): this {
+    if (operator !== 'is' || value !== null) {
+      throw new Error(`supabaseMock: unsupported not(${column}, ${operator}, ${String(value)})`);
+    }
+    this.filters.push({ column, op: 'notnull', value: null });
+    return this;
+  }
+
   limit(n: number): this {
     this.limitN = n;
     return this;
@@ -202,7 +213,7 @@ class QueryBuilder {
     return this;
   }
 
-  private apply(): { data: Row[] | null; error: { message: string } | null; count?: number } {
+  private apply(): { data: Row[] | null; error: { message: string; code?: string } | null; count?: number } {
     const rows = this.tables[this.table];
 
     if (this.mode === 'insert') {
@@ -221,8 +232,10 @@ class QueryBuilder {
         }
       }
       if (this.table === 'reissue_requests' && row.status === 'PENDING') {
-        if (rows.some((r) => r.tag_id === row.tag_id && r.requester_id === row.requester_id && r.status === 'PENDING')) {
-          return { data: null, error: { message: 'duplicate open reissue request' } };
+        // idx_reissue_requests_one_open (S-NFC3) and _one_open_per_tag (S-ADMIN1 Ph2).
+        const open = (r: Row) => r.status === 'PENDING' || (r.status === 'APPROVED' && (r.fulfilled_at ?? null) === null);
+        if (rows.some((r) => r.tag_id === row.tag_id && open(r))) {
+          return { data: null, error: { message: 'duplicate open reissue request', code: '23505' } };
         }
       }
       if (this.table === 'nfc_tap_sessions') {

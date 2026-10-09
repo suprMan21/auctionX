@@ -4,7 +4,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { tokenApi, TokenApiError } from '../api/tokenApi';
 import type { ClaimResult, TapResult, ValidTap } from '../api/schemas';
 import { hasSunParams, withoutSunParams } from '../lib/tapUrl';
-import { forgetTapSession, loadTap, saveTap } from '../lib/tapCache';
+import { forgetTapSession, isSessionLive, loadTap, saveTap } from '../lib/tapCache';
 import { BUYER_WARNING, statusCopy, tapFailureCopy } from '../lib/copy';
 import { TokenStatusBadge } from '../components/TokenStatusBadge';
 import { ProvenanceCard } from '../components/ProvenanceCard';
@@ -18,9 +18,6 @@ type View =
   | { kind: 'unknown-tag' }
   | { kind: 'error'; message: string }
   | { kind: 'result'; tap: TapResult };
-
-const isSessionLive = (tap: ValidTap, now: number = Date.now()): boolean =>
-  Boolean(tap.tapSession && new Date(tap.tapSession.expiresAt).getTime() > now);
 
 /**
  * `/verify/:tokenName` — where a chip tap lands.
@@ -169,6 +166,7 @@ export const TokenVerifyPage = () => {
         {view.kind === 'result' && view.tap.valid && (
           <ValidTapView
             tap={view.tap}
+            tokenName={tokenName}
             claimed={claimed}
             signedIn={Boolean(user)}
             pendingTransferId={view.tap.viewer?.pendingTransferId ?? incomingTransferId}
@@ -202,6 +200,8 @@ export const TokenVerifyPage = () => {
 
 interface ValidTapViewProps {
   readonly tap: ValidTap;
+  /** The chip's URL name: the tap cache key the replacement page reads. */
+  readonly tokenName: string;
   readonly claimed: ClaimResult | null;
   readonly signedIn: boolean;
   /** A PENDING transfer of this token to the signed-in viewer. */
@@ -212,7 +212,7 @@ interface ValidTapViewProps {
   readonly onSessionSpent: () => void;
 }
 
-const ValidTapView = ({ tap, claimed, signedIn, pendingTransferId, returnTo, headingRef, onClaimed, onSessionSpent }: ValidTapViewProps) => {
+const ValidTapView = ({ tap, tokenName, claimed, signedIn, pendingTransferId, returnTo, headingRef, onClaimed, onSessionSpent }: ValidTapViewProps) => {
   const status = statusCopy(tap.lifecycleStatus);
   const claimable = tap.lifecycleStatus === 'ENROLLED' && !claimed;
   const youOwnThis = Boolean(claimed) || Boolean(tap.viewer?.youOwnThis);
@@ -270,6 +270,23 @@ const ValidTapView = ({ tap, claimed, signedIn, pendingTransferId, returnTo, hea
           </p>
           <Link to={loginPathFor(returnTo)} className="text-primary-300 underline hover:text-primary-200">
             Sign in to accept
+          </Link>
+        </section>
+      )}
+
+      {/* S-ADMIN1 Ph2: the owner's live tap is the proof a replacement request needs. */}
+      {tap.lifecycleStatus === 'ACTIVE' && youOwnThis && signedIn && !claimed && isSessionLive(tap) && (
+        <section className="glass rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-2">Chip coming loose?</h2>
+          <p className="text-gray-400 text-sm mb-4">
+            If the chip is lifting but still on the item, ask for a replacement now. We cannot replace a chip that has
+            already come off.
+          </p>
+          <Link
+            to={`/tokens/${tap.tagId}/replace?tap=${encodeURIComponent(tokenName)}`}
+            className="text-primary-300 underline hover:text-primary-200"
+          >
+            Request a replacement chip
           </Link>
         </section>
       )}

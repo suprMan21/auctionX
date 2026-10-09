@@ -26,9 +26,9 @@ export interface TransferRecipient {
   feeCents: number;
 }
 
-const frontendBaseUrl = (): string => process.env.FRONTEND_URL || 'http://localhost:5173';
+export const frontendBaseUrl = (): string => process.env.FRONTEND_URL || 'http://localhost:5173';
 
-const usd = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
+export const usd = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
 
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
@@ -37,7 +37,10 @@ const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial
  * drop <div> margins, body backgrounds and CSS gradients, so every visual
  * that matters has a plain-colour fallback underneath it.
  */
-function shell(opts: { title: string; preheader: string; body: string }): string {
+const TRANSFER_FOOTER =
+  "You're receiving this because someone entered this address for a token transfer. If you weren't expecting it, you can ignore this email. Nothing happens unless you accept.";
+
+export function shell(opts: { title: string; preheader: string; body: string; footer?: string }): string {
   const site = frontendBaseUrl();
   const year = new Date().getFullYear();
   return `<!DOCTYPE html>
@@ -71,7 +74,7 @@ function shell(opts: { title: string; preheader: string; body: string }): string
       </td></tr>
 
       <tr><td bgcolor="#15151d" style="background-color:#15151d;padding:24px 40px 28px;border:1px solid #26262f;border-radius:0 0 16px 16px;font-family:${FONT};">
-        <p style="margin:0 0 10px;font-size:12px;line-height:1.6;color:#9ca3af;">You're receiving this because someone entered this address for a token transfer. If you weren't expecting it, you can ignore this email. Nothing happens unless you accept.</p>
+        <p style="margin:0 0 10px;font-size:12px;line-height:1.6;color:#9ca3af;">${opts.footer ?? TRANSFER_FOOTER}</p>
         <p style="margin:0;font-size:12px;line-height:1.6;color:#6b7280;">
           <a href="${site}" style="color:#a78bfa;text-decoration:none;">authentic-materials.com</a>
           &nbsp;·&nbsp; This mailbox isn't monitored, so please don't reply.
@@ -89,7 +92,7 @@ function shell(opts: { title: string; preheader: string; body: string }): string
 </html>`;
 }
 
-function btn(href: string, text: string): string {
+export function btn(href: string, text: string): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;">
   <tr><td bgcolor="#7c3aed" style="border-radius:12px;background-color:#7c3aed;background-image:linear-gradient(90deg,#7c3aed,#3b82f6);">
     <a href="${href}" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:12px;">${text}</a>
@@ -97,11 +100,11 @@ function btn(href: string, text: string): string {
 </table>`;
 }
 
-function heading(text: string): string {
+export function heading(text: string): string {
   return `<h1 style="margin:0 0 12px;font-size:24px;line-height:1.3;font-weight:700;color:#ffffff;">${text}</h1>`;
 }
 
-function para(text: string, last = false): string {
+export function para(text: string, last = false): string {
   return `<p style="margin:0 0 ${last ? 0 : 24}px;font-size:15px;line-height:1.6;color:#9ca3af;">${text}</p>`;
 }
 

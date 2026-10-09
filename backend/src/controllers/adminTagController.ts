@@ -28,6 +28,8 @@ import {
   suspensionBodySchema,
   resetBodySchema,
   uidSuffix,
+  confirmationSuffix,
+  UID_SUFFIX_LENGTH,
 } from '../services/nfc/adminTagSchemas';
 
 type AdminRequest = Request & { requestId?: string };
@@ -76,7 +78,9 @@ type AdminTagRow = {
 const toAdminTag = (row: AdminTagRow) => ({
   id: row.id,
   uidSuffix: uidSuffix(row.tag_uid),
-  serialSuffix: row.chip_serial ? row.chip_serial.slice(-4) : null,
+  // Same length as the typed confirmation (confirmationSuffix), so the admin
+  // reads exactly what they will type.
+  serialSuffix: row.chip_serial ? row.chip_serial.slice(-UID_SUFFIX_LENGTH).toUpperCase() : null,
   lifecycleStatus: row.lifecycle_status,
   ownerAccountId: row.current_owner_id,
   creatorAccountId: row.seller_id,
@@ -367,12 +371,12 @@ export const resetTag = async (req: AdminRequest, res: Response) => {
     emitAdminAction(ctx, 'reset', oldTagId, 'invalid_argument');
     throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
   }
-  const { newTagId, reason, confirmUidSuffix } = parsed.data;
+  const { newTagId, reason, confirmSuffix } = parsed.data;
 
   const supabase = getServiceClient();
   const { data: oldTag, error: loadError } = await supabase
     .from('nfc_tags')
-    .select('id, tag_uid')
+    .select('id, tag_uid, chip_serial')
     .eq('id', oldTagId)
     .maybeSingle();
 
@@ -385,8 +389,9 @@ export const resetTag = async (req: AdminRequest, res: Response) => {
     throw new AppError('not_found', 'Tag not found');
   }
 
-  // Typed confirmation: the admin must read the suffix off the chip being retired.
-  if (uidSuffix(oldTag.tag_uid as string) !== confirmUidSuffix.toUpperCase()) {
+  // Typed confirmation: the admin must read the suffix off the chip being retired
+  // (serial for v2 chips, UID for v1).
+  if (confirmationSuffix(oldTag as { tag_uid: string; chip_serial: string | null }) !== confirmSuffix.toUpperCase()) {
     emitAdminAction(ctx, 'reset', oldTagId, 'invalid_argument', newTagId);
     throw new AppError('invalid_argument', 'The confirmation does not match the chip being retired');
   }

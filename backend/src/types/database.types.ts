@@ -1865,48 +1865,96 @@ export type Database = {
           charged_amount: number | null
           charged_currency: string | null
           created_at: string
+          fulfilled_at: string | null
+          fulfilled_by: string | null
           fx_rate: number | null
           id: string
           list_amount_usd_cents: number | null
+          new_tag_id: string | null
+          paid_at: string | null
+          payment_status: string | null
+          photo_keys: string[] | null
           requester_id: string
+          review_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: string
           stripe_payment_intent_id: string | null
           tag_id: string
+          tap_session_id: string | null
           updated_at: string
+          waive_reason: string | null
         }
         Insert: {
           charged_amount?: number | null
           charged_currency?: string | null
           created_at?: string
+          fulfilled_at?: string | null
+          fulfilled_by?: string | null
           fx_rate?: number | null
           id?: string
           list_amount_usd_cents?: number | null
+          new_tag_id?: string | null
+          paid_at?: string | null
+          payment_status?: string | null
+          photo_keys?: string[] | null
           requester_id: string
+          review_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
           tag_id: string
+          tap_session_id?: string | null
           updated_at?: string
+          waive_reason?: string | null
         }
         Update: {
           charged_amount?: number | null
           charged_currency?: string | null
           created_at?: string
+          fulfilled_at?: string | null
+          fulfilled_by?: string | null
           fx_rate?: number | null
           id?: string
           list_amount_usd_cents?: number | null
+          new_tag_id?: string | null
+          paid_at?: string | null
+          payment_status?: string | null
+          photo_keys?: string[] | null
           requester_id?: string
+          review_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
           tag_id?: string
+          tap_session_id?: string | null
           updated_at?: string
+          waive_reason?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "reissue_requests_fulfilled_by_fkey"
+            columns: ["fulfilled_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reissue_requests_new_tag_id_fkey"
+            columns: ["new_tag_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reissue_requests_new_tag_id_fkey"
+            columns: ["new_tag_id"]
+            isOneToOne: false
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
+          },
           {
             foreignKeyName: "reissue_requests_requester_id_fkey"
             columns: ["requester_id"]
@@ -1934,6 +1982,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "public_tag_provenance"
             referencedColumns: ["tag_id"]
+          },
+          {
+            foreignKeyName: "reissue_requests_tap_session_id_fkey"
+            columns: ["tap_session_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tap_sessions"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2712,6 +2767,19 @@ export type Database = {
       }
     }
     Functions: {
+      admin_fulfil_reissue: {
+        Args: {
+          p_admin: string
+          p_custody_id: string
+          p_new_tag: string
+          p_ownership_id: string
+          p_reason: string
+          p_request: string
+          p_salt_enc: string
+          p_tag_ref: string
+        }
+        Returns: Json
+      }
       admin_nfc_actor_email: { Args: { p_admin: string }; Returns: string }
       admin_reset_token: {
         Args: {
@@ -2723,6 +2791,16 @@ export type Database = {
           p_reason: string
           p_salt_enc: string
           p_tag_ref: string
+        }
+        Returns: Json
+      }
+      admin_review_reissue: {
+        Args: {
+          p_admin: string
+          p_approve: boolean
+          p_reason: string
+          p_request: string
+          p_waive: boolean
         }
         Returns: Json
       }

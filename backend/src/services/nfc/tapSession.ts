@@ -29,7 +29,7 @@ export const TAP_SESSION_TTL_MS = 10 * 60 * 1000;
 /** 32 random bytes, base64url without padding: always 43 characters. */
 export const TAP_SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
-export type TapSessionPurpose = 'claim' | 'transfer_complete';
+export type TapSessionPurpose = 'claim' | 'transfer_complete' | 'reissue_request';
 
 export const hashTapSessionToken = (token: string): string =>
   createHash('sha256').update(token, 'utf8').digest('hex');
@@ -68,6 +68,7 @@ export const issueTapSession = async (
 };
 
 export interface RedeemedTapSession {
+  readonly id: string;
   readonly tagId: string;
   readonly counterValue: number;
 }
@@ -97,11 +98,15 @@ export const consumeTapSession = async (
       .eq('token_hash', hashTapSessionToken(params.token))
       .is('consumed_at', null)
       .gt('expires_at', now.toISOString())
-      .select('tag_id, counter_value')
+      .select('id, tag_id, counter_value')
       .maybeSingle();
 
     if (!error && data) {
-      redeemed = { tagId: data.tag_id as string, counterValue: data.counter_value as number };
+      redeemed = {
+        id: data.id as string,
+        tagId: data.tag_id as string,
+        counterValue: data.counter_value as number,
+      };
     }
   }
 

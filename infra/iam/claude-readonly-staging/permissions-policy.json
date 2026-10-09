@@ -30,26 +30,49 @@
     {
       "Sid": "StagingDeployStatus",
       "Effect": "Allow",
-      "Action": ["apprunner:ListOperations"],
+      "Action": [
+        "apprunner:ListOperations"
+      ],
       "Resource": "arn:aws:apprunner:us-east-2:904183418667:service/auctionX_backend_staging/*"
     },
     {
       "Sid": "ListServices",
       "Effect": "Allow",
-      "Action": ["apprunner:ListServices"],
+      "Action": [
+        "apprunner:ListServices"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "Metrics",
       "Effect": "Allow",
-      "Action": ["cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics", "cloudwatch:ListMetrics"],
+      "Action": [
+        "cloudwatch:GetMetricData",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "FrontendInvalidationStatus",
       "Effect": "Allow",
-      "Action": ["cloudfront:ListInvalidations", "cloudfront:GetInvalidation"],
+      "Action": [
+        "cloudfront:ListInvalidations",
+        "cloudfront:GetInvalidation"
+      ],
       "Resource": "arn:aws:cloudfront::904183418667:distribution/E3JOPXHI8DB4BE"
+    },
+    {
+      "Sid": "MediaBucketConfigReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketPolicy",
+        "s3:GetBucketPolicyStatus",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetBucketAcl",
+        "s3:GetBucketOwnershipControls"
+      ],
+      "Resource": "arn:aws:s3:::auctionx-media-prod-cl"
     },
     {
       "Sid": "NeverSecretsOrWrites",
@@ -62,7 +85,12 @@
         "kms:*",
         "secretsmanager:*",
         "ssm:GetParameter*",
-        "s3:*",
+        "s3:GetObject*",
+        "s3:Put*",
+        "s3:Delete*",
+        "s3:Restore*",
+        "s3:Replicate*",
+        "s3:ListBucket*",
         "iam:*",
         "sts:AssumeRole",
         "logs:CreateExportTask",

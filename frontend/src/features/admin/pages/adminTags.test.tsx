@@ -200,7 +200,7 @@ describe('AdminTagDetailPage', () => {
     expect(submit).toBeEnabled();
     await user.click(submit);
 
-    expect(api.resetTag).toHaveBeenCalledWith(OLD_ID, { newTagId: NEW_ID, reason: REASON, confirmUidSuffix: '936980' });
+    expect(api.resetTag).toHaveBeenCalledWith(OLD_ID, { newTagId: NEW_ID, reason: REASON, confirmSuffix: '936980' });
   });
 
   it('keeps the reset dialog open and shows the server error on failure', async () => {

@@ -1,0 +1,10 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-evidence-after-90-days",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "reissue-evidence/" },
+      "Expiration": { "Days": 90 }
+    }
+  ]
+}

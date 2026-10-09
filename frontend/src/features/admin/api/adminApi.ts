@@ -424,10 +424,47 @@ export const adminApi = {
   /** POST /admin/tags/:tagId/reset — atomic token reset onto an ENROLLED chip. */
   resetTag(
     tagId: string,
-    body: { newTagId: string; reason: string; confirmUidSuffix: string },
+    body: { newTagId: string; reason: string; confirmSuffix: string },
   ): Promise<AdminTagResetResponse> {
     return adminFetch<AdminTagResetResponse>(
       `/tags/${encodeURIComponent(tagId)}/reset`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+  },
+
+  // ─── Re-issue queue (S-ADMIN1 Ph2) ──────────────────────────────────────────
+
+  /** GET /admin/reissue-requests?status= — the queue, oldest first for open filters. */
+  listReissueRequests(params: { status?: AdminReissueFilter; page?: number; limit?: number } = {}): Promise<AdminReissueListResponse> {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) qs.set(key, String(value));
+    }
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    return adminFetch<AdminReissueListResponse>(`/reissue-requests${query}`);
+  },
+
+  /** Approve (charge the fee, or waive it with the reason) or reject. Nothing is charged here. */
+  reviewReissue(
+    requestId: string,
+    decision: 'approve' | 'approve_waived' | 'reject',
+    reason: string,
+  ): Promise<AdminReissueReviewResponse> {
+    const action = decision === 'reject' ? 'reject' : 'approve';
+    const body = decision === 'reject' ? { reason } : { reason, waive: decision === 'approve_waived' };
+    return adminFetch<AdminReissueReviewResponse>(
+      `/reissue-requests/${encodeURIComponent(requestId)}/${action}`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+  },
+
+  /** POST /admin/reissue-requests/:id/fulfil — only once PAID or WAIVED. */
+  fulfilReissue(
+    requestId: string,
+    body: { newTagId: string; reason: string; confirmSuffix: string },
+  ): Promise<AdminTagResetResponse> {
+    return adminFetch<AdminTagResetResponse>(
+      `/reissue-requests/${encodeURIComponent(requestId)}/fulfil`,
       { method: 'POST', body: JSON.stringify(body) },
     );
   },
@@ -611,7 +648,7 @@ export interface AdminTagListParams {
 export interface AdminTag {
   id: string;
   uidSuffix: string;
-  /** S-NFC-ID: last 4 of the chip serial (v2 chips); tells apart chips sharing a UID. */
+  /** S-NFC-ID: last 6 of the chip serial (v2 chips); tells apart chips sharing a UID. */
   serialSuffix?: string | null;
   lifecycleStatus: AdminTagLifecycleStatus | null;
   ownerAccountId: string | null;
@@ -629,9 +666,16 @@ export interface AdminTag {
   destructionStatus: 'PENDING' | 'DESTROYED' | null;
 }
 
-/** `…936980`, or `…936980 · sn …46F8` for a v2 chip (chips can share a UID). */
+/** `…936980`, or `…936980 · sn …AE6CA9` for a v2 chip (chips can share a UID). */
 export const chipLabel = (tag: Pick<AdminTag, 'uidSuffix' | 'serialSuffix'>): string =>
   tag.serialSuffix ? `…${tag.uidSuffix} · sn …${tag.serialSuffix}` : `…${tag.uidSuffix}`;
+
+/**
+ * What an admin types to confirm retiring a chip: the serial suffix of a v2 chip
+ * (every chip in the current lot ends in UID …936980), else the UID suffix.
+ */
+export const confirmationSuffixOf = (tag: Pick<AdminTag, 'uidSuffix' | 'serialSuffix'>): string =>
+  (tag.serialSuffix ?? tag.uidSuffix).toUpperCase();
 
 export interface AdminTagListResponse {
   success: true;
@@ -695,4 +739,48 @@ export interface AdminTagResetResponse {
     newLifecycleStatus: 'ACTIVE';
     destructionStatus: 'PENDING';
   };
+}
+
+// ─── Re-issue Queue Types (S-ADMIN1 Ph2) ────────────────────────────────────
+
+export type AdminReissueFilter = 'PENDING' | 'AWAITING_PAYMENT' | 'READY' | 'DONE' | 'REJECTED' | 'CANCELLED' | 'ALL';
+
+export interface AdminReissueRequest {
+  id: string;
+  tagId: string;
+  tag: {
+    uidSuffix: string;
+    serialSuffix: string | null;
+    lifecycleStatus: AdminTagLifecycleStatus | null;
+    sdmKeyVersion: number | null;
+    requesterStillOwner: boolean;
+  } | null;
+  requesterAccountId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  paymentStatus: 'AWAITING_PAYMENT' | 'PAID' | 'WAIVED' | null;
+  listAmountUsdCents: number | null;
+  chargedAmount: number | null;
+  chargedCurrency: string | null;
+  photoCount: number;
+  /** 5-minute presigned links; empty for closed requests. */
+  photoUrls: string[];
+  tappedAt: string | null;
+  reviewReason: string | null;
+  waiveReason: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  paidAt: string | null;
+  fulfilledAt: string | null;
+  newTagId: string | null;
+  createdAt: string;
+}
+
+export interface AdminReissueListResponse {
+  success: true;
+  data: { requests: AdminReissueRequest[]; pagination: { page: number; limit: number; total: number } };
+}
+
+export interface AdminReissueReviewResponse {
+  success: true;
+  data: { reissueRequestId: string; status: string; paymentStatus: string | null };
 }

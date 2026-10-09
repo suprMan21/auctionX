@@ -28,6 +28,8 @@ const NfcScanPage = lazy(() => import('./features/verification/pages/NfcScanPage
 import { TokenVerifyPage } from './features/tokens/pages/TokenVerifyPage';
 import { MyTokensPage } from './features/tokens/pages/MyTokensPage';
 import { TokenDetailPage } from './features/tokens/pages/TokenDetailPage';
+import { ReissueRequestPage } from './features/tokens/pages/ReissueRequestPage';
+import { ReissuePayPage } from './features/tokens/pages/ReissuePayPage';
 import { OwnershipLookupPage } from './features/tokens/pages/OwnershipLookupPage';
 import { hasSunParams } from './features/tokens/lib/tapUrl';
 import { loadTap } from './features/tokens/lib/tapCache';
@@ -42,6 +44,7 @@ import { AdminAuditLogPage } from '@/features/admin/pages/AdminAuditLogPage';
 import { AdminHealthPage } from '@/features/admin/pages/AdminHealthPage';
 import { AdminTagsPage } from '@/features/admin/pages/AdminTagsPage';
 import { AdminTagDetailPage } from '@/features/admin/pages/AdminTagDetailPage';
+import { AdminReissuePage } from '@/features/admin/pages/AdminReissuePage';
 import { NotificationsPage } from './features/notifications/pages/NotificationsPage';
 import { NotificationPreferencesPage } from './features/notifications/pages/NotificationPreferencesPage';
 import { SettingsPayoutsPage } from './pages/SettingsPayoutsPage';
@@ -243,11 +246,28 @@ function App() {
               </ProtectedRoute>
             }
           />
+          {/* S-ADMIN1 Ph2: the approval email links here. Web only (no app store fees). */}
+          <Route
+            path="/tokens/reissue/:requestId/pay"
+            element={
+              <ProtectedRoute>
+                <ReissuePayPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/tokens/:tagId"
             element={
               <ProtectedRoute>
                 <TokenDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tokens/:tagId/replace"
+            element={
+              <ProtectedRoute>
+                <ReissueRequestPage />
               </ProtectedRoute>
             }
           />
@@ -390,6 +410,7 @@ function App() {
               {/* S-ADMIN1: token admin console (manage_nfc enforced by the API). */}
               <Route path="tags" element={<AdminTagsPage />} />
               <Route path="tags/:tagId" element={<AdminTagDetailPage />} />
+              <Route path="reissue-requests" element={<AdminReissuePage />} />
               <Route path="audit-logs" element={<AdminAuditLogPage />} />
               <Route path="health" element={<AdminHealthPage />} />
             </Route>

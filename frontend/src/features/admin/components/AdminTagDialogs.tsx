@@ -4,12 +4,13 @@
  */
 
 import { useEffect, useId, useState } from 'react';
-import { adminApi, chipLabel, type AdminTag } from '../api/adminApi';
+import { adminApi, chipLabel, confirmationSuffixOf, type AdminTag } from '../api/adminApi';
 import { AdminDialog, ADMIN_BUTTON_CLASS, ADMIN_FIELD_CLASS } from './AdminDialog';
+import { confirmsChip, useEnrolledChips } from '../lib/chipConfirm';
 
 export const REASON_MIN = 10;
 
-const ReasonField = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
+export const ReasonField = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
   const id = useId();
   const hintId = useId();
   const short = value.trim().length < REASON_MIN;
@@ -32,7 +33,7 @@ const ReasonField = ({ value, onChange }: { value: string; onChange: (v: string)
   );
 };
 
-const ErrorLine = ({ message }: { message: string | null }) =>
+export const ErrorLine = ({ message }: { message: string | null }) =>
   message ? <p role="alert" className="text-sm text-red-400">{message}</p> : null;
 
 // ── Suspend / unsuspend ─────────────────────────────────────────────────────
@@ -96,6 +97,69 @@ export const AdminSuspendDialog = ({ open, tag, suspend, onClose, onDone }: Susp
   );
 };
 
+// ── Shared: replacement chip + typed confirmation ───────────────────────────
+
+export const ReplacementChipField = (
+  { candidates, loadError, value, onChange }:
+  { candidates: AdminTag[] | null; loadError: string | null; value: string; onChange: (id: string) => void },
+) => {
+  const chipId = useId();
+  return (
+    <div className="space-y-1">
+      <label htmlFor={chipId} className="block text-sm font-medium text-gray-200">Replacement chip (enrolled, unclaimed)</label>
+      {loadError ? (
+        <ErrorLine message={loadError} />
+      ) : candidates === null ? (
+        <p className="text-sm text-gray-400">Loading enrolled chips…</p>
+      ) : candidates.length === 0 ? (
+        <p className="text-sm text-amber-300">No enrolled chips are available. Encode one first.</p>
+      ) : (
+        <select id={chipId} value={value} onChange={(e) => onChange(e.target.value)} className={ADMIN_FIELD_CLASS}>
+          <option value="">Choose a chip…</option>
+          {candidates.map((c) => (
+            <option key={c.id} value={c.id}>
+              {chipLabel(c)} (enrolled {c.registeredAt ? new Date(c.registeredAt).toLocaleDateString() : '—'})
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+};
+
+/**
+ * The admin types the last 6 characters of the chip being retired: its serial on
+ * a v2 chip (the whole lot shares UID …936980), else its UID.
+ */
+export const ConfirmChipField = (
+  { chip, value, onChange }:
+  { chip: Pick<AdminTag, 'uidSuffix' | 'serialSuffix'>; value: string; onChange: (v: string) => void },
+) => {
+  const confirmId = useId();
+  const confirmHintId = useId();
+  const expected = confirmationSuffixOf(chip);
+  return (
+    <div className="space-y-1">
+      <label htmlFor={confirmId} className="block text-sm font-medium text-gray-200">
+        Type the last 6 characters of the chip being retired
+      </label>
+      <input
+        id={confirmId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={6}
+        autoComplete="off"
+        spellCheck={false}
+        aria-describedby={confirmHintId}
+        className={`${ADMIN_FIELD_CLASS} font-mono uppercase`}
+      />
+      <p id={confirmHintId} className="text-xs text-gray-400">
+        Expected: {expected} ({chip.serialSuffix ? 'end of the chip serial' : 'end of the chip UID'})
+      </p>
+    </div>
+  );
+};
+
 // ── Token reset ─────────────────────────────────────────────────────────────
 
 interface ResetDialogProps {
@@ -106,11 +170,7 @@ interface ResetDialogProps {
 }
 
 export const AdminResetDialog = ({ open, tag, onClose, onDone }: ResetDialogProps) => {
-  const chipId = useId();
-  const confirmId = useId();
-  const confirmHintId = useId();
-  const [candidates, setCandidates] = useState<AdminTag[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { candidates, loadError } = useEnrolledChips(open, tag.id);
   const [newTagId, setNewTagId] = useState('');
   const [reason, setReason] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -118,24 +178,16 @@ export const AdminResetDialog = ({ open, tag, onClose, onDone }: ResetDialogProp
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-    setNewTagId(''); setReason(''); setConfirm(''); setError(null); setCandidates(null); setLoadError(null);
-    let cancelled = false;
-    adminApi
-      .listTags({ status: 'ENROLLED', limit: 100 })
-      .then((res) => { if (!cancelled) setCandidates(res.data.tags.filter((t) => t.id !== tag.id)); })
-      .catch((err) => { if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Could not load enrolled chips'); });
-    return () => { cancelled = true; };
-  }, [open, tag.id]);
+    if (open) { setNewTagId(''); setReason(''); setConfirm(''); setError(null); }
+  }, [open]);
 
-  const confirmMatches = confirm.trim().toUpperCase() === tag.uidSuffix.toUpperCase();
-  const ready = Boolean(newTagId) && reason.trim().length >= REASON_MIN && confirmMatches && !busy;
+  const ready = Boolean(newTagId) && reason.trim().length >= REASON_MIN && confirmsChip(tag, confirm) && !busy;
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
-      const res = await adminApi.resetTag(tag.id, { newTagId, reason: reason.trim(), confirmUidSuffix: confirm.trim() });
+      const res = await adminApi.resetTag(tag.id, { newTagId, reason: reason.trim(), confirmSuffix: confirm.trim() });
       onDone(res.data.newTagId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The reset failed');
@@ -162,45 +214,9 @@ export const AdminResetDialog = ({ open, tag, onClose, onDone }: ResetDialogProp
         </>
       }
     >
-      <div className="space-y-1">
-        <label htmlFor={chipId} className="block text-sm font-medium text-gray-200">Replacement chip (enrolled, unclaimed)</label>
-        {loadError ? (
-          <ErrorLine message={loadError} />
-        ) : candidates === null ? (
-          <p className="text-sm text-gray-400">Loading enrolled chips…</p>
-        ) : candidates.length === 0 ? (
-          <p className="text-sm text-amber-300">No enrolled chips are available. Encode one first.</p>
-        ) : (
-          <select id={chipId} value={newTagId} onChange={(e) => setNewTagId(e.target.value)} className={ADMIN_FIELD_CLASS}>
-            <option value="">Choose a chip…</option>
-            {candidates.map((c) => (
-              <option key={c.id} value={c.id}>
-                {chipLabel(c)} (enrolled {c.registeredAt ? new Date(c.registeredAt).toLocaleDateString() : '—'})
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-
+      <ReplacementChipField candidates={candidates} loadError={loadError} value={newTagId} onChange={setNewTagId} />
       <ReasonField value={reason} onChange={setReason} />
-
-      <div className="space-y-1">
-        <label htmlFor={confirmId} className="block text-sm font-medium text-gray-200">
-          Type the last 6 characters of the chip being retired
-        </label>
-        <input
-          id={confirmId}
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          maxLength={6}
-          autoComplete="off"
-          spellCheck={false}
-          aria-describedby={confirmHintId}
-          className={`${ADMIN_FIELD_CLASS} font-mono uppercase`}
-        />
-        <p id={confirmHintId} className="text-xs text-gray-400">Expected: {tag.uidSuffix}</p>
-      </div>
-
+      <ConfirmChipField chip={tag} value={confirm} onChange={setConfirm} />
       <ErrorLine message={error} />
 
       <div className="flex justify-end gap-3">

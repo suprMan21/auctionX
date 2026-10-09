@@ -137,6 +137,8 @@ const paymentWebhookSchema = envelopeSchema.extend({
   stripe_event_type: z.string().max(64),
   signature_valid: z.boolean(),
   transfer_id: uuid.nullable(),
+  /** S-ADMIN1 Ph2: set instead of transfer_id for a re-issue fee intent. */
+  reissue_request_id: uuid.nullable().optional(),
   idempotent_replay: z.boolean(),
 }).strict();
 
@@ -165,6 +167,21 @@ const adminTagActionSchema = envelopeSchema.extend({
 const reissueRequestSchema = envelopeSchema.extend({
   event: z.literal('nfc.reissue_request'),
   tag_id: uuid.nullable(),
+  /** S-ADMIN1 Ph2: the owner-side step. Absent on the original S-NFC3 request event. */
+  action: z.enum(['request', 'photo_url', 'pay', 'cancel']).optional(),
+  reissue_request_id: uuid.nullable().optional(),
+}).strict();
+
+/**
+ * S-ADMIN1 Ph2: an admin decision on a re-issue request. As with
+ * admin.tag_action, the typed reason lives only in the audit row.
+ */
+const adminReissueActionSchema = envelopeSchema.extend({
+  event: z.literal('admin.reissue_action'),
+  action: z.enum(['approve', 'approve_waived', 'reject', 'fulfil']),
+  reissue_request_id: uuid.nullable(),
+  tag_id: uuid.nullable(),
+  new_tag_id: uuid.nullable(),
 }).strict();
 
 const disclosureChangeSchema = envelopeSchema.extend({
@@ -207,7 +224,7 @@ const tapSessionSchema = envelopeSchema.extend({
   event: z.literal('nfc.tap_session'),
   action: z.enum(['issue', 'consume']),
   tag_id: uuid.nullable(),
-  purpose: z.enum(['claim', 'transfer_complete']).nullable(),
+  purpose: z.enum(['claim', 'transfer_complete', 'reissue_request']).nullable(),
 }).strict();
 
 /** S-NFC3-FE: an owner opened their Receipt (the private half of the proof). */
@@ -234,6 +251,7 @@ export const securityEventSchema = z.discriminatedUnion('event', [
   replaceSchema,
   reissueRequestSchema,
   adminTagActionSchema,
+  adminReissueActionSchema,
   disclosureChangeSchema,
   authzDeniedSchema,
   twoFactorGateSchema,

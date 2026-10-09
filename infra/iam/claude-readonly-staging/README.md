@@ -17,8 +17,9 @@ IAM role  claude-readonly-staging   (1-hour sessions, auto-renewed by the CLI)
 |---|---|
 | Read/filter/tail/query `/aws/apprunner/auctionX_backend_staging/*` logs | `apprunner:DescribeService`, because it returns every env var, secrets included, in plaintext |
 | `apprunner:ListServices`, `ListOperations` (deploy status) | Any App Runner update, start or delete |
-| CloudWatch metrics | `kms:*`, `secretsmanager:*`, `ssm:GetParameter*`, `s3:*`, `iam:*` |
+| CloudWatch metrics | `kms:*`, `secretsmanager:*`, `ssm:GetParameter*`, `iam:*`; S3 object reads, listings and every S3 write |
 | CloudFront invalidation status for `E3JOPXHI8DB4BE` | Log exports, subscriptions, writes; assuming any further role |
+| Media bucket **settings** only (policy, policy status, public-access block, ACL, ownership) — added 2026-10-09 | Reading or listing any object in any bucket |
 
 Nothing in production. Production access stays human-only.
 

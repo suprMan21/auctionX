@@ -179,3 +179,54 @@ export const receiptSchema = z.object({
   algorithm: z.object({ hash: z.string(), preimage: z.string() }),
 });
 export type Receipt = z.infer<typeof receiptSchema>;
+
+// ── Re-issue (S-ADMIN1 Ph2) ─────────────────────────────────────────────────
+// A replacement chip for one that is coming loose, before it falls off.
+
+/** One of the owner's own re-issue requests. `status`/`paymentStatus` are text columns. */
+export const ownerReissueSchema = z.object({
+  id: z.string(),
+  tagId: z.string(),
+  status: z.string(),
+  paymentStatus: z.string().nullable(),
+  listAmountUsdCents: z.number().nullable(),
+  chargedAmount: z.number().nullable(),
+  chargedCurrency: z.string().nullable(),
+  createdAt: z.string(),
+  reviewedAt: z.string().nullable(),
+  paidAt: z.string().nullable(),
+  fulfilledAt: z.string().nullable(),
+  newTagId: z.string().nullable(),
+});
+export type OwnerReissue = z.infer<typeof ownerReissueSchema>;
+export const myReissueRequestsSchema = z.object({ requests: z.array(ownerReissueSchema) });
+
+export const reissueCreatedSchema = z.object({
+  reissueRequestId: z.string(),
+  status: z.literal('PENDING'),
+  listAmountUsdCents: z.number(),
+  chargedAmount: z.number(),
+  chargedCurrency: z.string(),
+});
+export type ReissueCreated = z.infer<typeof reissueCreatedSchema>;
+
+export const reissuePhotoUrlSchema = z.object({
+  uploadUrl: z.string().url(),
+  key: z.string(),
+  contentType: z.literal('image/jpeg'),
+});
+
+/** POST /reissue-requests/:id/pay. Still unpaid: only the Stripe webhook marks it PAID. */
+export const reissuePaySchema = z.object({
+  reissueRequestId: z.string(),
+  clientSecret: z.string(),
+  chargedAmount: z.number(),
+  chargedCurrency: z.string(),
+  listAmountUsdCents: z.number().nullable(),
+});
+export type ReissuePay = z.infer<typeof reissuePaySchema>;
+
+export const reissueCancelSchema = z.object({
+  reissueRequestId: z.string(),
+  status: z.literal('CANCELLED'),
+});

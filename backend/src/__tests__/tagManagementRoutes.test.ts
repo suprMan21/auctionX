@@ -49,6 +49,11 @@ describe('S-NFC3 tag management routes', () => {
     { method: 'post', path: '/api/v1/nfc/release' },
     { method: 'post', path: '/api/v1/nfc/replace' },
     { method: 'post', path: '/api/v1/nfc/reissue-request' },
+    // S-ADMIN1 Ph2 owner re-issue: photo upload URL, list, pay, cancel.
+    { method: 'post', path: '/api/v1/nfc/reissue-request/photo-url' },
+    { method: 'get', path: '/api/v1/nfc/reissue-requests/mine' },
+    { method: 'post', path: `/api/v1/nfc/reissue-requests/${UUID}/pay` },
+    { method: 'post', path: `/api/v1/nfc/reissue-requests/${UUID}/cancel` },
     { method: 'post', path: '/api/v1/nfc/transfer/initiate' },
     { method: 'post', path: `/api/v1/nfc/transfer/${UUID}/complete` },
     { method: 'post', path: `/api/v1/nfc/transfer/${UUID}/cancel` },

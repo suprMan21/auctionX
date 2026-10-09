@@ -104,9 +104,25 @@ export const releaseSchema = z.object({
   confirmPhrase: z.literal('RELEASE'),
 }).strict();
 
+/**
+ * S-ADMIN1 Ph2: a re-issue replaces a chip that is coming loose, before it
+ * falls off. The owner proves the chip is still there with a live tap (tap
+ * session, spent here) and 1–3 photos already uploaded to the evidence bucket.
+ */
 export const reissueRequestSchema = z.object({
   tagId: uuid,
+  tapSession: z.string().regex(TAP_SESSION_TOKEN_PATTERN, 'Invalid tap session'),
+  photoKeys: z.array(z.string().min(1).max(200)).min(1).max(3)
+    .refine((keys) => new Set(keys).size === keys.length, { message: 'Duplicate photo' }),
 }).strict();
+
+/** Asks for one presigned upload URL for an evidence photo (JPEG only). */
+export const reissuePhotoUrlSchema = z.object({
+  contentType: z.literal('image/jpeg'),
+  sizeBytes: z.number().int().min(1).max(5 * 1024 * 1024),
+}).strict();
+
+export const reissueRequestIdSchema = uuid;
 
 export const disclosureSchema = z.object({
   origin_video: z.boolean().optional(),

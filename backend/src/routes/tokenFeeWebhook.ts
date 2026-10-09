@@ -28,6 +28,7 @@ import { log } from '../lib/logger';
 import { emitSecurityEvent } from '../lib/security/securityEvent';
 import { securityContext } from '../lib/security/requestContext';
 import { mintOwnershipProof, type SecurityLogContext } from '../lib/ownership/ownershipProof';
+import { notifyReissueOwner } from '../lib/notifications/reissueEmails';
 
 const router = Router();
 const ROUTE = '/api/v1/webhooks/stripe-token-fees';
@@ -45,6 +46,7 @@ router.post('/', async (req: Request, res: Response) => {
     eventType: string;
     signatureValid: boolean;
     transferId: string | null;
+    reissueRequestId?: string | null;
     idempotentReplay: boolean;
     result: 'ok' | 'forbidden' | 'not_found' | 'internal';
   }) =>
@@ -53,6 +55,7 @@ router.post('/', async (req: Request, res: Response) => {
       stripe_event_type: params.eventType.slice(0, 64),
       signature_valid: params.signatureValid,
       transfer_id: params.transferId,
+      ...(params.reissueRequestId !== undefined ? { reissue_request_id: params.reissueRequestId } : {}),
       idempotent_replay: params.idempotentReplay,
       result: params.result,
       request_id: ctx.requestId,
@@ -103,6 +106,12 @@ router.post('/', async (req: Request, res: Response) => {
   const intent = event.data.object as Stripe.PaymentIntent;
   const transferId = (intent.metadata?.transfer_id as string | undefined) ?? null;
   const kind = intent.metadata?.kind as string | undefined;
+
+  // S-ADMIN1 Ph2: a re-issue fee only ever marks its request PAID. It never
+  // touches a transfer, and a transfer intent never reaches this branch.
+  if (kind === 'token_reissue_fee') {
+    return applyReissueFee(event.type, intent, ctx, emitWebhook, res);
+  }
 
   // A PaymentIntent from any other flow must not touch a transfer row.
   if (kind !== 'token_transfer_fee' || !transferId) {
@@ -260,5 +269,116 @@ router.post('/', async (req: Request, res: Response) => {
     return res.status(500).json({ received: true, applied: false });
   }
 });
+
+type EmitWebhook = (params: {
+  eventType: string;
+  signatureValid: boolean;
+  transferId: string | null;
+  reissueRequestId?: string | null;
+  idempotentReplay: boolean;
+  result: 'ok' | 'forbidden' | 'not_found' | 'internal';
+}) => void;
+
+/**
+ * `payment_intent.succeeded` for `kind=token_reissue_fee`: AWAITING_PAYMENT ->
+ * PAID. Nothing else. The chip swap is a separate admin step (Fulfil), so this
+ * never mints a proof or moves a token.
+ *
+ * Same rules as the transfer branch: bound to the PaymentIntent the request
+ * stored, conditional on the prior state (replays and races are 200), and 500
+ * on an unexpected failure so Stripe retries a PAID event we could not apply.
+ */
+async function applyReissueFee(
+  eventType: string,
+  intent: Stripe.PaymentIntent,
+  ctx: SecurityLogContext,
+  emitWebhook: EmitWebhook,
+  res: Response,
+) {
+  const rawId = intent.metadata?.reissue_request_id as string | undefined;
+  const reissueRequestId = rawId && /^[0-9a-f-]{36}$/i.test(rawId) ? rawId : null;
+  const emit = (result: 'ok' | 'forbidden' | 'not_found' | 'internal', idempotentReplay = false) =>
+    emitWebhook({
+      eventType, signatureValid: true, transferId: null, reissueRequestId, idempotentReplay, result,
+    });
+
+  if (!reissueRequestId) {
+    emit('not_found');
+    return res.status(200).json({ received: true, applied: false });
+  }
+
+  const supabase = getServiceClient();
+
+  try {
+    const { data: request, error: loadError } = await supabase
+      .from('reissue_requests')
+      .select('id, requester_id, status, payment_status, stripe_payment_intent_id, charged_amount')
+      .eq('id', reissueRequestId)
+      .maybeSingle();
+
+    if (loadError) throw new Error(loadError.message);
+    if (!request) {
+      emit('not_found');
+      return res.status(200).json({ received: true, applied: false });
+    }
+
+    if (request.payment_status === 'PAID') {
+      emit('ok', true);
+      return res.status(200).json({ received: true, applied: false, reason: 'already_paid' });
+    }
+
+    // The request must have stored THIS intent before handing out its secret
+    // (payReissue). Anything else is a foreign or forged binding.
+    if (request.stripe_payment_intent_id !== intent.id) {
+      emit('forbidden');
+      log.error('reissue_fee_webhook_intent_mismatch', { reissueRequestId });
+      return res.status(200).json({ received: true, applied: false });
+    }
+
+    if (request.status !== 'APPROVED' || request.payment_status !== 'AWAITING_PAYMENT') {
+      // Paid, but the request was cancelled or changed underneath. Money is
+      // held against a request we will not fulfil: surface it loudly for the
+      // Ph3 stuck-payment queue. Retrying would not change the outcome.
+      emit('internal');
+      log.error('reissue_fee_paid_but_not_payable', {
+        reissueRequestId,
+        status: request.status,
+        paymentStatus: request.payment_status,
+      });
+      return res.status(200).json({ received: true, applied: false });
+    }
+
+    const { data: paid, error: updateError } = await supabase
+      .from('reissue_requests')
+      .update({ payment_status: 'PAID', paid_at: new Date().toISOString() })
+      .eq('id', reissueRequestId)
+      .eq('status', 'APPROVED')
+      .eq('payment_status', 'AWAITING_PAYMENT')
+      .select('id')
+      .maybeSingle();
+
+    if (updateError) throw new Error(updateError.message);
+    if (!paid) {
+      emit('ok', true);
+      return res.status(200).json({ received: true, applied: false, reason: 'race_lost' });
+    }
+
+    emit('ok');
+    // Never blocks the acknowledgement.
+    await notifyReissueOwner(supabase, 'paid', {
+      id: reissueRequestId,
+      requesterId: request.requester_id as string,
+      chargedAmount: request.charged_amount as number | null,
+    });
+    return res.status(200).json({ received: true, applied: true });
+  } catch (err) {
+    emit('internal');
+    log.error('reissue_fee_webhook_apply_failed', {
+      reissueRequestId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return res.status(500).json({ received: true, applied: false });
+  }
+}
 
 export default router;

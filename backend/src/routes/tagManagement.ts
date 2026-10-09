@@ -18,6 +18,10 @@ import {
   cancelTransfer,
   releaseTag,
   requestReissue,
+  reissuePhotoUrl,
+  listMyReissueRequests,
+  payReissue,
+  cancelReissue,
   updateDisclosure,
 } from '../controllers/tagManagementController';
 import { ownershipAuthProbeDetector, resolveOwnershipId } from '../controllers/ownershipController';
@@ -139,7 +143,14 @@ tagManagementRoutes.post('/replace', requireAuth, mutationLimit, (_req: Request,
     code: 'gone',
   });
 });
+// S-ADMIN1 Ph2 re-issue (owner side). The `/reissue-requests/...` prefix
+// cannot collide with `/:tagId/...` below: those need a second segment of
+// `disclosure` or `receipt`.
+tagManagementRoutes.post('/reissue-request/photo-url', requireAuth, mutationLimit, handle(reissuePhotoUrl));
 tagManagementRoutes.post('/reissue-request', requireAuth, mutationLimit, handle(requestReissue));
+tagManagementRoutes.get('/reissue-requests/mine', requireAuth, readLimit, handle(listMyReissueRequests));
+tagManagementRoutes.post('/reissue-requests/:id/pay', requireAuth, mutationLimit, handle(payReissue));
+tagManagementRoutes.post('/reissue-requests/:id/cancel', requireAuth, mutationLimit, handle(cancelReissue));
 
 // S-NFC3-FE reads. `/tap` is public (optional auth personalises it); the rest
 // are the caller's own data.

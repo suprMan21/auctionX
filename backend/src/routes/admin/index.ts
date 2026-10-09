@@ -12,6 +12,7 @@ import sellerVerificationRouter from './sellerVerification';
 import yotiVerificationsRouter from './verifications';
 import healthRouter from './health';
 import tagsRouter from './tags';
+import reissueRouter from './reissue';
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.use('/users', usersRouter);            // account admin — anonymous own
 router.use('/audit-logs', auditLogsRouter);   // compliance / chain-of-custody evidence trail
 router.use('/verifications', yotiVerificationsRouter); // Yoti ID review (Premier, S-TIER1)
 router.use('/tags', tagsRouter);              // S-ADMIN1 token admin: inventory, suspend, atomic reset
+router.use('/reissue-requests', reissueRouter); // S-ADMIN1 Ph2 re-issue queue: approve/waive/reject, fulfil
 
 // ── Parked: marketplace admin. Nothing deleted; see docs/PARKED_MARKETPLACE.md
 if (isMarketplaceEnabled()) {
