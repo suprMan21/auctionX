@@ -65,8 +65,8 @@ so **nothing persists** (confirmed after the run: 0 seed tags, 0 requests, const
 | 05 | second decision refused | ✅ |
 | 06 | fulfil while unpaid → `not_paid` | ✅ |
 | 07 | table CHECK: fulfilled but AWAITING_PAYMENT refused | ✅ |
-| 07b | table CHECK: fulfilled with NULL payment state refused | ❌ → **fixed by M2** (✅ with M2 applied in-run) |
-| 08 | table CHECK: WAIVED with no reason refused | ❌ → **fixed by M2** (✅ with M2 applied in-run) |
+| 07b | table CHECK: fulfilled with NULL payment state refused | ❌ before M2 → ✅ after M2 pushed |
+| 08 | table CHECK: WAIVED with no reason refused | ❌ before M2 → ✅ after M2 pushed |
 | 09 | one open request per tag | ✅ |
 | 10 | **atomicity:** fulfil forced to fail at its LAST statement → both tags, request, custody row, proof and the reset's audit row all unchanged | ✅ |
 | 11 | fulfil → old RETIRED / PENDING destruction / replaced_by; new ACTIVE same owner; one current proof; REISSUE custody; `tag_reset` + `reissue_fulfil` audit rows | ✅ |
@@ -79,7 +79,8 @@ so **nothing persists** (confirmed after the run: 0 seed tags, 0 requests, const
 
 **Bug found by the live run:** a CHECK that evaluates to NULL passes. `length(btrim(NULL)) >= 10` and
 `NULL IN ('PAID','WAIVED')` both let NULLs through. M2 `20261009000002_s_admin1_reissue_check_nulls.sql` wraps
-both in `coalesce`. Proven by applying M2 inside the rolled-back run: all 19 checks ok.
+both in `coalesce`. Proven first inside a rolled-back run, then for real: Boss pushed M2 2026-10-09 and the
+live check re-ran **19/19 ok** against the staging schema (0 leftover rows).
 
 ## Corrections to the plan
 
@@ -91,7 +92,7 @@ both in `coalesce`. Proven by applying M2 inside the rolled-back run: all 19 che
 
 ## Boss actions (in order)
 
-1. **Push M2:** `supabase db push --linked` (only `20261009000002` pending). Then Claude re-runs the live check.
+1. ~~Push M2~~ ✅ done 2026-10-09, live check 19/19.
 2. **Evidence bucket:** follow `infra/s3/reissue-evidence-staging/README.md` (bucket, policy, **CORS**, lifecycle,
    backend IAM inline policy, `REISSUE_EVIDENCE_BUCKET` env on App Runner).
 3. **Push the branch** / merge to `dev` → App Runner deploy; frontend build + sync (grep `dist/assets` for `pk_test_`).
