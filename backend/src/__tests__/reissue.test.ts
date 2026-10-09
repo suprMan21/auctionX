@@ -325,6 +325,23 @@ describe('evidence keys', () => {
     expect(isOwnEvidenceKey(`listings/${OWNER}/0000000a-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg`, OWNER)).toBe(false);
   });
 
+  it('presigns a PUT that a browser can actually complete: no SDK checksum, size + type signed', async () => {
+    process.env.REISSUE_EVIDENCE_BUCKET = 'am-reissue-evidence-staging';
+    process.env.AWS_ACCESS_KEY_ID = 'AKIAEXAMPLEEXAMPLE12';
+    process.env.AWS_SECRET_ACCESS_KEY = 'x'.repeat(40);
+    const { evidenceUploadUrl } = await vi.importActual<typeof import('../lib/reissueEvidence')>('../lib/reissueEvidence');
+
+    const { uploadUrl, key } = await evidenceUploadUrl(OWNER, 123456);
+    const params = new URL(uploadUrl).searchParams;
+
+    // 2026-10-09: the SDK default signed a CRC32 of an EMPTY body, so S3 would reject the photo.
+    expect([...params.keys()].filter((k) => /checksum/i.test(k))).toEqual([]);
+    expect(params.get('X-Amz-SignedHeaders')).toMatch(/content-length/);
+    expect(params.get('X-Amz-SignedHeaders')).toMatch(/content-type/);
+    expect(new URL(uploadUrl).hostname).toContain('am-reissue-evidence-staging');
+    expect(key).toMatch(new RegExp(`^reissue-evidence/${OWNER}/[0-9a-f-]{36}\\.jpg$`));
+  });
+
   it('is unavailable without a private evidence bucket (never falls back to the public media bucket)', async () => {
     delete process.env.REISSUE_EVIDENCE_BUCKET;
     const { evidenceUploadUrl } = await vi.importActual<typeof import('../lib/reissueEvidence')>('../lib/reissueEvidence');

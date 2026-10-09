@@ -139,6 +139,7 @@ describe('S-NFC3 tag management routes', () => {
     // throws a plain Error ("supabaseUrl is required"): exactly the kind of
     // internal message that must not reach the client.
     delete process.env.SUPABASE_URL;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     const app = await loadApp();
     const res: Probe = await request(app)
       .post('/api/v1/nfc/tap')
@@ -146,6 +147,15 @@ describe('S-NFC3 tag management routes', () => {
 
     expect(res.status).toBeGreaterThanOrEqual(500);
     expect(res.body?.error).toBe('Internal server error');
+
+    // ...but it IS logged for us (2026-10-09: a silent 500 hid a live failure),
+    // with the route pattern and never the request body.
+    const logged = errors.mock.calls.map((c) => String(c[0])).find((l) => l.includes('unhandled_route_error'));
+    expect(logged).toBeDefined();
+    expect(logged).toContain('/api/v1/nfc/tap');
+    expect(logged).toMatch(/"errorName":"Error","error":"[^"]+"/);
+    expect(logged).not.toContain('picc_data');
+    errors.mockRestore();
   });
 
   it('mounts the ownership lookup unauthenticated', async () => {

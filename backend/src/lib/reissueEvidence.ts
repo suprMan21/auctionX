@@ -38,14 +38,23 @@ const evidenceBucket = (): string => {
   return bucket;
 };
 
-const client = (): S3Client =>
-  new S3Client({
+/**
+ * Static keys (IAM user `auctionx-s3-access`) when both are set; otherwise the
+ * default AWS credential chain, rather than handing the SDK `undefined` keys.
+ *
+ * `requestChecksumCalculation: 'WHEN_REQUIRED'`: newer SDKs otherwise sign a
+ * CRC32 of the (empty) body into a presigned PUT, and S3 then rejects the
+ * browser's real photo. Found 2026-10-09.
+ */
+const client = (): S3Client => {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  return new S3Client({
     region: region(),
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    },
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
   });
+};
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 

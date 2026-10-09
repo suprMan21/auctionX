@@ -9,6 +9,7 @@ import { Router, RequestHandler, Request, Response, NextFunction } from 'express
 import rateLimit from 'express-rate-limit';
 import { requireAuth, optionalAuth } from '../middleware/auth';
 import { AppError, toAppError } from '../lib/errors';
+import { log } from '../lib/logger';
 import {
   enrollTag,
   enrollPrecheck,
@@ -73,6 +74,18 @@ export const handle =
     } catch (err) {
       const appError: AppError = toAppError(err);
       if (res.headersSent) return next(err);
+      // An unexpected (non-AppError) failure must be visible in the logs: the
+      // client only ever sees "Internal server error". 2026-10-09: a re-issue
+      // photo-URL failure returned 500 twice and left no trace at all.
+      // Route pattern + error name/message only, never the request body.
+      if (!(err instanceof AppError)) {
+        log.error('unhandled_route_error', {
+          route: `${req.baseUrl}${(req.route as { path?: string } | undefined)?.path ?? ''}`,
+          requestId: (req as Request & { requestId?: string }).requestId ?? null,
+          errorName: err instanceof Error ? err.name : typeof err,
+          error: err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300),
+        });
+      }
       // A closed-set `reason` (CLIENT_REASONS) is the only thing from
       // `details` that is ever echoed.
       const reason = sunReason(appError.details);
