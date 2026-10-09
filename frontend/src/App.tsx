@@ -54,6 +54,7 @@ import { Dashboard } from '@/pages/Dashboard';
 import { isMarketplaceEnabledOnClient } from './lib/featureFlags';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { CollectorLandingPage } from '@/pages/CollectorLandingPage';
+import { HomePage } from '@/pages/HomePage';
 import { CreatorLandingPage } from '@/pages/CreatorLandingPage';
 import { AMSealedPage } from '@/pages/AMSealedPage';
 import { AMProofPage } from '@/pages/AMProofPage';
@@ -389,7 +390,8 @@ function App() {
           />
           )}
 
-          <Route path="/" element={<CollectorLandingPage />} />
+          {/* Token-first home (2026-10-09). The marketplace-era landing stays at /collector. */}
+          <Route path="/" element={<HomePage />} />
 
           {/* Admin routes — protected by AdminProtectedRoute */}
           <Route path="/admin" element={<AdminProtectedRoute />}>
