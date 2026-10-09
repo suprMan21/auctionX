@@ -93,13 +93,19 @@ production, so it must land before any real token sale.
 
 ---
 
-## 🚀 Frontend deploy (staging)
+## 🚀 Frontend deploy (staging AND authentic-materials.com)
 
-Claude's shell cannot use the `auctionx` profile (op plugin needs a TTY), so Boss runs it:
+The public domain's CloudFront distribution reads the SAME bucket, so invalidate both (2026-10-09). Claude's shell
+cannot use the `auctionx` profile (op plugin needs a TTY), so Boss runs it, one step at a time:
 ```bash
-cd frontend && npm run build && aws s3 sync dist/ s3://auctionx-frontend-staging --profile auctionx --delete \
-  && aws cloudfront create-invalidation --profile auctionx --distribution-id E3JOPXHI8DB4BE --paths '/*'
+cd frontend && npm run build
+grep -l "pk_test_" dist/assets/*.js            # must print a file
+aws s3 sync dist/ s3://auctionx-frontend-staging --profile auctionx --delete
+aws cloudfront create-invalidation --profile auctionx --distribution-id E3JOPXHI8DB4BE --paths '/*'
+aws cloudfront create-invalidation --profile auctionx --paths '/*' --distribution-id \
+  "$(aws cloudfront list-distributions --profile auctionx --query "DistributionList.Items[?DomainName=='d3l1h87n1juy75.cloudfront.net'].Id" --output text)"
 ```
+Backend: after `git push origin dev`, run `scripts/verify-backend-deploy.sh` (pushes do not always deploy).
 Deploy order: backend (push `dev`, wait for App Runner **Running**) BEFORE frontend.
 
 ## 🛠️ ADMIN CONSOLE (new section, Boss 2026-10-02)

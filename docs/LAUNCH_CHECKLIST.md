@@ -144,7 +144,18 @@
 
 ## 6. DNS & Hosting
 
-- [ ] Vercel project connected to `auctionx.com` custom domain
+> **Current state (2026-10-09):** `authentic-materials.com` / `www` are served by a SECOND CloudFront distribution
+> (`d3l1h87n1juy75.cloudfront.net`) whose origin is the **staging** bucket `auctionx-frontend-staging`, the same bucket
+> as the staging distribution `E3JOPXHI8DB4BE`. So every staging frontend deploy changes the public site, and the public
+> domain serves the whole staging app (`/admin`, `/tokens`, test Stripe pk). Every deploy must invalidate BOTH
+> distributions. Fine for showing partners the home page; not for launch.
+
+- [ ] **Separate production frontend:** own S3 bucket (public access blocked, CloudFront OAC), point the
+      authentic-materials.com distribution at it, production build (live Stripe pk, production `VITE_API_URL`),
+      own deploy command. Staging keeps `auctionx-frontend-staging` + `E3JOPXHI8DB4BE`.
+- [ ] Record the authentic-materials.com distribution ID here and in the deploy docs.
+
+- [ ] ~~Vercel project connected to `auctionx.com` custom domain~~ (superseded: AWS S3 + CloudFront, see above)
 - [ ] HTTPS enforced (Vercel handles this automatically)
 - [ ] Backend deployed to Railway (or equivalent) with health check passing:
   `GET /api/v1/health` → 200
