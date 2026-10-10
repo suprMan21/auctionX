@@ -144,15 +144,14 @@
 
 ## 6. DNS & Hosting
 
-> **Current state (2026-10-09):** `authentic-materials.com` / `www` are served by a SECOND CloudFront distribution
-> **`E35K71RCQGYBAW`** (`d3l1h87n1juy75.cloudfront.net`) whose origin is the **staging** bucket `auctionx-frontend-staging`, the same bucket
-> as the staging distribution `E3JOPXHI8DB4BE`. So every staging frontend deploy changes the public site, and the public
-> domain serves the whole staging app (`/admin`, `/tokens`, test Stripe pk). Every deploy must invalidate BOTH
-> distributions. Fine for showing partners the home page; not for launch.
+> **Current state (2026-10-10):** the public site is its own landing-only build (`npm run build:public`) with its own
+> bucket `am-frontend-prod` behind `E35K71RCQGYBAW` (private, CloudFront OAC); staging keeps
+> `auctionx-frontend-staging` + `E3JOPXHI8DB4BE`. Setup and the one-time switch: `infra/s3/am-frontend-prod/README.md`.
+> Deploys: `scripts/deploy-frontend.sh staging|public`.
 
-- [ ] **Separate production frontend:** own S3 bucket (public access blocked, CloudFront OAC), point the
-      authentic-materials.com distribution at it, production build (live Stripe pk, production `VITE_API_URL`),
-      own deploy command. Staging keeps `auctionx-frontend-staging` + `E3JOPXHI8DB4BE`.
+- [ ] **Production app on the public domain:** replace the landing-only build in `am-frontend-prod` with a production
+      app build (live Stripe pk, production `VITE_API_URL`, production Supabase project). The landing-only entry
+      (`frontend/src/PublicSite.tsx`) and its leak checks go away or become the pre-login shell.
 
 - [ ] ~~Vercel project connected to `auctionx.com` custom domain~~ (superseded: AWS S3 + CloudFront, see above)
 - [ ] HTTPS enforced (Vercel handles this automatically)

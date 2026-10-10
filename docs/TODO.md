@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-09 (S-ADMIN1 Ph2 re-issue live + verified on silicon)
+**Last updated:** 2026-10-10 (public site split from staging: built, switch pending)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -93,17 +93,23 @@ production, so it must land before any real token sale.
 
 ---
 
-## 🚀 Frontend deploy (staging AND authentic-materials.com)
+## 🚀 Frontend deploy (two separate sites since 2026-10-10)
 
-The public domain's CloudFront distribution reads the SAME bucket, so invalidate both (2026-10-09). Claude's shell
-cannot use the `auctionx` profile (op plugin needs a TTY), so Boss runs it, one step at a time:
-```bash
-cd frontend && npm run build
-grep -l "pk_test_" dist/assets/*.js            # must print a file
-aws s3 sync dist/ s3://auctionx-frontend-staging --profile auctionx --delete
-aws cloudfront create-invalidation --profile auctionx --distribution-id E3JOPXHI8DB4BE --paths '/*'
-aws cloudfront create-invalidation --profile auctionx --distribution-id E35K71RCQGYBAW --paths '/*'   # authentic-materials.com
-```
+| Site | Serves | Command |
+|---|---|---|
+| Staging (`d1bwev65w7rqzl.cloudfront.net`) | the whole app | `scripts/deploy-frontend.sh staging` |
+| Public (`authentic-materials.com`) | landing pages only | `scripts/deploy-frontend.sh public` |
+
+Claude's shell cannot use the `auctionx` profile (op plugin needs a TTY), so Boss runs them. Add `--dry-run` to build,
+run the checks and print the AWS commands without running them.
+
+- [ ] **Boss: one-time switch of the public domain to its own bucket** `am-frontend-prod`. Steps in
+      `infra/s3/am-frontend-prod/README.md` (bucket, policy, deploy-user policy, first upload, CloudFront origin).
+      **Do this before the next staging frontend deploy.** Until it is done the domain still reads the staging bucket, so a
+      staging deploy also changes the public site and needs the extra invalidation:
+      `aws cloudfront create-invalidation --profile auctionx --distribution-id E35K71RCQGYBAW --paths '/*'`
+- [ ] After the switch: Claude updates CLAUDE.md (drop "invalidate BOTH") and the Notion copy.
+
 Backend: after `git push origin dev`, run `scripts/verify-backend-deploy.sh` (pushes do not always deploy).
 Deploy order: backend (push `dev`, wait for App Runner **Running**) BEFORE frontend.
 
