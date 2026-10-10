@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-09 (S-ADMIN1 Ph2 re-issue live + verified on silicon)
+**Last updated:** 2026-10-10 (encoder auto-naming live on staging)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -116,11 +116,11 @@ token sale without admin tooling.
 - **S-ADMIN1 Ph2 ✅ live + verified on silicon 2026-10-09** (`docs/S_ADMIN1_PH2_VERIFICATION.md`): owner-only re-issue for a
   chip coming loose (live tap + live-camera photos, private bucket), web-only $10, approve / waive / reject / fulfil,
   serial-suffix confirmation. Owner override dropped (Boss).
-  - [ ] **Encoder auto-naming** (built 2026-10-10, branch `feature/s-encoder-auto-naming`): no `--item` → next
-        `chip_NNN`, reserved on the backend before any chip write; name shown in the admin console. Migration
-        `20261010000001` applied to staging, live check `supabase/tests/chip_names_live.sql` 15/15. **Left:** merge to
-        `dev`, Boss pushes, confirm the backend deploy, deploy the frontend, then encode one chip with no `--item`
-        (expect `chip_005`). The new encoder refuses every chip until the backend is deployed.
+  - [ ] **Encoder auto-naming** ✅ live on staging 2026-10-10 (`docs/S_ENCODER_AUTO_NAMING_VERIFICATION.md`): name reserved
+        on the backend before any chip write, shown in the admin console, `chip_` prefix reserved for the sequence.
+        **Open:** the no-name path has not run on a real chip yet (a chip was enrolled as `chip_` by a manual name).
+        Next time a chip is needed anyway, encode with no `--item`/`--token` and expect `chip_005`.
+  - [ ] Boss: push `dev` (reserved-prefix commit `d32de33` + docs), confirm the backend deploy.
   - [ ] Boss (optional): remove inline policy `ReissueEvidenceStaging` from IAM user `auctionx-s3-access` (unused; the
         instance role has it).
   - [ ] Boss: decide on App Runner auto-deploy (pushes did not reliably deploy on 2026-10-09).
