@@ -362,6 +362,7 @@ describe('reserve chip name', () => {
   it.each([
     ['chip_name_taken: chip_004 is already in use'],
     ['chip_already_named: this chip is enrolled as chip_004'],
+    ['chip_name_reserved: names starting with chip_ are assigned in sequence (next is chip_005)'],
   ])('a clash is a conflict (%s)', async (message) => {
     answer({ data: null, error: { message } });
     expect((await reserve({ sigSha256: NEW_SIG, name: 'chip_004' })).threw?.code).toBe('conflict');

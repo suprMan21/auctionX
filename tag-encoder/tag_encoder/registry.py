@@ -229,9 +229,13 @@ class MemoryRegistry:
             if name is None or name.lower() == held:
                 return self.names[held]["name"]
             del self.names[held]  # an un-enrolled chip re-run under a different name
+        used = [int(m.group(1)) for m in map(_AUTO_NAME.match, self.names) if m]
+        auto = f"chip_{max(used, default=0) + 1:03d}"
         if name is None:
-            used = [int(m.group(1)) for m in map(_AUTO_NAME.match, self.names) if m]
-            name = f"chip_{max(used, default=0) + 1:03d}"
+            name = auto
+        elif name.lower().startswith("chip_") and name != auto:
+            # the chip_ prefix belongs to the sequence (no `chip_`, no jumping ahead)
+            raise NameTaken(f"names starting with chip_ are assigned in sequence (next is {auto})")
         elif name.lower() in self.names:
             raise NameTaken(f"chip name {name!r} is not available: in use")
         self.names[name.lower()] = {"name": name, "sig": sig_sha256, "enrolled": False}

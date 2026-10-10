@@ -148,7 +148,9 @@ stored on the backend (`nfc_tags.chip_name`). It is reserved against the chip's
 fingerprint at the registry stage, before the first write, so a clash never
 leaves a half-written chip, and re-running a chip that failed mid-encode gets
 the same name back. Names are unique ignoring case and are never reused, even
-after a chip is retired. Allowed: 1 to 64 letters, digits, `_` or `-`.
+after a chip is retired. Allowed: 1 to 64 letters, digits, `_` or `-`. Names starting
+with `chip_` belong to the sequence: leave the name out to get one. A manual
+`chip_…` is refused unless it is exactly the next name in sequence.
 
 `--item` that is an `items.id` UUID is linked at enroll; anything else is an
 audit label only. Chips keyed under the staging KMS roots point at the staging

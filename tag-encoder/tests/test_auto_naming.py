@@ -62,20 +62,38 @@ def test_no_name_gets_the_next_chip_number_and_it_is_in_the_url():
 
 def test_the_sequence_continues_past_names_already_in_the_registry():
     reg = MemoryRegistry()
-    for n, name in enumerate(("chip_001", "chip_004", "gold_run_01"), 1):
-        _run(_chip(n), reg, replace(AUTO, item=name, token=name))
+    # as on staging: four backfilled chips, one retired-looking gap, other names
+    reg.names.update({n: {"name": n, "sig": None, "enrolled": True} for n in ("chip_001", "chip_004", "chip_", "gold_run_01")})
 
     assert _run(_chip(9), reg).name == "chip_005"  # max + 1: a gap is never refilled
 
 
+@pytest.mark.parametrize("bad", ["chip_", "chip_7", "CHIP_999", "chip_abc", "Chip_002"])
+def test_the_chip_prefix_is_reserved_for_the_sequence(bad):
+    reg, card = MemoryRegistry(), _chip()
+    writes = _record_writes(card)
+
+    with pytest.raises(Refused) as exc:
+        _run(card, reg, replace(AUTO, item=bad, token=bad))
+
+    assert exc.value.code == "name_taken" and "in sequence" in str(exc.value)
+    assert writes == [] and reg.names == {}
+
+
+def test_asking_for_exactly_the_next_name_is_allowed():
+    reg = MemoryRegistry()
+    assert _run(_chip(1), reg, replace(AUTO, item="chip_001", token="chip_001")).name == "chip_001"
+    assert _run(_chip(2), reg).name == "chip_002"
+
+
 def test_a_name_clash_is_refused_before_any_write():
     reg = MemoryRegistry()
-    _run(_chip(1), reg, replace(AUTO, item="chip_007", token="chip_007"))
+    _run(_chip(1), reg, replace(AUTO, item="gold_007", token="gold_007"))
     card = _chip(2)
     writes = _record_writes(card)
 
     with pytest.raises(Refused) as exc:
-        _run(card, reg, replace(AUTO, item="CHIP_007", token="CHIP_007"))  # case does not make it new
+        _run(card, reg, replace(AUTO, item="GOLD_007", token="GOLD_007"))  # case does not make it new
 
     assert exc.value.code == "name_taken" and writes == []
     assert card.key_versions == [0, 0, 0, 0, 0]

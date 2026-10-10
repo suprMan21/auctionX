@@ -400,6 +400,9 @@ export const reserveChipName = async (req: TagRequest, res: Response) => {
     if (message.includes('chip_name_taken')) {
       throw new AppError('conflict', 'That chip name is already in use');
     }
+    if (message.includes('chip_name_reserved')) {
+      throw new AppError('conflict', 'Names starting with chip_ are assigned in sequence; leave the name out to get the next one');
+    }
     if (message.includes('chip_already_named')) {
       throw new AppError('conflict', 'This chip is already enrolled under a name');
     }

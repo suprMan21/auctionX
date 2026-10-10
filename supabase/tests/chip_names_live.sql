@@ -42,8 +42,9 @@ BEGIN
   v_res := v_res || jsonb_build_object('04_second_chip_next', CASE WHEN v_next = 'chip_' || lpad((v_max + 2)::TEXT, 3, '0') THEN 'ok' ELSE 'FAIL: ' || v_next END);
 
   -- 5. A manual name already in use is refused, whatever its case.
+  PERFORM reserve_chip_name(encode(gen_random_bytes(32), 'hex'), 'live_check_taken', v_admin);
   BEGIN
-    PERFORM reserve_chip_name(v_sig_c, 'CHIP_004', v_admin);
+    PERFORM reserve_chip_name(v_sig_c, 'LIVE_CHECK_TAKEN', v_admin);
     v_res := v_res || jsonb_build_object('05_taken_refused', 'FAIL: no error');
   EXCEPTION WHEN OTHERS THEN
     v_res := v_res || jsonb_build_object('05_taken_refused', CASE WHEN SQLERRM LIKE 'chip_name_taken%' THEN 'ok' ELSE 'FAIL: ' || SQLERRM END);
@@ -113,6 +114,23 @@ BEGIN
   -- 14. The next auto name skips everything handed out above.
   v_next := reserve_chip_name(v_sig_c);
   v_res := v_res || jsonb_build_object('14_sequence_moves_on', CASE WHEN v_next = 'chip_' || lpad((v_max + 2)::TEXT, 3, '0') THEN 'ok' ELSE 'FAIL: ' || v_next END);
+
+  -- 16. The chip_ prefix is reserved for the sequence: a bare prefix, an
+  --     unpadded number and a jump ahead are all refused, in any case.
+  v_n := 0;
+  FOREACH v_next IN ARRAY ARRAY['chip_', 'chip_7', 'CHIP_999', 'chip_abc', 'Chip_' || lpad((v_max + 9)::TEXT, 3, '0')] LOOP
+    BEGIN
+      PERFORM reserve_chip_name(encode(gen_random_bytes(32), 'hex'), v_next, v_admin);
+    EXCEPTION WHEN OTHERS THEN
+      IF SQLERRM LIKE 'chip_name_reserved%' THEN v_n := v_n + 1; END IF;
+    END;
+  END LOOP;
+  v_res := v_res || jsonb_build_object('16_chip_prefix_reserved', CASE WHEN v_n = 5 THEN 'ok' ELSE 'FAIL: ' || v_n || ' of 5 refused' END);
+
+  -- 17. Asking by hand for exactly the next name in sequence is allowed.
+  v_want := 'chip_' || lpad((v_max + 3)::TEXT, 3, '0');
+  v_next := reserve_chip_name(encode(gen_random_bytes(32), 'hex'), v_want, v_admin);
+  v_res := v_res || jsonb_build_object('17_exact_next_allowed', CASE WHEN v_next = v_want THEN 'ok' ELSE 'FAIL: ' || v_next END);
 
   -- 15. Grants: service_role only; the table is closed to user-level keys.
   v_res := v_res || jsonb_build_object('15_grants', CASE WHEN
