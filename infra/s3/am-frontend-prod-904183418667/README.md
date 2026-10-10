@@ -1,4 +1,4 @@
-# am-frontend-prod
+# am-frontend-prod-904183418667
 
 Private bucket for the **public site**: what `authentic-materials.com` and `www` serve.
 
@@ -11,7 +11,7 @@ deploy changed the public site, and the public domain served the whole staging a
 |---|---|---|
 | Serves | the whole app | landing pages only (`frontend/src/PublicSite.tsx`) |
 | Build | `npm run build` → `dist/` | `npm run build:public` → `dist-public/` |
-| Bucket | `auctionx-frontend-staging` | `am-frontend-prod` |
+| Bucket | `auctionx-frontend-staging` | `am-frontend-prod-904183418667` |
 | CloudFront | `E3JOPXHI8DB4BE` | `E35K71RCQGYBAW` |
 | Deploy | `scripts/deploy-frontend.sh staging` | `scripts/deploy-frontend.sh public` |
 
@@ -25,7 +25,8 @@ Do the steps in order. The public site keeps serving the old build until step 5,
 step 4 puts the new build in place first, so there is no gap.
 
 1. **Create the bucket.** S3 → Create bucket.
-   - Name `am-frontend-prod`, region **us-east-2**.
+   - Name `am-frontend-prod-904183418667`, region **us-east-2**. (Plain `am-frontend-prod` is taken by
+     another AWS account; the suffix is our account ID.)
    - Object Ownership: **ACLs disabled**.
    - **Block all public access: ON** (all four boxes).
    - Default encryption: **SSE-S3**. Versioning: **Enable** (a bad deploy can be rolled back).
@@ -49,10 +50,10 @@ step 4 puts the new build in place first, so there is no gap.
 
 5. **Point the distribution at the new bucket.** CloudFront → `E35K71RCQGYBAW`.
    - **Origins → Create origin.** Origin domain: pick
-     `am-frontend-prod.s3.us-east-2.amazonaws.com` (the bucket itself, not a
+     `am-frontend-prod-904183418667.s3.us-east-2.amazonaws.com` (the bucket itself, not a
      `s3-website` address). Origin access: **Origin access control settings** → Create new
      OAC (defaults: sign requests) → Create origin.
-   - **Behaviors → Default (\*) → Edit.** Origin: the new `am-frontend-prod` origin.
+   - **Behaviors → Default (\*) → Edit.** Origin: the new `am-frontend-prod-904183418667` origin.
      Viewer protocol policy: **Redirect HTTP to HTTPS**. Save.
    - **General → Settings → Edit.** Default root object: `index.html`.
    - **Error pages.** Make sure both exist (add them if missing). A private bucket answers
@@ -78,5 +79,5 @@ step 4 puts the new build in place first, so there is no gap.
   `scripts/deploy-frontend.sh public`.
 - At launch this bucket takes the production app build (live Stripe key, production
   `VITE_API_URL`); see `docs/LAUNCH_CHECKLIST.md` §6.
-- Roll back a bad public deploy: S3 → `am-frontend-prod` → `index.html` → Versions →
+- Roll back a bad public deploy: S3 → `am-frontend-prod-904183418667` → `index.html` → Versions →
   restore the previous one, then invalidate `E35K71RCQGYBAW`.

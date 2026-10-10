@@ -103,8 +103,8 @@ production, so it must land before any real token sale.
 Claude's shell cannot use the `auctionx` profile (op plugin needs a TTY), so Boss runs them. Add `--dry-run` to build,
 run the checks and print the AWS commands without running them.
 
-- [ ] **Boss: one-time switch of the public domain to its own bucket** `am-frontend-prod`. Steps in
-      `infra/s3/am-frontend-prod/README.md` (bucket, policy, deploy-user policy, first upload, CloudFront origin).
+- [ ] **Boss: one-time switch of the public domain to its own bucket** `am-frontend-prod-904183418667`. Steps in
+      `infra/s3/am-frontend-prod-904183418667/README.md` (bucket, policy, deploy-user policy, first upload, CloudFront origin).
       **Do this before the next staging frontend deploy.** Until it is done the domain still reads the staging bucket, so a
       staging deploy also changes the public site and needs the extra invalidation:
       `aws cloudfront create-invalidation --profile auctionx --distribution-id E35K71RCQGYBAW --paths '/*'`

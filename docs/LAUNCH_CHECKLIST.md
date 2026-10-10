@@ -145,11 +145,11 @@
 ## 6. DNS & Hosting
 
 > **Current state (2026-10-10):** the public site is its own landing-only build (`npm run build:public`) with its own
-> bucket `am-frontend-prod` behind `E35K71RCQGYBAW` (private, CloudFront OAC); staging keeps
-> `auctionx-frontend-staging` + `E3JOPXHI8DB4BE`. Setup and the one-time switch: `infra/s3/am-frontend-prod/README.md`.
+> bucket `am-frontend-prod-904183418667` behind `E35K71RCQGYBAW` (private, CloudFront OAC); staging keeps
+> `auctionx-frontend-staging` + `E3JOPXHI8DB4BE`. Setup and the one-time switch: `infra/s3/am-frontend-prod-904183418667/README.md`.
 > Deploys: `scripts/deploy-frontend.sh staging|public`.
 
-- [ ] **Production app on the public domain:** replace the landing-only build in `am-frontend-prod` with a production
+- [ ] **Production app on the public domain:** replace the landing-only build in `am-frontend-prod-904183418667` with a production
       app build (live Stripe pk, production `VITE_API_URL`, production Supabase project). The landing-only entry
       (`frontend/src/PublicSite.tsx`) and its leak checks go away or become the pre-login shell.
 

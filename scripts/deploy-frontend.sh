@@ -2,7 +2,7 @@
 # Build and deploy one of the two frontends. They are separate sites:
 #
 #   staging   the whole app   → s3://auctionx-frontend-staging  (CloudFront E3JOPXHI8DB4BE)
-#   public    landing only    → s3://am-frontend-prod           (CloudFront E35K71RCQGYBAW,
+#   public    landing only    → s3://am-frontend-prod-904183418667           (CloudFront E35K71RCQGYBAW,
 #                                                                 authentic-materials.com)
 #
 # Usage:  scripts/deploy-frontend.sh staging|public [--dry-run]
@@ -12,7 +12,7 @@
 # script does not inherit as an alias, so AWS is called as `op plugin run -- aws`.
 # Override with AWS_CMD="aws" if your credentials come from somewhere else.
 #
-# Setup for the public site (one time): infra/s3/am-frontend-prod/README.md
+# Setup for the public site (one time): infra/s3/am-frontend-prod-904183418667/README.md
 
 set -euo pipefail
 
@@ -22,7 +22,7 @@ PROFILE=auctionx
 AWS_CMD="${AWS_CMD:-op plugin run -- aws}"
 STAGING_BUCKET=auctionx-frontend-staging
 STAGING_DIST_ID=E3JOPXHI8DB4BE
-PUBLIC_BUCKET=am-frontend-prod
+PUBLIC_BUCKET=am-frontend-prod-904183418667
 PUBLIC_DIST_ID=E35K71RCQGYBAW
 PUBLIC_URL=https://authentic-materials.com
 

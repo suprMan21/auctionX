@@ -5,13 +5,13 @@
       "Sid": "ListPublicSiteBucket",
       "Effect": "Allow",
       "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::am-frontend-prod"
+      "Resource": "arn:aws:s3:::am-frontend-prod-904183418667"
     },
     {
       "Sid": "WritePublicSiteObjects",
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:DeleteObject"],
-      "Resource": "arn:aws:s3:::am-frontend-prod/*"
+      "Resource": "arn:aws:s3:::am-frontend-prod-904183418667/*"
     },
     {
       "Sid": "InvalidatePublicSite",
