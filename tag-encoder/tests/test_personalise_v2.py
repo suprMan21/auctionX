@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -110,7 +111,8 @@ def test_phone_tap_verifies_only_with_its_own_serial():
 def test_duplicate_uid_chips_both_encode_and_stay_distinct():
     reg = MemoryRegistry()
     a, b = EmulatedNtag424(uid=UID), EmulatedNtag424(uid=UID)
-    out_a, out_b = _run(a, reg), _run(b, reg)
+    # one name per chip: the twin gets its own (names are unique in the registry)
+    out_a, out_b = _run(a, reg), _run(b, reg, job=replace(JOB, token="tok_nfcid_002"))
 
     assert out_a.serial_hex != out_b.serial_hex
     assert {c["uid"] for c in reg.chips} == {UID.hex().upper()} and len(reg.chips) == 2

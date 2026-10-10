@@ -14,9 +14,11 @@ Commands:
         Run the backend's validateSunScan logic: decrypt PICCData under the
         META key, check the claimed UID, verify the SDMMAC, check the counter.
 
-    personalise --item <id> [--token T] [--base-url URL] [--batch CSV] [--emulator]
+    personalise [--item <id>] [--token T] [--base-url URL] [--batch CSV] [--emulator]
         S-NFC2 Phase 2: physically key + write a chip on the PC/SC reader, read it
-        back, verify the SUN, then enroll it (personalise.py has the 9 stages).
+        back, verify the SUN, then enroll it (personalise.py has the 11 stages).
+        With no --item/--token the backend names the chip: the next chip_NNN.
+        Any name is reserved on the backend before the first write to the chip.
         Real chips: KMS keys + staff login (env) ONLY. --emulator rehearses the
         whole flow on a software chip with an in-memory registry.
 
@@ -242,9 +244,10 @@ def _personalise_jobs(args: argparse.Namespace) -> list:
     from .personalise import EncodeJob
 
     if not args.batch:
-        if not args.item:
-            raise SystemExit("error: --item or --batch is required")
-        return [EncodeJob(args.item, args.token or args.item, args.base_url, args.key_version)]
+        # Neither given: the registry names the chip (next chip_NNN).
+        return [EncodeJob(args.item or args.token, args.token or args.item, args.base_url, args.key_version)]
+    if args.item or args.token:
+        raise SystemExit("error: --batch takes its names from the CSV; drop --item/--token")
     with open(args.batch, newline="", encoding="utf-8") as fh:
         rows = [r for r in csv.DictReader(fh) if (r.get("item") or "").strip()]
     if not rows:
@@ -290,9 +293,9 @@ def cmd_personalise(args: argparse.Namespace) -> int:
 
     failures = 0
     for n, job in enumerate(jobs, 1):
-        print(f"\n[{n}/{len(jobs)}] item={job.item} token={job.token}")
+        print(f"\n[{n}/{len(jobs)}] item={job.item or '(auto)'} token={job.token or '(next chip_NNN)'}")
         if args.emulator:
-            card = EmulatedNtag424(uid=bytes.fromhex(_derive_uid_for_item(job.item)))
+            card = EmulatedNtag424(uid=bytes.fromhex(_derive_uid_for_item(job.item or f"auto-{n}")))
         else:
             if not args.yes:
                 answer = input("  Place a BLANK chip on the reader, then Enter (s = skip, q = quit): ").strip().lower()
@@ -316,7 +319,7 @@ def cmd_personalise(args: argparse.Namespace) -> int:
         finally:
             if hasattr(card, "close"):
                 card.close()
-        print(f"  ✓ ENCODED  tag {out.tag_id}  UID {out.uid_hex}  read-back ctr {out.readback_counter}"
+        print(f"  ✓ ENCODED  {out.name}  tag {out.tag_id}  UID {out.uid_hex}  read-back ctr {out.readback_counter}"
               f"{'  (resumed)' if out.resumed else ''}")
         print(f"    read-back URL: {out.readback_url}")
         if not args.emulator and not args.yes and len(jobs) > 1:
@@ -383,8 +386,9 @@ def build_parser() -> argparse.ArgumentParser:
     vf.set_defaults(func=cmd_verify)
 
     ps = sub.add_parser("personalise", help="physically encode chip(s) on the reader (S-NFC2 Ph2)")
-    ps.add_argument("--item", help="item id (an items.id UUID is linked at enroll; any other label is audit-only)")
-    ps.add_argument("--token", help="SUN token name in the URL path (defaults to --item)")
+    ps.add_argument("--item", help="item id (an items.id UUID is linked at enroll; any other label is audit-only). "
+                                   "Omit it and --token to auto-name the chip: the next chip_NNN")
+    ps.add_argument("--token", help="chip name in the URL path (defaults to --item); must be unused")
     ps.add_argument("--batch", help="CSV with an 'item' column (optional 'token'); one chip per row")
     ps.add_argument("--base-url", default=STAGING_BASE_URL, help="SUN base URL (default: staging frontend)")
     ps.add_argument("--reader", help="substring of the PC/SC reader name (default: first PICC reader)")

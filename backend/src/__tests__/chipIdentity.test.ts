@@ -8,7 +8,7 @@ import {
   v2MacInput,
 } from '../services/nfc/ntag424Codec';
 import { createLocalTagKeyProvider } from '../services/nfc/keys/tagKeyProvider';
-import { createMockSupabase, resetMockIds, type Tables, type Row } from './helpers/supabaseMock';
+import { createMockSupabase, resetMockIds, type MockHooks, type Tables, type Row } from './helpers/supabaseMock';
 import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEvents';
 
 /**
@@ -65,6 +65,7 @@ const sunFor = (counter: number, serial?: string): string => {
 // ── Harness ─────────────────────────────────────────────────────────────────
 
 let tables: Tables;
+let hooks: MockHooks;
 let logSpy: SecurityEventSpy;
 
 const tagRow = (overrides: Row): Row => ({
@@ -84,7 +85,7 @@ const tagRow = (overrides: Row): Row => ({
 });
 
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => createMockSupabase(tables),
+  createClient: () => createMockSupabase(tables, hooks),
 }));
 
 vi.mock('../lib/stripe', () => ({
@@ -134,6 +135,7 @@ beforeEach(() => {
   delete process.env.NFC_SDM_KEY_VERSION;
 
   logSpy = spyOnSecurityEvents();
+  hooks = {};
   tables = {
     nfc_tags: [
       tagRow({ id: V1_ID }),
@@ -321,5 +323,92 @@ describe('enroll (v2)', () => {
     process.env.NFC_SDM_KEY_VERSION = '2';
     const out = await enroll({ tagUid: '04DE5F1EACC040' });
     expect(out.threw?.code).toBe('invalid_argument');
+  });
+});
+
+// ── Encoder auto-naming ─────────────────────────────────────────────────────
+
+describe('reserve chip name', () => {
+  const NEW_SIG = 'c'.repeat(64);
+  let rpcCalls: { fn: string; args: Row }[];
+
+  const reserve = async (body: Row, user: string | null = STAFF) => {
+    const { reserveChipName } = await writes();
+    return call(reserveChipName, makeReq(user, body));
+  };
+  const answer = (result: { data: unknown; error: { message: string } | null }) => {
+    rpcCalls = [];
+    hooks.rpc = (fn, args) => { rpcCalls.push({ fn, args }); return result; };
+  };
+
+  it('with no name asks the database for the next chip_NNN', async () => {
+    answer({ data: 'chip_005', error: null });
+    const out = await reserve({ sigSha256: NEW_SIG });
+
+    expect(data(out)).toEqual({ name: 'chip_005', auto: true });
+    expect(rpcCalls).toEqual([
+      { fn: 'reserve_chip_name', args: { p_sig_sha256: NEW_SIG, p_name: undefined, p_actor: STAFF } },
+    ]);
+  });
+
+  it('passes a manual name through the same check', async () => {
+    answer({ data: 'gold_run_01', error: null });
+    const out = await reserve({ sigSha256: NEW_SIG, name: 'gold_run_01' });
+
+    expect(data(out)).toEqual({ name: 'gold_run_01', auto: false });
+    expect(rpcCalls[0].args.p_name).toBe('gold_run_01');
+  });
+
+  it.each([
+    ['chip_name_taken: chip_004 is already in use'],
+    ['chip_already_named: this chip is enrolled as chip_004'],
+  ])('a clash is a conflict (%s)', async (message) => {
+    answer({ data: null, error: { message } });
+    expect((await reserve({ sigSha256: NEW_SIG, name: 'chip_004' })).threw?.code).toBe('conflict');
+  });
+
+  it('fails closed when the database gives no definite name', async () => {
+    for (const result of [{ data: null, error: { message: 'connection reset' } }, { data: null, error: null }, { data: '', error: null }]) {
+      answer(result);
+      expect((await reserve({ sigSha256: NEW_SIG })).threw?.code).toBe('unavailable');
+    }
+  });
+
+  it('rejects a bad fingerprint or name before touching the database', async () => {
+    answer({ data: 'chip_005', error: null });
+    for (const body of [
+      {}, { sigSha256: 'C'.repeat(64) }, { sigSha256: NEW_SIG, name: '' }, { sigSha256: NEW_SIG, name: 'has space' },
+      { sigSha256: NEW_SIG, name: '../x' }, { sigSha256: NEW_SIG, name: 'a'.repeat(65) }, { sigSha256: NEW_SIG, other: 1 },
+    ]) {
+      expect((await reserve(body)).threw?.code).toBe('invalid_argument');
+    }
+    expect(rpcCalls).toEqual([]);
+  });
+
+  it('is refused without manage_nfc', async () => {
+    answer({ data: 'chip_005', error: null });
+    expect((await reserve({ sigSha256: NEW_SIG }, OWNER)).threw?.code).toBe('permission_denied');
+    expect((await reserve({ sigSha256: NEW_SIG }, null)).threw?.code).toBe('unauthenticated');
+    expect(rpcCalls).toEqual([]);
+  });
+});
+
+describe('enroll with a chip name', () => {
+  const enroll = async (body: Row) => {
+    const { enrollTag } = await writes();
+    return call(enrollTag, makeReq(STAFF, body));
+  };
+  const v2 = { tagUid: DUP_UID, chipSerial: 'ABCDEF0123456789', sigSha256: 'c'.repeat(64), sdmKeyVersion: 2 };
+
+  it('stores the name on the tag row', async () => {
+    const out = await enroll({ ...v2, chipName: 'chip_005' });
+
+    expect(out.status).toBe(201);
+    expect(tables.nfc_tags.find((r) => r.chip_serial === 'ABCDEF0123456789')).toMatchObject({ chip_name: 'chip_005' });
+  });
+
+  it('a name needs the chip fingerprint, and must be well formed', async () => {
+    expect((await enroll({ tagUid: '04DE5F1EACC040', chipName: 'chip_005' })).threw?.code).toBe('invalid_argument');
+    expect((await enroll({ ...v2, chipName: 'no/slash' })).threw?.code).toBe('invalid_argument');
   });
 });

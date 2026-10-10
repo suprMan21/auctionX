@@ -116,8 +116,10 @@ token sale without admin tooling.
 - **S-ADMIN1 Ph2 ✅ live + verified on silicon 2026-10-09** (`docs/S_ADMIN1_PH2_VERIFICATION.md`): owner-only re-issue for a
   chip coming loose (live tap + live-camera photos, private bucket), web-only $10, approve / waive / reject / fulfil,
   serial-suffix confirmation. Owner override dropped (Boss).
-  - [ ] **Encoder auto-naming** (Boss 2026-10-09): no `--item` → next `chip_NNN`, backend uniqueness check before any
-        chip write.
+  - [ ] **Encoder auto-naming** (built 2026-10-10, branch `feature/s-encoder-auto-naming`): no `--item` → next
+        `chip_NNN`, reserved on the backend before any chip write. To go live: apply migration
+        `20261010000001_nfc_chip_names.sql`, run `supabase/tests/chip_names_live.sql`, regenerate types, push + deploy
+        the backend, then encode one chip with no `--item` (expect `chip_005`).
   - [ ] Boss (optional): remove inline policy `ReissueEvidenceStaging` from IAM user `auctionx-s3-access` (unused; the
         instance role has it).
   - [ ] Boss: decide on App Runner auto-deploy (pushes did not reliably deploy on 2026-10-09).

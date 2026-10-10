@@ -14,6 +14,9 @@ the serial stage):
   6 registry     backend precheck on (UID, serial, fingerprint): the fingerprint or the
                  serial must not exist; RETIRED is never reused. A shared UID alone is
                  not a refusal at v2 (S-NFC-ID: duplicate-UID chips are real).
+                 Then the chip's name is reserved against its fingerprint: the given
+                 name if it is free, else the next chip_NNN. A clash stops here, so a
+                 bad name never leaves a half-written chip; a re-run keeps its name.
   7 pre-write    (v2, factory file only) WriteData the NDEF template, unauthenticated
                  (factory file 02 is Write=E), so the serial is on the chip before
                  any key depends on it
@@ -55,7 +58,7 @@ from .keyprovider import (
 from .ntag424 import apdu as A
 from .ntag424 import session as sm
 from .ntag424.encode import SERIAL_LEN, SdmTemplate, build_sdm_template, serial_from_ndef, verify_sun
-from .registry import Registry, RegistryError, item_uuid_or_none
+from .registry import CHIP_NAME, NameTaken, Registry, RegistryError, item_uuid_or_none
 from .transport import SW_ADDITIONAL_FRAME, SW_ISO_OK, SW_NATIVE_OK, CardIO
 
 FACTORY_KEY = bytes(16)
@@ -63,6 +66,7 @@ FACTORY_KEY_VERSION = 0x00
 SW_ILLEGAL_COMMAND = 0x911C
 SW_AUTH_ERROR = 0x91AE
 MAX_WRITE_DATA = 255 - 7  # one short APDU: FileNo + Offset(3) + Length(3) + data
+AUTO_NAME_PROBE = "chip_000000000"  # sizes the URL before an auto name is known
 
 GET_VERSION = [0x90, 0x60, 0x00, 0x00, 0x00]
 ADDITIONAL_FRAME = [0x90, 0xAF, 0x00, 0x00, 0x00]
@@ -88,8 +92,10 @@ class EncodeFailed(EncodeError):
 
 @dataclass(frozen=True)
 class EncodeJob:
-    item: str
-    token: str
+    """`token` is the chip's name (its URL path). None = the registry picks the next chip_NNN."""
+
+    item: str | None
+    token: str | None
     base_url: str
     key_version: int = SERIAL_KDF_VERSION
 
@@ -106,10 +112,12 @@ class EncodeOutcome:
     resumed: bool
     readback_url: str  # operator display only; never logged
     serial_hex: str | None = None
+    name: str | None = None
 
     def as_dict(self) -> dict:
         return {
             "tagId": self.tag_id,
+            "name": self.name,
             "uid": self.uid_hex,
             "serial": self.serial_hex,
             "readbackCounter": self.readback_counter,
@@ -249,11 +257,15 @@ def personalise(
     }
     # Size check up front with a dummy serial: the real one is only known at stage 5.
     try:
-        probe = build_sdm_template(job.base_url, job.token, bytes(SERIAL_LEN) if job.uses_serial else None)
+        probe = build_sdm_template(
+            job.base_url, job.token or AUTO_NAME_PROBE, bytes(SERIAL_LEN) if job.uses_serial else None
+        )
     except ValueError as exc:
         raise Refused("url_too_long", "identify", str(exc)) from exc
     if len(probe.ndef_bytes) > MAX_WRITE_DATA:
         raise Refused("url_too_long", "identify", f"NDEF {len(probe.ndef_bytes)} B > {MAX_WRITE_DATA} B")
+    if job.token is not None and not CHIP_NAME.match(job.token):
+        raise Refused("bad_name", "identify", "chip names are 1 to 64 letters, digits, _ or -")
 
     slots = (0, 1, 2, 3, 4) if job.uses_serial else (0, 2, 3)
     meta = file_key = master = key1 = key4 = bytearray()
@@ -309,7 +321,6 @@ def personalise(
                 raise EncodeFailed("serial_missing", "serial", "keys already set but no serial on the chip")
             serial = on_chip if on_chip is not None else rng(SERIAL_LEN)
         serial_hex = serial.hex().upper() if serial is not None else None
-        template = build_sdm_template(job.base_url, job.token, serial)
 
         # 6 registry (fail closed: any error stops the encode)
         chip.stage = "registry"
@@ -321,6 +332,17 @@ def personalise(
             raise Refused("retired_uid", "registry", "retired chips are never reused")
         if pre.exists:
             raise Refused("already_registered", "registry", f"lifecycle {pre.lifecycle_status}")
+        try:
+            name = registry.reserve_name(sig_sha256, job.token)
+        except NameTaken as exc:
+            raise Refused("name_taken", "registry", str(exc)) from exc
+        except RegistryError as exc:
+            raise Refused("registry_unavailable", "registry", str(exc)) from exc
+        base_audit.update(item=job.item or name, token=name)
+        try:
+            template = build_sdm_template(job.base_url, name, serial)
+        except ValueError as exc:
+            raise Refused("url_too_long", "registry", str(exc)) from exc
 
         # 7 pre-write (v2): the serial lands on the chip before any key depends on it
         if job.uses_serial and on_chip is None:
@@ -379,7 +401,9 @@ def personalise(
         # 11 enroll: only now does the chip count as encoded
         chip.stage = "enroll"
         try:
-            tag_id = registry.enroll(uid_hex, item_uuid_or_none(job.item), serial_hex, sig_sha256, job.key_version)
+            tag_id = registry.enroll(
+                uid_hex, item_uuid_or_none(job.item or ""), serial_hex, sig_sha256, job.key_version, name
+            )
         except RegistryError as exc:
             raise EncodeFailed("enroll_failed", "enroll", str(exc)) from exc
     except EncodeError as exc:
@@ -394,4 +418,4 @@ def personalise(
 
     # The serial is an identifier like the UID, so it stays out of the ledger (tag_id links it).
     audit.write(**base_audit, result="encoded", tag_id=tag_id, readback_counter=counter, resumed=resumed)
-    return EncodeOutcome(tag_id, uid_hex, counter, resumed, url, serial_hex)
+    return EncodeOutcome(tag_id, uid_hex, counter, resumed, url, serial_hex, name)

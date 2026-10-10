@@ -13,6 +13,7 @@ import { log } from '../lib/logger';
 import {
   enrollTag,
   enrollPrecheck,
+  reserveChipName,
   claimTag,
   initiateTransfer,
   completeTransfer,
@@ -143,6 +144,7 @@ tagManagementRoutes.use(ownershipAuthProbeDetector as unknown as RequestHandler)
 // ── Static routes, ALL before any parameterized route (lesson #5) ────────────
 tagManagementRoutes.post('/enroll', requireAuth, mutationLimit, handle(enrollTag));
 tagManagementRoutes.get('/enroll/precheck/:tagUid', requireAuth, mutationLimit, handle(enrollPrecheck));
+tagManagementRoutes.post('/enroll/reserve-name', requireAuth, mutationLimit, handle(reserveChipName));
 tagManagementRoutes.post('/claim', requireAuth, mutationLimit, handle(claimTag));
 tagManagementRoutes.post('/release', requireAuth, mutationLimit, handle(releaseTag));
 // S-ADMIN1: the non-atomic owner/staff replace is gone. The token reset is

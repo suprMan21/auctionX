@@ -12,6 +12,9 @@ import { TAP_SESSION_TOKEN_PATTERN } from './tapSession';
 import { CHIP_SERIAL_PATTERN } from './ntag424Codec';
 
 const SIG_SHA256_PATTERN = /^[0-9a-f]{64}$/;
+/** A chip's name: the path segment of its SUN URL. Mirrors the nfc_tags.chip_name CHECK. */
+const CHIP_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+const chipName = z.string().regex(CHIP_NAME_PATTERN, 'chipName must be 1 to 64 letters, digits, _ or -');
 
 const uuid = z.string().uuid();
 
@@ -53,6 +56,8 @@ const enrollFields = z.object({
   sigSha256: z.string().regex(SIG_SHA256_PATTERN, 'sigSha256 must be 64 lowercase hex').optional(),
   /** The KDF version the encoder personalised with. Defaults to the backend's current version. */
   sdmKeyVersion: z.number().int().min(1).max(255).optional(),
+  /** The name reserved for this chip (POST /nfc/enroll/reserve-name). Needs sigSha256. */
+  chipName: chipName.optional(),
 }).strict();
 
 /** The 7-byte UID path parameter (precheck). */
@@ -64,7 +69,19 @@ export const enrollSchema = enrollFields.refine(
 ).refine(
   (v) => v.chipSerial !== undefined || v.sdmKeyVersion === undefined || v.sdmKeyVersion < 2,
   { message: 'sdmKeyVersion >= 2 needs a chipSerial' },
+).refine(
+  (v) => v.chipName === undefined || v.sigSha256 !== undefined,
+  { message: 'A chipName needs sigSha256 (names are reserved per physical chip)' },
 );
+
+/**
+ * Encoder name reservation. No `name` = the next chip_NNN in sequence. Runs
+ * before the encoder writes anything to the chip.
+ */
+export const reserveChipNameSchema = z.object({
+  sigSha256: z.string().regex(SIG_SHA256_PATTERN, 'sigSha256 must be 64 lowercase hex'),
+  name: chipName.optional(),
+}).strict();
 
 /** Encoder precheck query (S-NFC-ID). Both absent = the v1 UID-only check. */
 export const enrollPrecheckQuerySchema = z.object({

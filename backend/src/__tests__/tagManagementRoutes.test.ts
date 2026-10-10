@@ -45,6 +45,7 @@ describe('S-NFC3 tag management routes', () => {
   const TOKEN_ROUTES = [
     { method: 'post', path: '/api/v1/nfc/enroll' },
     { method: 'get', path: '/api/v1/nfc/enroll/precheck/04A27E02936980' },
+    { method: 'post', path: '/api/v1/nfc/enroll/reserve-name' },
     { method: 'post', path: '/api/v1/nfc/claim' },
     { method: 'post', path: '/api/v1/nfc/release' },
     { method: 'post', path: '/api/v1/nfc/replace' },

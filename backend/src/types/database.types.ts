@@ -883,10 +883,46 @@ export type Database = {
           },
         ]
       }
+      nfc_chip_names: {
+        Row: {
+          enrolled_at: string | null
+          name: string
+          reserved_at: string
+          reserved_by: string | null
+          sig_sha256: string | null
+          tag_id: string | null
+        }
+        Insert: {
+          enrolled_at?: string | null
+          name: string
+          reserved_at?: string
+          reserved_by?: string | null
+          sig_sha256?: string | null
+          tag_id?: string | null
+        }
+        Update: {
+          enrolled_at?: string | null
+          name?: string
+          reserved_at?: string
+          reserved_by?: string | null
+          sig_sha256?: string | null
+          tag_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfc_chip_names_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nfc_tags: {
         Row: {
           activated_at: string | null
           aes_key_enc: string | null
+          chip_name: string | null
           chip_serial: string | null
           created_at: string
           current_owner_id: string | null
@@ -918,6 +954,7 @@ export type Database = {
         Insert: {
           activated_at?: string | null
           aes_key_enc?: string | null
+          chip_name?: string | null
           chip_serial?: string | null
           created_at?: string
           current_owner_id?: string | null
@@ -949,6 +986,7 @@ export type Database = {
         Update: {
           activated_at?: string | null
           aes_key_enc?: string | null
+          chip_name?: string | null
           chip_serial?: string | null
           created_at?: string
           current_owner_id?: string | null
@@ -2865,6 +2903,10 @@ export type Database = {
       }
       reactivate_admin: { Args: { p_admin_id: string }; Returns: undefined }
       revoke_admin_session: { Args: { p_admin_id: string }; Returns: undefined }
+      reserve_chip_name: {
+        Args: { p_actor?: string; p_name?: string; p_sig_sha256: string }
+        Returns: string
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       suspend_user: {

@@ -174,6 +174,37 @@ def test_personalise_refuses_dev_roots_on_real_silicon(tmp_path):
     assert "PUBLIC" in str(exc.value)
 
 
-def test_personalise_needs_item_or_batch(tmp_path):
-    with pytest.raises(SystemExit):
-        main(["personalise", "--emulator", "--dev-roots", "--audit-log", str(tmp_path / "a.jsonl")])
+def test_personalise_without_a_name_auto_names_the_chip(capsys, tmp_path):
+    audit = tmp_path / "a.jsonl"
+    rc = main(["personalise", "--emulator", "--dev-roots", "--audit-log", str(audit)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "token=(next chip_NNN)" in out and "✓ ENCODED  chip_001 " in out
+    assert "/verify/chip_001?sn=" in out
+    record = json.loads(audit.read_text().splitlines()[-1])
+    assert record["item"] == "chip_001" and record["token"] == "chip_001" and record["result"] == "encoded"
+
+
+def test_personalise_token_alone_names_the_chip(capsys, tmp_path):
+    rc = main(["personalise", "--token", "gold_run_01", "--emulator", "--dev-roots",
+               "--audit-log", str(tmp_path / "a.jsonl")])
+    assert rc == 0 and "✓ ENCODED  gold_run_01 " in capsys.readouterr().out
+
+
+def test_personalise_batch_refuses_a_repeated_name(capsys, tmp_path):
+    manifest = tmp_path / "lot.csv"
+    manifest.write_text("item\nitem_a\nitem_a\n")
+    rc = main(["personalise", "--batch", str(manifest), "--emulator", "--dev-roots",
+               "--audit-log", str(tmp_path / "a.jsonl")])
+    out = capsys.readouterr().out
+    assert rc == 1 and "1 encoded, 1 not encoded" in out
+    assert "REFUSED (nothing written)" in out and "name_taken" in out
+
+
+def test_personalise_batch_does_not_mix_with_item(tmp_path):
+    manifest = tmp_path / "lot.csv"
+    manifest.write_text("item\nitem_a\n")
+    with pytest.raises(SystemExit) as exc:
+        main(["personalise", "--batch", str(manifest), "--item", "x", "--emulator", "--dev-roots",
+              "--audit-log", str(tmp_path / "a.jsonl")])
+    assert "--batch" in str(exc.value)

@@ -1,17 +1,21 @@
 """Tag registry client — the backend's nfc_tags, as the encoder sees it.
 
-Two calls, both staff-only on the backend:
+Three calls, all staff-only on the backend:
     GET  /api/v1/nfc/enroll/precheck/:tagUid?serial=&sigSha256=
          -> { exists, lifecycleStatus, uidMatches }
-    POST /api/v1/nfc/enroll  { tagUid, itemId?, chipSerial?, sigSha256?, sdmKeyVersion? }
+    POST /api/v1/nfc/enroll/reserve-name  { sigSha256, name? }
+         -> { name, auto }   (no name = the next chip_NNN; 409 = name in use)
+    POST /api/v1/nfc/enroll  { tagUid, itemId?, chipSerial?, sigSha256?, sdmKeyVersion?, chipName? }
          -> { tagId, lifecycleStatus: ENROLLED }
 
 S-NFC-ID: with a serial + signature fingerprint, `exists` means THIS physical
 chip (same fingerprint) or this serial is already registered. A UID shared
 with another chip is reported in `uidMatches` but is not a refusal.
 
-precheck runs BEFORE any write to the chip (a RETIRED UID is never re-personalised,
-Locked 2026-10-02); enroll runs only AFTER the read-back verified. No key
+precheck and reserve-name run BEFORE any write to the chip (a RETIRED UID is never
+re-personalised, Locked 2026-10-02; a chip name is unique, Locked 2026-10-09). The
+name is held against the chip's fingerprint, so re-running a chip that failed
+mid-encode gets the same name back. enroll runs only AFTER the read-back verified. No key
 material ever crosses this API: the backend derives the chip keys itself.
 
 stdlib only (urllib) so the encoder keeps zero runtime dependencies.
@@ -22,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -29,11 +34,17 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 DEFAULT_API_BASE = "https://vw7zy9mkyg.us-east-2.awsapprunner.com"
+CHIP_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")  # mirrors the backend + nfc_tags CHECK
+_AUTO_NAME = re.compile(r"^chip_(\d+)$")
 _UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
 class RegistryError(RuntimeError):
     pass
+
+
+class NameTaken(RegistryError):
+    """The requested chip name belongs to another chip."""
 
 
 @dataclass(frozen=True)
@@ -46,6 +57,10 @@ class Precheck:
 class Registry(Protocol):
     def precheck(self, uid_hex: str, serial_hex: str | None = None, sig_sha256: str | None = None) -> Precheck: ...
 
+    def reserve_name(self, sig_sha256: str, name: str | None = None) -> str:
+        """Reserve `name` (or the next chip_NNN) for this chip. Raises NameTaken on a clash."""
+        ...
+
     def enroll(
         self,
         uid_hex: str,
@@ -53,6 +68,7 @@ class Registry(Protocol):
         serial_hex: str | None = None,
         sig_sha256: str | None = None,
         key_version: int | None = None,
+        chip_name: str | None = None,
     ) -> str:
         """Returns the new nfc_tags.id."""
         ...
@@ -102,6 +118,21 @@ class BackendRegistry:
         data = payload["data"]
         return Precheck(bool(data["exists"]), data.get("lifecycleStatus"), int(data.get("uidMatches") or 0))
 
+    def reserve_name(self, sig_sha256: str, name: str | None = None) -> str:
+        body: dict = {"sigSha256": sig_sha256}
+        if name is not None:
+            body["name"] = name
+        status, payload = self._call("POST", "/api/v1/nfc/enroll/reserve-name", body)
+        if status == 409:
+            raise NameTaken(f"chip name {name!r} is not available: {payload.get('error', 'in use')}")
+        reserved = (payload.get("data") or {}).get("name") if status == 200 and payload.get("success") else None
+        # Fail closed: anything but a definite, well-formed name stops the encode.
+        if not isinstance(reserved, str) or not CHIP_NAME.match(reserved):
+            raise RegistryError(f"name reservation failed (HTTP {status}): {payload.get('error', 'no detail')}")
+        if name is not None and reserved.lower() != name.lower():
+            raise RegistryError("name reservation failed: the backend returned a different name")
+        return reserved
+
     def enroll(
         self,
         uid_hex: str,
@@ -109,6 +140,7 @@ class BackendRegistry:
         serial_hex: str | None = None,
         sig_sha256: str | None = None,
         key_version: int | None = None,
+        chip_name: str | None = None,
     ) -> str:
         body: dict = {"tagUid": uid_hex}
         if item_id:
@@ -119,6 +151,8 @@ class BackendRegistry:
             body["sigSha256"] = sig_sha256
         if key_version is not None:
             body["sdmKeyVersion"] = key_version
+        if chip_name:
+            body["chipName"] = chip_name
         status, payload = self._call("POST", "/api/v1/nfc/enroll", body)
         if status != 201 or not payload.get("success"):
             raise RegistryError(f"enroll failed (HTTP {status}): {payload.get('error', 'no detail')}")
@@ -161,7 +195,10 @@ class MemoryRegistry:
 
     rows: dict[str, str] = field(default_factory=dict)  # v1 rows: uid -> lifecycle status
     chips: list[dict] = field(default_factory=list)  # v2 rows: {uid, serial, sig, status}
+    names: dict[str, dict] = field(default_factory=dict)  # lower(name) -> {name, sig, enrolled}
     fail_enroll: bool = False
+    fail_reserve: bool = False
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def precheck(self, uid_hex: str, serial_hex: str | None = None, sig_sha256: str | None = None) -> Precheck:
         uid = uid_hex.upper()
@@ -175,6 +212,31 @@ class MemoryRegistry:
         same_uid = sum(1 for c in self.chips if c["uid"] == uid) + (1 if uid in self.rows else 0)
         return Precheck(hit is not None, hit["status"] if hit else None, same_uid)
 
+    def reserve_name(self, sig_sha256: str, name: str | None = None) -> str:
+        """Same rules as the backend's reserve_chip_name()."""
+        if self.fail_reserve:
+            raise RegistryError("name reservation failed (simulated)")
+        if name is not None and not CHIP_NAME.match(name):
+            raise RegistryError("name reservation failed (HTTP 400): bad name")
+        with self._lock:  # the backend takes an advisory lock for the same reason
+            return self._reserve(sig_sha256, name)
+
+    def _reserve(self, sig_sha256: str, name: str | None) -> str:
+        held = next((k for k, r in self.names.items() if r["sig"] == sig_sha256), None)
+        if held is not None:
+            if self.names[held]["enrolled"]:
+                raise NameTaken(f"this chip is already enrolled as {self.names[held]['name']}")
+            if name is None or name.lower() == held:
+                return self.names[held]["name"]
+            del self.names[held]  # an un-enrolled chip re-run under a different name
+        if name is None:
+            used = [int(m.group(1)) for m in map(_AUTO_NAME.match, self.names) if m]
+            name = f"chip_{max(used, default=0) + 1:03d}"
+        elif name.lower() in self.names:
+            raise NameTaken(f"chip name {name!r} is not available: in use")
+        self.names[name.lower()] = {"name": name, "sig": sig_sha256, "enrolled": False}
+        return name
+
     def enroll(
         self,
         uid_hex: str,
@@ -182,9 +244,15 @@ class MemoryRegistry:
         serial_hex: str | None = None,
         sig_sha256: str | None = None,
         key_version: int | None = None,
+        chip_name: str | None = None,
     ) -> str:
         if self.fail_enroll:
             raise RegistryError("enroll failed (simulated)")
+        if chip_name is not None:
+            held = self.names.get(chip_name.lower())
+            if held is None or held["enrolled"] or held["sig"] != sig_sha256:
+                raise RegistryError("enroll failed (HTTP 409): chip name is not reserved for this chip")
+            held["enrolled"] = True
         uid = uid_hex.upper()
         if serial_hex is None:
             if uid in self.rows:

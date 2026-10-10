@@ -132,12 +132,23 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[hardware]'
 # Rehearse first: software chip, in-memory registry, nothing leaves the Mac
 .venv/bin/python -m tag_encoder.cli personalise --item rehearsal --emulator --dev-roots
 
-# One real chip (prompts to place it; MFA prompt once)
-op run --env-file encoder.env.op -- .venv/bin/python -m tag_encoder.cli personalise --item <id>
+# One real chip (prompts to place it; MFA prompt once). No name given: the backend
+# names it the next chip_NNN and prints the name on the ENCODED line.
+op run --env-file encoder.env.op -- .venv/bin/python -m tag_encoder.cli personalise
+
+# Or pick the name yourself (refused, with nothing written, if it is already in use)
+op run --env-file encoder.env.op -- .venv/bin/python -m tag_encoder.cli personalise --item <name>
 
 # A lot: CSV with an `item` column (optional `token`), one chip per row
 op run --env-file encoder.env.op -- .venv/bin/python -m tag_encoder.cli personalise --batch lot.csv
 ```
+
+**Chip names.** The name is the path of the chip's URL (`/verify/chip_005`) and is
+stored on the backend (`nfc_tags.chip_name`). It is reserved against the chip's
+fingerprint at the registry stage, before the first write, so a clash never
+leaves a half-written chip, and re-running a chip that failed mid-encode gets
+the same name back. Names are unique ignoring case and are never reused, even
+after a chip is retired. Allowed: 1 to 64 letters, digits, `_` or `-`.
 
 `--item` that is an `items.id` UUID is linked at enroll; anything else is an
 audit label only. Chips keyed under the staging KMS roots point at the staging

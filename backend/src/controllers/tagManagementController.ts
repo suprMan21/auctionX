@@ -52,6 +52,7 @@ import {
   enrollPrecheckQuerySchema,
   enrollSchema,
   enrollTagUidSchema,
+  reserveChipNameSchema,
   claimSchema,
   transferInitiateSchema,
   transferCompleteSchema,
@@ -314,7 +315,7 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
   if (!parsed.success) {
     throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
   }
-  const { tagUid, tenantId, itemId, chipSerial, sigSha256 } = parsed.data;
+  const { tagUid, tenantId, itemId, chipSerial, sigSha256, chipName } = parsed.data;
   const sdmKeyVersion = parsed.data.sdmKeyVersion ?? currentSdmKeyVersion();
   if ((sdmKeyVersion >= 2) !== (chipSerial !== undefined)) {
     throw new AppError('invalid_argument', 'Key version 2 and later chips must be enrolled with their chipSerial');
@@ -330,6 +331,7 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
       tag_uid: tagUid.toUpperCase(),
       chip_serial: chipSerial ?? null,
       originality_sig_sha256: sigSha256 ?? null,
+      chip_name: chipName ?? null,
       sdm_key_version: sdmKeyVersion,
       seller_id: userId,
       tenant_id: tenantId ?? 'auctionx',
@@ -347,7 +349,7 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
       ip: ctx.ip, route: ctx.route,
     });
     logger.error('nfc_enroll_failed', { error: error?.message });
-    throw new AppError('conflict', 'Tag could not be enrolled — this chip, serial or v1 UID may already exist');
+    throw new AppError('conflict', 'Tag could not be enrolled — this chip, serial or v1 UID may already exist, or its name is not reserved for it');
   }
 
   emitSecurityEvent({
@@ -357,6 +359,57 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
   });
 
   return ok(res, { tagId: data.id, lifecycleStatus: 'ENROLLED' }, 201);
+};
+
+// ── POST /api/v1/nfc/enroll/reserve-name ────────────────────────────────────
+
+/**
+ * POST /nfc/enroll/reserve-name — the encoder's name check, before any write
+ * to the chip (Locked 2026-10-09). No `name` = the next chip_NNN in sequence.
+ * The reservation is atomic in the database (reserve_chip_name) and held
+ * against the chip's fingerprint, so a re-run of the same chip gets the same
+ * name and two encoders can never be handed one name.
+ */
+export const reserveChipName = async (req: TagRequest, res: Response) => {
+  const ctx = securityContext(req, '/api/v1/nfc/enroll/reserve-name', 'staff');
+  const logger = withLogContext({ requestId: req.requestId, route: '/api/v1/nfc/enroll/reserve-name' });
+  const supabase = getServiceClient();
+
+  const userId = req.user?.id;
+  if (!userId) throw new AppError('unauthenticated', 'Authentication required');
+
+  if (!(await hasManageNfc(supabase, userId))) {
+    emitAuthzDenied('tag', null, 'role', ctx);
+    throw errorFor('forbidden');
+  }
+
+  const parsed = reserveChipNameSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  }
+  const { sigSha256, name } = parsed.data;
+
+  const { data, error } = await supabase.rpc('reserve_chip_name', {
+    p_sig_sha256: sigSha256,
+    p_name: name,
+    p_actor: userId,
+  });
+
+  if (error || typeof data !== 'string' || data.length === 0) {
+    const message = error?.message ?? 'no name returned';
+    if (message.includes('chip_name_taken')) {
+      throw new AppError('conflict', 'That chip name is already in use');
+    }
+    if (message.includes('chip_already_named')) {
+      throw new AppError('conflict', 'This chip is already enrolled under a name');
+    }
+    // Fail closed: the encoder must not write to a chip without a definite name.
+    logger.error('nfc_chip_name_reserve_failed', { error: message });
+    throw new AppError('unavailable', 'Chip name could not be reserved');
+  }
+
+  logger.info('nfc_chip_name_reserved', { chip_name: data, auto: name === undefined, actor_id: userId });
+  return ok(res, { name: data, auto: name === undefined });
 };
 
 // ── GET /api/v1/nfc/enroll/precheck/:tagUid ─────────────────────────────────
