@@ -13,7 +13,7 @@ import { confirmsChip, useEnrolledChips } from '../lib/chipConfirm';
 export type ReissueDecision = 'approve' | 'approve_waived' | 'reject';
 
 const chipOf = (r: AdminReissueRequest): string =>
-  r.tag ? chipLabel({ uidSuffix: r.tag.uidSuffix, serialSuffix: r.tag.serialSuffix }) : r.tagId.slice(0, 8);
+  r.tag ? chipLabel(r.tag) : r.tagId.slice(0, 8);
 
 const DECISION_COPY: Record<ReissueDecision, { title: string; description: string; button: string; tone: string }> = {
   approve: {

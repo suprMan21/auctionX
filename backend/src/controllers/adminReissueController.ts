@@ -54,7 +54,7 @@ const pathParam = (value: string | string[] | undefined): string =>
 const ADMIN_REISSUE_COLUMNS =
   'id, tag_id, requester_id, status, payment_status, tap_session_id, photo_keys, list_amount_usd_cents, charged_amount, charged_currency, review_reason, waive_reason, reviewed_by, reviewed_at, paid_at, fulfilled_at, fulfilled_by, new_tag_id, created_at';
 
-const QUEUE_TAG_COLUMNS = 'id, tag_uid, chip_serial, lifecycle_status, current_owner_id, sdm_key_version';
+const QUEUE_TAG_COLUMNS = 'id, tag_uid, chip_serial, chip_name, lifecycle_status, current_owner_id, sdm_key_version';
 
 type ReissueRow = {
   id: string;
@@ -82,6 +82,7 @@ type QueueTagRow = {
   id: string;
   tag_uid: string;
   chip_serial: string | null;
+  chip_name: string | null;
   lifecycle_status: string | null;
   current_owner_id: string | null;
   sdm_key_version: number | null;
@@ -264,6 +265,7 @@ export const listReissueRequests = async (req: AdminRequest, res: Response) => {
       tagId: r.tag_id,
       tag: tag
         ? {
+            chipName: tag.chip_name,
             uidSuffix: uidSuffix(tag.tag_uid),
             serialSuffix: tag.chip_serial ? tag.chip_serial.slice(-UID_SUFFIX_LENGTH).toUpperCase() : null,
             lifecycleStatus: tag.lifecycle_status,

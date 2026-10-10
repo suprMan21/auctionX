@@ -647,6 +647,8 @@ export interface AdminTagListParams {
 /** A chip as admins see it. Never the full UID, keys, salts or Ownership ID. */
 export interface AdminTag {
   id: string;
+  /** The name in the chip's URL (chip_NNN); null on chips enrolled before names were recorded. */
+  chipName?: string | null;
   uidSuffix: string;
   /** S-NFC-ID: last 6 of the chip serial (v2 chips); tells apart chips sharing a UID. */
   serialSuffix?: string | null;
@@ -666,9 +668,14 @@ export interface AdminTag {
   destructionStatus: 'PENDING' | 'DESTROYED' | null;
 }
 
-/** `…936980`, or `…936980 · sn …AE6CA9` for a v2 chip (chips can share a UID). */
-export const chipLabel = (tag: Pick<AdminTag, 'uidSuffix' | 'serialSuffix'>): string =>
-  tag.serialSuffix ? `…${tag.uidSuffix} · sn …${tag.serialSuffix}` : `…${tag.uidSuffix}`;
+/**
+ * `…936980`, or `…936980 · sn …AE6CA9` for a v2 chip (chips can share a UID),
+ * led by the chip's name when it has one: `chip_004 · …936980 · sn …8A0351`.
+ */
+export const chipLabel = (tag: Pick<AdminTag, 'chipName' | 'uidSuffix' | 'serialSuffix'>): string => {
+  const ids = tag.serialSuffix ? `…${tag.uidSuffix} · sn …${tag.serialSuffix}` : `…${tag.uidSuffix}`;
+  return tag.chipName ? `${tag.chipName} · ${ids}` : ids;
+};
 
 /**
  * What an admin types to confirm retiring a chip: the serial suffix of a v2 chip
@@ -749,6 +756,7 @@ export interface AdminReissueRequest {
   id: string;
   tagId: string;
   tag: {
+    chipName?: string | null;
     uidSuffix: string;
     serialSuffix: string | null;
     lifecycleStatus: AdminTagLifecycleStatus | null;

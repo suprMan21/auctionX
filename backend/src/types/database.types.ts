@@ -916,6 +916,13 @@ export type Database = {
             referencedRelation: "nfc_tags"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "nfc_chip_names_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
+          },
         ]
       }
       nfc_tags: {
@@ -2902,11 +2909,11 @@ export type Database = {
         Returns: boolean
       }
       reactivate_admin: { Args: { p_admin_id: string }; Returns: undefined }
-      revoke_admin_session: { Args: { p_admin_id: string }; Returns: undefined }
       reserve_chip_name: {
         Args: { p_actor?: string; p_name?: string; p_sig_sha256: string }
         Returns: string
       }
+      revoke_admin_session: { Args: { p_admin_id: string }; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       suspend_user: {

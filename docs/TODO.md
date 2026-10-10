@@ -117,9 +117,10 @@ token sale without admin tooling.
   chip coming loose (live tap + live-camera photos, private bucket), web-only $10, approve / waive / reject / fulfil,
   serial-suffix confirmation. Owner override dropped (Boss).
   - [ ] **Encoder auto-naming** (built 2026-10-10, branch `feature/s-encoder-auto-naming`): no `--item` → next
-        `chip_NNN`, reserved on the backend before any chip write. To go live: apply migration
-        `20261010000001_nfc_chip_names.sql`, run `supabase/tests/chip_names_live.sql`, regenerate types, push + deploy
-        the backend, then encode one chip with no `--item` (expect `chip_005`).
+        `chip_NNN`, reserved on the backend before any chip write; name shown in the admin console. Migration
+        `20261010000001` applied to staging, live check `supabase/tests/chip_names_live.sql` 15/15. **Left:** merge to
+        `dev`, Boss pushes, confirm the backend deploy, deploy the frontend, then encode one chip with no `--item`
+        (expect `chip_005`). The new encoder refuses every chip until the backend is deployed.
   - [ ] Boss (optional): remove inline policy `ReissueEvidenceStaging` from IAM user `auctionx-s3-access` (unused; the
         instance role has it).
   - [ ] Boss: decide on App Runner auto-deploy (pushes did not reliably deploy on 2026-10-09).

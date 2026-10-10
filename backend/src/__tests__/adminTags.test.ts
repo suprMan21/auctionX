@@ -220,6 +220,19 @@ describe('list', () => {
 
 // ── Detail ──────────────────────────────────────────────────────────────────
 
+describe('chip name', () => {
+  it('is returned for a named chip and null for one enrolled before names were recorded', async () => {
+    const { listTags } = await controllers();
+    (tables.nfc_tags.find((r) => r.id === NEW_TAG) as Row).chip_name = 'chip_005';
+
+    const out = await call(listTags, makeReq({}, {}, {}));
+    const tags = (out.body.data as { tags: Row[] }).tags;
+
+    expect(tags.find((t) => t.id === NEW_TAG)).toMatchObject({ chipName: 'chip_005' });
+    expect(tags.find((t) => t.id === OLD_TAG)?.chipName ?? null).toBeNull();
+  });
+});
+
 describe('detail', () => {
   it('returns timeline, custody, taps and Ownership ID status — and nothing secret (AC8)', async () => {
     const { getTag } = await controllers();

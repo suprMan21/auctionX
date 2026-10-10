@@ -89,6 +89,18 @@ describe('AdminTagsPage', () => {
     expect(screen.getByText('2 chips')).toBeInTheDocument();
   });
 
+  it('leads the chip label with its name when it has one', async () => {
+    api.listTags.mockResolvedValue({
+      success: true,
+      data: { tags: [tag({ chipName: 'chip_004', serialSuffix: '0351DE' }), tag({ id: NEW_ID, uidSuffix: 'ACC040' })], pagination: { page: 1, limit: 25, total: 2 } },
+    });
+
+    render(<MemoryRouter initialEntries={['/admin/tags']}><AdminTagsPage /></MemoryRouter>);
+
+    expect(await screen.findByRole('link', { name: 'chip_004 · …936980 · sn …0351DE' })).toHaveAttribute('href', `/admin/tags/${OLD_ID}`);
+    expect(screen.getByRole('link', { name: '…ACC040' })).toBeInTheDocument();
+  });
+
   it('filters by status through the API', async () => {
     api.listTags.mockResolvedValue({ success: true, data: { tags: [], pagination: { page: 1, limit: 25, total: 0 } } });
     const user = userEvent.setup();
