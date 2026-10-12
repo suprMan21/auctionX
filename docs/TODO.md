@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-10 (encoder auto-naming live on staging)
+**Last updated:** 2026-10-12 (public site split from staging, live)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -93,17 +93,19 @@ production, so it must land before any real token sale.
 
 ---
 
-## 🚀 Frontend deploy (staging AND authentic-materials.com)
+## 🚀 Frontend deploy (two separate sites since 2026-10-12)
 
-The public domain's CloudFront distribution reads the SAME bucket, so invalidate both (2026-10-09). Claude's shell
-cannot use the `auctionx` profile (op plugin needs a TTY), so Boss runs it, one step at a time:
-```bash
-cd frontend && npm run build
-grep -l "pk_test_" dist/assets/*.js            # must print a file
-aws s3 sync dist/ s3://auctionx-frontend-staging --profile auctionx --delete
-aws cloudfront create-invalidation --profile auctionx --distribution-id E3JOPXHI8DB4BE --paths '/*'
-aws cloudfront create-invalidation --profile auctionx --distribution-id E35K71RCQGYBAW --paths '/*'   # authentic-materials.com
-```
+| Site | Serves | Command |
+|---|---|---|
+| Staging (`d1bwev65w7rqzl.cloudfront.net`) | the whole app | `scripts/deploy-frontend.sh staging` |
+| Public (`authentic-materials.com`) | landing pages only | `scripts/deploy-frontend.sh public` |
+
+Claude's shell cannot use the `auctionx` profile (op plugin needs a TTY), so Boss runs them. Add `--dry-run` to build,
+run the checks and print the AWS commands without running them.
+
+Switched 2026-10-12: the public domain reads its own bucket `am-frontend-prod-904183418667`; a staging deploy no longer
+touches it. Setup record and rollback: `infra/s3/am-frontend-prod-904183418667/README.md`.
+
 Backend: after `git push origin dev`, run `scripts/verify-backend-deploy.sh` (pushes do not always deploy).
 Deploy order: backend (push `dev`, wait for App Runner **Running**) BEFORE frontend.
 

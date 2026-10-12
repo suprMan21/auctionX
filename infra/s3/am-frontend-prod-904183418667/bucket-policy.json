@@ -1,0 +1,25 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowPublicSiteCloudFrontOnly",
+      "Effect": "Allow",
+      "Principal": { "Service": "cloudfront.amazonaws.com" },
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::am-frontend-prod-904183418667/*",
+      "Condition": {
+        "StringEquals": {
+          "AWS:SourceArn": "arn:aws:cloudfront::904183418667:distribution/E35K71RCQGYBAW"
+        }
+      }
+    },
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::am-frontend-prod-904183418667", "arn:aws:s3:::am-frontend-prod-904183418667/*"],
+      "Condition": { "Bool": { "aws:SecureTransport": "false" } }
+    }
+  ]
+}
