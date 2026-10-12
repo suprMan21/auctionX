@@ -63,10 +63,11 @@ case "$TARGET" in
     invalidate "$PUBLIC_DIST_ID"
     if [ "$DRY_RUN" != "--dry-run" ]; then
       BUILT=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' dist-public/index.html)
-      echo "… waiting for $PUBLIC_URL to serve $BUILT"
-      for _ in $(seq 1 30); do
+      echo "✓ uploaded. Checking $PUBLIC_URL for $BUILT every 10s, up to 5 minutes (Ctrl-C is safe: the upload is done)"
+      for i in $(seq 1 30); do
         LIVE=$(curl -fsS -m 10 "$PUBLIC_URL/" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' || true)
         [ "$LIVE" = "$BUILT" ] && { echo "✓ public site live: $PUBLIC_URL"; exit 0; }
+        echo "  $i/30: still serving ${LIVE:-nothing}"
         sleep 10
       done
       echo "✗ $PUBLIC_URL still serves ${LIVE:-nothing} after 5 minutes. Is its origin $PUBLIC_BUCKET yet?"; exit 1
