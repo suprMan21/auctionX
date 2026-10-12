@@ -144,7 +144,7 @@
 
 ## 6. DNS & Hosting
 
-> **Current state (2026-10-10):** the public site is its own landing-only build (`npm run build:public`) with its own
+> **Current state (2026-10-12, live):** the public site is its own landing-only build (`npm run build:public`) with its own
 > bucket `am-frontend-prod-904183418667` behind `E35K71RCQGYBAW` (private, CloudFront OAC); staging keeps
 > `auctionx-frontend-staging` + `E3JOPXHI8DB4BE`. Setup and the one-time switch: `infra/s3/am-frontend-prod-904183418667/README.md`.
 > Deploys: `scripts/deploy-frontend.sh staging|public`.

@@ -73,6 +73,16 @@ step 4 puts the new build in place first, so there is no gap.
    `https://authentic-materials.com/admin` shows "Page not found" (not the sign-in page),
    and `https://d1bwev65w7rqzl.cloudfront.net/admin` still shows the staging sign-in.
 
+## Switched 2026-10-12: what went wrong on the way
+
+- The first attempt left the origin misconfigured (origin domain / origin access), so the bucket refused
+  CloudFront. The home page stayed up only because an old copy was cached. **Check that a real file comes
+  through (`/robots.txt` returns two plain-text lines) before running any invalidation.**
+- The origin screen always shows "You must allow access to CloudFront using this policy statement". It is a
+  reminder, not an error; `bucket-policy.json` already contains that statement.
+- The deploy script's last step waits up to 5 minutes for the domain to serve the new build. Before the origin
+  is switched that wait cannot pass.
+
 ## After the switch
 
 - Staging deploys no longer touch the public site, and the public site is deployed only by
