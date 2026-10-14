@@ -13,6 +13,7 @@ import yotiWebhookRoutes from './routes/yotiWebhook';
 import notificationRoutes from './routes/notifications';
 import adminRoutes from './routes/admin/index';
 import tokenFeeWebhookRoutes from './routes/tokenFeeWebhook';
+import tokenFeeSweepRoutes from './routes/tokenFeeSweep';
 import { ownershipRoutes } from './routes/tagManagement';
 
 // ── Parked marketplace routers (mounted only when FEATURE_MARKETPLACE=true) ──
@@ -46,9 +47,11 @@ type Mount = { readonly path: string; readonly router: Router; readonly raw?: bo
  */
 export const TOKEN_MOUNTS: readonly Mount[] = [
   { path: '/api/v1/webhooks/yoti', router: yotiWebhookRoutes, raw: true },
-  // S-NFC3: the only path that may complete a token transfer. Raw body for
+  // S-NFC3: the normal path that completes a token transfer. Raw body for
   // signature verification, and its OWN signing secret.
   { path: '/api/v1/webhooks/stripe-token-fees', router: tokenFeeWebhookRoutes, raw: true },
+  // S-ADMIN1 Ph3a: the 10-minute reconciliation tick (pg_cron, shared secret).
+  { path: '/api/v1/internal/token-fee-sweep', router: tokenFeeSweepRoutes },
   { path: '/api/v1/verification', router: yotiVerificationRoutes },
   { path: '/api/v1/nfc', router: nfcRoutes },
   { path: '/api/v1/ownership', router: ownershipRoutes },

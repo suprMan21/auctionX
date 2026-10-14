@@ -468,6 +468,42 @@ export const adminApi = {
       { method: 'POST', body: JSON.stringify(body) },
     );
   },
+
+  // ─── Stuck payments (S-ADMIN1 Ph3a) ─────────────────────────────────────────
+
+  /** GET /admin/stuck-payments?status= — token fees Stripe took that did not apply. */
+  listStuckPayments(params: { status?: AdminStuckPaymentFilter; page?: number; limit?: number } = {}): Promise<AdminStuckPaymentListResponse> {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) qs.set(key, String(value));
+    }
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    return adminFetch<AdminStuckPaymentListResponse>(`/stuck-payments${query}`);
+  },
+
+  /** Re-runs the apply for a paid fee. The server asks Stripe first. */
+  reapplyStuckPayment(incidentId: string, reason: string): Promise<AdminStuckPaymentReapplyResponse> {
+    return adminFetch<AdminStuckPaymentReapplyResponse>(
+      `/stuck-payments/${encodeURIComponent(incidentId)}/reapply`,
+      { method: 'POST', body: JSON.stringify({ reason }) },
+    );
+  },
+
+  /** Full refund. Admin and super_admin only. */
+  refundStuckPayment(
+    incidentId: string,
+    body: { reason: string; confirmSuffix: string },
+  ): Promise<AdminStuckPaymentRefundResponse> {
+    return adminFetch<AdminStuckPaymentRefundResponse>(
+      `/stuck-payments/${encodeURIComponent(incidentId)}/refund`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+  },
+
+  /** Runs the reconciliation check now instead of waiting for the 10-minute tick. */
+  sweepStuckPayments(): Promise<AdminStuckPaymentSweepResponse> {
+    return adminFetch<AdminStuckPaymentSweepResponse>('/stuck-payments/sweep', { method: 'POST', body: '{}' });
+  },
 };
 
 // ─── Yoti Verifications Response Types (S22) ────────────────────────────────
@@ -791,4 +827,66 @@ export interface AdminReissueListResponse {
 export interface AdminReissueReviewResponse {
   success: true;
   data: { reissueRequestId: string; status: string; paymentStatus: string | null };
+}
+
+// ─── Stuck payments (S-ADMIN1 Ph3a) ──────────────────────────────────────────
+
+export type AdminStuckPaymentFilter = 'OPEN' | 'RESOLVED' | 'REFUNDED' | 'ALL';
+
+export type AdminStuckPaymentReason =
+  | 'webhook_missed' | 'apply_failed' | 'no_recipient' | 'not_payable' | 'intent_mismatch' | 'row_missing';
+
+export interface AdminStuckPayment {
+  id: string;
+  kind: 'transfer_fee' | 'reissue_fee';
+  reason: AdminStuckPaymentReason;
+  status: 'OPEN' | 'RESOLVED' | 'REFUNDED';
+  resolution: 'webhook' | 'sweep' | 'reapply' | 'refund' | null;
+  transferId: string | null;
+  reissueRequestId: string | null;
+  paymentIntentId: string;
+  /** Minor units (cents). */
+  amount: number | null;
+  currency: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  seenCount: number;
+  lastError: string | null;
+  githubIssueNumber: number | null;
+  githubIssueUrl: string | null;
+  resolvedAt: string | null;
+  refundId: string | null;
+  /** What the payment points at, as it is now. Null when the row no longer exists. */
+  target: { tagId: string | null; chipName: string | null; status: string | null; paymentStatus: string | null } | null;
+}
+
+export interface AdminStuckPaymentListResponse {
+  success: true;
+  data: {
+    items: AdminStuckPayment[];
+    total: number;
+    page: number;
+    limit: number;
+    canRefund: boolean;
+    githubIssuesConfigured: boolean;
+    sweepConfigured: boolean;
+  };
+}
+
+export interface AdminStuckPaymentReapplyResponse {
+  success: true;
+  data: { incidentId: string; status: 'RESOLVED'; outcome: string };
+}
+
+export interface AdminStuckPaymentRefundResponse {
+  success: true;
+  data: { incidentId: string; status: 'REFUNDED'; refundId: string; transferCancelled: boolean };
+}
+
+export interface AdminStuckPaymentSweepResponse {
+  success: true;
+  data: {
+    scanned: number; checked: number; settled: number; applied: number; stuck: number;
+    skippedRecent: number; skippedRefunded: number; truncated: boolean;
+  };
 }

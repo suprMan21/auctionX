@@ -45,6 +45,11 @@ function getProfile(req: Request): RateLimitConfig {
   if (path.includes('/suspend') || path.includes('/ban') || path.includes('/unban') || path.includes('/reset')) {
     return PROFILES.destructive;
   }
+  // S-ADMIN1 Ph3a: refund and Re-apply move money or ownership; the sweep
+  // makes one Stripe list call per run.
+  if (path.startsWith('/stuck-payments/')) {
+    return PROFILES.destructive;
+  }
 
   return PROFILES.default;
 }

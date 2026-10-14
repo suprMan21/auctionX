@@ -45,6 +45,7 @@ import { AdminHealthPage } from '@/features/admin/pages/AdminHealthPage';
 import { AdminTagsPage } from '@/features/admin/pages/AdminTagsPage';
 import { AdminTagDetailPage } from '@/features/admin/pages/AdminTagDetailPage';
 import { AdminReissuePage } from '@/features/admin/pages/AdminReissuePage';
+import { AdminStuckPaymentsPage } from '@/features/admin/pages/AdminStuckPaymentsPage';
 import { NotificationsPage } from './features/notifications/pages/NotificationsPage';
 import { NotificationPreferencesPage } from './features/notifications/pages/NotificationPreferencesPage';
 import { SettingsPayoutsPage } from './pages/SettingsPayoutsPage';
@@ -413,6 +414,7 @@ function App() {
               <Route path="tags" element={<AdminTagsPage />} />
               <Route path="tags/:tagId" element={<AdminTagDetailPage />} />
               <Route path="reissue-requests" element={<AdminReissuePage />} />
+              <Route path="stuck-payments" element={<AdminStuckPaymentsPage />} />
               <Route path="audit-logs" element={<AdminAuditLogPage />} />
               <Route path="health" element={<AdminHealthPage />} />
             </Route>

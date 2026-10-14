@@ -46,6 +46,8 @@ const CATALOG: ReadonlyArray<SecurityEvent> = [
   { ...envelope, event: 'ownership.lookup', lookup_result: 'current' },
   { ...envelope, event: 'ownership.auth_attempt' },
   { ...envelope, event: 'kms.op', operation: 'Encrypt', purpose: 'ownership_salt', tag_id: TAG_ID },
+  { ...envelope, event: 'payment.reconcile', source: 'sweep', fee_kind: 'transfer_fee', transfer_id: TRANSFER_ID, reissue_request_id: null, outcome: 'applied' },
+  { ...envelope, event: 'admin.payment_action', action: 'reapply', incident_id: TRANSFER_ID },
 ];
 
 /** Every event name the union declares — the catalog must cover all of them. */
@@ -54,6 +56,7 @@ const ALL_EVENT_NAMES: ReadonlyArray<SecurityEventName> = [
   'transfer.state_change', 'payment.webhook', 'nfc.release', 'nfc.replace',
   'nfc.reissue_request', 'nfc.disclosure_change', 'authz.denied',
   'auth.2fa_gate', 'ownership.lookup', 'ownership.auth_attempt', 'kms.op',
+  'payment.reconcile', 'admin.payment_action',
 ];
 
 describe('emitSecurityEvent', () => {
@@ -169,6 +172,8 @@ describe('emitSecurityEvent', () => {
         'transfer_id', 'tag_id', 'old_tag_id', 'new_tag_id', 'from', 'to',
         'trigger', 'stripe_event_type', 'resource_type', 'resource_id', 'reason',
         'gate', 'outcome', 'lookup_result', 'operation', 'purpose',
+        // S-ADMIN1 Ph3a: two enums and a uuid.
+        'source', 'fee_kind', 'incident_id',
       ]);
 
       for (const line of emitted()) {

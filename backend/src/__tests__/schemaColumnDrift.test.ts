@@ -45,6 +45,11 @@ const TARGET_FILES = [
   // S-ADMIN1 Ph2: re-issue queue + email lookup.
   'controllers/adminReissueController.ts',
   'lib/notifications/reissueEmails.ts',
+  // S-ADMIN1 Ph3a: shared fee apply, sweep, incidents, stuck-payment queue.
+  'lib/payments/tokenFeeApply.ts',
+  'lib/payments/tokenFeeSweep.ts',
+  'lib/payments/paymentIncidents.ts',
+  'controllers/adminStuckPaymentsController.ts',
 ];
 
 /**
@@ -57,7 +62,11 @@ const TARGET_FILES = [
  * pending, and remove them at the next regen. Growing it to silence a failure
  * is the wrong move — the point of the test is that a wrong column name fails.
  */
-const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {};
+const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {
+  // S-ADMIN1 Ph3a: created by 20261011000001_s_admin1_stuck_payments.sql, not
+  // yet applied + regenerated. REMOVE at the regen that follows the apply.
+  payment_incidents: ['*'],
+};
 
 /** Parses `Row: { ... }` blocks out of database.types.ts, keyed by table name. */
 const parseKnownColumns = (): Map<string, Set<string>> => {
