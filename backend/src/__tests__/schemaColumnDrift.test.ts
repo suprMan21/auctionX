@@ -62,11 +62,7 @@ const TARGET_FILES = [
  * pending, and remove them at the next regen. Growing it to silence a failure
  * is the wrong move — the point of the test is that a wrong column name fails.
  */
-const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {
-  // S-ADMIN1 Ph3a: created by 20261011000001_s_admin1_stuck_payments.sql, not
-  // yet applied + regenerated. REMOVE at the regen that follows the apply.
-  payment_incidents: ['*'],
-};
+const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {};
 
 /** Parses `Row: { ... }` blocks out of database.types.ts, keyed by table name. */
 const parseKnownColumns = (): Map<string, Set<string>> => {
