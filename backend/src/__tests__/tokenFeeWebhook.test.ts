@@ -4,11 +4,14 @@ import request from 'supertest';
 import express from 'express';
 import { createMockSupabase, resetMockIds, type Tables, type Row } from './helpers/supabaseMock';
 import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEvents';
+import { feeDbFake } from './helpers/feeDbFake';
 
 /**
  * S-NFC3 — the token-fee webhook.
  *
- * This is the only path that may move a transfer to COMPLETED. The acceptance
+ * The normal path that moves a transfer to COMPLETED (S-ADMIN1 Ph3a added the
+ * sweep and the admin Re-apply, which share its apply; see stuckPayments.test).
+ * The apply is one database function, played here by feeDbFake. The acceptance
  * criteria exercised here:
  *   - "Transfer completes only after webhook success"
  *   - "No transfer reaches COMPLETED without a transfer.state_change whose
@@ -24,11 +27,16 @@ const BUYER = '22222222-2222-4222-8222-222222222222';
 
 let tables: Tables;
 let logSpy: SecurityEventSpy;
+let rpcFails = false;
 
 const constructEventAsync = vi.fn();
 
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => createMockSupabase(tables),
+  createClient: () => createMockSupabase(tables, {
+    rpc: (fn, args) => (rpcFails && fn.startsWith('apply_')
+      ? { data: null, error: { message: 'simulated function failure' } }
+      : feeDbFake(() => tables)(fn, args)),
+  }),
 }));
 
 vi.mock('../lib/stripe', () => ({
@@ -67,6 +75,7 @@ const post = async (app: express.Express, body: Row = {}, signed = true) => {
 
 beforeEach(() => {
   resetMockIds();
+  rpcFails = false;
   constructEventAsync.mockReset();
   logSpy = spyOnSecurityEvents();
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -103,6 +112,7 @@ afterEach(() => {
 
 const transfer = (): Row => tables.ownership_transfers[0];
 const tag = (): Row => tables.nfc_tags[0];
+const incidents = (): Row[] => tables.payment_incidents ?? [];
 
 describe('POST /api/v1/webhooks/stripe-token-fees', () => {
   it('leaves the transfer PENDING and asks Stripe to retry when the salt key is missing', async () => {
@@ -133,7 +143,7 @@ describe('POST /api/v1/webhooks/stripe-token-fees', () => {
     expect(tag().current_owner_id).toBe(BUYER);
   });
 
-  it('records the completion with trigger=webhook, and no other trigger ever does', async () => {
+  it('records the completion with trigger=webhook, and the webhook never uses another trigger', async () => {
     constructEventAsync.mockResolvedValue(succeededEvent());
     const app = await buildApp();
 
@@ -141,7 +151,7 @@ describe('POST /api/v1/webhooks/stripe-token-fees', () => {
 
     const completions = eventsNamed('transfer.state_change').filter((e) => e.to === 'COMPLETED');
     expect(completions).toHaveLength(1);
-    // S-SEC0 treats to=COMPLETED with trigger != webhook as Critical.
+    // S-SEC0: to=COMPLETED is legitimate only for webhook | sweep | reapply.
     expect(completions[0]).toMatchObject({ trigger: 'webhook', from: 'PENDING' });
     expect(eventsNamed('transfer.state_change').every(
       (e: Record<string, unknown>) => e.to !== 'COMPLETED' || e.trigger === 'webhook',
@@ -261,6 +271,12 @@ describe('POST /api/v1/webhooks/stripe-token-fees', () => {
     expect(res.status).toBe(500);
     expect(res.body.applied).toBe(false);
     expect(transfer().status).toBe('PENDING');
+    // ...and it is in the stuck-payment queue, not just in a log line.
+    expect(incidents()).toHaveLength(1);
+    expect(incidents()[0]).toMatchObject({
+      kind: 'transfer_fee', reason: 'no_recipient', status: 'OPEN',
+      transfer_id: TRANSFER_ID, stripe_payment_intent_id: 'pi_test_123',
+    });
   });
 
   it('applies on the retry once the recipient has been resolved', async () => {
@@ -276,6 +292,22 @@ describe('POST /api/v1/webhooks/stripe-token-fees', () => {
     expect(retry.body.applied).toBe(true);
     expect(transfer().status).toBe('COMPLETED');
     expect(tag().current_owner_id).toBe(BUYER);
+    // The incident the first delivery opened is closed by the apply itself.
+    expect(incidents()).toHaveLength(1);
+    expect(incidents()[0]).toMatchObject({ status: 'RESOLVED', resolution: 'webhook' });
+  });
+
+  it('keeps ONE incident however many times Stripe redelivers a stuck event', async () => {
+    tables.ownership_transfers[0].to_user_id = null;
+    constructEventAsync.mockResolvedValue(succeededEvent());
+    const app = await buildApp();
+
+    await post(app);
+    await post(app);
+    await post(app);
+
+    expect(incidents()).toHaveLength(1);
+    expect(incidents()[0].seen_count).toBe(3);
   });
 
   it('will not complete a CANCELLED transfer', async () => {
@@ -288,6 +320,92 @@ describe('POST /api/v1/webhooks/stripe-token-fees', () => {
     expect(res.body.applied).toBe(false);
     expect(transfer().status).toBe('CANCELLED');
     expect(tag().current_owner_id).toBe(OWNER);
+  });
+
+  it('queues a payment that landed on a cancelled transfer instead of swallowing it', async () => {
+    // Before Ph3a this was acknowledged as a lost race: the payer was charged,
+    // nothing moved, and nobody was told.
+    tables.ownership_transfers[0].status = 'CANCELLED';
+    constructEventAsync.mockResolvedValue(succeededEvent({ amount: 250, currency: 'usd' }));
+    const app = await buildApp();
+
+    const res = await post(app);
+
+    // A retry cannot un-cancel it, so Stripe is not asked to.
+    expect(res.status).toBe(200);
+    expect(incidents()).toHaveLength(1);
+    expect(incidents()[0]).toMatchObject({ reason: 'not_payable', status: 'OPEN', amount: 250, currency: 'usd' });
+    expect(eventsNamed('payment.webhook')[0]).toMatchObject({ result: 'conflict' });
+  });
+
+  it('queues a payment whose apply failed in the database, and asks Stripe to retry', async () => {
+    rpcFails = true;
+    constructEventAsync.mockResolvedValue(succeededEvent());
+    const app = await buildApp();
+
+    const res = await post(app);
+
+    expect(res.status).toBe(500);
+    expect(transfer().status).toBe('PENDING');
+    expect(tag().current_owner_id).toBe(OWNER);
+    expect(incidents()[0]).toMatchObject({ reason: 'apply_failed', last_error: 'apply_rpc_failed', status: 'OPEN' });
+  });
+
+  it('queues a payment that could not be applied because the salt key is missing', async () => {
+    delete process.env.OWNERSHIP_SALT_KEY;
+    constructEventAsync.mockResolvedValue(succeededEvent());
+    const app = await buildApp();
+
+    await post(app);
+
+    expect(incidents()[0]).toMatchObject({ reason: 'apply_failed', last_error: 'proof_mint_failed' });
+  });
+
+  it('queues a succeeded intent that names a transfer bound to another intent', async () => {
+    constructEventAsync.mockResolvedValue(succeededEvent({ id: 'pi_someone_else' }));
+    const app = await buildApp();
+
+    await post(app);
+
+    expect(incidents()[0]).toMatchObject({ reason: 'intent_mismatch', stripe_payment_intent_id: 'pi_someone_else' });
+  });
+
+  it('queues a succeeded token fee whose transfer does not exist', async () => {
+    const ghost = '99999999-9999-4999-8999-999999999999';
+    constructEventAsync.mockResolvedValue(succeededEvent({
+      metadata: { transfer_id: ghost, tag_id: TAG_ID, kind: 'token_transfer_fee' },
+    }));
+    const app = await buildApp();
+
+    const res = await post(app);
+
+    expect(res.status).toBe(200);
+    // The id names no row, so it is dropped rather than break a foreign key.
+    expect(incidents()[0]).toMatchObject({ reason: 'row_missing', transfer_id: null });
+  });
+
+  it('opens no incident for a normal apply, a replay, or another flow', async () => {
+    constructEventAsync.mockResolvedValue(succeededEvent());
+    const app = await buildApp();
+    await post(app);
+    await post(app);
+    constructEventAsync.mockResolvedValue({
+      type: 'payment_intent.succeeded', id: 'evt_3',
+      data: { object: { id: 'pi_other', metadata: { kind: 'marketplace_settlement' } } },
+    });
+    await post(app);
+
+    expect(incidents()).toHaveLength(0);
+  });
+
+  it('keeps a suspended token suspended when its transfer is paid', async () => {
+    tables.nfc_tags[0].lifecycle_status = 'SUSPENDED';
+    constructEventAsync.mockResolvedValue(succeededEvent());
+    const app = await buildApp();
+
+    await post(app);
+
+    expect(tag()).toMatchObject({ current_owner_id: BUYER, lifecycle_status: 'SUSPENDED' });
   });
 
   it('emits no forbidden value in any webhook log line', async () => {

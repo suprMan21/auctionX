@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import request from 'supertest';
 import express from 'express';
 import { createMockSupabase, resetMockIds, type MockHooks, type Tables, type Row } from './helpers/supabaseMock';
+import { feeDbFake } from './helpers/feeDbFake';
 import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEvents';
 import { hashTapSessionToken } from '../services/nfc/tapSession';
 
@@ -495,6 +496,12 @@ const postWebhook = async () => {
 const reissueMeta = { reissue_request_id: REQ_ID, tag_id: TAG_ID, kind: 'token_reissue_fee' };
 
 describe('webhook: re-issue fee', () => {
+  // S-ADMIN1 Ph3a: the apply is one database function (apply_reissue_fee),
+  // played here by feeDbFake so the tests still assert on what changed.
+  beforeEach(() => {
+    hooks.rpc = feeDbFake(() => tables, rpcCalls);
+  });
+
   it('marks the request PAID, and nothing else changes', async () => {
     tables.reissue_requests.push(reissueRow({ stripe_payment_intent_id: 'pi_reissue_1' }));
     constructEventAsync.mockResolvedValue(succeeded(reissueMeta));
@@ -533,6 +540,7 @@ describe('webhook: re-issue fee', () => {
     expect(res.status).toBe(200);
     expect(reissue().payment_status).toBe('AWAITING_PAYMENT');
     expect(events('payment.webhook').at(-1)).toMatchObject({ result: 'forbidden' });
+    expect(tables.payment_incidents[0]).toMatchObject({ kind: 'reissue_fee', reason: 'intent_mismatch', status: 'OPEN' });
   });
 
   it('does not revive a cancelled request that was somehow paid', async () => {
@@ -543,17 +551,39 @@ describe('webhook: re-issue fee', () => {
 
     expect(res.status).toBe(200);
     expect(reissue()).toMatchObject({ status: 'CANCELLED', payment_status: 'AWAITING_PAYMENT' });
+    // Paid for something we will not do: it goes to the stuck-payment queue,
+    // where an admin can refund it (Boss, 2026-10-11).
+    expect(tables.payment_incidents).toHaveLength(1);
+    expect(tables.payment_incidents[0]).toMatchObject({
+      kind: 'reissue_fee', reason: 'not_payable', status: 'OPEN',
+      reissue_request_id: REQ_ID, stripe_payment_intent_id: 'pi_reissue_1',
+    });
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it('asks Stripe to retry when the database read fails', async () => {
+  it('asks Stripe to retry when the database function fails', async () => {
     tables.reissue_requests.push(reissueRow({ stripe_payment_intent_id: 'pi_reissue_1' }));
-    hooks.failRead = (table) => table === 'reissue_requests';
+    const fake = feeDbFake(() => tables, rpcCalls);
+    hooks.rpc = (fn, args) => (fn === 'apply_reissue_fee'
+      ? { data: null, error: { message: 'simulated function failure' } }
+      : fake(fn, args));
     constructEventAsync.mockResolvedValue(succeeded(reissueMeta));
 
     const res = await postWebhook();
 
     expect(res.status).toBe(500);
     expect(reissue().payment_status).toBe('AWAITING_PAYMENT');
+    expect(tables.payment_incidents[0]).toMatchObject({ reason: 'apply_failed', status: 'OPEN' });
+  });
+
+  it('opens no incident for a normal payment or its replay', async () => {
+    tables.reissue_requests.push(reissueRow({ stripe_payment_intent_id: 'pi_reissue_1' }));
+    constructEventAsync.mockResolvedValue(succeeded(reissueMeta));
+
+    await postWebhook();
+    await postWebhook();
+
+    expect(tables.payment_incidents ?? []).toHaveLength(0);
   });
 
   it('never completes a transfer from a re-issue intent', async () => {

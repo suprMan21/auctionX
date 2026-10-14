@@ -45,6 +45,11 @@ const TARGET_FILES = [
   // S-ADMIN1 Ph2: re-issue queue + email lookup.
   'controllers/adminReissueController.ts',
   'lib/notifications/reissueEmails.ts',
+  // S-ADMIN1 Ph3a: shared fee apply, sweep, incidents, stuck-payment queue.
+  'lib/payments/tokenFeeApply.ts',
+  'lib/payments/tokenFeeSweep.ts',
+  'lib/payments/paymentIncidents.ts',
+  'controllers/adminStuckPaymentsController.ts',
 ];
 
 /**

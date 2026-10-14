@@ -70,7 +70,7 @@ Live on staging: `chip_001` tapped → genuine/unclaimed → claimed by test@ �
 2026-10-05 (`docs/S_NFC3_FE_RECIPIENT_EMAIL_VERIFICATION.md`). → **S-ADMIN1 Ph1 ✅ live 2026-10-05** → **chip identity
 fix: S-NFC-ID ✅ live 2026-10-07** (KDF v2 per-chip serial + K1/K4; duplicate-UID finding was a suffix misread —
 `docs/S_NFC_ID_VERIFICATION.md`) → **S-ADMIN1 physical reset test ✅ 2026-10-09** (chip_002 → chip_003) → **S-ADMIN1 Ph2 ✅ 2026-10-09** (re-issue chip_003 → chip_004, $10) → S-ADMIN1
-Ph3 (stuck-payment queue + GitHub Issues, admin pricing + vouchers) → S-ADMIN2 (users/roles) →
+Ph3a (stuck-payment queue + GitHub Issues: built 2026-10-11, deploy pending) → Ph3b (admin pricing + vouchers) → S-ADMIN2 (users/roles) →
 S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat $2.50) →
 S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token sale) → S-SEC2 (external pentest).
 
@@ -123,9 +123,24 @@ token sale without admin tooling.
   - [ ] Boss: decide on App Runner auto-deploy (pushes did not reliably deploy on 2026-10-09).
   - [ ] Pre-launch: media bucket `auctionx-media-prod-cl` is publicly readable by path (`PublicReadGetObject`); fine for
         listing images, review before launch (LAUNCH_CHECKLIST already flags its policy).
-- **S-ADMIN1 Ph3** (Boss 2026-10-05: S-ADMIN1, not S-ADMIN2): stuck-payment queue + Re-apply + ~10-min sweep + auto
-  GitHub Issues; admin-set prices (effective-dated) + free-transfer vouchers. Ph2 already logs
-  `reissue_fee_paid_but_not_payable` for a payment on a cancelled request: feed it into the stuck-payment queue.
+- **S-ADMIN1 Ph3a: stuck payments 🟡 built 2026-10-11, not live** (branch `feature/s-admin1-ph3`, worktree
+  `.claude/worktrees/s-admin1-ph3`; `docs/S_ADMIN1_PH3A_VERIFICATION.md`). Queue at `/admin/stuck-payments`, Re-apply
+  (support+), refund (admin+), 10-minute sweep, one GitHub Issue per incident; covers transfer and re-issue fees. The
+  transfer apply is now one database transaction shared by webhook, sweep and Re-apply. Live DB checks 26/26 in a
+  rolled-back dry run.
+  - [ ] **Boss: apply migration `20261011000001`** from the worktree (`supabase db push --linked`), then run
+        `supabase db query --linked -f supabase/tests/s_admin1_ph3a_live.sql` (expect all "ok").
+  - [ ] **Boss: sweep secret** → App Runner `TOKEN_FEE_SWEEP_SECRET` + Supabase Vault `token_fee_sweep_secret` and
+        `backend_api_url` (commands in the verification doc).
+  - [ ] **Boss: GitHub token** (fine-grained, `suprMan21/auctionX`, Issues read/write) → 1Password → App Runner
+        `GITHUB_ISSUES_TOKEN`.
+  - [ ] Claude, after the migration: regenerate both `database.types.ts`, drop `payment_incidents` from
+        `PENDING_MIGRATION_COLUMNS`, merge to `dev`. Boss pushes, verifies the backend deploy, deploys the frontend.
+  - [ ] Live test (sandbox card, no chip): missed webhook → sweep applies; paid then cancelled → refund; cron tick.
+- **S-ADMIN1 Ph3b: admin pricing + vouchers** (next session). Admin-set prices (effective-dated, with history)
+  replacing `TRANSFER_FEE_CENTS` / `REISSUE_FEE_CENTS`; the frontend shows the server price (the initiate dialog
+  hard-codes $2.50). **Vouchers are granted to an account** (Boss 2026-10-11): N free transfers for a user by email,
+  reason + optional expiry, auto-applied to the next fee they would pay. No redeemable codes.
 - **S-ADMIN2: users, roles and permissions.** User search and detail, suspend/reactivate, roles + `manage_users`,
   audit viewer, admin MFA (needs S-2FA). Owners stay anonymous except to support, with a logged reason. Owner
   override, if ever wanted, belongs here with verified identity.

@@ -125,11 +125,40 @@ const transferStateChangeSchema = envelopeSchema.extend({
   from: z.enum(['PENDING', 'COMPLETED', 'CANCELLED']).nullable(),
   to: z.enum(['PENDING', 'COMPLETED', 'CANCELLED']),
   /**
-   * `to=COMPLETED` with `trigger !== 'webhook'` must be impossible. S-SEC0
-   * treats any such line as Critical: it means a transfer completed without a
-   * verified `payment_intent.succeeded`.
+   * `to=COMPLETED` is only ever legitimate with `trigger` in
+   * `webhook | sweep | reapply`: a signed `payment_intent.succeeded`, or (S-ADMIN1
+   * Ph3a) a PaymentIntent the server fetched from Stripe and found succeeded.
+   * A `sweep` or `reapply` line is always paired with a `payment.reconcile`
+   * event carrying the same request_id. S-SEC0 treats `to=COMPLETED` with any
+   * other trigger as Critical: a transfer completed without a verified payment.
    */
-  trigger: z.enum(['webhook', 'client', 'admin', 'system']),
+  trigger: z.enum(['webhook', 'sweep', 'reapply', 'client', 'admin', 'system']),
+}).strict();
+
+/**
+ * S-ADMIN1 Ph3a: the sweep or an admin Re-apply tried to apply a token fee
+ * that Stripe reports as succeeded. IDs only.
+ */
+const paymentReconcileSchema = envelopeSchema.extend({
+  event: z.literal('payment.reconcile'),
+  source: z.enum(['sweep', 'reapply']),
+  fee_kind: z.enum(['transfer_fee', 'reissue_fee']),
+  transfer_id: uuid.nullable(),
+  reissue_request_id: uuid.nullable(),
+  outcome: z.enum([
+    'applied', 'already_completed', 'already_paid', 'not_found',
+    'intent_mismatch', 'not_payable', 'no_recipient', 'failed',
+  ]),
+}).strict();
+
+/**
+ * S-ADMIN1 Ph3a: an admin action on the stuck-payment queue. The typed reason
+ * lives only in the audit row.
+ */
+const adminPaymentActionSchema = envelopeSchema.extend({
+  event: z.literal('admin.payment_action'),
+  action: z.enum(['reapply', 'refund', 'sweep']),
+  incident_id: uuid.nullable(),
 }).strict();
 
 const paymentWebhookSchema = envelopeSchema.extend({
@@ -247,6 +276,8 @@ export const securityEventSchema = z.discriminatedUnion('event', [
   transferSchema,
   transferStateChangeSchema,
   paymentWebhookSchema,
+  paymentReconcileSchema,
+  adminPaymentActionSchema,
   releaseSchema,
   replaceSchema,
   reissueRequestSchema,

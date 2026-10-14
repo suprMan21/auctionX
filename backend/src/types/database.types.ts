@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   public: {
     Tables: {
@@ -1564,6 +1564,106 @@ export type Database = {
           },
         ]
       }
+      payment_incidents: {
+        Row: {
+          amount: number | null
+          created_at: string
+          currency: string | null
+          first_seen_at: string
+          github_claimed_at: string | null
+          github_issue_number: number | null
+          github_issue_url: string | null
+          github_last_comment_at: string | null
+          id: string
+          kind: string
+          last_error: string | null
+          last_seen_at: string
+          reason: string
+          reissue_request_id: string | null
+          resolution: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          resolved_reason: string | null
+          seen_count: number
+          status: string
+          stripe_payment_intent_id: string
+          stripe_refund_id: string | null
+          transfer_id: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          currency?: string | null
+          first_seen_at?: string
+          github_claimed_at?: string | null
+          github_issue_number?: number | null
+          github_issue_url?: string | null
+          github_last_comment_at?: string | null
+          id?: string
+          kind: string
+          last_error?: string | null
+          last_seen_at?: string
+          reason: string
+          reissue_request_id?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          resolved_reason?: string | null
+          seen_count?: number
+          status?: string
+          stripe_payment_intent_id: string
+          stripe_refund_id?: string | null
+          transfer_id?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          currency?: string | null
+          first_seen_at?: string
+          github_claimed_at?: string | null
+          github_issue_number?: number | null
+          github_issue_url?: string | null
+          github_last_comment_at?: string | null
+          id?: string
+          kind?: string
+          last_error?: string | null
+          last_seen_at?: string
+          reason?: string
+          reissue_request_id?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          resolved_reason?: string | null
+          seen_count?: number
+          status?: string
+          stripe_payment_intent_id?: string
+          stripe_refund_id?: string | null
+          transfer_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_incidents_reissue_request_id_fkey"
+            columns: ["reissue_request_id"]
+            isOneToOne: false
+            referencedRelation: "reissue_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_incidents_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_incidents_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "ownership_transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_penalties: {
         Row: {
           applied_at: string
@@ -2826,6 +2926,26 @@ export type Database = {
         Returns: Json
       }
       admin_nfc_actor_email: { Args: { p_admin: string }; Returns: string }
+      admin_reapply_payment: {
+        Args: {
+          p_admin: string
+          p_incident: string
+          p_ownership_id: string
+          p_reason: string
+          p_salt_enc: string
+          p_tag_ref: string
+        }
+        Returns: Json
+      }
+      admin_refund_payment_incident: {
+        Args: {
+          p_admin: string
+          p_incident: string
+          p_reason: string
+          p_refund_id: string
+        }
+        Returns: Json
+      }
       admin_reset_token: {
         Args: {
           p_admin: string
@@ -2861,6 +2981,21 @@ export type Database = {
       apply_payment_penalty: {
         Args: { p_offer_id: string; p_settlement_id: string; p_user_id: string }
         Returns: number
+      }
+      apply_reissue_fee: {
+        Args: { p_intent: string; p_request: string; p_source: string }
+        Returns: Json
+      }
+      apply_transfer_fee: {
+        Args: {
+          p_intent: string
+          p_ownership_id: string
+          p_salt_enc: string
+          p_source: string
+          p_tag_ref: string
+          p_transfer: string
+        }
+        Returns: Json
       }
       ban_user: {
         Args: { p_admin_id: string; p_reason: string; p_user_id: string }
@@ -2908,7 +3043,25 @@ export type Database = {
         Args: { auction_uuid: string; user_uuid: string }
         Returns: boolean
       }
+      payment_admin_actor_email: {
+        Args: { p_admin: string; p_need_admin: boolean }
+        Returns: string
+      }
       reactivate_admin: { Args: { p_admin_id: string }; Returns: undefined }
+      record_payment_incident: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_error: string
+          p_intent: string
+          p_kind: string
+          p_reason: string
+          p_reissue: string
+          p_resolved_as?: string
+          p_transfer: string
+        }
+        Returns: Json
+      }
       reserve_chip_name: {
         Args: { p_actor?: string; p_name?: string; p_sig_sha256: string }
         Returns: string
