@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-12 (public site split from staging, live)
+**Last updated:** 2026-10-14 (public site split, real AM mark + icons live on both sites)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -37,11 +37,6 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [ ] **Confirm CAD presentment on the sandbox account.** Shipped USD-only behind
       `FEATURE_CAD_PRESENTMENT=false`; if CAD is available set it plus `USD_CAD_RATE`.
 
-### Claude read-only AWS (2026-10-05)
-- [ ] Console steps in `infra/iam/claude-readonly-staging/README.md` (policy, user, key in 1Password as
-      `AWS - Claude ReadOnly Staging`, role), then restart via `amCode` and have Claude run the 3-step test.
-      Local wiring (`~/.aws` profiles + helper, session script) is done.
-
 ### S-ISO1 carry-over
 
 - [ ] **Stripe dashboard (S-ISO1 §8)** — disable the Stripe **Connect** webhook endpoint; confirm no
@@ -65,8 +60,6 @@ Details: `docs/S_NFC2_PH2_VERIFICATION.md`. Runbook: `tag-encoder/README.md` →
 
 Live on staging: `chip_001` tapped → genuine/unclaimed → claimed by test@ → one current Ownership ID
 (`0xcbfa9f6e…`), public lookup resolves. Details: `docs/S_NFC3_FE_VERIFICATION.md`.
-- [ ] **Boss: redeploy the frontend.** The live build predates `6732e86`: a bare 404 still reads as
-      "not a registered token". Command under §Frontend deploy below.
 - [ ] Follow-ups: mobile drawer still shows
       "Search listings" + empty dividers while the marketplace is parked; one unexplained backend test failure
       (1 in ~45 runs, name not captured; watch for it).
@@ -104,7 +97,9 @@ Claude's shell cannot use the `auctionx` profile (op plugin needs a TTY), so Bos
 run the checks and print the AWS commands without running them.
 
 Switched 2026-10-12: the public domain reads its own bucket `am-frontend-prod-904183418667`; a staging deploy no longer
-touches it. Setup record and rollback: `infra/s3/am-frontend-prod-904183418667/README.md`.
+touches it. Setup record and rollback: `infra/s3/am-frontend-prod-904183418667/README.md`; checks in
+`docs/SESSION_SITE1_VERIFICATION.md`. Logo/icons: the header mark and favicon use the real AM path; regenerate the PNG
+icons with `cd frontend && node scripts/make-icons.mjs` if the mark changes.
 
 Backend: after `git push origin dev`, run `scripts/verify-backend-deploy.sh` (pushes do not always deploy).
 Deploy order: backend (push `dev`, wait for App Runner **Running**) BEFORE frontend.
