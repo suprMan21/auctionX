@@ -130,8 +130,14 @@ export const AdminTagDetailPage = () => {
 
       <Section title="Chip">
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Field label="Owner account (internal)">{tag.ownerAccountId ?? '—'}</Field>
-          <Field label="Creator account">{tag.creatorAccountId ?? '—'}</Field>
+          <Field label="Owner">
+            {tag.ownerEmail ?? '—'}
+            {tag.ownerAccountId && <span className="block text-xs text-gray-400 font-mono">{tag.ownerAccountId}</span>}
+          </Field>
+          <Field label="Creator">
+            {tag.creatorEmail ?? '—'}
+            {tag.creatorAccountId && <span className="block text-xs text-gray-400 font-mono">{tag.creatorAccountId}</span>}
+          </Field>
           <Field label="Item">{tag.itemId ?? '—'}</Field>
           <Field label="Key version">{tag.sdmKeyVersion ?? '—'}</Field>
           <Field label="Tap counter">{tag.sunCounter}</Field>

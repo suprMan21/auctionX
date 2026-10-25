@@ -6,7 +6,7 @@ import type { MyToken, OwnerReissue } from '../api/schemas';
 import { forgetTapSession, isSessionLive, loadTap } from '../lib/tapCache';
 import { isOpenReissue, REISSUE_STAGE_COPY, reissueStage } from '../lib/reissue';
 import { ChipPhotoCapture, type CapturedPhoto } from '../components/ChipPhotoCapture';
-import { tokenDisplayName } from './MyTokensPage';
+import { tokenDisplayName } from '../lib/tokenName';
 
 type Load =
   | { kind: 'loading' }

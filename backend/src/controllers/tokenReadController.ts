@@ -207,7 +207,12 @@ type OwnedTagRow = {
   activated_at: string | null;
   disclosure: Record<string, boolean> | null;
   linked_item_id: string | null;
+  chip_name: string | null;
+  chip_serial: string | null;
 };
+
+/** The owner-facing chip reference when a token has no title: the end of its serial (as printed in admin). */
+const SERIAL_SUFFIX_LENGTH = 6;
 
 /** Every token the caller currently owns, newest claim first. */
 export const listMyTokens = async (req: ReadRequest, res: Response) => {
@@ -216,7 +221,7 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
 
   const { data: tagRows, error } = await supabase
     .from('nfc_tags')
-    .select('id, lifecycle_status, activated_at, disclosure, linked_item_id')
+    .select('id, lifecycle_status, activated_at, disclosure, linked_item_id, chip_name, chip_serial')
     .eq('current_owner_id', user.id);
   if (error) throw new AppError('internal', 'Could not load your tokens');
 
@@ -260,6 +265,9 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
         lifecycleStatus: t.lifecycle_status,
         claimedAt: t.activated_at,
         title: t.linked_item_id ? (titleByItem.get(t.linked_item_id) ?? null) : null,
+        // Fallback names when there is no title (S-ADMIN1 follow-up, Boss 2026-10-19).
+        chipName: t.chip_name,
+        serialSuffix: t.chip_serial ? t.chip_serial.slice(-SERIAL_SUFFIX_LENGTH).toUpperCase() : null,
         disclosure: t.disclosure ?? {},
         ownershipId: proofByTag.get(t.id) ?? null,
         provenance: provenance.get(t.id) ?? null,

@@ -9,8 +9,9 @@
  *      admin_reset_token). The function writes the audit row in the same
  *      transaction, so an action and its audit record cannot diverge.
  *   2. Every action needs a typed reason (Zod here, and again in the function).
- *   3. Admin views never return chip keys, salts, Ownership IDs or Receipts, and
- *      show the owner only as an internal account id (AC8).
+ *   3. Admin views never return chip keys, salts, Ownership IDs or Receipts.
+ *      Owner and creator are shown by account email (Boss 2026-10-19, replacing
+ *      the account-id-only rule AC8); emails never go into logs.
  *   4. Every action emits an `admin.tag_action` security event.
  */
 
@@ -30,6 +31,7 @@ import {
   uidSuffix,
   confirmationSuffix,
   UID_SUFFIX_LENGTH,
+  escapeLike,
 } from '../services/nfc/adminTagSchemas';
 
 type AdminRequest = Request & { requestId?: string };
@@ -76,7 +78,9 @@ type AdminTagRow = {
  * The admin-facing shape. The UID is reduced to its suffix; so is the serial
  * (S-NFC-ID), which is what tells apart two chips that share a UID.
  */
-const toAdminTag = (row: AdminTagRow) => ({
+type EmailMap = Map<string, string>;
+
+const toAdminTag = (row: AdminTagRow, emails: EmailMap = new Map()) => ({
   id: row.id,
   /** The name in the chip's URL (chip_NNN). Null on rows enrolled before names were recorded. */
   chipName: row.chip_name,
@@ -86,7 +90,9 @@ const toAdminTag = (row: AdminTagRow) => ({
   serialSuffix: row.chip_serial ? row.chip_serial.slice(-UID_SUFFIX_LENGTH).toUpperCase() : null,
   lifecycleStatus: row.lifecycle_status,
   ownerAccountId: row.current_owner_id,
+  ownerEmail: row.current_owner_id ? (emails.get(row.current_owner_id) ?? null) : null,
   creatorAccountId: row.seller_id,
+  creatorEmail: row.seller_id ? (emails.get(row.seller_id) ?? null) : null,
   itemId: row.linked_item_id,
   sdmKeyVersion: row.sdm_key_version,
   sunCounter: row.sun_counter,
@@ -99,6 +105,74 @@ const toAdminTag = (row: AdminTagRow) => ({
   replacedByTagId: row.replaced_by_tag_id,
   destructionStatus: row.destruction_status,
 });
+
+/**
+ * Account emails for the owners and creators on screen. One query; never logged.
+ */
+const loadEmails = async (supabase: SupabaseClient, rows: AdminTagRow[]): Promise<EmailMap> => {
+  const ids = [...new Set(rows.flatMap((r) => [r.current_owner_id, r.seller_id]).filter((id): id is string => !!id))];
+  if (ids.length === 0) return new Map();
+  const { data, error } = await supabase.from('users').select('id, email').in('id', ids);
+  if (error) throw new AppError('unavailable', 'Account emails could not be loaded');
+  return new Map(((data ?? []) as { id: string; email: string }[]).map((u) => [u.id, u.email]));
+};
+
+/** Most accounts an email search may match before the admin is asked to narrow it. */
+export const EMAIL_MATCH_LIMIT = 50;
+
+/**
+ * Writes the audit row for a search BEFORE it runs: an email search that cannot
+ * be recorded does not happen. The term lives only in this append-only row.
+ */
+const auditSearch = async (supabase: SupabaseClient, req: AdminRequest, term: string): Promise<void> => {
+  const admin = req.admin;
+  if (!admin) throw new AppError('unauthenticated', 'Admin authentication required');
+  const { error } = await supabase.from('audit_logs').insert({
+    admin_id: admin.admin_id,
+    admin_email: admin.email,
+    action: 'tag_search',
+    entity_type: 'admin_search',
+    // No single subject: keyed on the admin, so "who searched what" is one lookup.
+    entity_id: admin.admin_id,
+    changes: { query: term, scope: 'nfc_tags' },
+    reason: null,
+    ip_address: req.ip ?? null,
+    user_agent: (req.headers?.['user-agent'] as string | undefined) ?? null,
+    brand: admin.brand === 'unmentionables' ? 'unmentionables' : 'auctionx',
+  });
+  if (error) throw new AppError('unavailable', 'Search could not be recorded, so it was not run');
+};
+
+/**
+ * Turns the search term into PostgREST `or` terms over nfc_tags. Returns null
+ * when nothing can match (no account email matched and the term cannot be a
+ * chip name, serial or UID suffix).
+ */
+const searchTerms = async (
+  supabase: SupabaseClient,
+  term: string,
+): Promise<{ orTerms: string[] | null; emailMatchesTruncated: boolean }> => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id')
+    .ilike('email', `%${escapeLike(term)}%`)
+    .limit(EMAIL_MATCH_LIMIT + 1);
+  if (error) throw new AppError('unavailable', 'Search could not be run');
+  const ids = ((data ?? []) as { id: string }[]).map((u) => u.id);
+  const emailMatchesTruncated = ids.length > EMAIL_MATCH_LIMIT;
+
+  const orTerms: string[] = [];
+  if (ids.length > 0) orTerms.push(`current_owner_id.in.(${ids.slice(0, EMAIL_MATCH_LIMIT).join(',')})`);
+  // Chip names are chip_NNN or a manual name; only this charset goes into the
+  // `or` string (searchTermSchema already excludes PostgREST syntax).
+  if (/^[A-Za-z0-9_-]+$/.test(term)) orTerms.push(`chip_name.ilike.%${escapeLike(term)}%`);
+  // Serial and UID are stored uppercase hex; match the end, as admins read them.
+  if (/^[0-9a-fA-F]{2,14}$/.test(term)) {
+    const hex = term.toUpperCase();
+    orTerms.push(`chip_serial.ilike.%${hex}`, `tag_uid.ilike.%${hex}`);
+  }
+  return { orTerms: orTerms.length > 0 ? orTerms : null, emailMatchesTruncated };
+};
 
 /** Security context with the admin as actor (verifyAdminAuth sets req.admin, not req.user). */
 const adminContext = (req: AdminRequest, route: string): SecurityLogContext => ({
@@ -186,6 +260,17 @@ export const listTags = async (req: AdminRequest, res: Response) => {
   const supabase = getServiceClient();
   let query = supabase.from('nfc_tags').select(ADMIN_TAG_COLUMNS, { count: 'exact' });
 
+  let emailMatchesTruncated = false;
+  if (q.q) {
+    await auditSearch(supabase, req, q.q);
+    const search = await searchTerms(supabase, q.q);
+    emailMatchesTruncated = search.emailMatchesTruncated;
+    if (!search.orTerms) {
+      return ok(res, { tags: [], pagination: { page: q.page, limit: q.limit, total: 0 }, emailMatchesTruncated });
+    }
+    query = query.or(search.orTerms.join(','));
+  }
+
   if (q.status) query = query.eq('lifecycle_status', q.status);
   // UIDs are stored uppercase (enroll uppercases them); the suffix is hex-only, so no LIKE metacharacters.
   if (q.uidSuffix) query = query.ilike('tag_uid', `%${q.uidSuffix.toUpperCase()}`);
@@ -205,9 +290,13 @@ export const listTags = async (req: AdminRequest, res: Response) => {
     throw new AppError('unavailable', 'Tag inventory could not be loaded');
   }
 
+  const rows = (data ?? []) as unknown as AdminTagRow[];
+  const emails = await loadEmails(supabase, rows);
+
   return ok(res, {
-    tags: ((data ?? []) as unknown as AdminTagRow[]).map(toAdminTag),
+    tags: rows.map((row) => toAdminTag(row, emails)),
     pagination: { page: q.page, limit: q.limit, total: count ?? 0 },
+    emailMatchesTruncated,
   });
 };
 
@@ -230,7 +319,7 @@ export const getTag = async (req: AdminRequest, res: Response) => {
   }
   if (!tag) throw new AppError('not_found', 'Tag not found');
 
-  // Custody chain. Not `to_email` (PII); the owner is an internal account id only.
+  // Custody chain. Not `to_email` (what a sender typed); accounts by id here.
   const custody = await supabase
     .from('ownership_transfers')
     .select('id, transfer_type, status, from_user_id, to_user_id, initiated_at, completed_at, charged_amount, charged_currency, reissued_token')
@@ -277,9 +366,11 @@ export const getTag = async (req: AdminRequest, res: Response) => {
   }
 
   const proof = (proofs.data ?? [])[0] as { created_at: string; anchored_at: string | null } | undefined;
+  const tagRow = tag as unknown as AdminTagRow;
+  const emails = await loadEmails(supabase, [tagRow]);
 
   return ok(res, {
-    tag: toAdminTag(tag as unknown as AdminTagRow),
+    tag: toAdminTag(tagRow, emails),
     replacesTagIds: ((replaced.data ?? []) as { id: string }[]).map((r) => r.id),
     ownershipId: proof
       ? { status: 'current' as const, issuedAt: proof.created_at, anchoredAt: proof.anchored_at }

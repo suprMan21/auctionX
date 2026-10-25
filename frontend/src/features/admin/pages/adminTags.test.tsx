@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import type { AdminTag, AdminTagDetailResponse } from '../api/adminApi';
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
@@ -111,6 +111,60 @@ describe('AdminTagsPage', () => {
 
     await waitFor(() => expect(api.listTags).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'SUSPENDED', page: 1 })));
     expect(screen.getByRole('button', { name: 'Suspended' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('searches with one box, keeps the term out of the address bar, and notes the audit', async () => {
+    api.listTags.mockResolvedValue({ success: true, data: { tags: [], pagination: { page: 1, limit: 25, total: 0 } } });
+    const user = userEvent.setup();
+    const LocationProbe = () => <output data-testid="location">{useLocation().search}</output>;
+
+    render(
+      <MemoryRouter initialEntries={['/admin/tags?page=2']}>
+        <AdminTagsPage />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+    await screen.findByText('No chips match the current filters.');
+    await user.type(screen.getByRole('searchbox', { name: /owner email, chip name, serial or UID/ }), 'collector@example.com');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+
+    await waitFor(() =>
+      expect(api.listTags).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'collector@example.com', page: 1 })),
+    );
+    expect(screen.getByTestId('location').textContent).not.toContain('collector');
+    expect(screen.getByText('Searches are recorded in the audit log.')).toBeInTheDocument();
+  });
+
+  it('blocks a search term the server would refuse', async () => {
+    api.listTags.mockResolvedValue({ success: true, data: { tags: [], pagination: { page: 1, limit: 25, total: 0 } } });
+    const user = userEvent.setup();
+
+    render(<MemoryRouter initialEntries={['/admin/tags']}><AdminTagsPage /></MemoryRouter>);
+    await screen.findByText('No chips match the current filters.');
+    await user.type(screen.getByRole('searchbox'), 'a,b');
+
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
+  });
+
+  it('shows owner and creator emails, falling back to the short account id', async () => {
+    api.listTags.mockResolvedValue({
+      success: true,
+      data: {
+        tags: [
+          tag({ ownerEmail: 'collector@example.com', creatorEmail: 'studio@example.com' }),
+          tag({ id: NEW_ID, uidSuffix: 'ACC040', ownerEmail: null, ownerAccountId: '22222222-2222-4222-8222-222222222222' }),
+        ],
+        pagination: { page: 1, limit: 25, total: 2 },
+        emailMatchesTruncated: true,
+      },
+    });
+
+    render(<MemoryRouter initialEntries={['/admin/tags']}><AdminTagsPage /></MemoryRouter>);
+
+    expect(await screen.findByText('collector@example.com')).toBeInTheDocument();
+    expect(screen.getByText('studio@example.com')).toBeInTheDocument();
+    expect(screen.getByText('22222222…')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('More than 50 accounts match');
   });
 
   it('shows the server error instead of an empty table', async () => {

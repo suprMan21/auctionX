@@ -671,6 +671,8 @@ export type AdminTagLifecycleStatus =
   | 'ENROLLED' | 'CLAIMED' | 'ASSOCIATED' | 'ACTIVE' | 'RELEASED' | 'TRANSFERRED' | 'RETIRED' | 'SUSPENDED';
 
 export interface AdminTagListParams {
+  /** One search: owner email (partial), chip name, serial suffix or UID suffix. Audit-logged. */
+  q?: string;
   status?: AdminTagLifecycleStatus;
   uidSuffix?: string;
   itemId?: string;
@@ -690,7 +692,9 @@ export interface AdminTag {
   serialSuffix?: string | null;
   lifecycleStatus: AdminTagLifecycleStatus | null;
   ownerAccountId: string | null;
+  ownerEmail?: string | null;
   creatorAccountId: string | null;
+  creatorEmail?: string | null;
   itemId: string | null;
   sdmKeyVersion: number | null;
   sunCounter: number;
@@ -722,7 +726,12 @@ export const confirmationSuffixOf = (tag: Pick<AdminTag, 'uidSuffix' | 'serialSu
 
 export interface AdminTagListResponse {
   success: true;
-  data: { tags: AdminTag[]; pagination: { page: number; limit: number; total: number } };
+  data: {
+    tags: AdminTag[];
+    pagination: { page: number; limit: number; total: number };
+    /** More than 50 accounts matched the email search; only the first 50 were used. */
+    emailMatchesTruncated?: boolean;
+  };
 }
 
 export interface AdminTagCustodyRow {

@@ -23,8 +23,26 @@ const reason = z.string().trim().min(REASON_MIN, `Reason must be at least ${REAS
 export const UID_SUFFIX_LENGTH = 6;
 export const uidSuffix = (tagUid: string): string => tagUid.slice(-UID_SUFFIX_LENGTH).toUpperCase();
 
+/**
+ * The one search box on Admin Tags: owner email (partial), chip name, serial
+ * suffix or UID suffix. Limited to characters that occur in emails and chip
+ * names, so the term never carries PostgREST syntax (`,` `(` `)` `"`) or
+ * whitespace. LIKE wildcards are escaped where it is used (escapeLike).
+ */
+export const SEARCH_MIN = 2;
+export const searchTermSchema = z
+  .string()
+  .trim()
+  .min(SEARCH_MIN, `Search must be at least ${SEARCH_MIN} characters`)
+  .max(254)
+  .regex(/^[A-Za-z0-9@._+'-]+$/, 'Search may contain letters, digits and @ . _ + \' - only');
+
+/** Escapes LIKE metacharacters so the term matches literally. */
+export const escapeLike = (term: string): string => term.replace(/[\\%_]/g, (c) => `\\${c}`);
+
 /** GET /admin/tags query string. Every filter optional. */
 export const listTagsQuerySchema = z.object({
+  q: searchTermSchema.optional(),
   status: z.enum(LIFECYCLE_STATUSES).optional(),
   uidSuffix: z.string().regex(/^[0-9a-fA-F]{2,14}$/, 'uidSuffix must be 2-14 hex characters').optional(),
   itemId: uuid.optional(),

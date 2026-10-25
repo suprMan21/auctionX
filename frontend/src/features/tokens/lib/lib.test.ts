@@ -3,6 +3,7 @@ import { hasSunParams, withoutSunParams } from './tapUrl';
 import { forgetTapSession, loadTap, saveTap } from './tapCache';
 import { safeNextPath } from '@/features/auth/lib/safeNext';
 import type { TapResult } from '../api/schemas';
+import { tokenDisplayName } from './tokenName';
 
 const PICC = 'EF963FF7828658A599F3041510671E88';
 const CMAC = '94EED9EE65337086';
@@ -82,5 +83,16 @@ describe('safeNextPath', () => {
 
   it('falls back when absent', () => {
     expect(safeNextPath(null, '/tokens')).toBe('/tokens');
+  });
+});
+
+describe('tokenDisplayName', () => {
+  const tagId = '7c9960df-0000-4000-8000-000000000000';
+
+  it('prefers the item title, then the chip name, then the serial suffix, then the tag id', () => {
+    expect(tokenDisplayName({ tagId, title: 'Signed jersey', chipName: 'chip_004', serialSuffix: 'AE6CA9' })).toBe('Signed jersey');
+    expect(tokenDisplayName({ tagId, title: null, chipName: 'chip_004', serialSuffix: 'AE6CA9' })).toBe('chip_004');
+    expect(tokenDisplayName({ tagId, title: null, chipName: null, serialSuffix: 'AE6CA9' })).toBe('Token …AE6CA9');
+    expect(tokenDisplayName({ tagId, title: null })).toBe('Token 7C9960DF');
   });
 });

@@ -233,6 +233,147 @@ describe('chip name', () => {
   });
 });
 
+// ── Search + account emails (Boss 2026-10-19) ───────────────────────────────
+
+describe('search and emails', () => {
+  const OWNER_EMAIL = 'Collector.One@example.com';
+  const CREATOR_EMAIL = 'studio@example.com';
+  const SERIAL_TAG = '88888888-8888-4888-8888-888888888888';
+
+  beforeEach(() => {
+    tables.users = [
+      { id: OWNER, email: OWNER_EMAIL },
+      { id: ADMIN, email: CREATOR_EMAIL },
+      { id: '99999999-9999-4999-8999-999999999999', email: 'someone_else@example.com' },
+    ];
+    tables.nfc_tags.push(tagRow({
+      id: SERIAL_TAG, tag_uid: '04AAAAAAAAAAAA', chip_serial: 'AE6CA90011223344', chip_name: 'chip_007',
+      current_owner_id: null, lifecycle_status: 'ENROLLED',
+    }));
+  });
+
+  const ids = (out: { body: Row }) => ((out.body.data as { tags: Row[] }).tags).map((t) => t.id).sort();
+
+  it('shows owner and creator emails on the list and on the detail view', async () => {
+    const { listTags, getTag } = await controllers();
+
+    const list = await call(listTags, makeReq());
+    const detail = await call(getTag, makeReq({}, { tagId: OLD_TAG }));
+
+    const old = (list.body.data as { tags: Row[] }).tags.find((t) => t.id === OLD_TAG);
+    expect(old).toMatchObject({ ownerEmail: OWNER_EMAIL, creatorEmail: CREATOR_EMAIL, ownerAccountId: OWNER });
+    expect((detail.body.data as { tag: Row }).tag).toMatchObject({ ownerEmail: OWNER_EMAIL, creatorEmail: CREATOR_EMAIL });
+    // An unowned chip has no owner email.
+    expect((list.body.data as { tags: Row[] }).tags.find((t) => t.id === SERIAL_TAG)?.ownerEmail).toBeNull();
+  });
+
+  it('matches a partial owner email, case-insensitively', async () => {
+    const { listTags } = await controllers();
+
+    expect(ids(await call(listTags, makeReq({}, {}, { q: 'collector.ONE' })))).toEqual([OLD_TAG]);
+    expect(ids(await call(listTags, makeReq({}, {}, { q: 'nobody@nowhere.test' })))).toEqual([]);
+  });
+
+  it('matches a chip name, a serial suffix and a UID suffix', async () => {
+    const { listTags } = await controllers();
+
+    expect(ids(await call(listTags, makeReq({}, {}, { q: 'chip_007' })))).toEqual([SERIAL_TAG]);
+    expect(ids(await call(listTags, makeReq({}, {}, { q: '223344' })))).toEqual([SERIAL_TAG]);
+    expect(ids(await call(listTags, makeReq({}, {}, { q: 'acc040' })))).toEqual([NEW_TAG]);
+  });
+
+  it('treats _ and % in the term literally, not as wildcards', async () => {
+    const { listTags } = await controllers();
+    // "someone_else" exists; "someoneXelse" must not match it through `_`.
+    tables.users.push({ id: '12121212-1212-4121-8121-121212121212', email: 'someoneXelse@example.com' });
+    tables.nfc_tags[1].current_owner_id = '12121212-1212-4121-8121-121212121212';
+
+    expect(ids(await call(listTags, makeReq({}, {}, { q: 'someone_else' })))).toEqual([]);
+  });
+
+  it('combines the search with the status filter', async () => {
+    const { listTags } = await controllers();
+
+    expect(ids(await call(listTags, makeReq({}, {}, { q: 'chip_007', status: 'ACTIVE' })))).toEqual([]);
+  });
+
+  it('audit-logs every search with the term, the admin and no tag subject', async () => {
+    const { listTags } = await controllers();
+
+    await call(listTags, makeReq({}, {}, { q: 'collector' }));
+
+    expect(tables.audit_logs).toHaveLength(1);
+    expect(tables.audit_logs[0]).toMatchObject({
+      admin_id: ADMIN,
+      admin_email: 'admin@example.com',
+      action: 'tag_search',
+      entity_type: 'admin_search',
+      entity_id: ADMIN,
+      changes: { query: 'collector', scope: 'nfc_tags' },
+      brand: 'auctionx',
+    });
+  });
+
+  it('does not audit a plain list with no search term', async () => {
+    const { listTags } = await controllers();
+
+    await call(listTags, makeReq({}, {}, { status: 'ACTIVE' }));
+
+    expect(tables.audit_logs).toHaveLength(0);
+  });
+
+  it('runs no search when the audit row cannot be written (fails closed)', async () => {
+    hooks.failInsert = (t) => t === 'audit_logs';
+    const readSpy = vi.fn(() => false);
+    const { listTags } = await controllers();
+    hooks.failRead = readSpy;
+
+    const out = await call(listTags, makeReq({}, {}, { q: 'collector' }));
+
+    expect(out.threw?.code).toBe('unavailable');
+    expect(readSpy).not.toHaveBeenCalledWith('users');
+    expect(JSON.stringify(out.body)).not.toContain(OWNER_EMAIL);
+  });
+
+  it('never writes an email or the search term to the logs', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { listTags, getTag } = await controllers();
+
+    await call(listTags, makeReq({}, {}, { q: 'collector.one@example' }));
+    await call(getTag, makeReq({}, { tagId: OLD_TAG }));
+    hooks.failRead = (t) => t === 'nfc_tags';
+    await call(listTags, makeReq({}, {}, { q: 'collector.one@example' }));
+
+    const logged = JSON.stringify([logSpy.all(), errorSpy.mock.calls, warnSpy.mock.calls]).toLowerCase();
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+    for (const leak of ['collector', 'studio@example.com', 'example.com']) {
+      expect(logged).not.toContain(leak);
+    }
+  });
+
+  it('rejects search terms carrying query syntax or whitespace', async () => {
+    const { listTags } = await controllers();
+
+    for (const q of ['a,b', 'x)', 'a b', '"q"', 'x', '%']) {
+      expect((await call(listTags, makeReq({}, {}, { q }))).threw?.code).toBe('invalid_argument');
+    }
+    expect(tables.audit_logs).toHaveLength(0);
+  });
+
+  it('flags a search that matched more accounts than it can use', async () => {
+    const { listTags, EMAIL_MATCH_LIMIT } = await controllers();
+    for (let i = 0; i <= EMAIL_MATCH_LIMIT; i += 1) {
+      tables.users.push({ id: `bulk-${i}`, email: `bulk${i}@crowd.test` });
+    }
+
+    const out = await call(listTags, makeReq({}, {}, { q: 'crowd.test' }));
+
+    expect((out.body.data as Row).emailMatchesTruncated).toBe(true);
+  });
+});
+
 describe('detail', () => {
   it('returns timeline, custody, taps and Ownership ID status — and nothing secret (AC8)', async () => {
     const { getTag } = await controllers();

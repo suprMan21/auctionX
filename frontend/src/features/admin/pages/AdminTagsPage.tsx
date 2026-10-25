@@ -1,8 +1,11 @@
 /**
  * AdminTagsPage (S-ADMIN1) — token inventory.
  *
- * URL-synced filters (status, UID suffix, page) like the other admin lists.
- * Each row's chip suffix is a real link, so the table is keyboard navigable.
+ * Status and page are URL-synced like the other admin lists. The search term is
+ * NOT: it is often an email, and the address bar would keep it in browser
+ * history. One box matches owner email (partial), chip name, serial suffix or
+ * UID suffix; the backend audit-logs every search.
+ * Each row's chip label is a real link, so the table is keyboard navigable.
  */
 
 import { useEffect, useState } from 'react';
@@ -26,33 +29,41 @@ const shortId = (id: string | null): string => (id ? `${id.slice(0, 8)}…` : '�
 export const AdminTagsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const status = (searchParams.get('status') ?? '') as '' | AdminTagLifecycleStatus;
-  const uidSuffix = searchParams.get('uid') ?? '';
   const page = Math.max(parseInt(searchParams.get('page') ?? '1', 10) || 1, 1);
 
-  const [suffixInput, setSuffixInput] = useState(uidSuffix);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
   // Results are keyed by the query that produced them, so "loading" is derived
   // (no synchronous setState inside the effect).
-  const queryKey = `${status}|${uidSuffix}|${page}`;
-  const [result, setResult] = useState<{ key: string; rows: AdminTag[]; total: number } | null>(null);
+  const queryKey = `${status}|${search}|${page}`;
+  const [result, setResult] = useState<{ key: string; rows: AdminTag[]; total: number; truncated: boolean } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     adminApi
-      .listTags({ status: status || undefined, uidSuffix: uidSuffix || undefined, page, limit: PAGE_SIZE })
+      .listTags({ status: status || undefined, q: search || undefined, page, limit: PAGE_SIZE })
       .then((res) => {
-        if (!cancelled) setResult({ key: queryKey, rows: res.data.tags, total: res.data.pagination.total });
+        if (!cancelled) {
+          setResult({
+            key: queryKey,
+            rows: res.data.tags,
+            total: res.data.pagination.total,
+            truncated: res.data.emailMatchesTruncated ?? false,
+          });
+        }
       })
       .catch((err) => {
         if (!cancelled) setFailure({ key: queryKey, message: err instanceof Error ? err.message : 'Failed to load tags' });
       });
     return () => { cancelled = true; };
-  }, [status, uidSuffix, page, queryKey]);
+  }, [status, search, page, queryKey]);
 
   const error = failure?.key === queryKey ? failure.message : null;
   const loading = !error && result?.key !== queryKey;
   const rows = result?.key === queryKey ? result.rows : [];
   const total = result?.total ?? 0;
+  const truncated = result?.key === queryKey && result.truncated;
 
   const update = (changes: Record<string, string>) => {
     setSearchParams((prev) => {
@@ -66,7 +77,8 @@ export const AdminTagsPage = () => {
     });
   };
 
-  const suffixValid = suffixInput === '' || /^[0-9a-fA-F]{2,14}$/.test(suffixInput);
+  // Mirrors the backend's searchTermSchema.
+  const searchValid = searchInput === '' || /^[A-Za-z0-9@._+'-]{2,254}$/.test(searchInput);
   const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
 
   return (
@@ -98,23 +110,28 @@ export const AdminTagsPage = () => {
           className="ml-auto flex items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (suffixValid) update({ uid: suffixInput.toUpperCase() });
+            if (!searchValid) return;
+            setSearch(searchInput);
+            if (page !== 1) update({ page: '1' });
           }}
         >
-          <label htmlFor="uid-suffix" className="sr-only">UID suffix</label>
+          <label htmlFor="tag-search" className="sr-only">Search by owner email, chip name, serial or UID</label>
           <input
-            id="uid-suffix"
-            value={suffixInput}
-            onChange={(e) => setSuffixInput(e.target.value.trim())}
-            placeholder="UID ends with…"
-            aria-invalid={!suffixValid}
-            className="px-3 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-500 font-mono
+            id="tag-search"
+            type="search"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value.trim())}
+            placeholder="Email, chip name, serial or UID…"
+            aria-invalid={!searchValid}
+            aria-describedby="tag-search-note"
+            autoComplete="off"
+            className="px-3 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-400
               border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
-              min-w-[12rem]"
+              min-w-[16rem]"
           />
           <button
             type="submit"
-            disabled={!suffixValid}
+            disabled={!searchValid}
             className="px-3 py-2 rounded-xl text-sm bg-dark-700 text-gray-200 hover:bg-dark-600 disabled:opacity-50
               focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
           >
@@ -122,6 +139,12 @@ export const AdminTagsPage = () => {
           </button>
         </form>
       </div>
+      <p id="tag-search-note" className="text-xs text-gray-400 -mt-3 text-right">Searches are recorded in the audit log.</p>
+      {truncated && (
+        <p role="status" className="text-amber-300 text-sm">
+          More than 50 accounts match that email. Only the first 50 are shown; type more of the address.
+        </p>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center h-48" role="status" aria-label="Loading tags">
@@ -142,7 +165,8 @@ export const AdminTagsPage = () => {
               <tr>
                 <th scope="col" className="text-left px-4 py-3 font-medium">Chip</th>
                 <th scope="col" className="text-left px-4 py-3 font-medium">Status</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Owner account</th>
+                <th scope="col" className="text-left px-4 py-3 font-medium">Owner</th>
+                <th scope="col" className="text-left px-4 py-3 font-medium">Creator</th>
                 <th scope="col" className="text-left px-4 py-3 font-medium">Key ver.</th>
                 <th scope="col" className="text-left px-4 py-3 font-medium">Taps</th>
                 <th scope="col" className="text-left px-4 py-3 font-medium">Enrolled</th>
@@ -160,7 +184,8 @@ export const AdminTagsPage = () => {
                     </Link>
                   </td>
                   <td className="px-4 py-3"><AdminLifecycleBadge status={row.lifecycleStatus} /></td>
-                  <td className="px-4 py-3 font-mono text-gray-300">{shortId(row.ownerAccountId)}</td>
+                  <td className="px-4 py-3 text-gray-300 break-all">{row.ownerEmail ?? shortId(row.ownerAccountId)}</td>
+                  <td className="px-4 py-3 text-gray-300 break-all">{row.creatorEmail ?? shortId(row.creatorAccountId)}</td>
                   <td className="px-4 py-3 text-gray-300">{row.sdmKeyVersion ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-300">{row.sunCounter}</td>
                   <td className="px-4 py-3 text-gray-400">{fmt(row.registeredAt)}</td>

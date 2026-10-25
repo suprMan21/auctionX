@@ -11,6 +11,10 @@
  * `.order()`, `.range()`, `select(cols, { count: 'exact' })`, and `.rpc()`
  * answered by the `rpc` hook (database functions cannot run in memory).
  *
+ * Admin search: `ilike` also takes the contains form `%x%`, with `\_` `\%`
+ * `\\` escapes; `.or()` also takes `col.ilike.pattern` and `col.in.(a,b)`
+ * terms; a `failInsert` hook makes an insert fail like a PostgREST error.
+ *
  * S-NFC-ID: `.or('a.eq.x,b.eq.y')` (eq terms only), `maybeSingle()` errors on
  * more than one row exactly as PostgREST does (so an ambiguous duplicate-UID
  * lookup cannot pass silently), and nfc_tags inserts enforce the v2 identity
@@ -44,7 +48,7 @@ const matches = (row: Row, filters: Filter[]): boolean =>
       case 'eq':
         return cell === f.value;
       case 'or':
-        return (f.value as Array<[string, string]>).some(([column, value]) => row[column] === value);
+        return (f.value as Filter[]).some((term) => matches(row, [term]));
       case 'is':
         // PostgREST `is null`: a missing column reads as null too.
         return (cell ?? null) === f.value;
@@ -63,12 +67,25 @@ const matches = (row: Row, filters: Filter[]): boolean =>
       case 'lte':
         return cell !== null && cell !== undefined && (cell as number) <= (f.value as number);
       case 'ilike': {
-        // Only the leading-wildcard suffix form the admin search uses.
+        // Only the forms the admin search uses: `%suffix` and `%contains%`.
         const pattern = String(f.value);
-        if (!pattern.startsWith('%') || pattern.slice(1).includes('%')) {
+        const contains = pattern.length > 1 && pattern.endsWith('%') && !pattern.endsWith('\\%');
+        const body = contains ? pattern.slice(1, -1) : pattern.slice(1);
+        if (!pattern.startsWith('%') || /(^|[^\\])%/.test(body)) {
           throw new Error(`supabaseMock: unsupported ilike pattern ${pattern}`);
         }
-        return typeof cell === 'string' && cell.toUpperCase().endsWith(pattern.slice(1).toUpperCase());
+        if (typeof cell !== 'string') return false;
+        // As Postgres: an unescaped `_` is any one character; a backslash makes the next character literal.
+        let source = '';
+        for (let i = 0; i < body.length; i += 1) {
+          const ch = body[i];
+          if (ch === '\\' && i + 1 < body.length) {
+            i += 1;
+            source += body[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          } else if (ch === '_') source += '.';
+          else source += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+        return new RegExp(contains ? source : `${source}$`, 'i').test(cell);
       }
     }
   });
@@ -76,6 +93,8 @@ const matches = (row: Row, filters: Filter[]): boolean =>
 export interface MockHooks {
   /** Runs immediately before an update is applied (after filters are set). */
   beforeUpdate?: (table: string, patch: Row) => void;
+  /** Return true to make an insert on `table` fail like a PostgREST error. */
+  failInsert?: (table: string, row: Row) => boolean;
   /** Return true to make a read on `table` fail like a PostgREST error. */
   failRead?: (table: string) => boolean;
   /**
@@ -159,10 +178,29 @@ class QueryBuilder {
   }
 
   or(expr: string): this {
-    const terms = expr.split(',').map((term) => {
-      const m = /^([a-z0-9_]+)\.eq\.(.+)$/.exec(term);
+    // Split on commas outside parentheses, so `col.in.(a,b)` stays one term.
+    const raw: string[] = [];
+    let depth = 0;
+    let current = '';
+    for (const ch of expr) {
+      if (ch === '(') depth += 1;
+      if (ch === ')') depth -= 1;
+      if (ch === ',' && depth === 0) {
+        raw.push(current);
+        current = '';
+      } else current += ch;
+    }
+    raw.push(current);
+    const terms: Filter[] = raw.map((term) => {
+      const m = /^([a-z0-9_]+)\.(eq|ilike|in)\.(.+)$/.exec(term);
       if (!m) throw new Error(`supabaseMock: unsupported or() term ${term}`);
-      return [m[1], m[2]] as [string, string];
+      const [, column, op, value] = m;
+      if (op === 'in') {
+        const list = /^\((.*)\)$/.exec(value);
+        if (!list) throw new Error(`supabaseMock: unsupported or() in-list ${value}`);
+        return { column, op: 'in', value: list[1] === '' ? [] : list[1].split(',') };
+      }
+      return { column, op: op as 'eq' | 'ilike', value };
     });
     this.filters.push({ column: '', op: 'or', value: terms });
     return this;
@@ -218,6 +256,9 @@ class QueryBuilder {
 
     if (this.mode === 'insert') {
       const row = this.inserted as Row;
+      if (this.hooks.failInsert?.(this.table, row)) {
+        return { data: null, error: { message: 'mock insert failure' } };
+      }
 
       // Emulate the partial unique indexes the migration actually creates —
       // without them a race-condition test would pass for the wrong reason.

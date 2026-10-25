@@ -495,6 +495,22 @@ describe('GET /nfc/mine', () => {
     });
   });
 
+  it('returns the chip name and serial suffix (fallback names), never the full serial', async () => {
+    tables.nfc_tags = [
+      baseTag({ lifecycle_status: 'ACTIVE', current_owner_id: OWNER, chip_name: 'chip_004', chip_serial: '1122334455AE6CA9' }),
+      baseTag({ id: OTHER_TAG_ID, tag_uid: OTHER_UID, lifecycle_status: 'ACTIVE', current_owner_id: OWNER, chip_name: null, chip_serial: null }),
+    ];
+    tables.public_tag_provenance = [provenanceFor(TAG_ID), provenanceFor(OTHER_TAG_ID)];
+
+    const { listMyTokens } = await reads();
+    const out = await call(listMyTokens, makeReq(OWNER));
+    const tokens = data(out).tokens as Row[];
+
+    expect(tokens.find((t) => t.tagId === TAG_ID)).toMatchObject({ title: null, chipName: 'chip_004', serialSuffix: 'AE6CA9' });
+    expect(tokens.find((t) => t.tagId === OTHER_TAG_ID)).toMatchObject({ chipName: null, serialSuffix: null });
+    expect(JSON.stringify(out.body)).not.toContain('1122334455AE6CA9');
+  });
+
   it('returns an empty list for someone who owns nothing', async () => {
     const { listMyTokens } = await reads();
     const out = await call(listMyTokens, makeReq(STRANGER));

@@ -4,14 +4,12 @@ import { tokenApi } from '../api/tokenApi';
 import type { IncomingTransfer, MyToken } from '../api/schemas';
 import { TokenStatusBadge } from '../components/TokenStatusBadge';
 import { TransferProcessing } from '../components/TransferProcessing';
+import { tokenDisplayName } from '../lib/tokenName';
 
 type Load =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'ready'; tokens: MyToken[]; incoming: IncomingTransfer[] };
-
-export const tokenDisplayName = (token: { title: string | null; tagId: string }): string =>
-  token.title ?? `Token ${token.tagId.slice(0, 8).toUpperCase()}`;
 
 const formatUsd = (cents: number): string =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(cents / 100);

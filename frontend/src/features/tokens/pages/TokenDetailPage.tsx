@@ -11,7 +11,7 @@ import { DisclosureSettings } from '../components/DisclosureSettings';
 import { TransferInitiateDialog } from '../components/TransferInitiateDialog';
 import { ReleaseTokenDialog } from '../components/ReleaseTokenDialog';
 import { ReplacementSection } from '../components/ReplacementSection';
-import { tokenDisplayName } from './MyTokensPage';
+import { tokenDisplayName } from '../lib/tokenName';
 
 type Load =
   | { kind: 'loading' }

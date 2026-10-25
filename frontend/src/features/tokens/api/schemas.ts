@@ -71,6 +71,9 @@ export const myTokenSchema = z.object({
   lifecycleStatus,
   claimedAt: z.string().nullable(),
   title: z.string().nullable(),
+  // Fallback names for an untitled token. Optional so an older backend still parses.
+  chipName: z.string().nullable().optional(),
+  serialSuffix: z.string().nullable().optional(),
   disclosure: z.record(z.boolean()),
   ownershipId: z.string().nullable(),
   provenance: provenanceSchema.nullable(),
