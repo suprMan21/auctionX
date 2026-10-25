@@ -31,6 +31,7 @@ import { sunFailureCode } from '../services/nfc/sunVerification';
 import { resolveAndBurnSun } from '../services/nfc/tapResolver';
 import { issueTapSession } from '../services/nfc/tapSession';
 import { tapSchema } from '../services/nfc/tagManagementSchemas';
+import { confirmedEmail } from '../lib/security/confirmedEmail';
 
 interface ReadRequest extends RequestWithId, AuthRequest {}
 
@@ -54,9 +55,6 @@ const requireUser = (req: ReadRequest): User => {
   return req.user;
 };
 
-/** Lowercased email, only when Supabase Auth has confirmed it. */
-const confirmedEmail = (user: User): string | null =>
-  user.email && user.email_confirmed_at ? user.email.trim().toLowerCase() : null;
 
 /** `public_tag_provenance` row — the ONLY public shape of a token. */
 export type Provenance = {

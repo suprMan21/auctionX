@@ -69,6 +69,7 @@ import { TRANSFER_FEE_CENTS, resolveCharge } from '../lib/tokenFees';
 import { availableVoucherCount, currentPriceCents } from '../lib/tokenPrices';
 import { redeemTransferVoucher } from '../lib/payments/tokenFeeApply';
 import { notifyTransferRecipient } from '../lib/notifications/transferEmails';
+import { confirmedEmail } from '../lib/security/confirmedEmail';
 import { hasManageNfc } from '../lib/admin/tokenAdmin';
 
 interface TagRequest extends RequestWithId, AuthRequest {}
@@ -857,9 +858,10 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
   }
 
   // Recipient check. An email-targeted transfer resolves on first completion
-  // attempt by the account that owns that address.
-  const { data: actor } = await supabase.from('users').select('email').eq('id', userId).maybeSingle();
-  const actorEmail = (actor?.email as string | undefined)?.trim().toLowerCase() ?? null;
+  // attempt by the account that owns that address. The address comes from
+  // Supabase Auth (confirmed), never from public.users.email, which is a
+  // profile copy and was user-editable until 20261025000001.
+  const actorEmail = req.user ? confirmedEmail(req.user) : null;
 
   const isRecipient =
     (transfer.to_user_id !== null && transfer.to_user_id === userId) ||
