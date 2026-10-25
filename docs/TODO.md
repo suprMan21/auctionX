@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-25 (S-ADMIN1 Ph3a stuck payments live + verified)
+**Last updated:** 2026-10-24 (admin search + token names + trust proxy live + verified)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -70,7 +70,7 @@ Live on staging: `chip_001` tapped → genuine/unclaimed → claimed by test@ �
 2026-10-05 (`docs/S_NFC3_FE_RECIPIENT_EMAIL_VERIFICATION.md`). → **S-ADMIN1 Ph1 ✅ live 2026-10-05** → **chip identity
 fix: S-NFC-ID ✅ live 2026-10-07** (KDF v2 per-chip serial + K1/K4; duplicate-UID finding was a suffix misread —
 `docs/S_NFC_ID_VERIFICATION.md`) → **S-ADMIN1 physical reset test ✅ 2026-10-09** (chip_002 → chip_003) → **S-ADMIN1 Ph2 ✅ 2026-10-09** (re-issue chip_003 → chip_004, $10) → S-ADMIN1
-Ph3a ✅ 2026-10-25 (stuck-payment queue + GitHub Issues) → admin search + token names → Ph3b (admin pricing + vouchers) → S-ADMIN2 (users/roles) →
+Ph3a ✅ 2026-10-25 (stuck-payment queue + GitHub Issues) → admin search + token names ✅ 2026-10-24 → Ph3b (admin pricing + vouchers) → S-ADMIN2 (users/roles) →
 S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat $2.50) →
 S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token sale) → S-SEC2 (external pentest).
 
@@ -129,12 +129,11 @@ token sale without admin tooling.
   - [ ] Re-apply not run live (unit tests + live SQL only).
   - [ ] Follow-ups (small): `token_fee_stuck` at ERROR for born-resolved incidents → WARN; close comment not
         recorded / `noteIncidentClosed` swallows errors silently.
-  - [ ] **`trust proxy` not set** (pre-existing since 2026-10-05): express-rate-limit warns on every request and likely
-        keys every user on App Runner's proxy IP. Fix soon, separately.
   - [ ] Boss: rotate `GITHUB_ISSUES_TOKEN` before it expires (no Issues are filed after it lapses).
-- **S-ADMIN1 follow-up: admin search + token names** (next, before Ph3b; Boss 2026-10-19). Admin Tags: one search box
-  (owner email, chip name, serial / UID suffix), owner and creator email columns, `manage_nfc` only, emails never
-  logged. My Tokens: show the chip name or serial suffix instead of "Token 7C9960DF" when there is no title.
+- **Admin search + token names ✅ and `trust proxy` ✅ live + verified 2026-10-24**
+  (`docs/S_ADMIN1_SEARCH_TRUST_PROXY_VERIFICATION.md`). Search audit-logged first; rate limits now per client.
+- **Admin console UX** (backlog, Boss 2026-10-24): resizable columns, whole-row click, emails throughout the token
+  detail page (custody from/to, taps), audit-log Action / Entity type dropdowns. ~1 session; pull forward any time.
 - **S-ADMIN1 Ph3b: admin pricing + vouchers** (next session). Admin-set prices (effective-dated, with history)
   replacing `TRANSFER_FEE_CENTS` / `REISSUE_FEE_CENTS`; the frontend shows the server price (the initiate dialog
   hard-codes $2.50). **Vouchers are granted to an account** (Boss 2026-10-11): N free transfers for a user by email,
