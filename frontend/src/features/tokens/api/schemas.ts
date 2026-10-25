@@ -126,17 +126,53 @@ export const transferInitiateResultSchema = z.object({
 });
 export type TransferInitiateResult = z.infer<typeof transferInitiateResultSchema>;
 
-/** POST /transfer/:id/complete. Still PENDING: only the Stripe webhook completes it. */
-export const transferCompleteResultSchema = z.object({
+/**
+ * POST /transfer/:id/complete (S-ADMIN1 Ph3b).
+ *
+ * Paid: still PENDING with a clientSecret; only the Stripe webhook completes it.
+ * Free transfer (voucher): already COMPLETED, no clientSecret, nothing charged.
+ * The two shapes are told apart by `voucherApplied`, so a null secret can never
+ * reach Stripe. A response without `voucherApplied` (a backend from before
+ * Ph3b) is read as paid.
+ */
+const transferCompleteBase = {
   transferId: z.string(),
-  status: z.literal('PENDING'),
-  clientSecret: z.string(),
   listAmountUsdCents: z.number(),
   chargedAmount: z.number(),
   chargedCurrency: z.string(),
   fxRate: z.number().nullable().optional(),
+};
+export const transferCompletePaidSchema = z.object({
+  ...transferCompleteBase,
+  voucherApplied: z.literal(false).optional().transform((): false => false),
+  status: z.literal('PENDING'),
+  clientSecret: z.string().min(1),
 });
+export const transferCompleteFreeSchema = z.object({
+  ...transferCompleteBase,
+  voucherApplied: z.literal(true),
+  status: z.literal('COMPLETED'),
+  clientSecret: z.null(),
+});
+export const transferCompleteResultSchema = z.union([
+  transferCompletePaidSchema,
+  transferCompleteFreeSchema,
+]);
 export type TransferCompleteResult = z.infer<typeof transferCompleteResultSchema>;
+export type TransferCompletePaid = z.infer<typeof transferCompletePaidSchema>;
+
+/** GET /nfc/prices — prices in effect now, USD cents. */
+export const tokenPricesSchema = z.object({
+  currency: z.literal('usd'),
+  transferUsdCents: z.number().int(),
+  reissueUsdCents: z.number().int(),
+  tokenUsdCents: z.number().int(),
+});
+export type TokenPrices = z.infer<typeof tokenPricesSchema>;
+
+/** GET /nfc/vouchers/mine — free transfers the caller can use now. */
+export const myVouchersSchema = z.object({ freeTransfers: z.number().int().min(0) });
+export type MyVouchers = z.infer<typeof myVouchersSchema>;
 
 /** GET /transfer/:id. `status` is a text column (PENDING, COMPLETED, CANCELLED, …). */
 export const transferStatusSchema = z.object({

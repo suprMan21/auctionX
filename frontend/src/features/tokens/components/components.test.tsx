@@ -9,6 +9,7 @@ import type {
   Receipt,
   ReleaseResult,
   TransferCompleteResult,
+  TokenPrices,
   TransferInitiateResult,
   TransferStatus,
 } from '../api/schemas';
@@ -18,6 +19,7 @@ import type {
 const api = vi.hoisted(() => ({
   initiateTransfer: vi.fn<(input: { tagId: string; transferType: 'sale' | 'gift'; toEmail: string }) => Promise<TransferInitiateResult>>(),
   completeTransfer: vi.fn<(transferId: string, tapSession: string) => Promise<TransferCompleteResult>>(),
+  getPrices: vi.fn<() => Promise<TokenPrices>>(),
   transferStatus: vi.fn<(transferId: string) => Promise<TransferStatus>>(),
   release: vi.fn<(tagId: string) => Promise<ReleaseResult>>(),
   updateDisclosure: vi.fn<(tagId: string, changes: Record<string, boolean>) => Promise<Record<string, boolean>>>(),
@@ -30,9 +32,12 @@ vi.mock('../api/tokenApi', async () => {
 });
 
 // Stripe is mocked at the @stripe/react-stripe-js boundary.
-const stripe = vi.hoisted(() => ({ confirmPayment: vi.fn() }));
+const stripe = vi.hoisted(() => ({ confirmPayment: vi.fn(), elementsMounted: vi.fn() }));
 vi.mock('@stripe/react-stripe-js', () => ({
-  Elements: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Elements: ({ children }: { children: React.ReactNode }) => {
+    stripe.elementsMounted();
+    return <>{children}</>;
+  },
   PaymentElement: () => <div data-testid="payment-element" />,
   useStripe: () => stripe,
   useElements: () => ({}),
@@ -116,7 +121,9 @@ describe('axe harness', () => {
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
   stripe.confirmPayment.mockReset();
+  stripe.elementsMounted.mockReset();
   download.mockReset();
+  api.getPrices.mockResolvedValue({ currency: 'usd', transferUsdCents: 300, reissueUsdCents: 1000, tokenUsdCents: 2500 });
 });
 
 // ── Transfer initiate ───────────────────────────────────────────────────────
@@ -149,6 +156,39 @@ describe('TransferInitiateDialog', () => {
 
     await waitFor(() => expect(onStarted).toHaveBeenCalled());
     expect(api.initiateTransfer).toHaveBeenCalledWith({ tagId: TAG, transferType: 'gift', toEmail: 'friend@example.com' });
+  });
+
+  it('shows the transfer fee from the server, never a hard-coded one', async () => {
+    renderDialog();
+
+    const usd3 = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(3);
+    expect(await screen.findByText(usd3)).toBeInTheDocument();
+    expect(usd3).toMatch(/3\.00/);
+    expect(screen.getByText(/paid by the recipient/)).toBeInTheDocument();
+    expect(screen.queryByText(/2\.50/)).not.toBeInTheDocument();
+    expect(api.getPrices).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no amount while the fee is loading', () => {
+    api.getPrices.mockReturnValue(new Promise(() => {}));
+    renderDialog();
+
+    expect(screen.getByText('Checking the transfer fee…')).toBeInTheDocument();
+    expect(screen.queryByText(/\d\.\d\d/)).not.toBeInTheDocument();
+  });
+
+  it('still lets the owner start the transfer when the fee cannot be loaded', async () => {
+    api.getPrices.mockRejectedValue(new TokenApiError('down', 503, 'unavailable', null));
+    api.initiateTransfer.mockResolvedValue({ transferId: TRANSFER, status: 'PENDING', listAmountUsdCents: 300 });
+    const onStarted = vi.fn();
+    const user = userEvent.setup();
+    renderDialog(onStarted);
+
+    expect(await screen.findByText(/They see the exact amount before they pay/)).toBeInTheDocument();
+    expect(screen.queryByText(/\d\.\d\d/)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Recipient email'), 'a@b.co');
+    await user.click(screen.getByRole('button', { name: 'Start transfer' }));
+    await waitFor(() => expect(onStarted).toHaveBeenCalled());
   });
 
   it('explains a transfer that is already pending', async () => {
@@ -386,6 +426,7 @@ describe('TransferProcessing', () => {
 describe('TransferCompleteFlow', () => {
   const charge: TransferCompleteResult = {
     transferId: TRANSFER,
+    voucherApplied: false,
     status: 'PENDING',
     clientSecret: 'pi_123_secret_456',
     listAmountUsdCents: 250,
@@ -429,6 +470,33 @@ describe('TransferCompleteFlow', () => {
       }),
     );
     expect(await screen.findByText('It is yours.')).toBeInTheDocument();
+  });
+
+  it('finishes at once with no payment step when a free transfer is used', async () => {
+    api.completeTransfer.mockResolvedValue({
+      transferId: TRANSFER,
+      voucherApplied: true,
+      status: 'COMPLETED',
+      clientSecret: null,
+      listAmountUsdCents: 300,
+      chargedAmount: 0,
+      chargedCurrency: 'usd',
+      fxRate: 1,
+    });
+    const onSessionSpent = vi.fn();
+    const user = userEvent.setup();
+    renderFlow(SESSION, onSessionSpent);
+
+    await user.click(screen.getByRole('button', { name: 'Accept and continue to payment' }));
+
+    expect(await screen.findByText('It is yours.')).toBeInTheDocument();
+    expect(screen.getByText(/You used a free transfer, so there was nothing to pay/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View it in My Tokens' })).toHaveAttribute('href', `/tokens/${TAG}`);
+    expect(onSessionSpent).toHaveBeenCalled();
+    expect(stripe.elementsMounted).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('payment-element')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Pay / })).not.toBeInTheDocument();
+    expect(api.transferStatus).not.toHaveBeenCalled();
   });
 
   it('keeps the form after a declined card', async () => {

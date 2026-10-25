@@ -20,6 +20,19 @@ import type {
   AdminAuctionActionResponse,
 } from '../types/admin';
 
+import {
+  adminPricingSchema,
+  cancelPriceResultSchema,
+  grantVoucherResultSchema,
+  parseEnvelope,
+  revokeVoucherResultSchema,
+  setPriceResultSchema,
+  voucherListSchema,
+  type AdminPricing,
+  type AdminVoucherList,
+  type PriceKind,
+} from './pricingSchemas';
+
 const ADMIN_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1'}/admin`;
 
 // ─── Auth Helper ─────────────────────────────────────────────────────────────
@@ -503,6 +516,61 @@ export const adminApi = {
   /** Runs the reconciliation check now instead of waiting for the 10-minute tick. */
   sweepStuckPayments(): Promise<AdminStuckPaymentSweepResponse> {
     return adminFetch<AdminStuckPaymentSweepResponse>('/stuck-payments/sweep', { method: 'POST', body: '{}' });
+  },
+
+  // ─── Prices + free-transfer vouchers (S-ADMIN1 Ph3b; admin + super_admin) ──
+
+  /** GET /admin/pricing — prices in effect, launch defaults, and history (newest first). */
+  async getPricing(): Promise<AdminPricing> {
+    return parseEnvelope(adminPricingSchema, await adminFetch<unknown>('/pricing'));
+  },
+
+  /** POST /admin/pricing — effectiveFrom null = now; a future time schedules it. */
+  async setPrice(body: { kind: PriceKind; amountUsdCents: number; effectiveFrom: string | null; reason: string }) {
+    return parseEnvelope(
+      setPriceResultSchema,
+      await adminFetch<unknown>('/pricing', { method: 'POST', body: JSON.stringify(body) }),
+    );
+  },
+
+  /** POST /admin/pricing/:id/cancel — scheduled changes only. */
+  async cancelPrice(priceId: string, reason: string) {
+    return parseEnvelope(
+      cancelPriceResultSchema,
+      await adminFetch<unknown>(`/pricing/${encodeURIComponent(priceId)}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+    );
+  },
+
+  /** GET /admin/vouchers — email is an exact account email; the server audit-logs the lookup. */
+  async listVoucherGrants(params: { email?: string; page?: number; limit?: number } = {}): Promise<AdminVoucherList> {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== '') qs.set(key, String(value));
+    }
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    return parseEnvelope(voucherListSchema, await adminFetch<unknown>(`/vouchers${query}`));
+  },
+
+  /** POST /admin/vouchers — expiresAt null = never expires. */
+  async grantVouchers(body: { email: string; quantity: number; reason: string; expiresAt: string | null }) {
+    return parseEnvelope(
+      grantVoucherResultSchema,
+      await adminFetch<unknown>('/vouchers', { method: 'POST', body: JSON.stringify(body) }),
+    );
+  },
+
+  /** POST /admin/vouchers/:id/revoke — cancels the grant's unused free transfers. */
+  async revokeVoucherGrant(grantId: string, reason: string) {
+    return parseEnvelope(
+      revokeVoucherResultSchema,
+      await adminFetch<unknown>(`/vouchers/${encodeURIComponent(grantId)}/revoke`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+    );
   },
 };
 
