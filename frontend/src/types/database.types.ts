@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_settings: {
+        Row: {
+          delete_window_hours: number
+          id: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          delete_window_hours?: number
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          delete_window_hours?: number
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       admin_roles: {
         Row: {
           created_at: string | null
@@ -2804,6 +2825,10 @@ export type Database = {
           photo_url: string | null
           preferred_brand: Database["public"]["Enums"]["brand_type"] | null
           profile_photo_url: string | null
+          retire_reason: string | null
+          retired_at: string | null
+          retired_by: string | null
+          retired_role: string | null
           role: Database["public"]["Enums"]["user_role"]
           seller_tier: Database["public"]["Enums"]["tier_level"]
           seller_verification_rejection_reason: string | null
@@ -2849,6 +2874,10 @@ export type Database = {
           photo_url?: string | null
           preferred_brand?: Database["public"]["Enums"]["brand_type"] | null
           profile_photo_url?: string | null
+          retire_reason?: string | null
+          retired_at?: string | null
+          retired_by?: string | null
+          retired_role?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           seller_tier?: Database["public"]["Enums"]["tier_level"]
           seller_verification_rejection_reason?: string | null
@@ -2894,6 +2923,10 @@ export type Database = {
           photo_url?: string | null
           preferred_brand?: Database["public"]["Enums"]["brand_type"] | null
           profile_photo_url?: string | null
+          retire_reason?: string | null
+          retired_at?: string | null
+          retired_by?: string | null
+          retired_role?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           seller_tier?: Database["public"]["Enums"]["tier_level"]
           seller_verification_rejection_reason?: string | null
@@ -3079,10 +3112,31 @@ export type Database = {
       }
     }
     Functions: {
+      account_delete_blockers: { Args: { p_target: string }; Returns: string[] }
+      account_status_of: { Args: { p_user: string }; Returns: string }
+      admin_account_guard: {
+        Args: { p_admin: string; p_permission: string; p_target: string }
+        Returns: string
+      }
+      admin_actor_email: {
+        Args: { p_admin: string; p_permission: string }
+        Returns: string
+      }
+      admin_audit_log_facets: { Args: never; Returns: Json }
       admin_cancel_token_price: {
         Args: { p_admin: string; p_price: string; p_reason: string }
         Returns: Json
       }
+      admin_delete_account: {
+        Args: {
+          p_admin: string
+          p_confirm: string
+          p_reason: string
+          p_target: string
+        }
+        Returns: Json
+      }
+      admin_end_sessions: { Args: { p_user: string }; Returns: number }
       admin_fulfil_reissue: {
         Args: {
           p_admin: string
@@ -3096,6 +3150,14 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_get_account: {
+        Args: { p_admin: string; p_target: string }
+        Returns: Json
+      }
+      admin_get_account_tokens: {
+        Args: { p_admin: string; p_target: string }
+        Returns: Json
+      }
       admin_grant_transfer_vouchers: {
         Args: {
           p_admin: string
@@ -3106,7 +3168,12 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_lock_changes: { Args: never; Returns: boolean }
       admin_nfc_actor_email: { Args: { p_admin: string }; Returns: string }
+      admin_reactivate_account: {
+        Args: { p_admin: string; p_reason: string; p_target: string }
+        Returns: Json
+      }
       admin_reapply_payment: {
         Args: {
           p_admin: string
@@ -3127,6 +3194,7 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_require_reason: { Args: { p_reason: string }; Returns: string }
       admin_reset_token: {
         Args: {
           p_admin: string
@@ -3138,6 +3206,10 @@ export type Database = {
           p_salt_enc: string
           p_tag_ref: string
         }
+        Returns: Json
+      }
+      admin_retire_account: {
+        Args: { p_admin: string; p_reason: string; p_target: string }
         Returns: Json
       }
       admin_review_reissue: {
@@ -3152,6 +3224,29 @@ export type Database = {
       }
       admin_revoke_transfer_voucher: {
         Args: { p_admin: string; p_grant: string; p_reason: string }
+        Returns: Json
+      }
+      admin_search_accounts: {
+        Args: {
+          p_admin: string
+          p_limit: number
+          p_offset: number
+          p_query: string
+          p_status: string
+        }
+        Returns: Json
+      }
+      admin_set_account_role: {
+        Args: {
+          p_admin: string
+          p_reason: string
+          p_role: string
+          p_target: string
+        }
+        Returns: Json
+      }
+      admin_set_delete_window: {
+        Args: { p_admin: string; p_hours: number; p_reason: string }
         Returns: Json
       }
       admin_set_tag_suspension: {
@@ -3171,6 +3266,19 @@ export type Database = {
           p_kind: string
           p_reason: string
         }
+        Returns: Json
+      }
+      admin_suspend_account: {
+        Args: {
+          p_admin: string
+          p_hours: number
+          p_reason: string
+          p_target: string
+        }
+        Returns: Json
+      }
+      admin_unsuspend_account: {
+        Args: { p_admin: string; p_reason: string; p_target: string }
         Returns: Json
       }
       apply_payment_penalty: {
@@ -3193,10 +3301,6 @@ export type Database = {
         Returns: Json
       }
       available_transfer_vouchers: { Args: { p_user: string }; Returns: number }
-      ban_user: {
-        Args: { p_admin_id: string; p_reason: string; p_user_id: string }
-        Returns: undefined
-      }
       calculate_platform_fee_percent: {
         Args: { tier: Database["public"]["Enums"]["tier_level"] }
         Returns: number
@@ -3213,10 +3317,6 @@ export type Database = {
         Returns: Database["public"]["Enums"]["tier_level"]
       }
       current_token_price: { Args: { p_kind: string }; Returns: number }
-      deactivate_admin: {
-        Args: { p_admin_id: string; p_reason?: string }
-        Returns: undefined
-      }
       determine_risk_level: {
         Args: { flags: Database["public"]["Enums"]["content_flag"][] }
         Returns: Database["public"]["Enums"]["content_risk_level"]
@@ -3244,7 +3344,6 @@ export type Database = {
         Args: { p_admin: string; p_need_admin: boolean }
         Returns: string
       }
-      reactivate_admin: { Args: { p_admin_id: string }; Returns: undefined }
       record_payment_incident: {
         Args: {
           p_amount: number
@@ -3272,26 +3371,8 @@ export type Database = {
         Args: { p_actor?: string; p_name?: string; p_sig_sha256: string }
         Returns: string
       }
-      revoke_admin_session: { Args: { p_admin_id: string }; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
-      suspend_user: {
-        Args: {
-          p_admin_id: string
-          p_duration_hours: number
-          p_reason: string
-          p_user_id: string
-        }
-        Returns: undefined
-      }
-      unban_user: {
-        Args: { p_admin_id: string; p_user_id: string }
-        Returns: undefined
-      }
-      unsuspend_user: {
-        Args: { p_admin_id: string; p_user_id: string }
-        Returns: undefined
-      }
     }
     Enums: {
       admin_permission:
@@ -3307,6 +3388,9 @@ export type Database = {
         | "review_sellers"
         | "manage_escrow"
         | "manage_nfc"
+        | "reapply_payments"
+        | "refund_token_fees"
+        | "manage_pricing"
       auction_status:
         | "DRAFT"
         | "SCHEDULED"
@@ -3558,6 +3642,9 @@ export const Constants = {
         "review_sellers",
         "manage_escrow",
         "manage_nfc",
+        "reapply_payments",
+        "refund_token_fees",
+        "manage_pricing",
       ],
       auction_status: [
         "DRAFT",
