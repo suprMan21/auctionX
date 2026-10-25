@@ -13,19 +13,15 @@ import type { SecurityLogContext } from '../ownership/ownershipProof';
 export type ActorType = SecurityLogContext['actorType'];
 
 /**
- * Client IP from the trusted proxy header.
+ * Client IP as Express resolves it through the trusted App Runner proxies
+ * (app.ts TRUSTED_PROXIES), i.e. the same address the rate limiters use.
  *
- * App Runner terminates TLS and forwards the client address in
- * `x-forwarded-for`; the left-most entry is the original client. Falls back to
+ * Never the left-most `x-forwarded-for` entry: the client writes that one, so
+ * logging it lets anyone choose the IP in our security events. Falls back to
  * the socket address, and finally to a literal `unknown` so the envelope's
  * non-empty constraint always holds (a missing IP must not drop the event).
  */
-const clientIp = (req: Request): string => {
-  const forwarded = req.headers['x-forwarded-for'];
-  const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  const first = raw?.split(',')[0]?.trim();
-  return first || req.socket?.remoteAddress || 'unknown';
-};
+const clientIp = (req: Request): string => req.ip || req.socket?.remoteAddress || 'unknown';
 
 /**
  * @param routePattern The Express route pattern, passed explicitly by the

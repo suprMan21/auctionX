@@ -80,6 +80,22 @@ export const MARKETPLACE_MOUNTS: readonly Mount[] = [
 ] as const;
 
 /**
+ * Proxies whose `X-Forwarded-For` entries Express may believe: App Runner's
+ * internal hops, which are all link-local (169.254/16) or private addresses.
+ *
+ * Express reads X-Forwarded-For from the RIGHT, skips these, and takes the
+ * first public address as `req.ip`. That holds whatever the number of App
+ * Runner hops, and a client cannot choose its own IP: anything it sends sits to
+ * the left of the address App Runner appended. Deliberately not `true` (which
+ * would believe the left-most, client-written entry) and not a hop count (App
+ * Runner does not document one).
+ *
+ * Every rate limiter keys on `req.ip`; unset, they all saw the proxy's address
+ * and shared one budget across every user (unset since 2026-10-05).
+ */
+export const TRUSTED_PROXIES = ['loopback', 'linklocal', 'uniquelocal'] as const;
+
+/**
  * Builds the Express app.
  *
  * Extracted from server.ts so the mount allowlist is supertest-able: server.ts
@@ -87,6 +103,7 @@ export const MARKETPLACE_MOUNTS: readonly Mount[] = [
  */
 export const createApp = (): express.Express => {
   const app = express();
+  app.set('trust proxy', [...TRUSTED_PROXIES]);
   const marketplace = isMarketplaceEnabled();
 
   app.use(requestIdMiddleware as express.RequestHandler);
