@@ -27,6 +27,7 @@ import {
   updateDisclosure,
 } from '../controllers/tagManagementController';
 import { ownershipAuthProbeDetector, resolveOwnershipId } from '../controllers/ownershipController';
+import { getMyVouchers, getPrices } from '../controllers/tokenPricesController';
 import {
   tapTag,
   listMyTokens,
@@ -171,6 +172,9 @@ tagManagementRoutes.post('/reissue-requests/:id/cancel', requireAuth, mutationLi
 // are the caller's own data.
 tagManagementRoutes.post('/tap', optionalAuth, tapLimit, handle(tapTag));
 tagManagementRoutes.get('/mine', requireAuth, readLimit, handle(listMyTokens));
+// S-ADMIN1 Ph3b: prices in effect and the caller's free transfers (display only).
+tagManagementRoutes.get('/prices', requireAuth, readLimit, handle(getPrices));
+tagManagementRoutes.get('/vouchers/mine', requireAuth, readLimit, handle(getMyVouchers));
 tagManagementRoutes.get('/transfers/incoming', requireAuth, readLimit, handle(listIncomingTransfers));
 
 // `/transfer/initiate` MUST be registered before `/transfer/:id/...`, otherwise

@@ -216,6 +216,87 @@ export const applyReissueFee = async (
   }
 };
 
+export type VoucherOutcome =
+  | 'applied'
+  /** The fee payer has no usable voucher. Nothing changed: take a card payment. */
+  | 'no_voucher'
+  | 'not_found'
+  | 'not_payable'
+  | 'no_recipient'
+  /** A card payment was already started for this transfer. */
+  | 'intent_mismatch'
+  | 'failed';
+
+export interface VoucherResult {
+  readonly outcome: VoucherOutcome;
+  readonly grantId?: string | null;
+  readonly payerId?: string | null;
+  readonly errorCode?: string;
+}
+
+/**
+ * S-ADMIN1 Ph3b: uses one of the fee payer's free-transfer vouchers and
+ * completes the transfer, in one database transaction
+ * (`redeem_transfer_voucher`, which calls `apply_transfer_fee` with the
+ * 'voucher' source). The voucher use rolls back with any failure. The payer is
+ * decided by the database from the row, not by this caller. Never throws.
+ */
+export const redeemTransferVoucher = async (
+  supabase: SupabaseClient,
+  transferId: string,
+  tagId: string,
+  ctx: SecurityLogContext,
+): Promise<VoucherResult> => {
+  let minted;
+  try {
+    minted = mintOwnershipProof({ tagId, ownershipEventId: transferId, ownershipEventType: 'transfer' }, ctx);
+  } catch {
+    return { outcome: 'failed', errorCode: 'proof_mint_failed' };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('redeem_transfer_voucher', {
+      p_transfer: transferId,
+      p_ownership_id: minted.ownershipId,
+      p_tag_ref: minted.tagRef,
+      p_salt_enc: minted.saltEnc,
+    });
+    if (error) {
+      const key = (error.message ?? '').split(':')[0].trim();
+      return { outcome: 'failed', errorCode: key.startsWith('voucher_apply_') ? key : 'redeem_rpc_failed' };
+    }
+
+    const row = data as { outcome?: unknown; grant_id?: string | null; payer_id?: string | null } | null;
+    switch (row?.outcome) {
+      case 'applied':
+        emitSecurityEvent({
+          event: 'transfer.state_change',
+          transfer_id: transferId,
+          from: 'PENDING',
+          to: 'COMPLETED',
+          trigger: 'voucher',
+          result: 'ok',
+          request_id: ctx.requestId,
+          actor_id: ctx.actorId,
+          actor_type: ctx.actorType,
+          ip: ctx.ip,
+          route: ctx.route,
+        });
+        return { outcome: 'applied', grantId: row.grant_id ?? null, payerId: row.payer_id ?? null };
+      case 'no_voucher':
+      case 'not_found':
+      case 'not_payable':
+      case 'no_recipient':
+      case 'intent_mismatch':
+        return { outcome: row.outcome };
+      default:
+        return { outcome: 'failed', errorCode: 'redeem_unknown_outcome' };
+    }
+  } catch {
+    return { outcome: 'failed', errorCode: 'redeem_threw' };
+  }
+};
+
 export const applyFee = (
   supabase: SupabaseClient,
   fee: FeeIntent,

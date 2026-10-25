@@ -96,8 +96,9 @@ vi.mock('@supabase/supabase-js', () => ({
 }));
 
 const stripeCreate = vi.fn();
+const stripeCancel = vi.fn();
 vi.mock('../lib/stripe', () => ({
-  getStripe: () => ({ paymentIntents: { create: stripeCreate } }),
+  getStripe: () => ({ paymentIntents: { create: stripeCreate, cancel: stripeCancel } }),
 }));
 
 const sendEmail = vi.fn();
@@ -147,6 +148,8 @@ beforeEach(async () => {
   vi.resetModules();
   stripeCreate.mockReset();
   stripeCreate.mockResolvedValue({ id: 'pi_test_123', client_secret: 'cs_test_123' });
+  stripeCancel.mockReset();
+  stripeCancel.mockResolvedValue({ id: 'pi_test_123', status: 'canceled' });
   sendEmail.mockReset();
   sendEmail.mockResolvedValue(true);
   process.env.FRONTEND_URL = 'https://am.example';
@@ -1012,3 +1015,192 @@ describe('after a completed transfer', () => {
 // ── Re-issue ────────────────────────────────────────────────────────────────
 // S-ADMIN1 Ph2: owner-only with a live tap + photos, web payment, admin queue.
 // Covered end to end in reissue.test.ts.
+
+// ── S-ADMIN1 Ph3b: admin-set prices + free-transfer vouchers ────────────────
+
+describe('Ph3b prices and vouchers', () => {
+  const PAST = '2026-01-01T00:00:00Z';
+  const FUTURE = '2999-01-01T00:00:00Z';
+  const priceRow = (kind: string, cents: number, effective: string, extra: Row = {}): Row => ({
+    id: `price-${kind}-${cents}`, kind, amount_usd_cents: cents, effective_from: effective,
+    cancelled_at: null, created_at: effective, ...extra,
+  });
+  const grant = (userId: string, remaining: number, extra: Row = {}): Row => ({
+    id: `grant-${userId}`, user_id: userId, quantity: remaining || 1, remaining,
+    expires_at: null, revoked_at: null, ...extra,
+  });
+
+  /** Plays redeem_transfer_voucher: completes the transfer and moves ownership. */
+  const redeemCalls: Row[] = [];
+  const voucherDb = (outcome: string | { error: string }) => (fn: string, args: Row) => {
+    if (fn !== 'redeem_transfer_voucher') throw new Error(`unexpected rpc ${fn}`);
+    redeemCalls.push(args);
+    if (typeof outcome !== 'string') return { data: null, error: { message: outcome.error } };
+    if (outcome === 'applied') {
+      const t = tables.ownership_transfers.find((r) => r.id === args.p_transfer) as Row;
+      t.status = 'COMPLETED';
+      t.payment_method = 'voucher';
+      tag().current_owner_id = t.to_user_id;
+    }
+    return { data: { outcome, grant_id: 'grant-x', payer_id: BUYER }, error: null };
+  };
+
+  const startTransfer = async (extra: Row = {}) => {
+    await claimFirst();
+    const { initiateTransfer } = await controllers();
+    await call(initiateTransfer, makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toUserId: BUYER, ...extra }));
+    return String(tables.ownership_transfers[0].id);
+  };
+
+  beforeEach(() => {
+    redeemCalls.length = 0;
+  });
+
+  it('locks the price in effect when the sender starts the transfer (ignores scheduled and cancelled rows)', async () => {
+    tables.token_prices = [
+      priceRow('transfer', 250, '2026-01-01T00:00:00Z'),
+      priceRow('transfer', 300, '2026-06-01T00:00:00Z'),
+      priceRow('transfer', 900, '2026-07-01T00:00:00Z', { cancelled_at: '2026-06-30T00:00:00Z' }),
+      priceRow('transfer', 500, FUTURE),
+    ];
+    await startTransfer();
+    expect(tables.ownership_transfers[0].list_amount_usd_cents).toBe(300);
+    expect(tables.ownership_transfers[0].transfer_fee_cents).toBe(300);
+  });
+
+  it('falls back to the launch default when no price row exists', async () => {
+    tables.token_prices = [];
+    await startTransfer();
+    expect(tables.ownership_transfers[0].list_amount_usd_cents).toBe(250);
+  });
+
+  it('fails closed (no transfer) when the price lookup errors', async () => {
+    hooks.failRead = (table) => table === 'token_prices';
+    await claimFirst();
+    const { initiateTransfer } = await controllers();
+    const out = await call(initiateTransfer, makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toUserId: BUYER }));
+    expect(out.threw?.code).toBe('unavailable');
+    expect(tables.ownership_transfers).toHaveLength(0);
+  });
+
+  it('charges the locked price even after an admin raised it', async () => {
+    tables.token_prices = [priceRow('transfer', 300, PAST)];
+    const transferId = await startTransfer();
+    tables.token_prices.push(priceRow('transfer', 700, '2026-09-01T00:00:00Z'));
+
+    const { completeTransfer } = await controllers();
+    const out = await call(completeTransfer, makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }));
+
+    expect(out.threw).toBeNull();
+    expect(stripeCreate.mock.calls[0][0]).toMatchObject({ amount: 300 });
+    expect((out.body.data as Row).voucherApplied).toBe(false);
+  });
+
+  it("uses the fee payer's voucher instead of Stripe and returns COMPLETED", async () => {
+    const transferId = await startTransfer();
+    tables.transfer_voucher_grants = [grant(BUYER, 2)];
+    hooks.rpc = voucherDb('applied');
+
+    const { completeTransfer } = await controllers();
+    const out = await call(completeTransfer, makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }));
+
+    expect(out.threw).toBeNull();
+    expect(stripeCreate).not.toHaveBeenCalled();
+    expect(redeemCalls).toHaveLength(1);
+    expect(redeemCalls[0]).toMatchObject({ p_transfer: transferId });
+    // The proof is minted server-side and handed to the DB, never client-supplied.
+    expect(String(redeemCalls[0].p_ownership_id)).toMatch(/\S/);
+    const data = out.body.data as Row;
+    expect(data).toMatchObject({ status: 'COMPLETED', voucherApplied: true, clientSecret: null, chargedAmount: 0 });
+    expect(eventsNamed('transfer.state_change').find((e) => e.to === 'COMPLETED')).toMatchObject({ trigger: 'voucher' });
+  });
+
+  it("checks the SENDER's vouchers when the sender pays the fee", async () => {
+    const transferId = await startTransfer({ feePayer: 'SELLER' });
+    tables.transfer_voucher_grants = [grant(BUYER, 3)]; // recipient has some; sender has none
+    hooks.rpc = voucherDb('applied');
+
+    const { completeTransfer } = await controllers();
+    await call(completeTransfer, makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }));
+
+    expect(redeemCalls).toHaveLength(0);
+    expect(stripeCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores expired and revoked grants', async () => {
+    const transferId = await startTransfer();
+    tables.transfer_voucher_grants = [
+      grant(BUYER, 1, { id: 'g-exp', expires_at: '2020-01-01T00:00:00Z' }),
+      grant(BUYER, 1, { id: 'g-rev', revoked_at: '2026-10-01T00:00:00Z' }),
+    ];
+    hooks.rpc = voucherDb('applied');
+
+    const { completeTransfer } = await controllers();
+    await call(completeTransfer, makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }));
+
+    expect(redeemCalls).toHaveLength(0);
+    expect(stripeCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes a card payment when the database says no_voucher (e.g. used up meanwhile)', async () => {
+    const transferId = await startTransfer();
+    tables.transfer_voucher_grants = [grant(BUYER, 1)];
+    hooks.rpc = voucherDb('no_voucher');
+
+    const { completeTransfer } = await controllers();
+    const out = await call(completeTransfer, makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }));
+
+    expect(out.threw).toBeNull();
+    expect(stripeCreate).toHaveBeenCalledTimes(1);
+    expect((out.body.data as Row).clientSecret).toBe('cs_test_123');
+  });
+
+  it('never falls through to a card charge when the voucher apply fails', async () => {
+    const transferId = await startTransfer();
+    tables.transfer_voucher_grants = [grant(BUYER, 1)];
+    hooks.rpc = voucherDb({ error: 'voucher_apply_not_payable' });
+
+    const { completeTransfer } = await controllers();
+    const out = await call(completeTransfer, makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }));
+
+    expect(out.threw?.message).toMatch(/not been charged/i);
+    expect(stripeCreate).not.toHaveBeenCalled();
+    expect(tables.ownership_transfers[0].status).toBe('PENDING');
+  });
+
+  it('skips the voucher once a card payment has been started', async () => {
+    const transferId = await startTransfer();
+    tables.ownership_transfers[0].stripe_payment_intent_id = 'pi_test_123';
+    tables.transfer_voucher_grants = [grant(BUYER, 1)];
+    hooks.rpc = voucherDb('applied');
+
+    const { completeTransfer } = await controllers();
+    await call(completeTransfer, makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }));
+
+    expect(redeemCalls).toHaveLength(0);
+    expect(stripeCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the PaymentIntent and refuses when the transfer stopped being PENDING before it was stored', async () => {
+    const transferId = await startTransfer();
+    hooks.beforeUpdate = (table, patch) => {
+      if (table === 'ownership_transfers' && 'stripe_payment_intent_id' in patch) {
+        tables.ownership_transfers[0].status = 'COMPLETED';
+      }
+    };
+
+    const { completeTransfer } = await controllers();
+    const out = await call(completeTransfer, makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }));
+
+    expect(out.threw?.message).toMatch(/not been charged/i);
+    expect(stripeCancel).toHaveBeenCalledWith('pi_test_123');
+    expect(tables.ownership_transfers[0].stripe_payment_intent_id ?? null).toBeNull();
+  });
+
+  it('locks the current re-issue price onto a new re-issue request', async () => {
+    tables.token_prices = [priceRow('reissue', 1500, PAST), priceRow('reissue', 2000, FUTURE)];
+    const { currentPriceCents } = await import('../lib/tokenPrices');
+    const { createClient } = await import('@supabase/supabase-js');
+    expect(await currentPriceCents(createClient('x', 'y') as never, 'reissue')).toBe(1500);
+  });
+});

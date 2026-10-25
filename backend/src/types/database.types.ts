@@ -2516,6 +2516,60 @@ export type Database = {
           },
         ]
       }
+      token_prices: {
+        Row: {
+          amount_usd_cents: number
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          id: string
+          kind: string
+          reason: string
+        }
+        Insert: {
+          amount_usd_cents: number
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from: string
+          id?: string
+          kind: string
+          reason: string
+        }
+        Update: {
+          amount_usd_cents?: number
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          kind?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_prices_cancelled_by_fkey"
+            columns: ["cancelled_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "token_prices_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount_cents: number
@@ -2607,6 +2661,119 @@ export type Database = {
           {
             foreignKeyName: "transactions_seller_id_fkey"
             columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transfer_voucher_grants: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          granted_by: string
+          id: string
+          quantity: number
+          reason: string
+          remaining: number
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          granted_by: string
+          id?: string
+          quantity: number
+          reason: string
+          remaining: number
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          granted_by?: string
+          id?: string
+          quantity?: number
+          reason?: string
+          remaining?: number
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfer_voucher_grants_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_voucher_grants_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_voucher_grants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transfer_voucher_redemptions: {
+        Row: {
+          grant_id: string
+          id: string
+          list_amount_usd_cents: number | null
+          redeemed_at: string
+          transfer_id: string
+          user_id: string
+        }
+        Insert: {
+          grant_id: string
+          id?: string
+          list_amount_usd_cents?: number | null
+          redeemed_at?: string
+          transfer_id: string
+          user_id: string
+        }
+        Update: {
+          grant_id?: string
+          id?: string
+          list_amount_usd_cents?: number | null
+          redeemed_at?: string
+          transfer_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfer_voucher_redemptions_grant_id_fkey"
+            columns: ["grant_id"]
+            isOneToOne: false
+            referencedRelation: "transfer_voucher_grants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_voucher_redemptions_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: true
+            referencedRelation: "ownership_transfers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_voucher_redemptions_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -2912,6 +3079,10 @@ export type Database = {
       }
     }
     Functions: {
+      admin_cancel_token_price: {
+        Args: { p_admin: string; p_price: string; p_reason: string }
+        Returns: Json
+      }
       admin_fulfil_reissue: {
         Args: {
           p_admin: string
@@ -2922,6 +3093,16 @@ export type Database = {
           p_request: string
           p_salt_enc: string
           p_tag_ref: string
+        }
+        Returns: Json
+      }
+      admin_grant_transfer_vouchers: {
+        Args: {
+          p_admin: string
+          p_expires_at: string
+          p_quantity: number
+          p_reason: string
+          p_user: string
         }
         Returns: Json
       }
@@ -2969,6 +3150,10 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_revoke_transfer_voucher: {
+        Args: { p_admin: string; p_grant: string; p_reason: string }
+        Returns: Json
+      }
       admin_set_tag_suspension: {
         Args: {
           p_admin: string
@@ -2977,6 +3162,16 @@ export type Database = {
           p_tag: string
         }
         Returns: string
+      }
+      admin_set_token_price: {
+        Args: {
+          p_admin: string
+          p_amount: number
+          p_effective_from: string
+          p_kind: string
+          p_reason: string
+        }
+        Returns: Json
       }
       apply_payment_penalty: {
         Args: { p_offer_id: string; p_settlement_id: string; p_user_id: string }
@@ -2997,6 +3192,7 @@ export type Database = {
         }
         Returns: Json
       }
+      available_transfer_vouchers: { Args: { p_user: string }; Returns: number }
       ban_user: {
         Args: { p_admin_id: string; p_reason: string; p_user_id: string }
         Returns: undefined
@@ -3016,6 +3212,7 @@ export type Database = {
         Args: { trailing_12mo_sales: number }
         Returns: Database["public"]["Enums"]["tier_level"]
       }
+      current_token_price: { Args: { p_kind: string }; Returns: number }
       deactivate_admin: {
         Args: { p_admin_id: string; p_reason?: string }
         Returns: undefined
@@ -3058,6 +3255,15 @@ export type Database = {
           p_reason: string
           p_reissue: string
           p_resolved_as?: string
+          p_transfer: string
+        }
+        Returns: Json
+      }
+      redeem_transfer_voucher: {
+        Args: {
+          p_ownership_id: string
+          p_salt_enc: string
+          p_tag_ref: string
           p_transfer: string
         }
         Returns: Json
