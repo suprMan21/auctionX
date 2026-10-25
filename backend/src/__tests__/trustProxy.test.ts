@@ -18,7 +18,7 @@ const probeApp = (limiter?: express.RequestHandler) => {
   app.set('trust proxy', [...TRUSTED_PROXIES]);
   if (limiter) app.use(limiter);
   app.get('/ip', (req, res) => {
-    res.json({ ip: req.ip, logged: securityContext(req, '/ip', 'anonymous').ip });
+    res.json({ ip: req.ip, logged: securityContext(req, '/ip', 'anon').ip });
   });
   return app;
 };
