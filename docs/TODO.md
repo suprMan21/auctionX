@@ -155,13 +155,14 @@ authz = admin_users + `manage_nfc` (2026-10-05).
       Security Key C NFC break-glass keys (root + super_admin stay as-is until then); report `tccDev` permissions.
 - [ ] **`backend/.env.op` is broken** (2026-10-25): it references 1Password item "NFC Local Root", which no longer exists,
       so `op run --env-file backend/.env.op` (and `cc-auctionx`) fails before starting. Remove or repoint that line.
-- [ ] **`backend/.env` holds `auctionx-deploy`'s long-lived key** (found 2026-10-25; file dated May 9). Local backend runs
-      without 1Password use the DEPLOY user, which can write both site buckets (incl. the public site). The backend
-      never needs deploy credentials: point `backend/.env` at the scoped S3 user (or a short-lived role) and keep the
-      deploy key only in the `auctionx` CLI profile. Correction: `.env.op` uses 1Password item "AWS AuctionX Media"
-      (presumably `auctionx-s3-access`, unconfirmed).
+- [ ] **The backend's local AWS key is the DEPLOY user's** (verified 2026-10-25 with sts get-caller-identity): both
+      plain `backend/.env` and 1Password item "AWS AuctionX Media" (used by `backend/.env.op`) hold `auctionx-deploy`,
+      which can write both site buckets incl. the public site. Fix: check "Last used" on `auctionx-s3-access`'s key
+      (nothing known loads it); create a new key on that (now scoped) user, put it in "AWS AuctionX Media" and
+      `backend/.env`, deactivate its old key; the deploy key then lives only in the `auctionx` CLI profile.
 - [x] ~~IAM cleanup — PRIORITY~~ applied by Boss 2026-10-25 (scoped inline `AmS3DevScoped`, S3FullAccess detached,
-      user out of `tccDev`, group deleted); verification with the `.env.op` key pending. Original note:
+      user out of `tccDev`, group deleted). Its key is not used by local dev (see above), so the scope-down is not yet
+      exercised. Original note:
       **IAM cleanup — PRIORITY (pull ahead of S-SEC0):** machine user `auctionx-s3-access` (member of group
       `tccDev`) has `IAMUserChangePassword` + **`AmazonS3FullAccess`** attached to the user itself, AND group `tccDev` (its
       only member) also grants `AmazonS3FullAccess` (Boss 2026-10-25). Its long-lived key (local dev, via
