@@ -17,6 +17,10 @@ import {
   transferCompleteResultSchema,
   transferInitiateResultSchema,
   transferStatusSchema,
+  tokenPricesSchema,
+  myVouchersSchema,
+  type TokenPrices,
+  type MyVouchers,
   incomingTransfersSchema,
   myTokensSchema,
   ownershipLookupSchema,
@@ -89,7 +93,7 @@ const authHeader = async (required: boolean): Promise<Record<string, string>> =>
 
 const request = async <T>(
   path: string,
-  schema: z.ZodType<T>,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   init: { method?: string; body?: unknown; auth: 'required' | 'optional' },
 ): Promise<T> => {
   const headers: Record<string, string> = {
@@ -188,6 +192,16 @@ export const tokenApi = {
       body: { tapSession },
       auth: 'required',
     });
+  },
+
+  /** Prices in effect now (S-ADMIN1 Ph3b). Display only: the server locks the price when a transfer starts. */
+  getPrices(): Promise<TokenPrices> {
+    return request('/nfc/prices', tokenPricesSchema, { auth: 'required' });
+  },
+
+  /** Free transfers the signed-in account can use now. */
+  getMyVouchers(): Promise<MyVouchers> {
+    return request('/nfc/vouchers/mine', myVouchersSchema, { auth: 'required' });
   },
 
   async cancelTransfer(transferId: string): Promise<void> {

@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { AdminRoleContext, roleNameFrom, type AdminRoleState } from '../lib/adminRole';
 
 type CheckState = 'loading' | 'admin' | 'not-admin' | 'unauthenticated';
 
@@ -20,6 +21,7 @@ type CheckState = 'loading' | 'admin' | 'not-admin' | 'unauthenticated';
 export const AdminProtectedRoute = () => {
   const { session, loading: authLoading, initialized } = useAuth();
   const [checkState, setCheckState] = useState<CheckState>('loading');
+  const [role, setRole] = useState<AdminRoleState>({ status: 'loading' });
 
   useEffect(() => {
     if (authLoading || !initialized) return;
@@ -42,7 +44,23 @@ export const AdminProtectedRoute = () => {
         setCheckState('not-admin');
       }
     };
+    // S-ADMIN1 Ph3b: the role, for hiding role-specific UI. Kept separate from
+    // the access check above so a failed lookup only hides role-gated items.
+    const loadRole = async () => {
+      try {
+        const { data } = await supabase
+          .from('admin_users')
+          .select('admin_roles(role_name)')
+          .eq('admin_id', session.user.id)
+          .eq('is_active', true)
+          .single();
+        setRole({ status: 'known', role: roleNameFrom(data?.admin_roles) });
+      } catch {
+        setRole({ status: 'known', role: null });
+      }
+    };
     check();
+    loadRole();
   }, [session, authLoading, initialized]);
 
   if (!initialized || authLoading || checkState === 'loading') {
@@ -64,5 +82,9 @@ export const AdminProtectedRoute = () => {
     return <Navigate to="/" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <AdminRoleContext.Provider value={role}>
+      <Outlet />
+    </AdminRoleContext.Provider>
+  );
 };

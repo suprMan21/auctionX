@@ -11,6 +11,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { cn } from '@/lib/cn';
 import { BRAND_LABEL } from '@/constants/branding';
 import { isMarketplaceEnabledOnClient } from '../../lib/featureFlags';
+import { hasAdminRole, PRICING_ROLES, useAdminRole } from './lib/adminRole';
 
 interface NavItem {
   /** Route path relative to /admin */
@@ -21,6 +22,8 @@ interface NavItem {
   icon: string;
   /** S-ISO1: this surface serves the parked marketplace. */
   marketplace?: boolean;
+  /** S-ADMIN1 Ph3b: only these admin roles see the item (the API enforces it too). */
+  roles?: readonly string[];
 }
 
 const ALL_NAV_ITEMS: NavItem[] = [
@@ -50,6 +53,20 @@ const ALL_NAV_ITEMS: NavItem[] = [
     label: 'Stuck payments',
     // exclamation-circle: paid, not delivered
     icon: 'M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+  {
+    to: '/admin/pricing',
+    label: 'Pricing',
+    roles: PRICING_ROLES,
+    // cash
+    icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z',
+  },
+  {
+    to: '/admin/vouchers',
+    label: 'Free transfers',
+    roles: PRICING_ROLES,
+    // ticket
+    icon: 'M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z',
   },
   {
     to: '/admin/verifications',
@@ -118,6 +135,8 @@ export const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { session, signOut } = useAuth();
   const navigate = useNavigate();
+  const role = useAdminRole();
+  const navItems = NAV_ITEMS.filter((item) => !item.roles || hasAdminRole(role, item.roles));
 
   const handleLogout = async () => {
     await signOut();
@@ -143,7 +162,7 @@ export const AdminLayout = () => {
 
       {/* Nav */}
       <nav className="flex-1 p-4 space-y-1" aria-label="Admin navigation">
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

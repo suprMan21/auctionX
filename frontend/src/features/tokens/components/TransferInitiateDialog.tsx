@@ -1,13 +1,10 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { z } from 'zod';
 import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
 import { tokenApi, TokenApiError } from '../api/tokenApi';
 import type { TransferInitiateResult } from '../api/schemas';
 import { formatMoney, transferErrorCopy } from '../lib/copy';
-
-/** The fee the API charges per transfer (TRANSFER_FEE_CENTS). Display only. */
-const LIST_FEE_USD_CENTS = 250;
 
 const emailSchema = z.string().trim().email();
 
@@ -20,6 +17,9 @@ interface TransferInitiateDialogProps {
 
 type Phase = { kind: 'editing' } | { kind: 'submitting' } | { kind: 'error'; message: string };
 
+/** The fee shown here comes from GET /nfc/prices; the server locks it when the transfer starts. */
+type Fee = { kind: 'loading' } | { kind: 'ready'; usdCents: number } | { kind: 'unavailable' };
+
 /**
  * Owner starts a sale or gift by recipient email. The recipient finishes it by
  * tapping the token and paying the transfer fee.
@@ -29,11 +29,31 @@ export const TransferInitiateDialog = ({ isOpen, tagId, onClose, onStarted }: Tr
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: 'editing' });
+  const [fee, setFee] = useState<Fee>({ kind: 'loading' });
   const emailId = useId();
   const emailHelpId = useId();
   const emailErrorId = useId();
 
   const submitting = phase.kind === 'submitting';
+
+  // Fetch the current price each time the dialog opens; prices can change.
+  // Closing resets to loading so a reopened dialog never shows a stale amount.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => tokenApi.getPrices())
+      .then((prices) => {
+        if (!cancelled) setFee({ kind: 'ready', usdCents: prices.transferUsdCents });
+      })
+      .catch(() => {
+        if (!cancelled) setFee({ kind: 'unavailable' });
+      });
+    return () => {
+      cancelled = true;
+      setFee({ kind: 'loading' });
+    };
+  }, [isOpen]);
 
   const close = () => {
     if (submitting) return;
@@ -122,10 +142,16 @@ export const TransferInitiateDialog = ({ isOpen, tagId, onClose, onStarted }: Tr
         </div>
 
         <div className="rounded-xl border border-white/10 p-4 text-sm text-gray-300 space-y-1">
-          <p>
-            Transfer fee: <span className="text-white">{formatMoney(LIST_FEE_USD_CENTS, 'usd')}</span>, paid by the recipient
-            when they accept.
-          </p>
+          {fee.kind === 'ready' ? (
+            <p>
+              Transfer fee: <span className="text-white">{formatMoney(fee.usdCents, 'usd')}</span>, paid by the recipient
+              when they accept.
+            </p>
+          ) : fee.kind === 'loading' ? (
+            <p role="status">Checking the transfer fee…</p>
+          ) : (
+            <p>The recipient pays a transfer fee when they accept. They see the exact amount before they pay.</p>
+          )}
           <p className="text-gray-400">
             To accept, they tap the token with their phone. Hand over the item first. Ownership moves only when they
             tap and pay.

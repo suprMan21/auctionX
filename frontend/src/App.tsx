@@ -46,6 +46,10 @@ import { AdminTagsPage } from '@/features/admin/pages/AdminTagsPage';
 import { AdminTagDetailPage } from '@/features/admin/pages/AdminTagDetailPage';
 import { AdminReissuePage } from '@/features/admin/pages/AdminReissuePage';
 import { AdminStuckPaymentsPage } from '@/features/admin/pages/AdminStuckPaymentsPage';
+import { AdminPricingPage } from '@/features/admin/pages/AdminPricingPage';
+import { AdminVouchersPage } from '@/features/admin/pages/AdminVouchersPage';
+import { AdminRoleGate } from '@/features/admin/components/AdminRoleGate';
+import { PRICING_ROLES } from '@/features/admin/lib/adminRole';
 import { NotificationsPage } from './features/notifications/pages/NotificationsPage';
 import { NotificationPreferencesPage } from './features/notifications/pages/NotificationPreferencesPage';
 import { SettingsPayoutsPage } from './pages/SettingsPayoutsPage';
@@ -415,6 +419,9 @@ function App() {
               <Route path="tags/:tagId" element={<AdminTagDetailPage />} />
               <Route path="reissue-requests" element={<AdminReissuePage />} />
               <Route path="stuck-payments" element={<AdminStuckPaymentsPage />} />
+              {/* S-ADMIN1 Ph3b: admin and super_admin only (the API returns 403 to support). */}
+              <Route path="pricing" element={<AdminRoleGate roles={PRICING_ROLES}><AdminPricingPage /></AdminRoleGate>} />
+              <Route path="vouchers" element={<AdminRoleGate roles={PRICING_ROLES}><AdminVouchersPage /></AdminRoleGate>} />
               <Route path="audit-logs" element={<AdminAuditLogPage />} />
               <Route path="health" element={<AdminHealthPage />} />
             </Route>

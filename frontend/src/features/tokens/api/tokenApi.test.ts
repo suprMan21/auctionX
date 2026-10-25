@@ -100,4 +100,59 @@ describe('tokenApi', () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({ tagId: 't', transferType: 'sale', toEmail: 'a@b.co' });
   });
+
+  // ── S-ADMIN1 Ph3b: prices, vouchers, free transfers ──────────────────────
+
+  const signedIn = () => getSession.mockResolvedValueOnce({ data: { session: { access_token: 'jwt' } } });
+  const completeBase = { transferId: 'tr', listAmountUsdCents: 300, chargedAmount: 300, chargedCurrency: 'usd', fxRate: 1 };
+
+  it('reads the prices in effect', async () => {
+    signedIn();
+    fetchMock.mockResolvedValue(jsonResponse(200, {
+      success: true, data: { currency: 'usd', transferUsdCents: 300, reissueUsdCents: 1000, tokenUsdCents: 2500 }, error: null,
+    }));
+
+    await expect(tokenApi.getPrices()).resolves.toEqual({ currency: 'usd', transferUsdCents: 300, reissueUsdCents: 1000, tokenUsdCents: 2500 });
+    expect((fetchMock.mock.calls[0] as [string])[0]).toMatch(/\/nfc\/prices$/);
+  });
+
+  it('reads the caller’s free transfers', async () => {
+    signedIn();
+    fetchMock.mockResolvedValue(jsonResponse(200, { success: true, data: { freeTransfers: 2 }, error: null }));
+
+    await expect(tokenApi.getMyVouchers()).resolves.toEqual({ freeTransfers: 2 });
+    expect((fetchMock.mock.calls[0] as [string])[0]).toMatch(/\/nfc\/vouchers\/mine$/);
+  });
+
+  it('reads a paid accept as paid, including from a backend that does not send voucherApplied', async () => {
+    signedIn();
+    fetchMock.mockResolvedValue(jsonResponse(200, {
+      success: true, data: { ...completeBase, status: 'PENDING', clientSecret: 'pi_1_secret_2' }, error: null,
+    }));
+
+    const result = await tokenApi.completeTransfer('tr', 'S'.repeat(43));
+    expect(result.voucherApplied).toBe(false);
+    expect(result.clientSecret).toBe('pi_1_secret_2');
+  });
+
+  it('reads a free transfer as completed with no client secret', async () => {
+    signedIn();
+    fetchMock.mockResolvedValue(jsonResponse(200, {
+      success: true,
+      data: { ...completeBase, chargedAmount: 0, voucherApplied: true, status: 'COMPLETED', clientSecret: null },
+      error: null,
+    }));
+
+    const result = await tokenApi.completeTransfer('tr', 'S'.repeat(43));
+    expect(result).toMatchObject({ voucherApplied: true, status: 'COMPLETED', clientSecret: null });
+  });
+
+  it('rejects a paid accept with no client secret rather than handing Stripe a null', async () => {
+    signedIn();
+    fetchMock.mockResolvedValue(jsonResponse(200, {
+      success: true, data: { ...completeBase, voucherApplied: false, status: 'PENDING', clientSecret: null }, error: null,
+    }));
+
+    await expect(tokenApi.completeTransfer('tr', 'S'.repeat(43))).rejects.toMatchObject({ code: 'bad_response' });
+  });
 });

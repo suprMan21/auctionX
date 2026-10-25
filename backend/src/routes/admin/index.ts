@@ -14,6 +14,8 @@ import healthRouter from './health';
 import tagsRouter from './tags';
 import reissueRouter from './reissue';
 import stuckPaymentsRouter from './stuckPayments';
+import pricingRouter from './pricing';
+import vouchersRouter from './vouchers';
 
 const router = Router();
 
@@ -39,6 +41,8 @@ router.use('/verifications', yotiVerificationsRouter); // Yoti ID review (Premie
 router.use('/tags', tagsRouter);              // S-ADMIN1 token admin: inventory, suspend, atomic reset
 router.use('/reissue-requests', reissueRouter); // S-ADMIN1 Ph2 re-issue queue: approve/waive/reject, fulfil
 router.use('/stuck-payments', stuckPaymentsRouter); // S-ADMIN1 Ph3a: paid-but-unapplied token fees: Re-apply, refund, sweep
+router.use('/pricing', pricingRouter);        // S-ADMIN1 Ph3b: admin-set token prices (effective-dated)
+router.use('/vouchers', vouchersRouter);      // S-ADMIN1 Ph3b: free-transfer vouchers granted to accounts
 
 // ── Parked: marketplace admin. Nothing deleted; see docs/PARKED_MARKETPLACE.md
 if (isMarketplaceEnabled()) {

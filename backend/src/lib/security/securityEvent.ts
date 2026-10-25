@@ -129,10 +129,13 @@ const transferStateChangeSchema = envelopeSchema.extend({
    * `webhook | sweep | reapply`: a signed `payment_intent.succeeded`, or (S-ADMIN1
    * Ph3a) a PaymentIntent the server fetched from Stripe and found succeeded.
    * A `sweep` or `reapply` line is always paired with a `payment.reconcile`
-   * event carrying the same request_id. S-SEC0 treats `to=COMPLETED` with any
-   * other trigger as Critical: a transfer completed without a verified payment.
+   * event carrying the same request_id. S-ADMIN1 Ph3b adds `voucher`: a free
+   * transfer from an admin grant, always backed by a `transfer_voucher_redemptions`
+   * row for the same transfer_id (written in the same transaction). S-SEC0 treats
+   * `to=COMPLETED` with any other trigger as Critical: a transfer completed
+   * without a verified payment.
    */
-  trigger: z.enum(['webhook', 'sweep', 'reapply', 'client', 'admin', 'system']),
+  trigger: z.enum(['webhook', 'sweep', 'reapply', 'voucher', 'client', 'admin', 'system']),
 }).strict();
 
 /**

@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import type { StripeElementsOptions } from '@stripe/stripe-js';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { isStripeConfigured, isStripeTestMode, stripeAppearance, stripePromise } from '@/lib/stripe';
 import { tokenApi, TokenApiError } from '../api/tokenApi';
-import type { TransferCompleteResult } from '../api/schemas';
+import type { TransferCompletePaid } from '../api/schemas';
 import { formatMoney, transferErrorCopy } from '../lib/copy';
 import { transferReturnUrl } from '../lib/transferReturn';
 import { TransferProcessing } from './TransferProcessing';
@@ -21,7 +22,9 @@ interface TransferCompleteFlowProps {
 type Phase =
   | { kind: 'idle' }
   | { kind: 'starting' }
-  | { kind: 'paying'; charge: TransferCompleteResult }
+  | { kind: 'paying'; charge: TransferCompletePaid }
+  /** A free transfer (voucher) was used: the server already completed it. No Stripe step. */
+  | { kind: 'free' }
   | { kind: 'processing' }
   | { kind: 'error'; message: string };
 
@@ -29,6 +32,9 @@ type Phase =
  * Recipient accepts a transfer: the tap that opened the page proves they hold
  * the item, then they pay the fee. The amount shown is what the server will
  * charge (`chargedAmount` / `chargedCurrency`), never a hard-coded price.
+ *
+ * S-ADMIN1 Ph3b: when the payer has a free transfer, the server uses it and
+ * completes the transfer at once (`voucherApplied`). Stripe is never mounted.
  */
 export const TransferCompleteFlow = ({ transferId, tagId, tapSession, onSessionSpent, onCompleted }: TransferCompleteFlowProps) => {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
@@ -39,7 +45,7 @@ export const TransferCompleteFlow = ({ transferId, tagId, tapSession, onSessionS
     try {
       const charge = await tokenApi.completeTransfer(transferId, tapSession);
       onSessionSpent();
-      setPhase({ kind: 'paying', charge });
+      setPhase(charge.voucherApplied ? { kind: 'free' } : { kind: 'paying', charge });
     } catch (err) {
       const apiError = err instanceof TokenApiError ? err : null;
       // Any answer from /complete has spent the session, success or not.
@@ -53,6 +59,10 @@ export const TransferCompleteFlow = ({ transferId, tagId, tapSession, onSessionS
 
   if (phase.kind === 'processing') {
     return <TransferProcessing transferId={transferId} tagId={tagId} onCompleted={onCompleted} />;
+  }
+
+  if (phase.kind === 'free') {
+    return <FreeTransferDone tagId={tagId} onCompleted={onCompleted} />;
   }
 
   return (
@@ -98,8 +108,25 @@ export const TransferCompleteFlow = ({ transferId, tagId, tapSession, onSessionS
   );
 };
 
+const FreeTransferDone = ({ tagId, onCompleted }: { readonly tagId: string; readonly onCompleted?: () => void }) => {
+  const onCompletedRef = useRef(onCompleted);
+  useEffect(() => {
+    onCompletedRef.current?.();
+  }, []);
+  return (
+    <section className="glass rounded-2xl p-6" aria-live="polite">
+      <h2 className="text-lg font-semibold text-white mb-2">It is yours.</h2>
+      <p className="text-gray-400 text-sm mb-1">The transfer is complete and you are the owner on record.</p>
+      <p className="text-gray-400 text-sm mb-3">You used a free transfer, so there was nothing to pay.</p>
+      <Link to={`/tokens/${tagId}`} className="text-primary-300 underline hover:text-primary-200">
+        View it in My Tokens
+      </Link>
+    </section>
+  );
+};
+
 interface PaymentStepProps {
-  readonly charge: TransferCompleteResult;
+  readonly charge: TransferCompletePaid;
   readonly transferId: string;
   readonly onPaid: () => void;
 }

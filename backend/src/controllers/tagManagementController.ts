@@ -65,11 +65,9 @@ import {
 } from '../services/nfc/tagManagementSchemas';
 import { evidenceUploadUrl, evidenceObjectIsValid, isOwnEvidenceKey } from '../lib/reissueEvidence';
 import { getStripe } from '../lib/stripe';
-import {
-  TRANSFER_FEE_CENTS,
-  REISSUE_FEE_CENTS,
-  resolveCharge,
-} from '../lib/tokenFees';
+import { TRANSFER_FEE_CENTS, resolveCharge } from '../lib/tokenFees';
+import { availableVoucherCount, currentPriceCents } from '../lib/tokenPrices';
+import { redeemTransferVoucher } from '../lib/payments/tokenFeeApply';
 import { notifyTransferRecipient } from '../lib/notifications/transferEmails';
 import { hasManageNfc } from '../lib/admin/tokenAdmin';
 
@@ -749,6 +747,10 @@ export const initiateTransfer = async (req: TagRequest, res: Response) => {
     throw errorFor('transfer_pending');
   }
 
+  // S-ADMIN1 Ph3b: the price is locked here, when the sender starts the
+  // transfer. A later admin price change does not reach this transfer.
+  const feeCents = await currentPriceCents(supabase, 'transfer');
+
   const { data: created, error } = await supabase
     .from('ownership_transfers')
     .insert({
@@ -760,8 +762,8 @@ export const initiateTransfer = async (req: TagRequest, res: Response) => {
       status: 'PENDING',
       fee_payer: feePayer,
       payment_method: 'card',
-      list_amount_usd_cents: TRANSFER_FEE_CENTS,
-      transfer_fee_cents: TRANSFER_FEE_CENTS,
+      list_amount_usd_cents: feeCents,
+      transfer_fee_cents: feeCents,
       initiated_at: new Date().toISOString(),
     })
     .select('id')
@@ -789,13 +791,13 @@ export const initiateTransfer = async (req: TagRequest, res: Response) => {
     transferType: transferType === 'gift' ? 'GIFT' : 'SALE',
     toUserId: toUserId ?? null,
     toEmail: toEmail?.trim().toLowerCase() ?? null,
-    feeCents: TRANSFER_FEE_CENTS,
+    feeCents,
   });
 
   return ok(res, {
     transferId: created.id,
     status: 'PENDING',
-    listAmountUsdCents: TRANSFER_FEE_CENTS,
+    listAmountUsdCents: feeCents,
   }, 201);
 };
 
@@ -827,7 +829,7 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
 
   const { data: transfer } = await supabase
     .from('ownership_transfers')
-    .select('id, tag_id, from_user_id, to_user_id, to_email, status, transfer_type, fee_payer, stripe_payment_intent_id')
+    .select('id, tag_id, from_user_id, to_user_id, to_email, status, transfer_type, fee_payer, stripe_payment_intent_id, list_amount_usd_cents')
     .eq('id', transferId)
     .maybeSingle();
 
@@ -984,7 +986,45 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
   }
 
   const payerId = transfer.fee_payer === 'SELLER' ? transfer.from_user_id : userId;
-  const charge = resolveCharge(TRANSFER_FEE_CENTS, payerId ? await billingCountryFor(supabase, payerId) : null);
+  const logger = withLogContext({ requestId: ctx.requestId, route: ctx.route });
+
+  // S-ADMIN1 Ph3b: a free-transfer voucher. Only before any card payment has
+  // been started; once a PaymentIntent exists, the card path continues. The
+  // count is a cheap pre-check; redeem_transfer_voucher decides, and uses the
+  // voucher and completes the transfer in one transaction.
+  if (!transfer.stripe_payment_intent_id && payerId && (await availableVoucherCount(supabase, payerId)) > 0) {
+    const redeemed = await redeemTransferVoucher(supabase, transfer.id, tag.id, ctx);
+
+    if (redeemed.outcome === 'applied') {
+      emitTransfer('ok');
+      return ok(res, {
+        transferId: transfer.id,
+        status: 'COMPLETED',
+        voucherApplied: true,
+        clientSecret: null,
+        listAmountUsdCents: transfer.list_amount_usd_cents ?? TRANSFER_FEE_CENTS,
+        chargedAmount: 0,
+        chargedCurrency: 'usd',
+        fxRate: 1,
+      });
+    }
+    if (redeemed.outcome !== 'no_voucher') {
+      // The voucher was not used (the database rolled it back). Do not fall
+      // through to a card charge on a transfer that could not complete.
+      logger.error('transfer_voucher_redeem_failed', {
+        transferId: transfer.id,
+        outcome: redeemed.outcome,
+        errorCode: redeemed.errorCode ?? null,
+      });
+      emitTransfer('internal');
+      throw new AppError('internal', 'We could not apply your free transfer. You have not been charged. Please try again.');
+    }
+  }
+
+  // The price was locked when the sender started the transfer. Rows from
+  // before Ph3b have none stored and fall back to the price in effect now.
+  const listCents = transfer.list_amount_usd_cents ?? (await currentPriceCents(supabase, 'transfer'));
+  const charge = resolveCharge(listCents, payerId ? await billingCountryFor(supabase, payerId) : null);
 
   const stripe = getStripe();
   const intent = await stripe.paymentIntents.create(
@@ -1004,7 +1044,10 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
     { idempotencyKey: `token-transfer-fee-${transfer.id}` },
   );
 
-  await supabase
+  // Only onto a transfer still PENDING. If it completed meanwhile (a voucher in
+  // a concurrent request), cancel the intent rather than hand out a secret for
+  // a payment that could only strand money.
+  const { data: stored, error: storeError } = await supabase
     .from('ownership_transfers')
     .update({
       stripe_payment_intent_id: intent.id,
@@ -1013,7 +1056,27 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
       charged_currency: charge.chargedCurrency,
       fx_rate: charge.fxRate,
     })
-    .eq('id', transfer.id);
+    .eq('id', transfer.id)
+    .eq('status', 'PENDING')
+    .select('id')
+    .maybeSingle();
+
+  if (storeError || !stored) {
+    logger.error('transfer_intent_store_failed', {
+      transferId: transfer.id,
+      error: storeError?.message ?? 'transfer no longer pending',
+    });
+    try {
+      await stripe.paymentIntents.cancel(intent.id);
+    } catch (cancelErr) {
+      logger.error('transfer_intent_cancel_failed', {
+        transferId: transfer.id,
+        error: cancelErr instanceof Error ? cancelErr.message : String(cancelErr),
+      });
+    }
+    emitTransfer('internal');
+    throw new AppError('internal', 'We could not start this payment. You have not been charged. Please try again.');
+  }
 
   emitTransfer('ok');
 
@@ -1021,6 +1084,7 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
     transferId: transfer.id,
     // Still PENDING. The webhook is what advances it.
     status: 'PENDING',
+    voucherApplied: false,
     clientSecret: intent.client_secret,
     listAmountUsdCents: charge.listAmountUsdCents,
     chargedAmount: charge.chargedAmount,
@@ -1368,7 +1432,8 @@ export const requestReissue = async (req: TagRequest, res: Response) => {
     throw errorFor('tap_session_invalid');
   }
 
-  const charge = resolveCharge(REISSUE_FEE_CENTS, await billingCountryFor(supabase, userId));
+  // S-ADMIN1 Ph3b: the re-issue price in effect now, locked onto the request.
+  const charge = resolveCharge(await currentPriceCents(supabase, 'reissue'), await billingCountryFor(supabase, userId));
 
   const { data: created, error } = await supabase
     .from('reissue_requests')
