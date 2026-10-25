@@ -153,7 +153,14 @@ authz = admin_users + `manage_nfc` (2026-10-05).
       Still to do: YubiKeys on Google, GitHub, Stripe, 1Password, Supabase, GoDaddy (authentic-materials.com) and
       Squarespace (cravingcorp.com); move the am-encoder TOTP seed onto both keys and out of 1Password; buy the two
       Security Key C NFC break-glass keys (root + super_admin stay as-is until then); report `tccDev` permissions.
-- [ ] **IAM cleanup — PRIORITY (pull ahead of S-SEC0):** machine user `auctionx-s3-access` (member of group
+- [ ] **`backend/.env` holds `auctionx-deploy`'s long-lived key** (found 2026-10-25; file dated May 9). Local backend runs
+      without 1Password use the DEPLOY user, which can write both site buckets (incl. the public site). The backend
+      never needs deploy credentials: point `backend/.env` at the scoped S3 user (or a short-lived role) and keep the
+      deploy key only in the `auctionx` CLI profile. Correction: `.env.op` uses 1Password item "AWS AuctionX Media"
+      (presumably `auctionx-s3-access`, unconfirmed).
+- [x] ~~IAM cleanup — PRIORITY~~ applied by Boss 2026-10-25 (scoped inline `AmS3DevScoped`, S3FullAccess detached,
+      user out of `tccDev`, group deleted); verification with the `.env.op` key pending. Original note:
+      **IAM cleanup — PRIORITY (pull ahead of S-SEC0):** machine user `auctionx-s3-access` (member of group
       `tccDev`) has `IAMUserChangePassword` + **`AmazonS3FullAccess`** attached to the user itself, AND group `tccDev` (its
       only member) also grants `AmazonS3FullAccess` (Boss 2026-10-25). Its long-lived key (local dev, via
       `backend/.env.op`) can overwrite the public site bucket `am-frontend-prod-904183418667` (phishing), the staging
