@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import express, { type NextFunction, type Request, type Response } from 'express';
+import { permissionsFor } from './helpers/adminRoles';
 import { createMockSupabase, resetMockIds, type MockHooks, type Tables, type Row } from './helpers/supabaseMock';
 
 /**
@@ -38,7 +39,7 @@ const appWith = async (role: string | null) => {
   app.use((req: Request, _res: Response, next: NextFunction) => {
     if (role) {
       (req as unknown as { admin: Row }).admin = {
-        admin_id: ADMIN, email: 'admin@example.com', role, permissions: [], brand: 'auctionx',
+        admin_id: ADMIN, email: 'admin@example.com', role, permissions: permissionsFor(role), brand: 'auctionx',
       };
     }
     next();

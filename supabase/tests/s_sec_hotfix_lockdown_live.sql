@@ -35,6 +35,8 @@ BEGIN
   -- 01. No client role can execute the locked functions; service_role can.
   v_ok := true;
   FOREACH v_fn IN ARRAY v_fns LOOP
+    -- S-ADMIN2 Ph1 dropped the legacy suspend/ban/admin-session functions: gone counts as locked.
+    CONTINUE WHEN to_regprocedure(v_fn) IS NULL;
     v_ok := v_ok
       AND NOT has_function_privilege('anon', v_fn, 'EXECUTE')
       AND NOT has_function_privilege('authenticated', v_fn, 'EXECUTE')
@@ -58,7 +60,7 @@ BEGIN
   v_state := 'none';
   BEGIN
     EXECUTE 'SET LOCAL ROLE anon';
-    PERFORM public.deactivate_admin(v_admin, 'live check');
+    PERFORM public.admin_suspend_account(v_admin, v_user, 1, 'live check reason');  -- was deactivate_admin (dropped in S-ADMIN2 Ph1)
   EXCEPTION WHEN insufficient_privilege THEN v_state := '42501';
   END;
   EXECUTE 'RESET ROLE';

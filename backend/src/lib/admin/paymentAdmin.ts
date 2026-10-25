@@ -1,36 +1,13 @@
 /**
- * S-ADMIN1 Ph3a — who may act on stuck payments.
+ * S-ADMIN1 Ph3a — stuck-payment request shapes.
  *
- * Locked 2026-10-03: support can Re-apply; refunds need admin or super_admin.
- * Keyed on the admin ROLE, not a permission: the seeded `support` role already
- * carries `process_refunds` from the parked marketplace, so that permission
- * cannot be the refund gate. The database functions re-check the same rule
- * (`payment_admin_actor_email`), so this middleware is the first gate, not the
- * only one.
+ * Who may act (Locked 2026-10-03: support Re-applies, admin+ refunds) is the
+ * reapply_payments / refund_token_fees permissions since S-ADMIN2 Ph1; see
+ * lib/admin/permissions.ts. The database functions re-check them.
  */
 
-import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { REASON_MIN } from '../../services/nfc/adminTagSchemas';
-
-export const PAYMENT_QUEUE_ROLES = ['support', 'admin', 'super_admin'] as const;
-export const PAYMENT_REFUND_ROLES = ['admin', 'super_admin'] as const;
-
-export const canRefundPayments = (role: string | undefined): boolean =>
-  (PAYMENT_REFUND_ROLES as readonly string[]).includes(role ?? '');
-
-export const requireAdminRole = (roles: readonly string[]) =>
-  (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.admin) {
-      res.status(401).json({ success: false, data: null, error: 'Not authenticated' });
-      return;
-    }
-    if (!roles.includes(req.admin.role)) {
-      res.status(403).json({ success: false, data: null, error: 'Insufficient permissions' });
-      return;
-    }
-    next();
-  };
 
 // ── Request validation ──────────────────────────────────────────────────────
 

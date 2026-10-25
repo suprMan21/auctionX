@@ -1,16 +1,14 @@
 /**
  * S-ADMIN1 Ph3b — who may set prices and grant vouchers, and request shapes.
  *
- * Locked 2026-10-03: admin and super_admin only (no 'manager' role). The
- * database functions re-check the same rule (`payment_admin_actor_email` with
- * need_admin = true), so the route middleware is the first gate, not the only one.
+ * Locked 2026-10-03: admin and super_admin only (no 'manager' role). Since
+ * S-ADMIN2 Ph1 that is the manage_pricing permission, re-checked by the
+ * database functions (`admin_actor_email`).
  */
 
 import { z } from 'zod';
 import { REASON_MIN } from '../../services/nfc/adminTagSchemas';
 import { PRICE_KINDS } from '../tokenPrices';
-
-export const PRICING_ROLES = ['admin', 'super_admin'] as const;
 
 const reason = z.string().trim().min(REASON_MIN, `Reason must be at least ${REASON_MIN} characters`).max(500);
 

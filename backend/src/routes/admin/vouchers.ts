@@ -1,16 +1,16 @@
 import { Router } from 'express';
 import { handle } from '../tagManagement';
-import { requireAdminRole } from '../../lib/admin/paymentAdmin';
-import { PRICING_ROLES } from '../../lib/admin/pricingAdmin';
+import { requirePermission } from '../../middleware/adminAuth';
+import { PERMISSIONS } from '../../lib/admin/permissions';
 import { grantVouchers, listVouchers, revokeVoucher } from '../../controllers/adminPricingController';
 
 /**
  * S-ADMIN1 Ph3b free-transfer vouchers, granted to an account (Locked
- * 2026-10-11). Admin and super_admin only.
+ * 2026-10-11). Needs manage_pricing (admin, super_admin).
  */
 const router = Router();
 
-router.use(requireAdminRole(PRICING_ROLES));
+router.use(requirePermission(PERMISSIONS.managePricing));
 
 router.get('/', handle(listVouchers));
 router.post('/', handle(grantVouchers));

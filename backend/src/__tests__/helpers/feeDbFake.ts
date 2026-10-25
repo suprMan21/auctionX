@@ -157,13 +157,13 @@ const recordIncident = (tables: Tables, a: Row): RpcAnswer => {
   return done({ ...existing, is_new: false });
 };
 
-/** Mirrors payment_admin_actor_email: by ROLE NAME, active admins only. */
+/** Mirrors payment_admin_actor_email (S-ADMIN2): by PERMISSION, active admins only. */
 const actorAllowed = (tables: Tables, adminId: unknown, needAdmin: boolean): boolean => {
   const admin = table(tables, 'admin_users').find((r) => r.admin_id === adminId);
   if (!admin || admin.is_active !== true) return false;
   const role = table(tables, 'admin_roles').find((r) => r.role_id === admin.role_id);
-  const name = String(role?.role_name ?? '');
-  return name === 'admin' || name === 'super_admin' || (!needAdmin && name === 'support');
+  const perms = (role?.permissions ?? []) as string[];
+  return perms.includes(needAdmin ? 'refund_token_fees' : 'reapply_payments');
 };
 
 const audit = (tables: Tables, a: Row, action: string, changes: Row): void => {

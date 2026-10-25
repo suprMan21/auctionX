@@ -1,16 +1,16 @@
 import { Router } from 'express';
 import { handle } from '../tagManagement';
-import { requireAdminRole } from '../../lib/admin/paymentAdmin';
-import { PRICING_ROLES } from '../../lib/admin/pricingAdmin';
+import { requirePermission } from '../../middleware/adminAuth';
+import { PERMISSIONS } from '../../lib/admin/permissions';
 import { cancelPrice, listPrices, setPrice } from '../../controllers/adminPricingController';
 
 /**
  * S-ADMIN1 Ph3b token prices. The admin index has already run verifyAdminAuth
- * and adminRateLimit. Admin and super_admin only (Locked 2026-10-03).
+ * and adminRateLimit. Needs manage_pricing (admin, super_admin; Locked 2026-10-03).
  */
 const router = Router();
 
-router.use(requireAdminRole(PRICING_ROLES));
+router.use(requirePermission(PERMISSIONS.managePricing));
 
 router.get('/', handle(listPrices));
 router.post('/', handle(setPrice));

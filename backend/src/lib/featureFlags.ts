@@ -36,3 +36,10 @@ export const isMarketplaceEnabled = (): boolean => truthy(process.env.FEATURE_MA
  *   "S-2FA — MFA enrollment + AAL2 step-up".
  */
 export const isTwoFactorRequired = (): boolean => truthy(process.env.FEATURE_REQUIRE_2FA);
+
+/**
+ * S-ADMIN2 AC 5 — admin routes require AAL2 (a verified second factor).
+ * DEFAULT OFF: there is no MFA enrolment yet (S-2FA). Switching it on before
+ * enrolment exists locks every admin out of the console.
+ */
+export const isAdminTwoFactorRequired = (): boolean => truthy(process.env.FEATURE_REQUIRE_ADMIN_2FA);

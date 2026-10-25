@@ -1,10 +1,7 @@
 import { Router } from 'express';
 import { handle } from '../tagManagement';
-import {
-  PAYMENT_QUEUE_ROLES,
-  PAYMENT_REFUND_ROLES,
-  requireAdminRole,
-} from '../../lib/admin/paymentAdmin';
+import { requirePermission } from '../../middleware/adminAuth';
+import { PERMISSIONS } from '../../lib/admin/permissions';
 import {
   listStuckPayments,
   reapplyStuckPayment,
@@ -15,15 +12,16 @@ import {
 /**
  * S-ADMIN1 Ph3a stuck-payment queue. The admin index has already run
  * verifyAdminAuth and adminRateLimit. Support may view, Re-apply and run the
- * sweep; a refund needs admin or super_admin (Locked 2026-10-03).
+ * sweep (reapply_payments); a refund needs refund_token_fees (admin,
+ * super_admin; Locked 2026-10-03).
  */
 const router = Router();
 
-router.use(requireAdminRole(PAYMENT_QUEUE_ROLES));
+router.use(requirePermission(PERMISSIONS.reapplyPayments));
 
 router.get('/', handle(listStuckPayments));
 router.post('/sweep', handle(sweepStuckPayments));
 router.post('/:id/reapply', handle(reapplyStuckPayment));
-router.post('/:id/refund', requireAdminRole(PAYMENT_REFUND_ROLES), handle(refundStuckPayment));
+router.post('/:id/refund', requirePermission(PERMISSIONS.refundTokenFees), handle(refundStuckPayment));
 
 export default router;

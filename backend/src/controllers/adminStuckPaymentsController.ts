@@ -22,6 +22,7 @@
 import type { Request, Response } from 'express';
 import type Stripe from 'stripe';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { PERMISSIONS, hasPermission } from '../lib/admin/permissions';
 import { AppError } from '../lib/errors';
 import { withLogContext } from '../lib/logger';
 import { getStripe } from '../lib/stripe';
@@ -38,7 +39,6 @@ import {
 } from '../lib/payments/paymentIncidents';
 import { isRefunded, runTokenFeeSweep } from '../lib/payments/tokenFeeSweep';
 import {
-  canRefundPayments,
   incidentIdParamSchema,
   intentSuffix,
   listIncidentsQuerySchema,
@@ -242,7 +242,7 @@ export const listStuckPayments = async (req: AdminRequest, res: Response) => {
     total: count ?? items.length,
     page,
     limit,
-    canRefund: canRefundPayments(req.admin?.role),
+    canRefund: hasPermission(req.admin, PERMISSIONS.refundTokenFees),
     // Shown as a warning in the console: without these, nobody is told.
     githubIssuesConfigured: isGithubIssuesConfigured(),
     sweepConfigured: !!process.env.TOKEN_FEE_SWEEP_SECRET?.trim(),
@@ -396,7 +396,7 @@ export const refundStuckPayment = async (req: AdminRequest, res: Response) => {
 
   // The route already requires admin or super_admin; checked again here so the
   // rule holds even if the route file is ever rearranged.
-  if (!canRefundPayments(req.admin?.role)) {
+  if (!hasPermission(req.admin, PERMISSIONS.refundTokenFees)) {
     emitAction(ctx, 'refund', incidentId, 'forbidden');
     throw new AppError('permission_denied', 'Forbidden');
   }

@@ -16,6 +16,9 @@ import reissueRouter from './reissue';
 import stuckPaymentsRouter from './stuckPayments';
 import pricingRouter from './pricing';
 import vouchersRouter from './vouchers';
+import accountSettingsRouter from './accountSettings';
+import { handle } from '../tagManagement';
+import { getMe } from '../../controllers/adminAccountsController';
 
 const router = Router();
 
@@ -34,8 +37,10 @@ router.use(adminRateLimit);
 // are token-platform concerns, while auctions/escrow/disputes/moderation serve
 // the parked marketplace. So it gets a sub-allowlist rather than being parked
 // wholesale.
+router.get('/me', handle(getMe));             // S-ADMIN2: role + permissions for the console
 router.use('/health', healthRouter);
-router.use('/users', usersRouter);            // account admin — anonymous ownership still needs suspend/ban
+router.use('/users', usersRouter);            // S-ADMIN2 accounts: search, suspend/retire/delete, roles
+router.use('/account-settings', accountSettingsRouter); // S-ADMIN2: Retire -> Delete waiting window
 router.use('/audit-logs', auditLogsRouter);   // compliance / chain-of-custody evidence trail
 router.use('/verifications', yotiVerificationsRouter); // Yoti ID review (Premier, S-TIER1)
 router.use('/tags', tagsRouter);              // S-ADMIN1 token admin: inventory, suspend, atomic reset

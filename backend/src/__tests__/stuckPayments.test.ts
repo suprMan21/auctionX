@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { permissionsFor } from './helpers/adminRoles';
 import { randomBytes } from 'crypto';
 import request from 'supertest';
 import express from 'express';
@@ -109,7 +110,7 @@ const openIncident = (overrides: Row = {}): Row => {
 
 const makeReq = (adminId: string, role: string, body: Row = {}, params: Row = {}, query: Row = {}) => ({
   requestId: 'test-req',
-  admin: { admin_id: adminId, role, permissions: [] },
+  admin: { admin_id: adminId, role, permissions: permissionsFor(role) },
   headers: {},
   socket: { remoteAddress: '203.0.113.5' },
   body, params, query,
@@ -171,8 +172,8 @@ beforeEach(() => {
     payment_incidents: [],
     audit_logs: [],
     admin_roles: [
-      { role_id: ROLE_SUPPORT, role_name: 'support', permissions: ['view_payments', 'process_refunds'] },
-      { role_id: ROLE_ADMIN, role_name: 'admin', permissions: ['manage_nfc'] },
+      { role_id: ROLE_SUPPORT, role_name: 'support', permissions: permissionsFor('support') },
+      { role_id: ROLE_ADMIN, role_name: 'admin', permissions: permissionsFor('admin') },
     ],
     admin_users: [
       { admin_id: SUPPORT, role_id: ROLE_SUPPORT, is_active: true },
@@ -586,7 +587,7 @@ describe('admin: Re-apply', () => {
   });
 
   it('is refused by the database function for an actor who is not support, admin or super_admin', async () => {
-    tables.admin_roles.push({ role_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', role_name: 'analyst', permissions: ['view_payments'] });
+    tables.admin_roles.push({ role_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', role_name: 'analyst', permissions: permissionsFor('analyst') });
     tables.admin_users[0].role_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
     const inc = openIncident();
     stripeRetrieve.mockResolvedValue(intent());
@@ -656,22 +657,28 @@ describe('admin: Refund', () => {
     expect(inc.status).toBe('OPEN');
   });
 
-  it('is gated to admin and super_admin at the route as well', async () => {
-    const { requireAdminRole, PAYMENT_REFUND_ROLES, PAYMENT_QUEUE_ROLES } = await import('../lib/admin/paymentAdmin');
-    const run = (roles: readonly string[], role: string | null) => {
-      const res = { code: 0, status(c: number) { this.code = c; return this; }, json() { return this; } };
+  it('is gated by permission at the route as well (refund_token_fees / reapply_payments)', async () => {
+    const { requirePermission } = await import('../middleware/adminAuth');
+    const run = (permission: 'refund_token_fees' | 'reapply_payments', role: string | null) => {
+      const res = { code: 0, body: {} as Row, status(c: number) { this.code = c; return this; }, json(b: Row) { this.body = b; return this; } };
       let passed = false;
-      requireAdminRole(roles)({ admin: role ? { role } : undefined } as never, res as never, () => { passed = true; });
-      return { passed, code: res.code };
+      requirePermission(permission)(
+        { admin: role ? { role, permissions: permissionsFor(role) } : undefined } as never,
+        res as never,
+        () => { passed = true; },
+      );
+      return { passed, code: res.code, body: res.body };
     };
 
-    expect(run(PAYMENT_REFUND_ROLES, 'support')).toEqual({ passed: false, code: 403 });
-    expect(run(PAYMENT_REFUND_ROLES, 'admin').passed).toBe(true);
-    expect(run(PAYMENT_REFUND_ROLES, 'super_admin').passed).toBe(true);
-    expect(run(PAYMENT_QUEUE_ROLES, 'support').passed).toBe(true);
-    expect(run(PAYMENT_QUEUE_ROLES, 'moderator')).toEqual({ passed: false, code: 403 });
-    expect(run(PAYMENT_QUEUE_ROLES, 'analyst')).toEqual({ passed: false, code: 403 });
-    expect(run(PAYMENT_QUEUE_ROLES, null)).toEqual({ passed: false, code: 401 });
+    expect(run('refund_token_fees', 'support')).toMatchObject({ passed: false, code: 403 });
+    expect(run('refund_token_fees', 'admin').passed).toBe(true);
+    expect(run('refund_token_fees', 'super_admin').passed).toBe(true);
+    expect(run('reapply_payments', 'support').passed).toBe(true);
+    expect(run('reapply_payments', 'moderator')).toMatchObject({ passed: false, code: 403 });
+    expect(run('reapply_payments', 'analyst')).toMatchObject({ passed: false, code: 403 });
+    expect(run('reapply_payments', null)).toMatchObject({ passed: false, code: 401 });
+    // A 403 never lists what the admin holds.
+    expect(JSON.stringify(run('refund_token_fees', 'support').body)).not.toContain('reapply_payments');
   });
 
   it('needs the last 6 characters of the payment id typed correctly', async () => {

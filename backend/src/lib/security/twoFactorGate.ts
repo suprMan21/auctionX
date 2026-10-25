@@ -34,7 +34,7 @@ export type TwoFactorGate = 'claim' | 'transfer_complete';
  * Safe ONLY because this runs after `requireAuth`, which has already validated
  * the same token against GoTrue. Never call this on an unauthenticated path.
  */
-const readAalClaim = (authHeader: string | undefined): string | null => {
+export const readAalClaim = (authHeader: string | undefined): string | null => {
   const token = authHeader?.replace(/^Bearer\s+/i, '').trim();
   if (!token) return null;
 
