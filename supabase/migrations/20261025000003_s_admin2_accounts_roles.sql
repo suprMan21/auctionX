@@ -34,6 +34,17 @@ CREATE TABLE IF NOT EXISTS public.account_settings (
 );
 INSERT INTO public.account_settings (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
 
+-- Accounts retired by hand before this migration (sign-in banned for decades,
+-- e.g. 9b9e on 2026-10-25) are recorded as retired, so the console agrees.
+UPDATE public.users u
+   SET retired_at    = now(),
+       retire_reason = 'Retired by hand before S-ADMIN2 (sign-in banned)',
+       role          = 'user'
+  FROM auth.users a
+ WHERE a.id = u.id
+   AND a.banned_until > now() + interval '50 years'
+   AND u.retired_at IS NULL;
+
 ALTER TABLE public.account_settings ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.account_settings FROM PUBLIC, anon, authenticated;
 GRANT SELECT, UPDATE ON public.account_settings TO service_role;
@@ -137,18 +148,35 @@ BEGIN
 END;
 $$;
 
+-- Serialises every account / role change (low volume). Without it two
+-- super_admins acting on each other at the same moment could both pass the
+-- actor check and leave none. Callers take it BEFORE checking the actor.
+CREATE OR REPLACE FUNCTION admin_lock_changes()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext('s_admin2_account_changes'));
+  RETURN true;
+END;
+$$;
+
 -- Actor checks shared by every account action. Acting on a staff account
 -- additionally needs manage_admins (super_admin only), and nobody acts on
 -- their own account, so the last super_admin can never be locked out.
 CREATE OR REPLACE FUNCTION admin_account_guard(p_admin UUID, p_target UUID, p_permission TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_email TEXT := admin_actor_email(p_admin, p_permission);
+  v_locked BOOLEAN := admin_lock_changes();
+  v_email  TEXT := admin_actor_email(p_admin, p_permission);
 BEGIN
   IF p_target IS NULL THEN
     RAISE EXCEPTION 'account_not_found' USING ERRCODE = 'no_data_found';
@@ -190,6 +218,8 @@ DECLARE
   v_email  TEXT;
   v_window INTEGER;
   v_out    TEXT[] := ARRAY[]::TEXT[];
+  v_fk     RECORD;
+  v_has    BOOLEAN;
 BEGIN
   SELECT * INTO v_u FROM users WHERE id = p_target;
   IF NOT FOUND THEN
@@ -222,10 +252,32 @@ BEGIN
   IF EXISTS (SELECT 1 FROM audit_logs WHERE admin_id = p_target) THEN
     v_out := array_append(v_out, 'audit_actor'::text);
   END IF;
-  -- Re-issue requests are payment records and would cascade away.
-  IF EXISTS (SELECT 1 FROM reissue_requests WHERE requester_id = p_target) THEN
-    v_out := array_append(v_out, 'account_has_history'::text);
-  END IF;
+  -- Any other row that references the account (payments, transfers, re-issues,
+  -- parked marketplace listings/bids/transactions, conversations, KYC records…)
+  -- blocks Delete: those references would either cascade other people's data
+  -- away or fail. Only the account's own disposable rows may go with it.
+  -- Checked from the catalog, so tables added later are covered too.
+  FOR v_fk IN
+    SELECT c.conrelid::regclass::text AS tbl, a.attname AS col
+      FROM pg_constraint c
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+     WHERE c.contype = 'f'
+       AND c.confrelid IN ('public.users'::regclass, 'auth.users'::regclass)
+       AND cardinality(c.conkey) = 1
+       AND c.conrelid::regclass::text NOT LIKE 'auth.%'
+       AND c.conrelid::regclass::text NOT IN (
+             'admin_users',               -- deactivated on retire; audit actors are blocked above
+             'nfc_tags',                  -- reported above as owns_tokens / created_tokens
+             'notifications', 'notification_preferences', 'saved_searches',
+             'shipping_addresses', 'transfer_voucher_grants',
+             'verification_events')       -- scan history: ON DELETE SET NULL anonymises it
+  LOOP
+    EXECUTE format('SELECT EXISTS (SELECT 1 FROM %s WHERE %I = $1)', v_fk.tbl, v_fk.col) INTO v_has USING p_target;
+    IF v_has THEN
+      v_out := array_append(v_out, 'account_has_history'::text);
+      EXIT;
+    END IF;
+  END LOOP;
   RETURN v_out;
 END;
 $$;
@@ -381,6 +433,12 @@ BEGIN
   IF v_u.retired_at IS NULL THEN
     RAISE EXCEPTION 'not_retired' USING ERRCODE = 'check_violation';
   END IF;
+  -- Retiring a staff account was a super_admin decision; so is undoing it.
+  IF (SELECT l.changes->>'removed_role' FROM audit_logs l
+        WHERE l.entity_id = p_target AND l.action = 'account_retire'
+        ORDER BY l.created_at DESC LIMIT 1) IS NOT NULL THEN
+    PERFORM admin_actor_email(p_admin, 'manage_admins');
+  END IF;
 
   UPDATE users SET retired_at = NULL, retired_by = NULL, retire_reason = NULL, updated_at = now()
    WHERE id = p_target;
@@ -459,6 +517,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_locked  BOOLEAN := admin_lock_changes();
   v_email   TEXT := admin_actor_email(p_admin, 'manage_admins');
   v_reason  TEXT := admin_require_reason(p_reason);
   v_role    TEXT := nullif(btrim(coalesce(p_role, '')), '');
@@ -529,6 +588,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_locked BOOLEAN := admin_lock_changes();
   v_email  TEXT := admin_actor_email(p_admin, 'manage_admins');
   v_reason TEXT := admin_require_reason(p_reason);
   v_prev   INTEGER;
@@ -749,6 +809,7 @@ DROP FUNCTION IF EXISTS public.revoke_admin_session(uuid);
 
 -- ── 7. Grants: service_role only ────────────────────────────────────────────
 REVOKE ALL ON FUNCTION admin_actor_email(UUID, TEXT)                              FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION admin_lock_changes()                                       FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION payment_admin_actor_email(UUID, BOOLEAN)                   FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION account_status_of(UUID)                                    FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION admin_end_sessions(UUID)                                   FROM PUBLIC, anon, authenticated;
@@ -768,6 +829,7 @@ REVOKE ALL ON FUNCTION admin_get_account_tokens(UUID, UUID)                     
 REVOKE ALL ON FUNCTION admin_audit_log_facets()                                   FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION admin_actor_email(UUID, TEXT)                              TO service_role;
+GRANT EXECUTE ON FUNCTION admin_lock_changes()                                       TO service_role;
 GRANT EXECUTE ON FUNCTION payment_admin_actor_email(UUID, BOOLEAN)                   TO service_role;
 GRANT EXECUTE ON FUNCTION account_status_of(UUID)                                    TO service_role;
 GRANT EXECUTE ON FUNCTION admin_end_sessions(UUID)                                   TO service_role;

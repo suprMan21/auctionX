@@ -5,7 +5,7 @@
 -- and the throwaway account) rolls back.
 --
 -- Run: supabase db query --linked -f supabase/tests/s_admin2_accounts_live.sql
--- Expect: ERROR  P0001: RESULTS {...} with every check "ok".
+-- Expect: ERROR  P0001: RESULTS {"ok": 29, "total": 29, "failures": {}}
 
 DO $$
 DECLARE
@@ -16,6 +16,7 @@ DECLARE
   v_temp_email CONSTANT TEXT := 's-admin2-live@example.invalid';
   v_fns    CONSTANT TEXT[] := ARRAY[
     'public.admin_actor_email(uuid, text)',
+    'public.admin_lock_changes()',
     'public.payment_admin_actor_email(uuid, boolean)',
     'public.account_status_of(uuid)',
     'public.admin_end_sessions(uuid)',
@@ -286,6 +287,38 @@ BEGIN
       AND NOT has_column_privilege('authenticated', 'public.users', 'is_suspended', 'UPDATE');
   v_res := v_res || jsonb_build_object('26_status_columns_not_client_writable', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL' END);
 
-  RAISE EXCEPTION 'RESULTS %', v_res;
+  -- 27. Accounts banned by hand before S-ADMIN2 read as retired (9b9e).
+  v_ok := NOT EXISTS (SELECT 1 FROM auth.users a JOIN users u ON u.id = a.id
+                       WHERE a.banned_until > now() + interval '50 years' AND u.retired_at IS NULL)
+      AND (SELECT count(*) FROM auth.users WHERE banned_until > now() + interval '50 years') >= 1;
+  v_res := v_res || jsonb_build_object('27_hand_retired_backfilled', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL' END);
+
+  -- 28. Delete refuses an account other records point at (test@ has transfers).
+  v_ok := 'account_has_history' = ANY (account_delete_blockers(v_user));
+  v_res := v_res || jsonb_build_object('28_linked_records_block_delete', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL ' || array_to_string(account_delete_blockers(v_user), ',') END);
+
+  -- 29. A plain admin cannot reactivate an ex-staff account a super_admin retired.
+  PERFORM admin_set_account_role(v_super, v_staff, 'support', R);
+  PERFORM admin_retire_account(v_super, v_staff, R);
+  INSERT INTO auth.users (id, email, aud, role, email_confirmed_at, created_at, updated_at)
+  VALUES (v_temp, v_temp_email, 'authenticated', 'authenticated', now(), now(), now());
+  IF NOT EXISTS (SELECT 1 FROM users WHERE id = v_temp) THEN
+    INSERT INTO users (id, email) VALUES (v_temp, v_temp_email);
+  END IF;
+  PERFORM admin_set_account_role(v_super, v_temp, 'admin', R);
+  v_state := 'none';
+  BEGIN PERFORM admin_reactivate_account(v_temp, v_staff, R);
+  EXCEPTION WHEN insufficient_privilege THEN v_state := '42501'; END;
+  PERFORM admin_reactivate_account(v_super, v_staff, R);
+  v_res := v_res || jsonb_build_object('29_reactivate_ex_staff_needs_super', CASE WHEN v_state = '42501' AND account_status_of(v_staff) = 'active' THEN 'ok' ELSE 'FAIL ' || v_state END);
+
+  -- Compact summary: the error text is length-limited, so print totals plus
+  -- every failing check in full (jsonb orders keys by length, long ones last).
+  RAISE EXCEPTION 'RESULTS %', (
+    SELECT jsonb_build_object(
+             'total', count(*),
+             'ok', count(*) FILTER (WHERE value = '"ok"'::jsonb),
+             'failures', coalesce(jsonb_object_agg(key, value) FILTER (WHERE value <> '"ok"'::jsonb), '{}'::jsonb))
+      FROM jsonb_each(v_res));
 END;
 $$;
