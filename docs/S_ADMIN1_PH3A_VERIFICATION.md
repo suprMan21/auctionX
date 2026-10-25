@@ -5,8 +5,9 @@
 **Backlog:** https://app.notion.com/p/3ee3baf69664810a888df72c1a63816f
 **Decision:** "Paid-but-stuck transfers" (Locked 2026-10-03), extended to re-issue fees (Ideas DB 2026-10-09)
 
-Status: **🟡 BUILT, NOT YET LIVE.** Code and tests are complete. The migration passed its live checks on staging in
-a dry run that rolled back (26/26), but it is **not applied** and nothing is deployed. Boss actions are in §Left to do.
+Status: **✅ LIVE ON STAGING, verified with sandbox money 2026-10-19 / 2026-10-25.** Migration applied (live checks
+26/26 against the applied functions), merged to `dev` (`d1d166b`), backend and frontend deployed, cron ticking, GitHub
+Issues filing. Results in §Live verification. Re-apply is covered by unit tests only (see §Not verified live).
 
 ---
 
@@ -122,14 +123,52 @@ void, function and table grants, cron job scheduled, audit rows append-only.
 The unit tests play the database functions with `__tests__/helpers/feeDbFake.ts`, which restates their rules in
 TypeScript. That is a second copy and can drift; the live SQL file is the proof of the real functions.
 
-## Not yet verified
+## Live verification (staging, Stripe sandbox)
 
-- The migration is not applied (the apply was blocked in the Claude session; Boss runs it).
-- No live money: no sandbox payment has been pushed through the new webhook, sweep, Re-apply or refund.
-- No real GitHub Issue has been filed (no token yet).
-- pg_cron → backend call has not run (no Vault secrets yet).
+Every result below was read back from `payment_incidents`, `ownership_transfers`, `audit_logs`, `net._http_response`
+(the cron tick responses) and the backend CloudWatch log, not from the screen.
 
-## Left to do
+**Deploy.** Migration applied by Boss 2026-10-14 (live checks 26/26 against the applied functions). Types regenerated
+and `PENDING_MIGRATION_COLUMNS` emptied (`9c5fbc1`), merged to `dev` (`d1d166b`). App Runner deploy 20:32Z and config
+updates 22:26Z / 23:55Z all SUCCEEDED. Frontend deployed 2026-10-15 00:55Z (bundle contains the page).
+
+**Cron.** The first ticks returned `400 Bad Request` from App Runner's proxy, before reaching the backend: the Vault
+sweep secret had been pasted with a leading newline. Trimmed in place (`btrim` via `vault.update_secret`); every tick
+from 2026-10-14 23:40Z returns 200.
+
+| # | Case | What happened | Result |
+|---|---|---|---|
+| 1 | Missed webhook (2026-10-19) | Webhook endpoint disabled. test2@ → test@ transfer `98e9e61a…` of `chip_004`, $2.50, initiated 20:13:41Z. The 20:20Z tick skipped it (`skippedRecent: 1`, inside the 5-minute grace). The 20:30Z tick applied it (`applied: 1`): transfer COMPLETED 20:30:01Z, fee paid, `chip_004` → test@. Incident `03d6e72e…` `webhook_missed`, born RESOLVED (`resolution = sweep`). GitHub Issue #2. | ✅ |
+| 3 | Cron | Covered by case 1: the 10-minute tick applied the payment with nobody pressing anything; `token_fee_sweep_done {applied: 1}` logged. | ✅ |
+| 2 | Paid, then cancelled → refund (2026-10-25) | Webhook disabled. test@ → test2@ transfer `25ed7af1…`, initiated 01:46:12Z, paid ~01:47Z, cancelled by the sender 01:48:01Z. The 01:50Z tick skipped it (grace). Check now at 01:54:45Z → incident `45bdc81f…` OPEN `not_payable`, Issue #3. Refund by super_admin 01:55:16Z → REFUNDED, Stripe refund `re_3UUGWOD…`, `audit_logs` `payment_refund` row (admin id, incident, intent, refund id, $2.50, reason "cancelled transfer", `transfer_cancelled: false`). Transfer stays CANCELLED, unpaid; `chip_004` stays with test@. The 02:00Z tick read the charge from Stripe as refunded (`skippedRefunded: 1`); Boss confirmed Refunded in the Stripe dashboard. No `github_issue_call_failed` logged around the refund (the close comment itself was not opened on GitHub by Claude). | ✅ |
+
+Webhook endpoint re-enabled by Boss after case 2.
+
+**End state:** `chip_004` is owned by **test@** (not back at test2@; a return transfer would cost another sandbox fee,
+so it was left). `chip_001` untouched. Both incidents closed; nothing OPEN.
+
+## Not verified live
+
+- **Re-apply.** It is offered only on an OPEN incident that can still be applied, and the sweep closes those itself
+  within 10 minutes, so it is hard to stage. Covered by unit tests (`stuckPayments.test.ts`) and the live SQL file
+  (support can Re-apply). Boss chose to close out without it.
+- A re-issue fee through the queue (unit tests and live SQL only).
+
+## Found during the live test (backlog, not blockers)
+
+- `token_fee_stuck` logs at ERROR even when the incident is born RESOLVED (sweep applied it). Should be WARN then.
+- The close comment does not update `github_last_comment_at`, so the database cannot show it was posted; and
+  `noteIncidentClosed` swallows its own exceptions without logging (HTTP failures inside `commentOnIssue` are logged).
+- **Pre-existing since 2026-10-05:** every request logs express-rate-limit `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`
+  (`trust proxy` is not set). The rate limiter likely keys on App Runner's proxy address, so all users share one
+  bucket. Set `app.set('trust proxy', 1)` after confirming the hop count.
+- My Tokens names a token "Token 7C9960DF" (first 8 of the tag id) when it has no title; show the chip name or serial
+  suffix instead.
+- Admin Tags cannot be searched by owner email; the owner shows as a random account id (Boss, 2026-10-19). Plan:
+  one search box (owner email, chip name, serial / UID suffix), owner and creator email columns, `manage_nfc` only,
+  emails never logged.
+
+## Setup steps (done; kept for production)
 
 **Boss, in order (DB → backend → frontend):**
 
@@ -149,6 +188,10 @@ TypeScript. That is a second copy and can drift; the live SQL file is the proof 
      SELECT vault.create_secret('https://vw7zy9mkyg.us-east-2.awsapprunner.com', 'backend_api_url');
      SELECT vault.create_secret('<the same secret>', 'token_fee_sweep_secret');
      ```
+   - Paste it as one line. A leading space or newline makes App Runner's proxy answer `400 Bad Request` to every
+     tick. Check with `SELECT length(decrypted_secret), length(btrim(decrypted_secret, E' \t\r\n')) FROM
+     vault.decrypted_secrets WHERE name = 'token_fee_sweep_secret';` (the two must match). To replace it:
+     `SELECT vault.update_secret((SELECT id FROM vault.secrets WHERE name = 'token_fee_sweep_secret'), '<secret>');`
 3. **GitHub token.** Fine-grained personal access token, repository `suprMan21/auctionX` only, permission
    **Issues: Read and write**. Store in 1Password, then App Runner env `GITHUB_ISSUES_TOKEN` = the literal.
    Optional: create the label `stuck-payment` on the repo (GitHub creates it on first use otherwise).
@@ -158,7 +201,9 @@ TypeScript. That is a second copy and can drift; the live SQL file is the proof 
 **Claude, after step 1:** regenerate both `database.types.ts` copies and remove the `payment_incidents` entry from
 `PENDING_MIGRATION_COLUMNS` in `schemaColumnDrift.test.ts`.
 
-**Live test plan (no chip needed; sandbox card only):**
+**Live test plan (no chip needed; sandbox card only).** Note: a missed webhook that the sweep can apply is recorded
+already closed, so it shows under **Applied**, not under the default **Open** filter. "Check now" within 5 minutes of
+the payment finds nothing (grace window).
 1. *Missed webhook.* In the Stripe sandbox dashboard, disable the token-fee webhook endpoint. Start a transfer of
    `chip_004` (test2@ → test@) and pay. Wait 5 minutes, open Stuck payments, press Check now. Expect: transfer
    completed, one incident shown under Applied ("Applied by the automatic check"), one GitHub Issue. Re-enable the
