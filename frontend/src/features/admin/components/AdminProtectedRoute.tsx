@@ -2,8 +2,9 @@
  * Route guard for admin-only pages.
  * Renders an Outlet when the signed-in user is an active admin, per the
  * backend (GET /admin/me), and provides their role + permissions to the
- * console. Unauthenticated → /login; not an admin (or a suspended/retired
- * account) → /.
+ * console. Unauthenticated, or a 401 (expired / revoked session) → sign out
+ * and /login; not an admin (403, incl. a suspended/retired account) → /.
+ * Anything else (503, network) shows a retry screen.
  * @module Module 10 — Admin Dashboard (S-ADMIN2 Ph1)
  */
 
@@ -13,12 +14,13 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AdminApiError, adminApi } from '../api/adminApi';
 import { AdminRoleContext, type AdminAccessState } from '../lib/adminRole';
 
-type CheckState = 'loading' | 'admin' | 'not-admin' | 'unauthenticated' | 'needs-2fa' | 'error';
+type CheckState = 'loading' | 'admin' | 'not-admin' | 'unauthenticated' | 'signed-out' | 'needs-2fa' | 'error';
 type Checked = { userId: string; state: Exclude<CheckState, 'loading' | 'unauthenticated'>; access: AdminAccessState };
 
 export const AdminProtectedRoute = () => {
-  const { session, loading: authLoading, initialized } = useAuth();
+  const { session, loading: authLoading, initialized, signOut } = useAuth();
   const [checked, setChecked] = useState<Checked | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const userId = session?.user.id ?? null;
 
   useEffect(() => {
@@ -35,12 +37,19 @@ export const AdminProtectedRoute = () => {
         if (cancelled) return;
         const state: Checked['state'] =
           err instanceof AdminApiError && err.code === 'ADMIN_2FA_REQUIRED' ? 'needs-2fa'
-            : err instanceof AdminApiError && (err.status === 401 || err.status === 403) ? 'not-admin'
-              : 'error';
+            : err instanceof AdminApiError && err.status === 401 ? 'signed-out'
+              : err instanceof AdminApiError && err.status === 403 ? 'not-admin'
+                : 'error';
         setChecked({ userId, state, access: { status: 'loading' } });
       });
     return () => { cancelled = true; };
-  }, [userId, authLoading, initialized]);
+  }, [userId, authLoading, initialized, attempt]);
+
+  const checkedState = checked?.userId === userId ? checked.state : null;
+  useEffect(() => {
+    // The server no longer accepts this session: drop it so /login does not bounce back.
+    if (checkedState === 'signed-out') void signOut();
+  }, [checkedState, signOut]);
 
   const checkState: CheckState =
     !initialized || authLoading ? 'loading'
@@ -60,7 +69,14 @@ export const AdminProtectedRoute = () => {
     );
   }
 
-  if (checkState === 'unauthenticated') return <Navigate to="/login" replace />;
+  if (checkState === 'unauthenticated') return <Navigate to="/login?next=%2Fadmin" replace />;
+  if (checkState === 'signed-out') {
+    return (
+      <div className="min-h-screen bg-dark-800 flex items-center justify-center">
+        <p className="text-gray-400 text-sm" role="status">Your session has ended. Signing you out…</p>
+      </div>
+    );
+  }
   if (checkState === 'not-admin') return <Navigate to="/" replace />;
 
   if (checkState === 'needs-2fa' || checkState === 'error') {
@@ -75,6 +91,15 @@ export const AdminProtectedRoute = () => {
               ? 'The admin console needs a second factor. Sign in again with your security key or authenticator.'
               : 'Your admin access could not be checked. Try again in a moment.'}
           </p>
+          {checkState === 'error' && (
+            <button
+              type="button"
+              onClick={() => { setChecked(null); setAttempt((n) => n + 1); }}
+              className="mt-4 min-h-[44px] px-4 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            >
+              Try again
+            </button>
+          )}
         </div>
       </div>
     );

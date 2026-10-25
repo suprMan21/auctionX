@@ -6,7 +6,7 @@
  * @module Module 10 — Admin Dashboard
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { adminApi } from '../api/adminApi';
 import { DELETE_BLOCKER_TEXT, ROLE_LABELS, type AccountDetail, type AccountTokens } from '../api/accountSchemas';
@@ -57,31 +57,46 @@ export const AdminUserDetailPage = () => {
   const [tokens, setTokens] = useState<AccountTokens | null>(null);
   const [tokensError, setTokensError] = useState<string | null>(null);
   const [tokensBusy, setTokensBusy] = useState(false);
+  const idRef = useRef(id);
+  idRef.current = id;
 
+  // Each load gets a sequence number; a slower answer for an earlier request is dropped.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setError(null);
     try {
-      setAccount(await adminApi.getAccount(id));
+      const data = await adminApi.getAccount(id);
+      if (seq === loadSeq.current) setAccount(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The account could not be loaded');
+      if (seq === loadSeq.current) setError(err instanceof Error ? err.message : 'The account could not be loaded');
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
+    // A different account: forget everything shown for the previous one.
     setLoading(true);
+    setAccount(null);
+    setNotice(null);
+    setDeleted(false);
+    setDialog(null);
     setTokens(null);
+    setTokensError(null);
     void load();
+    return () => { loadSeq.current += 1; };
   }, [load]);
 
   const showTokens = async () => {
+    const forId = id;
     setTokensBusy(true);
     setTokensError(null);
     try {
-      setTokens(await adminApi.getAccountTokens(id));
+      const data = await adminApi.getAccountTokens(forId);
+      if (forId === idRef.current) setTokens(data);
     } catch (err) {
-      setTokensError(err instanceof Error ? err.message : 'Tokens could not be loaded');
+      if (forId === idRef.current) setTokensError(err instanceof Error ? err.message : 'Tokens could not be loaded');
     } finally {
       setTokensBusy(false);
     }
@@ -136,6 +151,8 @@ export const AdminUserDetailPage = () => {
   const isSuperAdmin = hasPermission(access, PERMISSIONS.manageAdmins);
   // Acting on a staff account needs manage_admins; nobody acts on their own account.
   const mayAct = !account.is_self && (account.staff_role === null || isSuperAdmin);
+  // Undoing the retirement of a staff account needs a super admin (the server checks too).
+  const mayReactivate = !account.retired_staff_role || isSuperAdmin;
   const { status } = account;
 
   return (
@@ -210,16 +227,24 @@ export const AdminUserDetailPage = () => {
           ) : !mayAct ? (
             <p className="text-sm text-gray-400">This is a staff account. Only a super admin can change it.</p>
           ) : (
+            <>
+            {status === 'retired' && !mayReactivate && (
+              <p className="text-sm text-gray-400 mb-3">This account had a staff role when it was retired. Only a super admin can reactivate it.</p>
+            )}
             <div className="flex flex-wrap gap-3">
               {canManage && status === 'active' && <ActionButton tone="warn" onClick={() => setDialog('suspend')}>Suspend</ActionButton>}
               {canManage && status === 'suspended' && <ActionButton onClick={() => setDialog('unsuspend')}>Lift suspension</ActionButton>}
               {canManage && status !== 'retired' && <ActionButton tone="danger" onClick={() => setDialog('retire')}>Retire</ActionButton>}
-              {canManage && status === 'retired' && <ActionButton onClick={() => setDialog('reactivate')}>Reactivate</ActionButton>}
-              {isSuperAdmin && status === 'active' && <ActionButton onClick={() => setDialog('role')}>Change staff role</ActionButton>}
+              {canManage && status === 'retired' && mayReactivate && <ActionButton onClick={() => setDialog('reactivate')}>Reactivate</ActionButton>}
+              {/* A role can be granted only to an active account, but removed in any state. */}
+              {isSuperAdmin && (status === 'active' || account.staff_role !== null) && (
+                <ActionButton onClick={() => setDialog('role')}>{status === 'active' ? 'Change staff role' : 'Remove staff role'}</ActionButton>
+              )}
               {isSuperAdmin && status === 'retired' && account.delete?.blockers.length === 0 && (
                 <ActionButton tone="danger" onClick={() => setDialog('delete')}>Delete permanently</ActionButton>
               )}
             </div>
+            </>
           )}
         </section>
       )}

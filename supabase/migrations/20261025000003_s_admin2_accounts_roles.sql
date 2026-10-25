@@ -19,6 +19,8 @@
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS retired_at    TIMESTAMPTZ;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS retired_by    UUID;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS retire_reason TEXT;
+-- The staff role the account had when it was retired: undoing that needs manage_admins.
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS retired_role  TEXT;
 
 COMMENT ON COLUMN public.users.retired_at IS
   'S-ADMIN2: set by admin_retire_account. Retired = cannot sign in; Delete is allowed only after account_settings.delete_window_hours.';
@@ -35,15 +37,32 @@ CREATE TABLE IF NOT EXISTS public.account_settings (
 INSERT INTO public.account_settings (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
 
 -- Accounts retired by hand before this migration (sign-in banned for decades,
--- e.g. 9b9e on 2026-10-25) are recorded as retired, so the console agrees.
+-- e.g. 9b9e on 2026-10-25) or banned by the dropped ban_user (users.is_banned,
+-- which never blocked sign-in) are recorded as retired, so the console and the
+-- auth checks agree. Any staff row they had (active or not) counts as a staff
+-- role: only a super_admin may reactivate them.
 UPDATE public.users u
    SET retired_at    = now(),
-       retire_reason = 'Retired by hand before S-ADMIN2 (sign-in banned)',
+       retire_reason = CASE WHEN coalesce(u.is_banned, false)
+                            THEN 'Banned before S-ADMIN2'
+                            ELSE 'Retired by hand before S-ADMIN2 (sign-in banned)' END,
+       retired_role  = (SELECT r.role_name FROM public.admin_users x
+                          JOIN public.admin_roles r ON r.role_id = x.role_id
+                         WHERE x.admin_id = u.id),
        role          = 'user'
   FROM auth.users a
  WHERE a.id = u.id
-   AND a.banned_until > now() + interval '50 years'
+   AND (a.banned_until > now() + interval '50 years' OR coalesce(u.is_banned, false))
    AND u.retired_at IS NULL;
+UPDATE auth.users a
+   SET banned_until = now() + interval '100 years'
+  FROM public.users u
+ WHERE u.id = a.id AND u.retired_at IS NOT NULL
+   AND (a.banned_until IS NULL OR a.banned_until < now() + interval '50 years');
+UPDATE public.admin_users x
+   SET is_active = false
+  FROM public.users u
+ WHERE u.id = x.admin_id AND u.retired_at IS NOT NULL AND x.is_active;
 
 ALTER TABLE public.account_settings ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.account_settings FROM PUBLIC, anon, authenticated;
@@ -143,7 +162,7 @@ BEGIN
   DELETE FROM auth.sessions WHERE user_id = p_user;
   GET DIAGNOSTICS v_n = ROW_COUNT;
   DELETE FROM auth.refresh_tokens WHERE user_id = p_user::text;
-  UPDATE admin_users SET session_version = EXTRACT(EPOCH FROM now())::BIGINT + 1 WHERE admin_id = p_user;
+  UPDATE admin_users SET session_version = floor(EXTRACT(EPOCH FROM now()))::BIGINT + 1 WHERE admin_id = p_user;
   RETURN v_n;
 END;
 $$;
@@ -262,11 +281,14 @@ BEGIN
       FROM pg_constraint c
       JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
      WHERE c.contype = 'f'
-       AND c.confrelid IN ('public.users'::regclass, 'auth.users'::regclass)
+       -- admin_users.admin_id is the account id, so references to the staff row count too.
+       AND c.confrelid IN ('public.users'::regclass, 'auth.users'::regclass, 'public.admin_users'::regclass)
        AND cardinality(c.conkey) = 1
        AND c.conrelid::regclass::text NOT LIKE 'auth.%'
+       -- The account's own staff row (deactivated on retire) goes with it.
+       AND NOT (c.conrelid = 'public.admin_users'::regclass AND c.confrelid <> 'public.admin_users'::regclass)
        AND c.conrelid::regclass::text NOT IN (
-             'admin_users',               -- deactivated on retire; audit actors are blocked above
+             'audit_logs',                -- reported above as audit_actor
              'nfc_tags',                  -- reported above as owns_tokens / created_tokens
              'notifications', 'notification_preferences', 'saved_searches',
              'shipping_addresses', 'transfer_voucher_grants',
@@ -347,7 +369,8 @@ BEGIN
   IF v_u.retired_at IS NOT NULL THEN
     RAISE EXCEPTION 'account_retired' USING ERRCODE = 'check_violation';
   END IF;
-  IF account_status_of(p_target) <> 'suspended' THEN
+  -- An expired suspension can still be lifted: that clears its leftover flags.
+  IF NOT coalesce(v_u.is_suspended, false) THEN
     RAISE EXCEPTION 'not_suspended' USING ERRCODE = 'check_violation';
   END IF;
 
@@ -397,7 +420,7 @@ BEGIN
   UPDATE admin_users SET is_active = false WHERE admin_id = p_target;
   UPDATE users
      SET retired_at = now(), retired_by = p_admin, retire_reason = v_reason,
-         role = 'user', updated_at = now()
+         retired_role = v_role, role = 'user', updated_at = now()
    WHERE id = p_target;
   UPDATE auth.users SET banned_until = now() + interval '100 years' WHERE id = p_target;
   v_ended := admin_end_sessions(p_target);
@@ -434,13 +457,13 @@ BEGIN
     RAISE EXCEPTION 'not_retired' USING ERRCODE = 'check_violation';
   END IF;
   -- Retiring a staff account was a super_admin decision; so is undoing it.
-  IF (SELECT l.changes->>'removed_role' FROM audit_logs l
-        WHERE l.entity_id = p_target AND l.action = 'account_retire'
-        ORDER BY l.created_at DESC LIMIT 1) IS NOT NULL THEN
+  -- retired_role is set by admin_retire_account and by the backfill above.
+  IF v_u.retired_role IS NOT NULL THEN
     PERFORM admin_actor_email(p_admin, 'manage_admins');
   END IF;
 
-  UPDATE users SET retired_at = NULL, retired_by = NULL, retire_reason = NULL, updated_at = now()
+  UPDATE users SET retired_at = NULL, retired_by = NULL, retire_reason = NULL, retired_role = NULL,
+                   is_banned = false, updated_at = now()
    WHERE id = p_target;
   v_status := account_status_of(p_target);
   -- A suspension that is still running stays in force.
@@ -555,7 +578,7 @@ BEGIN
 
   IF v_role IS NULL THEN
     UPDATE admin_users
-       SET is_active = false, session_version = EXTRACT(EPOCH FROM now())::BIGINT + 1
+       SET is_active = false, session_version = floor(EXTRACT(EPOCH FROM now()))::BIGINT + 1
      WHERE admin_id = p_target;
     v_action := 'role_revoke';
   ELSE
@@ -716,6 +739,7 @@ BEGIN
            'retired_at', u.retired_at,
            'retire_reason', u.retire_reason,
            'retired_by_email', (SELECT email FROM auth.users WHERE id = u.retired_by),
+           'retired_staff_role', u.retired_role,
            'staff_role', (SELECT r.role_name FROM admin_users a JOIN admin_roles r ON r.role_id = a.role_id
                            WHERE a.admin_id = u.id AND a.is_active),
            'age_verified', coalesce(u.age_verified, false),

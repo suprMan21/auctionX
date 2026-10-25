@@ -28,9 +28,12 @@ vi.mock('../api/adminApi', async () => {
   return { ...actual, adminApi: api };
 });
 
-const auth = vi.hoisted(() => ({ session: { user: { id: 'me-1', email: 'boss@example.com' } } as unknown }));
+const auth = vi.hoisted(() => ({
+  session: { user: { id: 'me-1', email: 'boss@example.com' } } as unknown,
+  signOut: vi.fn(),
+}));
 vi.mock('@/features/auth/hooks/useAuth', () => ({
-  useAuth: () => ({ session: auth.session, loading: false, initialized: true, signOut: vi.fn() }),
+  useAuth: () => ({ session: auth.session, loading: false, initialized: true, signOut: auth.signOut }),
 }));
 
 import { AdminUsersPage } from './AdminUsersPage';
@@ -85,6 +88,7 @@ beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
   api.getAccountSettings.mockResolvedValue({ deleteWindowHours: 24, updatedAt: '2026-10-25T00:00:00Z' });
   auth.session = { user: { id: 'me-1', email: 'boss@example.com' } };
+  auth.signOut.mockReset();
 });
 
 describe('account detail: actions by role', () => {
@@ -109,6 +113,28 @@ describe('account detail: actions by role', () => {
     api.getAccount.mockResolvedValue(account({ is_self: true, staff_role: 'super_admin' }));
     renderDetail('super_admin');
     expect(await screen.findByText('You cannot change your own account here.')).toBeInTheDocument();
+  });
+
+  it('super admin on a suspended staff account can remove the role (not grant one)', async () => {
+    api.getAccount.mockResolvedValue(account({ status: 'suspended', staff_role: 'admin' }));
+    renderDetail('super_admin');
+    const region = await screen.findByRole('region', { name: 'Actions' });
+    await userEvent.click(within(region).getByRole('button', { name: 'Remove staff role' }));
+    const options = within(screen.getByLabelText('Staff role')).getAllByRole('option').map((o) => o.textContent);
+    expect(options).toEqual(['No staff role']);
+  });
+
+  it('admin on an account retired with a staff role: no Reactivate, told why', async () => {
+    api.getAccount.mockResolvedValue(account({ status: 'retired', retired_at: '2026-10-25T00:00:00Z', retired_staff_role: 'support' }));
+    renderDetail('admin');
+    expect(await screen.findByText(/Only a super admin can reactivate it/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reactivate' })).not.toBeInTheDocument();
+  });
+
+  it('admin on an account retired without a staff role: Reactivate offered', async () => {
+    api.getAccount.mockResolvedValue(account({ status: 'retired', retired_at: '2026-10-25T00:00:00Z', retired_staff_role: null }));
+    renderDetail('admin');
+    expect(await screen.findByRole('button', { name: 'Reactivate' })).toBeInTheDocument();
   });
 
   it('support: no Actions section at all', async () => {
@@ -303,6 +329,22 @@ describe('admin route guard (GET /admin/me)', () => {
     api.getMe.mockRejectedValue(new AdminApiError('This account is not active', 403, 'ACCOUNT_INACTIVE'));
     renderGuard();
     expect(await screen.findByText('home page')).toBeInTheDocument();
+  });
+
+  it('401 (expired or revoked session) signs out instead of going home', async () => {
+    api.getMe.mockRejectedValue(new AdminApiError('Session has been invalidated', 401, 'SESSION_REVOKED'));
+    renderGuard();
+    await waitFor(() => expect(auth.signOut).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('home page')).not.toBeInTheDocument();
+  });
+
+  it('unavailable: Try again asks the API again', async () => {
+    api.getMe.mockRejectedValueOnce(new AdminApiError('Service temporarily unavailable', 503, 'UNAVAILABLE'));
+    api.getMe.mockResolvedValueOnce({ adminId: 'me-1', email: 'boss@example.com', role: 'super_admin', permissions: [] });
+    renderGuard();
+    await userEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('admin console')).toBeInTheDocument();
+    expect(api.getMe).toHaveBeenCalledTimes(2);
   });
 
   it('ADMIN_2FA_REQUIRED explains the second factor', async () => {

@@ -17,7 +17,7 @@ interface RateLimitConfig {
 
 // Tiered limits based on action severity
 const PROFILES: Record<string, RateLimitConfig> = {
-  // Destructive: suspend, ban, unban, token reset — tight
+  // Destructive: suspend, retire, delete, role, settings, token reset — tight
   destructive: {
     windowMs: 60_000,
     maxRequests: 10,
@@ -37,12 +37,15 @@ const PROFILES: Record<string, RateLimitConfig> = {
   }
 };
 
+const DESTRUCTIVE_SEGMENTS = ['/suspend', '/ban', '/unban', '/reset', '/retire', '/reactivate', '/delete', '/role'];
+
 function getProfile(req: Request): RateLimitConfig {
   if (req.method === 'GET') return PROFILES.read;
 
   const path = req.path.toLowerCase();
   // `/suspend` also matches `/unsuspend`. `/reset` = S-ADMIN1 token reset.
-  if (path.includes('/suspend') || path.includes('/ban') || path.includes('/unban') || path.includes('/reset')) {
+  // S-ADMIN2: retire / reactivate / delete / role on /users/:id, and the delete window.
+  if (DESTRUCTIVE_SEGMENTS.some((seg) => path.includes(seg)) || path.startsWith('/account-settings')) {
     return PROFILES.destructive;
   }
   // S-ADMIN1 Ph3a: refund and Re-apply move money or ownership; the sweep
@@ -57,13 +60,17 @@ function getProfile(req: Request): RateLimitConfig {
 export const adminRateLimit = (req: Request, res: Response, next: NextFunction): void => {
   // Must run after verifyAdminAuth so req.admin is populated
   if (!req.admin) {
-    res.status(401).json({ error: 'Not authenticated' });
+    res.status(401).json({ success: false, data: null, error: 'Not authenticated', code: 'UNAUTHENTICATED' });
     return;
   }
 
   const profile = getProfile(req);
-  // Key: per admin, per method, per path — prevents one admin from DOSing specific actions
-  const key = `${req.admin.admin_id}:${req.method}:${req.path}`;
+  // Key: per admin, per method, per path — prevents one admin from DOSing specific actions.
+  // Destructive actions share one bucket per admin: the path holds the target id,
+  // so a per-path key would let an admin act on any number of accounts.
+  const key = profile === PROFILES.destructive
+    ? `${req.admin.admin_id}:destructive`
+    : `${req.admin.admin_id}:${req.method}:${req.path}`;
   const now = Date.now();
 
   let entry = store.get(key);

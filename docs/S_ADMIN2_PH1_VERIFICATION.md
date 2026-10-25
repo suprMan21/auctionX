@@ -86,14 +86,14 @@ Branch `feature/s-admin2-ph1`. Feature Backlog card "S-ADMIN2 — Admin Console:
 | 5 Admin AAL2 behind a flag | ✅ (flag off) | `FEATURE_REQUIRE_ADMIN_2FA`; guard test for `ADMIN_2FA_REQUIRED` |
 | 6 RLS/grants reviewed; every SECURITY DEFINER revoked from PUBLIC/anon/authenticated | ✅ | check 01 (22 functions), 04, 26 |
 | 7 tsc, vitest, lint green | ✅ | see Tests |
-| 8 Two-step Retire → Delete | ✅ | checks 14, 17, 18, 19, 28 |
+| 8 Two-step Retire → Delete | ✅ | checks 14, 17, 18, 19, 28, 30–33 |
 | 9 One permission model, permissions exposed to frontend | ✅ | `/admin/me`; no role-name gates left (backend grep) |
 | 10 Legacy suspend/ban RPCs replaced; one audit row | ✅ | check 02; users route has no audit middleware |
 | 11 Profile save no longer goes to /my-listings | ✅ | `afterProfileLanding` test |
 
 ## Tests
 
-- **Dry run** (`BEGIN` + `20261025000003` + live checks + `ROLLBACK`): `s_admin2_accounts_live.sql` **29/29 ok**
+- **Dry run** (`BEGIN` + `20261025000003` + live checks + `ROLLBACK`): `s_admin2_accounts_live.sql` **33/33 ok**
   (prints a compact summary: the error text is length-limited and was hiding the two longest check names).
   Caught one bug first (text-array append in `account_delete_blockers`). Nothing persisted (checked).
 - **Independent security review** of the diff (subagent, read-only): no auth bypass or escalation. Fixed:
@@ -105,9 +105,24 @@ Branch `feature/s-admin2-ph1`. Feature Backlog card "S-ADMIN2 — Admin Console:
   chip names 17/17. Hotfix suite updated: dropped functions count as locked.
 - `20261025000002` (enum values only) was applied to staging ahead of the dry run with `supabase db query`;
   `db push` re-runs it as a no-op and records it.
-- Backend: tsc 0; vitest **760 passed / 21 skipped** (+60 `adminAccounts.test.ts`; payment/pricing tests moved to
-  permissions).
-- Frontend: tsc 0; vitest **207 passed** (+20 `adminAccounts.test.tsx`); eslint 0 errors in touched files
+- **Correctness review** (three read-only subagents: DB, backend, frontend). Fixed:
+  - DB: accounts retired by hand before S-ADMIN2 (9b9e) had no record of their staff role, so a plain admin could
+    reactivate them → `users.retired_role` (set on retire and by the backfill, which also turns off leftover
+    `admin_users` rows); reactivate checks it. Backfill also covers legacy `is_banned` (0 on staging). An expired
+    suspension can be lifted (clears leftovers). Delete preview counts references to the staff row
+    (`moderation_queue`, `users.banned_by`, `admin_users.assigned_by`). Checks 30–33.
+  - Backend: audit-log page past the end → empty page, not 503 (PGRST103). Retire / reactivate / delete / role /
+    delete-window share the destructive rate limit, one bucket per admin. `requireAuth` codes now
+    `ACCOUNT_INACTIVE` / `UNAVAILABLE` (same as the admin guard). New `adminAuthGuard.test.ts` covers the admin
+    guard's status, 2FA flag, rate limit and audit paging.
+  - Frontend: super admin can remove the role of a suspended/retired staff account; Reactivate hidden (with the
+    reason) when it needs a super admin; a 401 signs out instead of going home; Try again on the unavailable
+    screen; pending search no longer navigates after leaving the list; unknown `?status=` ignored; search box
+    follows Back/Forward; detail page resets per account; tags / re-issue / stuck payments / verifications routes
+    gated by permission; dashboard loads each panel by permission and skips parked marketplace endpoints.
+- Backend: tsc 0; vitest **773 passed / 21 skipped** (+60 `adminAccounts.test.ts`, +13 `adminAuthGuard.test.ts`;
+  payment/pricing tests moved to permissions).
+- Frontend: tsc 0; vitest **212 passed** (+25 `adminAccounts.test.tsx`); eslint 0 errors in touched files
   (repo baseline has 36 pre-existing errors elsewhere).
 
 ## Deploy order (matters)

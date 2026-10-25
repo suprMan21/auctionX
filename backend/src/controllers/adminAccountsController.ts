@@ -252,15 +252,23 @@ export const listAuditLogs = async (req: AdminRequest, res: Response) => {
   const q = parse(auditLogQuerySchema, req.query);
   const offset = (q.page - 1) * q.limit;
 
-  let query = getServiceClient().from('audit_logs').select(AUDIT_COLUMNS, { count: 'exact' });
-  if (q.admin) query = query.eq('admin_id', q.admin);
-  if (q.action) query = query.eq('action', q.action);
-  if (q.entity) query = query.eq('entity_type', q.entity);
-  if (q.target) query = query.eq('entity_id', q.target);
+  const filtered = (head: boolean) => {
+    let query = getServiceClient().from('audit_logs').select(AUDIT_COLUMNS, { count: 'exact', head });
+    if (q.admin) query = query.eq('admin_id', q.admin);
+    if (q.action) query = query.eq('action', q.action);
+    if (q.entity) query = query.eq('entity_type', q.entity);
+    if (q.target) query = query.eq('entity_id', q.target);
+    return query;
+  };
 
-  const { data, error, count } = await query
+  let { data, error, count } = await filtered(false)
     .order('created_at', { ascending: false })
     .range(offset, offset + q.limit - 1);
+  // A page past the end (e.g. after narrowing a filter) is an empty page, not an outage.
+  if (error?.code === 'PGRST103') {
+    ({ error, count } = await filtered(true));
+    data = [];
+  }
   if (error) throw new AppError('unavailable', 'Audit entries could not be loaded');
 
   const total = count ?? 0;

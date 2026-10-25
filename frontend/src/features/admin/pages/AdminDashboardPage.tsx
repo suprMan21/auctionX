@@ -10,12 +10,17 @@ import { adminApi } from '../api/adminApi';
 import { supabase } from '@/lib/supabase';
 import type { HealthStatus } from '../types/admin';
 import type { AuditLogEntry } from '../api/accountSchemas';
+import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
+import { isMarketplaceEnabledOnClient } from '@/lib/featureFlags';
+
+/** Settles to null instead of throwing, so one failed panel does not blank the dashboard. */
+const orNull = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
 
 interface DashboardStats {
-  totalUsers: number;
-  pendingModeration: number;
-  activeListings: number;
-  activeAuctions: number;
+  totalUsers: number | null;
+  pendingModeration: number | null;
+  activeListings: number | null;
+  activeAuctions: number | null;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -61,23 +66,23 @@ const HealthChip = ({ health }: { health: HealthStatus | null | 'error' }) => {
 
   if (health === 'error') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-warning-500/20 text-warning-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-warning-400" />
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-warning-500/20 text-warning-500">
+        <span className="w-1.5 h-1.5 rounded-full bg-warning-500" />
         Health endpoint not available
       </span>
     );
   }
 
   const colorMap: Record<string, string> = {
-    ok: 'bg-success-500/20 text-success-400',
-    degraded: 'bg-warning-500/20 text-warning-400',
-    down: 'bg-error-500/20 text-error-400',
+    ok: 'bg-success-500/20 text-success-500',
+    degraded: 'bg-warning-500/20 text-warning-500',
+    down: 'bg-error-500/20 text-error-500',
   };
 
   const dotMap: Record<string, string> = {
-    ok: 'bg-success-400',
-    degraded: 'bg-warning-400',
-    down: 'bg-error-400',
+    ok: 'bg-success-500',
+    degraded: 'bg-warning-500',
+    down: 'bg-error-500',
   };
 
   return (
@@ -97,67 +102,50 @@ const HealthChip = ({ health }: { health: HealthStatus | null | 'error' }) => {
  * AdminDashboardPage — aggregates platform stats for the admin overview.
  */
 export const AdminDashboardPage = () => {
+  const access = useAdminRole();
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentLogs, setRecentLogs] = useState<AuditLogEntry[]>([]);
+  const [recentLogs, setRecentLogs] = useState<AuditLogEntry[] | null>(null);
   const [health, setHealth] = useState<HealthStatus | null | 'error'>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const canViewUsers = hasPermission(access, PERMISSIONS.viewUsers);
+  const canViewAudit = hasPermission(access, PERMISSIONS.viewAuditLogs);
+  // The marketplace is parked: its endpoints are not mounted, so do not call them.
+  const marketplace = isMarketplaceEnabledOnClient();
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [usersRes, moderationRes, listingsRes, auctionsRes, logsRes] = await Promise.all([
-          adminApi.searchAccounts({ limit: 1 }),
-          adminApi.getModerationQueue({ status: 'pending' }),
-          supabase
-            .from('listings')
-            .select('id', { count: 'exact', head: true })
-            .eq('status', 'ACTIVE'),
-          supabase
-            .from('auctions')
-            .select('id', { count: 'exact', head: true })
-            .eq('status', 'ACTIVE'),
-          adminApi.getAuditLogs({ limit: 10 }),
-        ]);
+    if (access.status !== 'known') return;
+    let cancelled = false;
+    const count = (table: 'listings' | 'auctions') =>
+      Promise.resolve(supabase.from(table).select('id', { count: 'exact', head: true }).eq('status', 'ACTIVE'))
+        .then((r) => (r.error ? null : r.count ?? 0));
 
-        setStats({
-          totalUsers: usersRes.pagination.total,
-          pendingModeration: moderationRes.stats.pendingCount,
-          activeListings: listingsRes.count ?? 0,
-          activeAuctions: auctionsRes.count ?? 0,
-        });
+    void Promise.all([
+      canViewUsers ? orNull(adminApi.searchAccounts({ limit: 1 }).then((r) => r.pagination.total)) : null,
+      marketplace ? orNull(adminApi.getModerationQueue({ status: 'pending' }).then((r) => r.stats.pendingCount)) : null,
+      marketplace ? orNull(count('listings')) : null,
+      marketplace ? orNull(count('auctions')) : null,
+      canViewAudit ? orNull(adminApi.getAuditLogs({ limit: 10 }).then((r) => r.logs)) : null,
+    ]).then(([totalUsers, pendingModeration, activeListings, activeAuctions, logs]) => {
+      if (cancelled) return;
+      setStats({ totalUsers, pendingModeration, activeListings, activeAuctions });
+      setRecentLogs(logs);
+    });
 
-        setRecentLogs(logsRes.logs);
+    adminApi.getHealth()
+      .then((h) => { if (!cancelled) setHealth(h); })
+      .catch(() => { if (!cancelled) setHealth('error'); });
+    return () => { cancelled = true; };
+  }, [access.status, canViewUsers, canViewAudit, marketplace]);
 
-        // Health is optional — graceful 404 handling
-        adminApi.getHealth()
-          .then(setHealth)
-          .catch(() => setHealth('error'));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load dashboard');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
-  }, []);
-
-  if (loading) {
+  if (!stats) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64" role="status" aria-label="Loading dashboard">
         <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="glass rounded-2xl p-6 border border-error-500/30">
-        <p className="text-error-400 text-sm">{error}</p>
-      </div>
-    );
-  }
+  const shown = (v: number | null) => (v === null ? '—' : v);
 
   return (
     <div className="space-y-8">
@@ -166,15 +154,18 @@ export const AdminDashboardPage = () => {
         <p className="text-gray-400 text-sm mt-1">Platform overview</p>
       </div>
 
-      {/* Stat cards */}
-      <div data-testid="stats-cards" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Users" value={stats?.totalUsers ?? 0} to="/admin/users" />
-        <StatCard label="Pending Moderation" value={stats?.pendingModeration ?? 0} to="/admin/moderation" />
-        <StatCard label="Active Listings" value={stats?.activeListings ?? 0} to="/admin/moderation" />
-        <StatCard label="Active Auctions" value={stats?.activeAuctions ?? 0} to="/admin/audit-logs" />
-      </div>
+      {/* Stat cards: only the ones this admin may open ("—" when a count could not be loaded) */}
+      {(canViewUsers || marketplace) && (
+        <div data-testid="stats-cards" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {canViewUsers && <StatCard label="Total Users" value={shown(stats.totalUsers)} to="/admin/users" />}
+          {marketplace && <StatCard label="Pending Moderation" value={shown(stats.pendingModeration)} to="/admin/moderation" />}
+          {marketplace && <StatCard label="Active Listings" value={shown(stats.activeListings)} to="/admin/moderation" />}
+          {marketplace && <StatCard label="Active Auctions" value={shown(stats.activeAuctions)} to="/admin/auctions" />}
+        </div>
+      )}
 
       {/* Recent audit logs */}
+      {canViewAudit && (
       <div className="glass rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">Recent Activity</h2>
@@ -186,7 +177,9 @@ export const AdminDashboardPage = () => {
           </Link>
         </div>
 
-        {recentLogs.length === 0 ? (
+        {recentLogs === null ? (
+          <p className="text-error-500 text-sm" role="alert">Recent activity could not be loaded.</p>
+        ) : recentLogs.length === 0 ? (
           <p className="text-gray-400 text-sm">No recent activity.</p>
         ) : (
           <div>
@@ -196,6 +189,7 @@ export const AdminDashboardPage = () => {
           </div>
         )}
       </div>
+      )}
 
       {/* Health indicator */}
       {health !== null && (

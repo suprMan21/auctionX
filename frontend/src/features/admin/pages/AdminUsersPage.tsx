@@ -66,7 +66,19 @@ export const AdminUsersPage = () => {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const q = searchParams.get('q') ?? '';
-  const status = searchParams.get('status') ?? 'all';
+  const rawStatus = searchParams.get('status') ?? 'all';
+  // An unknown ?status= falls back to all rather than a 400 from the API.
+  const status = STATUS_FILTERS.some((f) => f.value === rawStatus) ? rawStatus : 'all';
+  const [draft, setDraft] = useState(q);
+  const [draftFor, setDraftFor] = useState(q);
+  if (draftFor !== q) {
+    // The URL changed (Back/Forward, filter reset): show the search it holds.
+    setDraftFor(q);
+    setDraft(q);
+  }
+
+  // A search still waiting to fire must not navigate after the page is left.
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
 
   const queryKey = `${q}|${status}|${page}`;
@@ -94,6 +106,7 @@ export const AdminUsersPage = () => {
     });
 
   const onSearch = (value: string) => {
+    setDraft(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     // A longer pause than a typeahead: every search writes an audit row.
     debounceRef.current = setTimeout(() => update({ q: value.trim() || null, page: '1' }), 500);
@@ -115,7 +128,7 @@ export const AdminUsersPage = () => {
           <input
             data-testid="user-search"
             type="search"
-            defaultValue={q}
+            value={draft}
             onChange={(e) => onSearch(e.target.value)}
             placeholder="Email, display name or account id…"
             className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-400 border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500"

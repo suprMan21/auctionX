@@ -411,15 +411,15 @@ function App() {
               {/* S22: Yoti verifications admin surface. Static "verifications"
                   before parameterized ":userId" sibling (Lesson #5). Legacy
                   seller-verification doc-pipeline page remains accessible. */}
-              <Route path="verifications" element={<AdminVerificationsPage />} />
-              <Route path="verifications/:userId" element={<AdminVerificationDetailPage />} />
+              <Route path="verifications" element={<AdminPermissionGate permission={PERMISSIONS.reviewSellers}><AdminVerificationsPage /></AdminPermissionGate>} />
+              <Route path="verifications/:userId" element={<AdminPermissionGate permission={PERMISSIONS.reviewSellers}><AdminVerificationDetailPage /></AdminPermissionGate>} />
               {marketplaceEnabled && <Route path="seller-verification" element={<AdminSellerVerificationPage />} />}
               {marketplaceEnabled && <Route path="escrow" element={<AdminEscrowPage />} />}
-              {/* S-ADMIN1: token admin console (manage_nfc enforced by the API). */}
-              <Route path="tags" element={<AdminTagsPage />} />
-              <Route path="tags/:tagId" element={<AdminTagDetailPage />} />
-              <Route path="reissue-requests" element={<AdminReissuePage />} />
-              <Route path="stuck-payments" element={<AdminStuckPaymentsPage />} />
+              {/* S-ADMIN1: token admin console (manage_nfc; the API enforces it too). */}
+              <Route path="tags" element={<AdminPermissionGate permission={PERMISSIONS.manageNfc}><AdminTagsPage /></AdminPermissionGate>} />
+              <Route path="tags/:tagId" element={<AdminPermissionGate permission={PERMISSIONS.manageNfc}><AdminTagDetailPage /></AdminPermissionGate>} />
+              <Route path="reissue-requests" element={<AdminPermissionGate permission={PERMISSIONS.manageNfc}><AdminReissuePage /></AdminPermissionGate>} />
+              <Route path="stuck-payments" element={<AdminPermissionGate permission={PERMISSIONS.reapplyPayments}><AdminStuckPaymentsPage /></AdminPermissionGate>} />
               <Route path="pricing" element={<AdminPermissionGate permission={PERMISSIONS.managePricing}><AdminPricingPage /></AdminPermissionGate>} />
               <Route path="vouchers" element={<AdminPermissionGate permission={PERMISSIONS.managePricing}><AdminVouchersPage /></AdminPermissionGate>} />
               <Route path="audit-logs" element={<AdminPermissionGate permission={PERMISSIONS.viewAuditLogs}><AdminAuditLogPage /></AdminPermissionGate>} />

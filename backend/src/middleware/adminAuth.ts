@@ -163,7 +163,7 @@ export const verifyAdminAuth = async (
 export const requirePermission = (permission: AdminPermission) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.admin) {
-      res.status(401).json({ error: 'Not authenticated' });
+      res.status(401).json({ success: false, data: null, error: 'Not authenticated', code: 'UNAUTHENTICATED' });
       return;
     }
 

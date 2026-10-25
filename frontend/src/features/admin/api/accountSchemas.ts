@@ -63,6 +63,8 @@ export const accountDetailSchema = z.object({
   retired_at: z.string().nullable(),
   retire_reason: z.string().nullable(),
   retired_by_email: z.string().nullable(),
+  /** Staff role the account lost when it was last retired (reactivating it needs manage_admins). */
+  retired_staff_role: z.string().nullish(),
   staff_role: z.string().nullable(),
   age_verified: z.boolean(),
   active_sessions: z.number().int(),

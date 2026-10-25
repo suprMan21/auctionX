@@ -5,7 +5,7 @@
 -- and the throwaway account) rolls back.
 --
 -- Run: supabase db query --linked -f supabase/tests/s_admin2_accounts_live.sql
--- Expect: ERROR  P0001: RESULTS {"ok": 29, "total": 29, "failures": {}}
+-- Expect: ERROR  P0001: RESULTS {"ok": 33, "total": 33, "failures": {}}
 
 DO $$
 DECLARE
@@ -311,6 +311,47 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN v_state := '42501'; END;
   PERFORM admin_reactivate_account(v_super, v_staff, R);
   v_res := v_res || jsonb_build_object('29_reactivate_ex_staff_needs_super', CASE WHEN v_state = '42501' AND account_status_of(v_staff) = 'active' THEN 'ok' ELSE 'FAIL ' || v_state END);
+
+  -- 30. Accounts retired by hand before S-ADMIN2 keep their staff history:
+  --     the backfill recorded the role, so a plain admin cannot reactivate them.
+  SELECT id INTO v_fn FROM users WHERE retire_reason LIKE '%before S-ADMIN2%' AND retired_role IS NOT NULL LIMIT 1;
+  v_state := 'none';
+  IF v_fn IS NOT NULL THEN
+    BEGIN PERFORM admin_reactivate_account(v_temp, v_fn::uuid, R);
+    EXCEPTION WHEN insufficient_privilege THEN v_state := '42501'; END;
+    v_ok := v_state = '42501'
+        AND admin_get_account(v_super, v_fn::uuid)->>'retired_staff_role' IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM admin_users x JOIN users u ON u.id = x.admin_id
+                         WHERE u.retired_at IS NOT NULL AND x.is_active);
+  ELSE
+    v_ok := false; v_state := 'no hand-retired ex-staff account found';
+  END IF;
+  v_res := v_res || jsonb_build_object('30_hand_retired_staff_needs_super', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL ' || v_state END);
+
+  -- 31. An expired suspension can still be lifted, which clears its leftovers.
+  PERFORM admin_suspend_account(v_super, v_user, 1, R);
+  UPDATE users SET suspended_until = now() - interval '1 minute' WHERE id = v_user;
+  v_ok := account_status_of(v_user) = 'active';
+  PERFORM admin_unsuspend_account(v_super, v_user, R);
+  v_ok := v_ok AND NOT (SELECT coalesce(is_suspended, false) FROM users WHERE id = v_user)
+      AND (SELECT suspended_until FROM users WHERE id = v_user) IS NULL;
+  v_res := v_res || jsonb_build_object('31_unsuspend_expired_clears', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL' END);
+
+  -- 32. Reactivating an account whose suspension is still running leaves it
+  --     suspended, with the sign-in ban ending when the suspension does.
+  PERFORM admin_suspend_account(v_super, v_staff, 24, R);
+  PERFORM admin_retire_account(v_super, v_staff, R);
+  v_j := admin_reactivate_account(v_temp, v_staff, R);
+  v_ok := v_j->>'status' = 'suspended' AND account_status_of(v_staff) = 'suspended'
+      AND (SELECT a.banned_until = u.suspended_until FROM auth.users a JOIN users u ON u.id = a.id WHERE a.id = v_staff);
+  v_res := v_res || jsonb_build_object('32_reactivate_keeps_running_suspension', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL ' || v_j::text END);
+
+  -- 33. Records pointing at the account's staff row also block Delete
+  --     (the preview and the delete agree).
+  v_ok := NOT ('account_has_history' = ANY (account_delete_blockers(v_temp)));
+  UPDATE users SET banned_by = v_temp WHERE id = v_user;
+  v_ok := v_ok AND 'account_has_history' = ANY (account_delete_blockers(v_temp));
+  v_res := v_res || jsonb_build_object('33_staff_row_references_block_delete', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL ' || array_to_string(account_delete_blockers(v_temp), ',') END);
 
   -- Compact summary: the error text is length-limited, so print totals plus
   -- every failing check in full (jsonb orders keys by length, long ones last).

@@ -81,10 +81,10 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
       setReason('');
       setHours(24);
       setConfirm('');
-      setRole((account.staff_role as GrantableRole | null) ?? '');
+      setRole(account.status === 'active' ? ((account.staff_role as GrantableRole | null) ?? '') : '');
       setError(null);
     }
-  }, [open, account.staff_role]);
+  }, [open, account.staff_role, account.status]);
 
   if (!action) return null;
 
@@ -142,7 +142,8 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
           <label htmlFor={roleId} className="block text-sm font-medium text-gray-200">Staff role</label>
           <select id={roleId} value={role} onChange={(e) => setRole(e.target.value as GrantableRole | '')} className={ADMIN_FIELD_CLASS}>
             <option value="">No staff role</option>
-            {GRANTABLE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            {/* Only an active account can be given a role; any account can lose one. */}
+            {(account.status === 'active' ? GRANTABLE_ROLES : []).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </select>
         </div>
       )}

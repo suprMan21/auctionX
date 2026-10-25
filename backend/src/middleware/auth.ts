@@ -20,11 +20,11 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
   // issued before the action. Fails closed if the status cannot be read.
   const status = await getAccountStatus(user.id);
   if (status === null) {
-    res.status(503).json({ success: false, data: null, error: 'Service temporarily unavailable', code: 'unavailable' });
+    res.status(503).json({ success: false, data: null, error: 'Service temporarily unavailable', code: 'UNAVAILABLE' });
     return;
   }
   if (status !== 'active') {
-    res.status(403).json({ success: false, data: null, error: 'This account is not active', code: 'account_inactive' });
+    res.status(403).json({ success: false, data: null, error: 'This account is not active', code: 'ACCOUNT_INACTIVE' });
     return;
   }
 

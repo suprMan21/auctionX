@@ -237,20 +237,24 @@ describe('reads', () => {
 describe('requireAuth refuses inactive accounts (AC 2)', () => {
   const run = async (status: string | null, rpcError = false) => {
     vi.doMock('../lib/supabase', () => ({ verifyAuthToken: async () => ({ id: TARGET }) }));
-    hooks.rpc = () => (rpcError ? { data: null, error: { message: 'down' } } : { data: status, error: null });
+    hooks.rpc = (fn: string, args: Row) => {
+      rpcCalls.push({ fn, args });
+      return rpcError ? { data: null, error: { message: 'down' } } : { data: status, error: null };
+    };
     const { requireAuth } = await import('../middleware/auth');
     const app = express();
     app.get('/x', requireAuth as never, (_req, res) => { res.json({ ok: true }); });
     return request(app).get('/x').set('Authorization', 'Bearer t');
   };
 
-  it('active → passes', async () => {
+  it('active → passes; asks for this account by name', async () => {
     expect((await run('active')).status).toBe(200);
+    expect(rpcCalls).toEqual([{ fn: 'account_status_of', args: { p_user: TARGET } }]);
   });
-  it('suspended → 403 account_inactive', async () => {
+  it('suspended → 403 ACCOUNT_INACTIVE', async () => {
     const res = await run('suspended');
     expect(res.status).toBe(403);
-    expect(res.body.code).toBe('account_inactive');
+    expect(res.body.code).toBe('ACCOUNT_INACTIVE');
   });
   it('retired → 403', async () => {
     expect((await run('retired')).status).toBe(403);
