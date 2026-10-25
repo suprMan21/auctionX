@@ -153,6 +153,8 @@ authz = admin_users + `manage_nfc` (2026-10-05).
       Still to do: YubiKeys on Google, GitHub, Stripe, 1Password, Supabase, GoDaddy (authentic-materials.com) and
       Squarespace (cravingcorp.com); move the am-encoder TOTP seed onto both keys and out of 1Password; buy the two
       Security Key C NFC break-glass keys (root + super_admin stay as-is until then); report `tccDev` permissions.
+- [ ] **`backend/.env.op` is broken** (2026-10-25): it references 1Password item "NFC Local Root", which no longer exists,
+      so `op run --env-file backend/.env.op` (and `cc-auctionx`) fails before starting. Remove or repoint that line.
 - [ ] **`backend/.env` holds `auctionx-deploy`'s long-lived key** (found 2026-10-25; file dated May 9). Local backend runs
       without 1Password use the DEPLOY user, which can write both site buckets (incl. the public site). The backend
       never needs deploy credentials: point `backend/.env` at the scoped S3 user (or a short-lived role) and keep the
