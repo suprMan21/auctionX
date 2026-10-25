@@ -107,9 +107,25 @@ vi.mock('../lib/notifications/emailSender', () => ({
 }));
 
 /** Minimal Express req/res doubles — the controllers only use a few fields. */
-const makeReq = (userId: string | null, body: Row = {}, params: Row = {}) => ({
+/** Each test user's sign-in email as Supabase Auth reports it (confirmed). */
+const AUTH_EMAIL: Record<string, string> = {
+  [OWNER]: 'owner@example.com',
+  [BUYER]: 'buyer@example.com',
+  [STRANGER]: 'stranger@example.com',
+  [STAFF]: 'staff@example.com',
+  [LEGACY_ROLE_ADMIN]: 'legacy@example.com',
+};
+
+const makeReq = (
+  userId: string | null,
+  body: Row = {},
+  params: Row = {},
+  authUser: Row = {},
+) => ({
   requestId: 'test-req',
-  user: userId ? { id: userId } : undefined,
+  user: userId
+    ? { id: userId, email: AUTH_EMAIL[userId], email_confirmed_at: '2026-01-01T00:00:00Z', ...authUser }
+    : undefined,
   headers: { authorization: userId ? 'Bearer header.eyJhYWwiOiJhYWwxIn0.sig' : undefined },
   socket: { remoteAddress: '203.0.113.5' },
   body,
@@ -510,6 +526,49 @@ describe('transfer', () => {
     expect(out.threw).toBeNull();
     // The recipient is resolved onto the row once identified.
     expect(tables.ownership_transfers[0].to_user_id).toBe(BUYER);
+  });
+
+  // 2026-10-25 hotfix: public.users.email was user-editable, so it must not
+  // decide who the recipient is. Only the confirmed Supabase Auth email does.
+  it('ignores a profile email copied from the recipient', async () => {
+    await claimFirst();
+    const { initiateTransfer, completeTransfer } = await controllers();
+    await call(
+      initiateTransfer,
+      makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toEmail: 'buyer@example.com' }),
+    );
+    const transferId = String(tables.ownership_transfers[0].id);
+    const stranger = tables.users.find((u) => u.id === STRANGER);
+    if (stranger) stranger.email = 'buyer@example.com';
+    logSpy.clear();
+
+    const out = await call(
+      completeTransfer,
+      makeReq(STRANGER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }),
+    );
+
+    expect(out.threw?.message).toMatch(/forbidden/i);
+    expect(stripeCreate).not.toHaveBeenCalled();
+    expect(tables.ownership_transfers[0].to_user_id).toBeNull();
+    expect(eventsNamed('authz.denied')[0]).toMatchObject({ reason: 'not_recipient' });
+  });
+
+  it('refuses an email-targeted completion when the sign-in email is unconfirmed', async () => {
+    await claimFirst();
+    const { initiateTransfer, completeTransfer } = await controllers();
+    await call(
+      initiateTransfer,
+      makeReq(OWNER, { tagId: TAG_ID, transferType: 'sale', toEmail: 'buyer@example.com' }),
+    );
+    const transferId = String(tables.ownership_transfers[0].id);
+
+    const out = await call(
+      completeTransfer,
+      makeReq(BUYER, { tagUid: TAG_UID, sunMessage: sunFor(2) }, { id: transferId }, { email_confirmed_at: null }),
+    );
+
+    expect(out.threw?.message).toMatch(/forbidden/i);
+    expect(stripeCreate).not.toHaveBeenCalled();
   });
 
   it('never creates a payment when the recipient cannot be recorded', async () => {
