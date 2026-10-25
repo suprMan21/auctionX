@@ -153,11 +153,13 @@ authz = admin_users + `manage_nfc` (2026-10-05).
       Still to do: YubiKeys on Google, GitHub, Stripe, 1Password, Supabase, GoDaddy (authentic-materials.com) and
       Squarespace (cravingcorp.com); move the am-encoder TOTP seed onto both keys and out of 1Password; buy the two
       Security Key C NFC break-glass keys (root + super_admin stay as-is until then); report `tccDev` permissions.
-- [ ] **IAM cleanup — PRIORITY (pull ahead of S-SEC0):** group `tccDev` = machine user `auctionx-s3-access` with
-      `IAMUserChangePassword` + **`AmazonS3FullAccess`** (Boss 2026-10-25). Its long-lived key (local dev, via
+- [ ] **IAM cleanup — PRIORITY (pull ahead of S-SEC0):** machine user `auctionx-s3-access` (member of group
+      `tccDev`) has `IAMUserChangePassword` + **`AmazonS3FullAccess`** attached to the user itself (Boss 2026-10-25;
+      `tccDev` group policies not yet reported). Its long-lived key (local dev, via
       `backend/.env.op`) can overwrite the public site bucket `am-frontend-prod-904183418667` (phishing), the staging
       site, read re-issue evidence and delete buckets. Fix: scope to object read/write/delete on
-      `auctionx-media-prod-cl` (+ `am-reissue-evidence-staging` for local re-issue tests) and drop S3FullAccess. Staging does not use that user (App Runner uses its instance role;
+      `auctionx-media-prod-cl` (+ `am-reissue-evidence-staging` for local re-issue tests) and detach S3FullAccess from
+      the user. Staging does not use that user (App Runner uses its instance role;
       the leftover `AWS_ACCESS_KEY_ID` on App Runner has no secret and can be removed). Local backend dev still loads its
       long-lived key + secret via `backend/.env.op`: replace with a short-lived role/profile, then deactivate the key and
       drop the unused `ReissueEvidenceStaging` inline policy. Keep humans out of `tccDev`.
