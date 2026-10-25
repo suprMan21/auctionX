@@ -8,7 +8,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi } from '../api/adminApi';
 import { supabase } from '@/lib/supabase';
-import type { AuditLog, HealthStatus } from '../types/admin';
+import type { HealthStatus } from '../types/admin';
+import type { AuditLogEntry } from '../api/accountSchemas';
 
 interface DashboardStats {
   totalUsers: number;
@@ -40,7 +41,7 @@ const StatCard = ({
 );
 
 /** A single row in the recent audit log list. */
-const AuditRow = ({ log }: { log: AuditLog }) => (
+const AuditRow = ({ log }: { log: AuditLogEntry }) => (
   <div className="flex items-start justify-between gap-4 py-3 border-b border-white/5 last:border-0">
     <div className="min-w-0">
       <p className="text-sm text-white font-medium truncate">{log.action.replace(/_/g, ' ')}</p>
@@ -97,7 +98,7 @@ const HealthChip = ({ health }: { health: HealthStatus | null | 'error' }) => {
  */
 export const AdminDashboardPage = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentLogs, setRecentLogs] = useState<AuditLog[]>([]);
+  const [recentLogs, setRecentLogs] = useState<AuditLogEntry[]>([]);
   const [health, setHealth] = useState<HealthStatus | null | 'error'>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,7 +107,7 @@ export const AdminDashboardPage = () => {
     const load = async () => {
       try {
         const [usersRes, moderationRes, listingsRes, auctionsRes, logsRes] = await Promise.all([
-          adminApi.listUsers({ limit: 1 }),
+          adminApi.searchAccounts({ limit: 1 }),
           adminApi.getModerationQueue({ status: 'pending' }),
           supabase
             .from('listings')

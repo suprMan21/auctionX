@@ -11,7 +11,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { cn } from '@/lib/cn';
 import { BRAND_LABEL } from '@/constants/branding';
 import { isMarketplaceEnabledOnClient } from '../../lib/featureFlags';
-import { hasAdminRole, PRICING_ROLES, useAdminRole } from './lib/adminRole';
+import { hasPermission, PERMISSIONS, useAdminRole } from './lib/adminRole';
 
 interface NavItem {
   /** Route path relative to /admin */
@@ -22,8 +22,8 @@ interface NavItem {
   icon: string;
   /** S-ISO1: this surface serves the parked marketplace. */
   marketplace?: boolean;
-  /** S-ADMIN1 Ph3b: only these admin roles see the item (the API enforces it too). */
-  roles?: readonly string[];
+  /** S-ADMIN2: only admins holding this permission see the item (the API enforces it too). */
+  permission?: string;
 }
 
 const ALL_NAV_ITEMS: NavItem[] = [
@@ -35,42 +35,47 @@ const ALL_NAV_ITEMS: NavItem[] = [
   {
     to: '/admin/users',
     label: 'Users',
+    permission: PERMISSIONS.viewUsers,
     icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
   },
   {
     to: '/admin/tags',
     label: 'Tags',
+    permission: PERMISSIONS.manageNfc,
     icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z',
   },
   {
     to: '/admin/reissue-requests',
     label: 'Re-issue queue',
+    permission: PERMISSIONS.manageNfc,
     // arrows-circle (refresh): one chip swapped for another
     icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
   },
   {
     to: '/admin/stuck-payments',
     label: 'Stuck payments',
+    permission: PERMISSIONS.reapplyPayments,
     // exclamation-circle: paid, not delivered
     icon: 'M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
   },
   {
     to: '/admin/pricing',
     label: 'Pricing',
-    roles: PRICING_ROLES,
+    permission: PERMISSIONS.managePricing,
     // cash
     icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z',
   },
   {
     to: '/admin/vouchers',
     label: 'Free transfers',
-    roles: PRICING_ROLES,
+    permission: PERMISSIONS.managePricing,
     // ticket
     icon: 'M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z',
   },
   {
     to: '/admin/verifications',
     label: 'Verifications',
+    permission: PERMISSIONS.reviewSellers,
     icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
   },
   {
@@ -94,6 +99,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   {
     to: '/admin/audit-logs',
     label: 'Audit Logs',
+    permission: PERMISSIONS.viewAuditLogs,
     icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
   },
   {
@@ -135,8 +141,8 @@ export const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { session, signOut } = useAuth();
   const navigate = useNavigate();
-  const role = useAdminRole();
-  const navItems = NAV_ITEMS.filter((item) => !item.roles || hasAdminRole(role, item.roles));
+  const access = useAdminRole();
+  const navItems = NAV_ITEMS.filter((item) => !item.permission || hasPermission(access, item.permission));
 
   const handleLogout = async () => {
     await signOut();

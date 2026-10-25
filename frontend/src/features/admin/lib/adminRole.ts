@@ -1,29 +1,37 @@
 /**
- * The signed-in admin's role, for showing or hiding role-specific admin UI
- * (S-ADMIN1 Ph3b). Display only: the API enforces every role check itself.
+ * The signed-in admin's role and permissions, for showing or hiding admin UI
+ * (S-ADMIN2 Ph1: one permission model). Display only: the API enforces every
+ * permission itself.
  *
- * AdminProtectedRoute reads the role from admin_users -> admin_roles and
- * provides it here. Unknown (still loading, or the lookup failed) hides
- * anything role-gated.
+ * AdminProtectedRoute loads them from GET /admin/me and provides them here.
+ * Unknown (still loading, or the lookup failed) hides anything gated.
  */
 
 import { createContext, useContext } from 'react';
 
-export type AdminRoleState = { status: 'loading' } | { status: 'known'; role: string | null };
+export type AdminAccessState =
+  | { status: 'loading' }
+  | { status: 'known'; role: string | null; permissions: readonly string[]; adminId?: string };
 
-export const AdminRoleContext = createContext<AdminRoleState>({ status: 'loading' });
+/** Kept as AdminRoleState for existing imports. */
+export type AdminRoleState = AdminAccessState;
 
-export const useAdminRole = (): AdminRoleState => useContext(AdminRoleContext);
+export const AdminRoleContext = createContext<AdminAccessState>({ status: 'loading' });
 
-/** Prices and free-transfer vouchers: admin and super_admin only (Locked 2026-10-03). */
-export const PRICING_ROLES: readonly string[] = ['admin', 'super_admin'];
+export const useAdminRole = (): AdminAccessState => useContext(AdminRoleContext);
 
-export const hasAdminRole = (state: AdminRoleState, roles: readonly string[]): boolean =>
-  state.status === 'known' && state.role !== null && roles.includes(state.role);
+/** Permission names (the admin_permission enum). */
+export const PERMISSIONS = {
+  viewUsers: 'view_users',
+  manageUsers: 'manage_users',
+  manageAdmins: 'manage_admins',
+  viewAuditLogs: 'view_audit_logs',
+  manageNfc: 'manage_nfc',
+  reapplyPayments: 'reapply_payments',
+  refundTokenFees: 'refund_token_fees',
+  managePricing: 'manage_pricing',
+  reviewSellers: 'review_sellers',
+} as const;
 
-/** admin_roles comes back as an object or a one-item array depending on the embed. */
-export const roleNameFrom = (embedded: unknown): string | null => {
-  const row = Array.isArray(embedded) ? embedded[0] : embedded;
-  if (row && typeof row === 'object' && 'role_name' in row && typeof row.role_name === 'string') return row.role_name;
-  return null;
-};
+export const hasPermission = (state: AdminAccessState, permission: string): boolean =>
+  state.status === 'known' && state.permissions.includes(permission);

@@ -48,8 +48,8 @@ import { AdminReissuePage } from '@/features/admin/pages/AdminReissuePage';
 import { AdminStuckPaymentsPage } from '@/features/admin/pages/AdminStuckPaymentsPage';
 import { AdminPricingPage } from '@/features/admin/pages/AdminPricingPage';
 import { AdminVouchersPage } from '@/features/admin/pages/AdminVouchersPage';
-import { AdminRoleGate } from '@/features/admin/components/AdminRoleGate';
-import { PRICING_ROLES } from '@/features/admin/lib/adminRole';
+import { AdminPermissionGate } from '@/features/admin/components/AdminPermissionGate';
+import { PERMISSIONS } from '@/features/admin/lib/adminRole';
 import { NotificationsPage } from './features/notifications/pages/NotificationsPage';
 import { NotificationPreferencesPage } from './features/notifications/pages/NotificationPreferencesPage';
 import { SettingsPayoutsPage } from './pages/SettingsPayoutsPage';
@@ -402,8 +402,9 @@ function App() {
           <Route path="/admin" element={<AdminProtectedRoute />}>
             <Route element={<AdminLayout />}>
               <Route index element={<AdminDashboardPage />} />
-              <Route path="users" element={<AdminUsersPage />} />
-              <Route path="users/:id" element={<AdminUserDetailPage />} />
+              {/* S-ADMIN2: every page gated by permission (display only; the API enforces it). */}
+              <Route path="users" element={<AdminPermissionGate permission={PERMISSIONS.viewUsers}><AdminUsersPage /></AdminPermissionGate>} />
+              <Route path="users/:id" element={<AdminPermissionGate permission={PERMISSIONS.viewUsers}><AdminUserDetailPage /></AdminPermissionGate>} />
               {marketplaceEnabled && <Route path="moderation" element={<AdminModerationPage />} />}
               {marketplaceEnabled && <Route path="auctions" element={<AdminAuctionsPage />} />}
               {marketplaceEnabled && <Route path="auctions/:id" element={<AdminAuctionDetailPage />} />}
@@ -419,10 +420,9 @@ function App() {
               <Route path="tags/:tagId" element={<AdminTagDetailPage />} />
               <Route path="reissue-requests" element={<AdminReissuePage />} />
               <Route path="stuck-payments" element={<AdminStuckPaymentsPage />} />
-              {/* S-ADMIN1 Ph3b: admin and super_admin only (the API returns 403 to support). */}
-              <Route path="pricing" element={<AdminRoleGate roles={PRICING_ROLES}><AdminPricingPage /></AdminRoleGate>} />
-              <Route path="vouchers" element={<AdminRoleGate roles={PRICING_ROLES}><AdminVouchersPage /></AdminRoleGate>} />
-              <Route path="audit-logs" element={<AdminAuditLogPage />} />
+              <Route path="pricing" element={<AdminPermissionGate permission={PERMISSIONS.managePricing}><AdminPricingPage /></AdminPermissionGate>} />
+              <Route path="vouchers" element={<AdminPermissionGate permission={PERMISSIONS.managePricing}><AdminVouchersPage /></AdminPermissionGate>} />
+              <Route path="audit-logs" element={<AdminPermissionGate permission={PERMISSIONS.viewAuditLogs}><AdminAuditLogPage /></AdminPermissionGate>} />
               <Route path="health" element={<AdminHealthPage />} />
             </Route>
           </Route>

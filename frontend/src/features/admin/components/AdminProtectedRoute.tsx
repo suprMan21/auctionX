@@ -1,69 +1,55 @@
 /**
  * Route guard for admin-only pages.
- * Renders an Outlet when the user is authenticated AND present in admin_users.
- * Redirects unauthenticated users to /login, non-admins to /.
- * @module Module 10 — Admin Dashboard
+ * Renders an Outlet when the signed-in user is an active admin, per the
+ * backend (GET /admin/me), and provides their role + permissions to the
+ * console. Unauthenticated → /login; not an admin (or a suspended/retired
+ * account) → /.
+ * @module Module 10 — Admin Dashboard (S-ADMIN2 Ph1)
  */
 
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
-import { AdminRoleContext, roleNameFrom, type AdminRoleState } from '../lib/adminRole';
+import { AdminApiError, adminApi } from '../api/adminApi';
+import { AdminRoleContext, type AdminAccessState } from '../lib/adminRole';
 
-type CheckState = 'loading' | 'admin' | 'not-admin' | 'unauthenticated';
+type CheckState = 'loading' | 'admin' | 'not-admin' | 'unauthenticated' | 'needs-2fa' | 'error';
+type Checked = { userId: string; state: Exclude<CheckState, 'loading' | 'unauthenticated'>; access: AdminAccessState };
 
-/**
- * AdminProtectedRoute guards all /admin/* routes.
- * On mount it verifies the session then queries admin_users for the current user ID.
- * While checking it renders a full-screen spinner to prevent flash-of-content.
- */
 export const AdminProtectedRoute = () => {
   const { session, loading: authLoading, initialized } = useAuth();
-  const [checkState, setCheckState] = useState<CheckState>('loading');
-  const [role, setRole] = useState<AdminRoleState>({ status: 'loading' });
+  const [checked, setChecked] = useState<Checked | null>(null);
+  const userId = session?.user.id ?? null;
 
   useEffect(() => {
-    if (authLoading || !initialized) return;
+    if (authLoading || !initialized || !userId) return;
+    let cancelled = false;
+    adminApi
+      .getMe()
+      .then((me) => {
+        if (!cancelled) {
+          setChecked({ userId, state: 'admin', access: { status: 'known', role: me.role, permissions: me.permissions, adminId: me.adminId } });
+        }
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const state: Checked['state'] =
+          err instanceof AdminApiError && err.code === 'ADMIN_2FA_REQUIRED' ? 'needs-2fa'
+            : err instanceof AdminApiError && (err.status === 401 || err.status === 403) ? 'not-admin'
+              : 'error';
+        setChecked({ userId, state, access: { status: 'loading' } });
+      });
+    return () => { cancelled = true; };
+  }, [userId, authLoading, initialized]);
 
-    if (!session) {
-      setCheckState('unauthenticated');
-      return;
-    }
+  const checkState: CheckState =
+    !initialized || authLoading ? 'loading'
+      : !userId ? 'unauthenticated'
+        : checked?.userId !== userId ? 'loading'
+          : checked.state;
+  const access: AdminAccessState = checkState === 'admin' && checked ? checked.access : { status: 'loading' };
 
-    const check = async () => {
-      try {
-        const { data } = await supabase
-          .from('admin_users')
-          .select('admin_id')
-          .eq('admin_id', session.user.id)
-          .eq('is_active', true)
-          .single();
-        setCheckState(data ? 'admin' : 'not-admin');
-      } catch {
-        setCheckState('not-admin');
-      }
-    };
-    // S-ADMIN1 Ph3b: the role, for hiding role-specific UI. Kept separate from
-    // the access check above so a failed lookup only hides role-gated items.
-    const loadRole = async () => {
-      try {
-        const { data } = await supabase
-          .from('admin_users')
-          .select('admin_roles(role_name)')
-          .eq('admin_id', session.user.id)
-          .eq('is_active', true)
-          .single();
-        setRole({ status: 'known', role: roleNameFrom(data?.admin_roles) });
-      } catch {
-        setRole({ status: 'known', role: null });
-      }
-    };
-    check();
-    loadRole();
-  }, [session, authLoading, initialized]);
-
-  if (!initialized || authLoading || checkState === 'loading') {
+  if (checkState === 'loading') {
     return (
       <div className="min-h-screen bg-dark-800 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -74,16 +60,28 @@ export const AdminProtectedRoute = () => {
     );
   }
 
-  if (checkState === 'unauthenticated') {
-    return <Navigate to="/login" replace />;
-  }
+  if (checkState === 'unauthenticated') return <Navigate to="/login" replace />;
+  if (checkState === 'not-admin') return <Navigate to="/" replace />;
 
-  if (checkState === 'not-admin') {
-    return <Navigate to="/" replace />;
+  if (checkState === 'needs-2fa' || checkState === 'error') {
+    return (
+      <div className="min-h-screen bg-dark-800 flex items-center justify-center p-4">
+        <div className="glass rounded-2xl p-6 max-w-md" role="alert">
+          <h1 className="text-xl font-semibold text-white mb-2">
+            {checkState === 'needs-2fa' ? 'Two-factor sign-in needed' : 'Admin console unavailable'}
+          </h1>
+          <p className="text-gray-400 text-sm">
+            {checkState === 'needs-2fa'
+              ? 'The admin console needs a second factor. Sign in again with your security key or authenticator.'
+              : 'Your admin access could not be checked. Try again in a moment.'}
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <AdminRoleContext.Provider value={role}>
+    <AdminRoleContext.Provider value={access}>
       <Outlet />
     </AdminRoleContext.Provider>
   );

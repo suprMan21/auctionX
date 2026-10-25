@@ -1,451 +1,292 @@
 /**
- * Admin user detail page.
- * Shows user info, listing/bid history, and action modals (suspend/unsuspend/ban/unban).
+ * Admin account detail (S-ADMIN2 Ph1).
+ * Shows the minimum support needs, the account's status, and the actions the
+ * signed-in admin's permissions allow. Token holdings load only on request:
+ * they need manage_nfc and every view is recorded in the audit log.
  * @module Module 10 — Admin Dashboard
  */
 
-import { useEffect, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { adminApi } from '../api/adminApi';
-import { supabase } from '@/lib/supabase';
-import { Modal } from '@/components/common/Modal';
-import { Button } from '@/components/common/Button';
-import type { AdminUser, AdminUserStats } from '../types/admin';
+import { DELETE_BLOCKER_TEXT, ROLE_LABELS, type AccountDetail, type AccountTokens } from '../api/accountSchemas';
+import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
+import { AccountActionDialog, type AccountAction } from '../components/AdminAccountDialogs';
+import { ADMIN_BUTTON_CLASS } from '../components/AdminDialog';
+import { AccountStatusBadge } from './AdminUsersPage';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
 
-type ModalType = 'suspend' | 'ban' | 'unban' | null;
-
-interface RecentListing {
-  id: string;
-  title: string;
-  status: string;
-  created_at: string;
-}
-
-interface RecentBid {
-  id: string;
-  amount_cents: number;
-  created_at: string;
-  auction_id: string;
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-/** Status badge for user detail header. */
-const StatusBadge = ({ user }: { user: AdminUser }) => {
-  if (user.is_banned) {
-    return <span className="px-3 py-1 rounded-full text-xs font-medium bg-error-500/20 text-error-500">Banned</span>;
-  }
-  if (user.is_suspended) {
-    return <span className="px-3 py-1 rounded-full text-xs font-medium bg-warning-500/20 text-warning-500">Suspended</span>;
-  }
-  return <span className="px-3 py-1 rounded-full text-xs font-medium bg-success-500/20 text-success-500">Active</span>;
+const DONE_TEXT: Record<AccountAction, string> = {
+  suspend: 'Account suspended and signed out everywhere.',
+  unsuspend: 'Suspension lifted.',
+  retire: 'Account retired and signed out everywhere.',
+  reactivate: 'Account reactivated.',
+  delete: 'Account deleted.',
+  role: 'Staff role saved.',
 };
 
-/** Listing status badge. */
-const ListingStatusBadge = ({ status }: { status: string }) => {
-  const map: Record<string, string> = {
-    ACTIVE: 'bg-success-500/20 text-success-500',
-    DRAFT: 'bg-gray-500/20 text-gray-400',
-    SOLD: 'bg-primary-500/20 text-primary-400',
-    CANCELLED: 'bg-error-500/20 text-error-400',
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? 'bg-gray-500/20 text-gray-400'}`}>
-      {status}
-    </span>
-  );
-};
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div>
+    <dt className="text-xs text-gray-400 uppercase tracking-wider">{label}</dt>
+    <dd className="text-sm text-white mt-1 break-words">{children}</dd>
+  </div>
+);
 
-/** Suspend form embedded in modal. */
-const SuspendForm = ({
-  onSubmit,
-  loading,
-}: {
-  onSubmit: (durationHours: number, reason: string) => void;
-  loading: boolean;
-}) => {
-  const [reason, setReason] = useState('');
-  const [durationHours, setDurationHours] = useState(24);
+const ActionButton = ({ onClick, children, tone = 'neutral' }: { onClick: () => void; children: React.ReactNode; tone?: 'neutral' | 'warn' | 'danger' }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`${ADMIN_BUTTON_CLASS} min-h-[44px] text-white ${
+      tone === 'danger' ? 'bg-red-600 hover:bg-red-500' : tone === 'warn' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-dark-700 hover:bg-dark-600'
+    }`}
+  >
+    {children}
+  </button>
+);
 
-  const durationOptions = [
-    { label: '1 hour', value: 1 },
-    { label: '24 hours', value: 24 },
-    { label: '72 hours (3 days)', value: 72 },
-    { label: '168 hours (1 week)', value: 168 },
-    { label: '720 hours (30 days)', value: 720 },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">Duration</label>
-        <select
-          value={durationHours}
-          onChange={(e) => setDurationHours(Number(e.target.value))}
-          className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white border border-transparent
-                     focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
-        >
-          {durationOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">Reason *</label>
-        <textarea
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={3}
-          placeholder="Reason for suspension…"
-          className="w-full px-4 py-3 rounded-xl bg-dark-700 text-white placeholder:text-gray-400
-                     border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
-                     resize-none"
-        />
-      </div>
-
-      <Button
-        variant="primary"
-        fullWidth
-        disabled={!reason.trim() || loading}
-        onClick={() => onSubmit(durationHours, reason.trim())}
-      >
-        {loading ? 'Suspending…' : 'Confirm Suspend'}
-      </Button>
-    </div>
-  );
-};
-
-/** Reason-only form embedded in modal (for ban/unban). */
-const ReasonForm = ({
-  label,
-  buttonLabel,
-  onSubmit,
-  loading,
-  requireReason,
-}: {
-  label: string;
-  buttonLabel: string;
-  onSubmit: (reason: string) => void;
-  loading: boolean;
-  requireReason: boolean;
-}) => {
-  const [reason, setReason] = useState('');
-
-  return (
-    <div className="space-y-4">
-      {requireReason && (
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">{label} *</label>
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={3}
-            placeholder="Enter reason…"
-            className="w-full px-4 py-3 rounded-xl bg-dark-700 text-white placeholder:text-gray-400
-                       border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
-                       resize-none"
-          />
-        </div>
-      )}
-
-      <Button
-        variant="primary"
-        fullWidth
-        disabled={(requireReason && !reason.trim()) || loading}
-        onClick={() => onSubmit(reason.trim())}
-      >
-        {loading ? 'Processing…' : buttonLabel}
-      </Button>
-    </div>
-  );
-};
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-/**
- * AdminUserDetailPage — full user profile with action buttons and modals.
- */
 export const AdminUserDetailPage = () => {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-
-  const [user, setUser] = useState<AdminUser | null>(null);
-  const [stats, setStats] = useState<AdminUserStats | null>(null);
-  const [listings, setListings] = useState<RecentListing[]>([]);
-  const [bids, setBids] = useState<RecentBid[]>([]);
+  const { id = '' } = useParams<{ id: string }>();
+  const access = useAdminRole();
+  const [account, setAccount] = useState<AccountDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeModal, setActiveModal] = useState<ModalType>(null);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState(false);
+  const [dialog, setDialog] = useState<AccountAction | null>(null);
+  const [tokens, setTokens] = useState<AccountTokens | null>(null);
+  const [tokensError, setTokensError] = useState<string | null>(null);
+  const [tokensBusy, setTokensBusy] = useState(false);
 
-  const load = async () => {
-    if (!id) return;
-    setLoading(true);
+  const load = useCallback(async () => {
     setError(null);
     try {
-      const [detailRes, listingsRes, bidsRes] = await Promise.all([
-        adminApi.getUser(id),
-        supabase
-          .from('listings')
-          .select('id, title, status, created_at')
-          .eq('seller_id', id)
-          .order('created_at', { ascending: false })
-          .limit(10),
-        supabase
-          .from('bids')
-          .select('id, amount_cents, created_at, auction_id')
-          .eq('bidder_id', id)
-          .order('created_at', { ascending: false })
-          .limit(10),
-      ]);
-
-      setUser(detailRes.user);
-      setStats(detailRes.stats);
-      setListings((listingsRes.data ?? []) as RecentListing[]);
-      setBids((bidsRes.data ?? []) as RecentBid[]);
+      setAccount(await adminApi.getAccount(id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load user');
+      setError(err instanceof Error ? err.message : 'The account could not be loaded');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    setLoading(true);
+    setTokens(null);
+    void load();
+  }, [load]);
 
-  const handleSuspend = async (durationHours: number, reason: string) => {
-    if (!id) return;
-    setActionLoading(true);
+  const showTokens = async () => {
+    setTokensBusy(true);
+    setTokensError(null);
     try {
-      await adminApi.suspendUser(id, durationHours, reason);
-      toast.success('User suspended');
-      setActiveModal(null);
-      await load();
+      setTokens(await adminApi.getAccountTokens(id));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to suspend user');
+      setTokensError(err instanceof Error ? err.message : 'Tokens could not be loaded');
     } finally {
-      setActionLoading(false);
+      setTokensBusy(false);
     }
   };
 
-  const handleUnsuspend = async () => {
-    if (!id) return;
-    setActionLoading(true);
-    try {
-      await adminApi.unsuspendUser(id);
-      toast.success('User unsuspended');
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to unsuspend user');
-    } finally {
-      setActionLoading(false);
+  const onDone = (action: AccountAction) => {
+    setDialog(null);
+    setNotice(DONE_TEXT[action]);
+    if (action === 'delete') {
+      setDeleted(true);
+      return;
     }
+    void load();
   };
 
-  const handleBan = async (reason: string) => {
-    if (!id) return;
-    setActionLoading(true);
-    try {
-      await adminApi.banUser(id, reason);
-      toast.success('User banned');
-      setActiveModal(null);
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to ban user');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const back = (
+    <Link to="/admin/users" className="text-sm text-gray-300 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded">
+      ← All users
+    </Link>
+  );
 
-  const handleUnban = async () => {
-    if (!id) return;
-    setActionLoading(true);
-    try {
-      await adminApi.unbanUser(id);
-      toast.success('User unbanned');
-      setActiveModal(null);
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to unban user');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  if (deleted) {
+    return (
+      <div className="space-y-4">
+        {back}
+        <div className="glass rounded-2xl p-6" role="status">
+          <h1 className="text-xl font-semibold text-white">Account deleted</h1>
+          <p className="text-sm text-gray-400 mt-1">The sign-in account and profile were removed. The audit history stays.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-48" role="status" aria-label="Loading account">
         <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  if (error || !user) {
+  if (error || !account) {
     return (
-      <div className="glass rounded-2xl p-6 border border-error-500/30">
-        <p className="text-error-400 text-sm">{error ?? 'User not found'}</p>
-        <button onClick={() => navigate('/admin/users')} className="mt-3 text-primary-400 text-sm hover:text-primary-300">
-          ← Back to users
-        </button>
+      <div className="space-y-4">
+        {back}
+        <p className="text-error-500 text-sm" role="alert">{error ?? 'Account not found'}</p>
       </div>
     );
   }
 
+  const canManage = hasPermission(access, PERMISSIONS.manageUsers);
+  const isSuperAdmin = hasPermission(access, PERMISSIONS.manageAdmins);
+  // Acting on a staff account needs manage_admins; nobody acts on their own account.
+  const mayAct = !account.is_self && (account.staff_role === null || isSuperAdmin);
+  const { status } = account;
+
   return (
     <div className="space-y-6">
-      {/* Back button */}
-      <Link to="/admin/users" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
-        ← Back to Users
-      </Link>
+      {back}
 
-      {/* User info card */}
-      <div className="glass rounded-2xl p-6">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-white">{user.email}</h1>
-              <StatusBadge user={user} />
-            </div>
-            {user.display_name && <p className="text-gray-400">{user.display_name}</p>}
-            <div className="flex flex-wrap gap-4 pt-2 text-sm text-gray-400">
-              <span>Tier: <span className="text-white">{user.seller_tier}</span></span>
-              <span>Sales: <span className="text-white">${(user.lifetime_sales_cents / 100).toLocaleString()}</span></span>
-              <span>Joined: <span className="text-white">{new Date(user.created_at).toLocaleDateString()}</span></span>
-              {user.last_login_at && (
-                <span>Last login: <span className="text-white">{new Date(user.last_login_at).toLocaleDateString()}</span></span>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-bold text-white break-all">{account.email ?? account.id}</h1>
+        <AccountStatusBadge status={status} />
+        {account.staff_role && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-500/10 text-primary-300">
+            {ROLE_LABELS[account.staff_role] ?? account.staff_role}
+          </span>
+        )}
+      </div>
+
+      {notice && <p role="status" className="text-sm text-success-500">{notice}</p>}
+
+      <section className="glass rounded-2xl p-5" aria-label="Account details">
+        <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <Field label="Display name">{account.display_name ?? '—'}</Field>
+          <Field label="Email confirmed">{account.email_confirmed ? 'Yes' : 'No'}</Field>
+          <Field label="Age verified">{account.age_verified ? 'Yes' : 'No'}</Field>
+          <Field label="Created">{when(account.created_at)}</Field>
+          <Field label="Last sign-in">{when(account.last_sign_in_at)}</Field>
+          <Field label="Active sessions">{account.active_sessions}</Field>
+          <Field label="Pending transfers">{account.pending_transfers}</Field>
+          <Field label="Account id"><span className="font-mono text-xs">{account.id}</span></Field>
+        </dl>
+      </section>
+
+      {status === 'suspended' && (
+        <section className="glass rounded-2xl p-5 border border-amber-500/30" aria-label="Suspension">
+          <h2 className="text-base font-semibold text-white">Suspended until {when(account.suspended_until)}</h2>
+          <p className="text-sm text-gray-300 mt-1">Reason: {account.suspension_reason ?? '—'}</p>
+        </section>
+      )}
+
+      {status === 'retired' && (
+        <section className="glass rounded-2xl p-5 border border-white/10" aria-label="Retirement">
+          <h2 className="text-base font-semibold text-white">Retired {when(account.retired_at)}</h2>
+          <p className="text-sm text-gray-300 mt-1">
+            By {account.retired_by_email ?? '—'}. Reason: {account.retire_reason ?? '—'}
+          </p>
+          {account.delete && (
+            <div className="mt-3 text-sm">
+              {account.delete.blockers.length === 0 ? (
+                <p className="text-gray-300">This account can be deleted.</p>
+              ) : (
+                <>
+                  <p className="text-gray-300">Delete is not available yet:</p>
+                  <ul className="list-disc pl-5 text-gray-400 mt-1 space-y-0.5">
+                    {account.delete.blockers.map((b) => (
+                      <li key={b}>
+                        {DELETE_BLOCKER_TEXT[b] ?? b}
+                        {b === 'delete_window_open' && account.delete?.eligible_at ? ` Available from ${when(account.delete.eligible_at)}.` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </div>
-          </div>
+          )}
+        </section>
+      )}
 
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-2">
-            {!user.is_banned && !user.is_suspended && (
-              <>
-                <Button variant="secondary" size="sm" onClick={() => setActiveModal('suspend')}>Suspend</Button>
-                <Button variant="secondary" size="sm" onClick={() => setActiveModal('ban')}>Ban</Button>
-              </>
-            )}
-            {user.is_suspended && !user.is_banned && (
-              <>
-                <Button variant="secondary" size="sm" onClick={handleUnsuspend} disabled={actionLoading}>
-                  {actionLoading ? 'Processing…' : 'Unsuspend'}
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => setActiveModal('ban')}>Ban</Button>
-              </>
-            )}
-            {user.is_banned && (
-              <Button variant="secondary" size="sm" onClick={() => setActiveModal('unban')}>Unban</Button>
-            )}
-          </div>
-        </div>
-
-        {/* Stats */}
-        {stats && (
-          <div className="mt-6 pt-6 border-t border-white/10 grid grid-cols-3 gap-4">
-            <div>
-              <p className="text-2xl font-bold text-white">{stats.listingsCount}</p>
-              <p className="text-xs text-gray-400">Total Listings</p>
+      {(canManage || isSuperAdmin) && (
+        <section className="glass rounded-2xl p-5" aria-labelledby="actions-heading">
+          <h2 id="actions-heading" className="text-base font-semibold text-white mb-3">Actions</h2>
+          {account.is_self ? (
+            <p className="text-sm text-gray-400">You cannot change your own account here.</p>
+          ) : !mayAct ? (
+            <p className="text-sm text-gray-400">This is a staff account. Only a super admin can change it.</p>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {canManage && status === 'active' && <ActionButton tone="warn" onClick={() => setDialog('suspend')}>Suspend</ActionButton>}
+              {canManage && status === 'suspended' && <ActionButton onClick={() => setDialog('unsuspend')}>Lift suspension</ActionButton>}
+              {canManage && status !== 'retired' && <ActionButton tone="danger" onClick={() => setDialog('retire')}>Retire</ActionButton>}
+              {canManage && status === 'retired' && <ActionButton onClick={() => setDialog('reactivate')}>Reactivate</ActionButton>}
+              {isSuperAdmin && status === 'active' && <ActionButton onClick={() => setDialog('role')}>Change staff role</ActionButton>}
+              {isSuperAdmin && status === 'retired' && account.delete?.blockers.length === 0 && (
+                <ActionButton tone="danger" onClick={() => setDialog('delete')}>Delete permanently</ActionButton>
+              )}
             </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{stats.activeListingsCount}</p>
-              <p className="text-xs text-gray-400">Active</p>
+          )}
+        </section>
+      )}
+
+      {hasPermission(access, PERMISSIONS.manageNfc) && (
+        <section className="glass rounded-2xl p-5" aria-labelledby="tokens-heading">
+          <h2 id="tokens-heading" className="text-base font-semibold text-white">Tokens and re-issues</h2>
+          {!tokens ? (
+            <div className="mt-2 space-y-2">
+              <p className="text-sm text-gray-400">Token ownership is private. Viewing it is recorded in the audit log.</p>
+              <button
+                type="button"
+                onClick={showTokens}
+                disabled={tokensBusy}
+                className={`${ADMIN_BUTTON_CLASS} min-h-[44px] bg-dark-700 hover:bg-dark-600 text-white`}
+              >
+                {tokensBusy ? 'Loading…' : 'Show tokens'}
+              </button>
+              {tokensError && <p role="alert" className="text-sm text-red-400">{tokensError}</p>}
             </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{stats.soldListingsCount}</p>
-              <p className="text-xs text-gray-400">Sold</p>
+          ) : (
+            <div className="mt-3 space-y-4">
+              {tokens.tokens.length === 0 ? (
+                <p className="text-sm text-gray-400">Owns no tokens.</p>
+              ) : (
+                <ul className="divide-y divide-white/5">
+                  {tokens.tokens.map((t) => (
+                    <li key={t.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
+                      <Link to={`/admin/tags/${t.id}`} className="text-sm text-white hover:text-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded">
+                        {t.chip_name ?? (t.serial_suffix ? `Token …${t.serial_suffix}` : t.id)}
+                      </Link>
+                      <span className="text-xs text-gray-400">{t.lifecycle_status ?? '—'}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {tokens.reissue_requests.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-200">Re-issue requests</h3>
+                  <ul className="text-sm text-gray-400 mt-1 space-y-0.5">
+                    {tokens.reissue_requests.map((r) => (
+                      <li key={r.id}>{when(r.created_at)}: {r.status.toLowerCase()}{r.payment_status ? `, payment ${r.payment_status.toLowerCase()}` : ''}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </section>
+      )}
 
-      {/* Recent Listings */}
-      <div className="glass rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Recent Listings</h2>
-        {listings.length === 0 ? (
-          <p className="text-gray-400 text-sm">No listings.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="text-left pb-2 text-gray-400 font-medium">Title</th>
-                  <th className="text-left pb-2 text-gray-400 font-medium">Status</th>
-                  <th className="text-left pb-2 text-gray-400 font-medium">Created</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {listings.map((l) => (
-                  <tr key={l.id}>
-                    <td className="py-2 text-white pr-4 max-w-[200px] truncate">{l.title}</td>
-                    <td className="py-2 pr-4"><ListingStatusBadge status={l.status} /></td>
-                    <td className="py-2 text-gray-400">{new Date(l.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {hasPermission(access, PERMISSIONS.viewAuditLogs) && (
+        <Link
+          to={`/admin/audit-logs?target=${account.id}`}
+          className="inline-block text-sm text-primary-300 hover:text-primary-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+        >
+          View this account&rsquo;s audit history →
+        </Link>
+      )}
 
-      {/* Recent Bids */}
-      <div className="glass rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Recent Bids</h2>
-        {bids.length === 0 ? (
-          <p className="text-gray-400 text-sm">No bids.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="text-left pb-2 text-gray-400 font-medium">Amount</th>
-                  <th className="text-left pb-2 text-gray-400 font-medium">Auction ID</th>
-                  <th className="text-left pb-2 text-gray-400 font-medium">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {bids.map((b) => (
-                  <tr key={b.id}>
-                    <td className="py-2 text-white pr-4">${(b.amount_cents / 100).toLocaleString()}</td>
-                    <td className="py-2 text-gray-400 pr-4 font-mono text-xs">{b.auction_id.slice(0, 12)}…</td>
-                    <td className="py-2 text-gray-400">{new Date(b.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Suspend modal */}
-      <Modal isOpen={activeModal === 'suspend'} onClose={() => setActiveModal(null)} title="Suspend User">
-        <SuspendForm onSubmit={handleSuspend} loading={actionLoading} />
-      </Modal>
-
-      {/* Ban modal */}
-      <Modal isOpen={activeModal === 'ban'} onClose={() => setActiveModal(null)} title="Ban User">
-        <ReasonForm
-          label="Reason for ban"
-          buttonLabel="Confirm Ban"
-          onSubmit={handleBan}
-          loading={actionLoading}
-          requireReason
-        />
-      </Modal>
-
-      {/* Unban modal */}
-      <Modal isOpen={activeModal === 'unban'} onClose={() => setActiveModal(null)} title="Unban User">
-        <p className="text-gray-300 mb-4">Are you sure you want to remove this user's ban?</p>
-        <ReasonForm
-          label=""
-          buttonLabel="Confirm Unban"
-          onSubmit={handleUnban}
-          loading={actionLoading}
-          requireReason={false}
-        />
-      </Modal>
+      <AccountActionDialog
+        open={dialog !== null}
+        action={dialog}
+        account={account}
+        onClose={() => setDialog(null)}
+        onDone={onDone}
+      />
     </div>
   );
 };

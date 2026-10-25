@@ -7,10 +7,7 @@
 
 import { supabase } from '@/lib/supabase';
 import type {
-  UsersResponse,
-  AdminUserDetailResponse,
   ModerationQueueResponse,
-  AuditLogsResponse,
   HealthStatus,
   AdminActionResult,
   SellerVerificationQueueItem,
@@ -33,6 +30,25 @@ import {
   type PriceKind,
 } from './pricingSchemas';
 
+import {
+  accountDetailSchema,
+  accountSearchSchema,
+  accountSettingsSchema,
+  accountTokensSchema,
+  actionResultSchema,
+  adminMeSchema,
+  auditFacetsSchema,
+  auditLogListSchema,
+  type AccountDetail,
+  type AccountSearch,
+  type AccountSettings,
+  type AccountTokens,
+  type AdminMe,
+  type AuditFacets,
+  type AuditLogList,
+  type GrantableRole,
+} from './accountSchemas';
+
 const ADMIN_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1'}/admin`;
 
 // ─── Auth Helper ─────────────────────────────────────────────────────────────
@@ -47,6 +63,14 @@ async function getAuthHeader(): Promise<{ Authorization: string }> {
     throw new Error('Not authenticated');
   }
   return { Authorization: `Bearer ${session.access_token}` };
+}
+
+/** A non-2xx admin API answer. `message` is the server's safe text. */
+export class AdminApiError extends Error {
+  constructor(message: string, readonly status: number, readonly code: string | null) {
+    super(message);
+    this.name = 'AdminApiError';
+  }
 }
 
 /**
@@ -69,13 +93,15 @@ async function adminFetch<T>(
 
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
+    let code: string | null = null;
     try {
       const body = await response.json();
       message = body.error || message;
+      code = typeof body.code === 'string' ? body.code : null;
     } catch {
       // body is not JSON — keep the HTTP status message
     }
-    throw new Error(message);
+    throw new AdminApiError(message, response.status, code);
   }
 
   return response.json() as Promise<T>;
@@ -84,73 +110,66 @@ async function adminFetch<T>(
 // ─── User Endpoints ───────────────────────────────────────────────────────────
 
 export const adminApi = {
-  /**
-   * GET /admin/users
-   * Returns paginated user list with optional search/status/page filters.
-   */
-  listUsers(params?: {
-    search?: string;
-    status?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<UsersResponse> {
+  // ─── S-ADMIN2: who am I, accounts, roles ────────────────────────────────────
+
+  /** GET /admin/me — the caller's role and permissions. */
+  async getMe(): Promise<AdminMe> {
+    return parseEnvelope(adminMeSchema, await adminFetch<unknown>('/me'));
+  },
+
+  /** GET /admin/users — search by email, display name or id. A non-empty search is audit-logged. */
+  async searchAccounts(params: { q?: string; status?: string; page?: number; limit?: number } = {}): Promise<AccountSearch> {
     const qs = new URLSearchParams();
-    if (params?.search) qs.set('search', params.search);
-    if (params?.status) qs.set('status', params.status);
-    if (params?.page) qs.set('page', String(params.page));
-    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params.q) qs.set('q', params.q);
+    if (params.status) qs.set('status', params.status);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
     const query = qs.toString() ? `?${qs}` : '';
-    return adminFetch<UsersResponse>(`/users${query}`);
+    return parseEnvelope(accountSearchSchema, await adminFetch<unknown>(`/users${query}`));
   },
 
-  /**
-   * GET /admin/users/:id
-   * Returns full user detail and listing stats.
-   */
-  getUser(id: string): Promise<AdminUserDetailResponse> {
-    return adminFetch<AdminUserDetailResponse>(`/users/${id}`);
+  async getAccount(id: string): Promise<AccountDetail> {
+    return parseEnvelope(accountDetailSchema, await adminFetch<unknown>(`/users/${encodeURIComponent(id)}`));
   },
 
-  /**
-   * POST /admin/users/:id/suspend
-   * Suspends a user for the given duration with a required reason.
-   */
-  suspendUser(id: string, durationHours: number, reason: string): Promise<AdminActionResult> {
-    return adminFetch<AdminActionResult>(`/users/${id}/suspend`, {
-      method: 'POST',
-      body: JSON.stringify({ durationHours, reason }),
-    });
+  /** Token holdings + re-issue history. manage_nfc; the view is audit-logged. */
+  async getAccountTokens(id: string): Promise<AccountTokens> {
+    return parseEnvelope(accountTokensSchema, await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/tokens`));
   },
 
-  /**
-   * POST /admin/users/:id/unsuspend
-   * Lifts an active suspension from a user.
-   */
-  unsuspendUser(id: string): Promise<AdminActionResult> {
-    return adminFetch<AdminActionResult>(`/users/${id}/unsuspend`, {
-      method: 'POST',
-    });
+  async suspendAccount(id: string, hours: number, reason: string): Promise<void> {
+    parseEnvelope(actionResultSchema, await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/suspend`, {
+      method: 'POST', body: JSON.stringify({ hours, reason }),
+    }));
   },
 
-  /**
-   * POST /admin/users/:id/ban
-   * Permanently bans a user with a required reason.
-   */
-  banUser(id: string, reason: string): Promise<AdminActionResult> {
-    return adminFetch<AdminActionResult>(`/users/${id}/ban`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
+  async accountAction(id: string, action: 'unsuspend' | 'retire' | 'reactivate', reason: string): Promise<void> {
+    parseEnvelope(actionResultSchema, await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/${action}`, {
+      method: 'POST', body: JSON.stringify({ reason }),
+    }));
   },
 
-  /**
-   * POST /admin/users/:id/unban
-   * Lifts a permanent ban from a user.
-   */
-  unbanUser(id: string): Promise<AdminActionResult> {
-    return adminFetch<AdminActionResult>(`/users/${id}/unban`, {
-      method: 'POST',
-    });
+  async deleteAccount(id: string, confirm: string, reason: string): Promise<void> {
+    parseEnvelope(actionResultSchema, await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/delete`, {
+      method: 'POST', body: JSON.stringify({ confirm, reason }),
+    }));
+  },
+
+  /** role null revokes staff access. super_admin only. */
+  async setAccountRole(id: string, role: GrantableRole | null, reason: string): Promise<void> {
+    parseEnvelope(actionResultSchema, await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/role`, {
+      method: 'PUT', body: JSON.stringify({ role, reason }),
+    }));
+  },
+
+  async getAccountSettings(): Promise<AccountSettings> {
+    return parseEnvelope(accountSettingsSchema, await adminFetch<unknown>('/account-settings'));
+  },
+
+  async setDeleteWindow(hours: number, reason: string): Promise<void> {
+    parseEnvelope(actionResultSchema, await adminFetch<unknown>('/account-settings', {
+      method: 'PUT', body: JSON.stringify({ hours, reason }),
+    }));
   },
 
   // ─── Moderation Endpoints ───────────────────────────────────────────────────
@@ -199,25 +218,29 @@ export const adminApi = {
 
   // ─── Audit Log Endpoints ────────────────────────────────────────────────────
 
-  /**
-   * GET /admin/audit-logs
-   * Returns paginated audit log entries with optional filters.
-   */
-  getAuditLogs(params?: {
+  /** GET /admin/audit-logs — filter by actor, action, entity type and target. */
+  async getAuditLogs(params: {
     page?: number;
     limit?: number;
     action?: string;
     entity?: string;
     admin?: string;
-  }): Promise<AuditLogsResponse> {
+    target?: string;
+  } = {}): Promise<AuditLogList> {
     const qs = new URLSearchParams();
-    if (params?.page) qs.set('page', String(params.page));
-    if (params?.limit) qs.set('limit', String(params.limit));
-    if (params?.action) qs.set('action', params.action);
-    if (params?.entity) qs.set('entity', params.entity);
-    if (params?.admin) qs.set('admin', params.admin);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.action) qs.set('action', params.action);
+    if (params.entity) qs.set('entity', params.entity);
+    if (params.admin) qs.set('admin', params.admin);
+    if (params.target) qs.set('target', params.target);
     const query = qs.toString() ? `?${qs}` : '';
-    return adminFetch<AuditLogsResponse>(`/audit-logs${query}`);
+    return parseEnvelope(auditLogListSchema, await adminFetch<unknown>(`/audit-logs${query}`));
+  },
+
+  /** Values for the audit-log filter dropdowns. */
+  async getAuditFacets(): Promise<AuditFacets> {
+    return parseEnvelope(auditFacetsSchema, await adminFetch<unknown>('/audit-logs/facets'));
   },
 
   // ─── Seller Verification Endpoints ─────────────────────────────────────────

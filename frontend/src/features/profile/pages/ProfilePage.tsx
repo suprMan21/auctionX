@@ -6,6 +6,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { ErrorHandler, AppError, ErrorCode } from '@/lib/errors/ErrorHandler';
+import { afterProfileLanding } from '../lib/landing';
 
 interface Profile {
   id: string;
@@ -125,7 +126,7 @@ export function ProfilePage() {
 
       if (error) throw error;
 
-      navigate('/my-listings');
+      navigate(afterProfileLanding());
     } catch (error) {
       ErrorHandler.handle(error, 'ProfilePage.handleSubmit');
     } finally {
@@ -249,7 +250,7 @@ export function ProfilePage() {
                   type="button"
                   variant="ghost"
                   size="lg"
-                  onClick={() => navigate('/my-listings')}
+                  onClick={() => navigate(afterProfileLanding())}
                   disabled={saving}
                 >
                   Skip

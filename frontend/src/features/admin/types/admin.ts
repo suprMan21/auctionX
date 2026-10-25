@@ -23,57 +23,7 @@ export type AdminPermission =
 
 // ─── User Types ───────────────────────────────────────────────────────────────
 
-/**
- * A platform user as returned by GET /admin/users and GET /admin/users/:id.
- * Maps to the `users` table Row type.
- */
-export interface AdminUser {
-  id: string;
-  email: string;
-  display_name: string | null;
-  seller_tier: string;
-  is_suspended: boolean;
-  is_banned: boolean;
-  created_at: string;
-  last_login_at: string | null;
-  ban_reason: string | null;
-  banned_at: string | null;
-  banned_until: string | null;
-  age_verified: boolean;
-  role: string;
-  lifetime_sales_cents: number;
-  preferred_brand: string | null;
-}
-
-/**
- * Stats returned alongside user detail from GET /admin/users/:id.
- */
-export interface AdminUserStats {
-  listingsCount: number;
-  activeListingsCount: number;
-  soldListingsCount: number;
-}
-
-/**
- * Full user detail response from GET /admin/users/:id.
- */
-export interface AdminUserDetailResponse {
-  user: AdminUser;
-  stats: AdminUserStats;
-}
-
-/**
- * Paginated users list response from GET /admin/users.
- */
-export interface UsersResponse {
-  users: AdminUser[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
-}
+// S-ADMIN2 Ph1: account and audit-log shapes live in api/accountSchemas.ts (validated).
 
 // ─── Moderation Types ─────────────────────────────────────────────────────────
 
@@ -128,37 +78,6 @@ export interface ModerationQueueResponse {
 
 // ─── Audit Log Types ──────────────────────────────────────────────────────────
 
-/**
- * A single audit log entry, returned by GET /admin/audit-logs.
- * Maps to the `audit_logs` table Row type.
- */
-export interface AuditLog {
-  log_id: string;
-  admin_id: string;
-  admin_email: string;
-  action: string;
-  entity_type: string;
-  entity_id: string;
-  brand: string;
-  changes: Record<string, unknown> | null;
-  reason: string | null;
-  ip_address: string | null;
-  user_agent: string | null;
-  created_at: string | null;
-}
-
-/**
- * Paginated audit logs response from GET /admin/audit-logs.
- */
-export interface AuditLogsResponse {
-  logs: AuditLog[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
-}
 
 // ─── Health Types ─────────────────────────────────────────────────────────────
 

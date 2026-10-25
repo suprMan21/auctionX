@@ -30,8 +30,9 @@ vi.mock('@/features/auth/hooks/useAuth', () => ({
 import { AdminPricingPage } from './AdminPricingPage';
 import { AdminVouchersPage } from './AdminVouchersPage';
 import { AdminLayout } from '../AdminLayout';
-import { AdminRoleGate } from '../components/AdminRoleGate';
-import { AdminRoleContext, PRICING_ROLES } from '../lib/adminRole';
+import { AdminPermissionGate } from '../components/AdminPermissionGate';
+import { AdminRoleContext, PERMISSIONS } from '../lib/adminRole';
+import { accessFor } from '../test/adminAccess';
 import { parseDollarsToCents, toIsoWithOffset } from '../lib/pricing';
 import { adminPricingSchema, parseEnvelope } from '../api/pricingSchemas';
 
@@ -90,7 +91,7 @@ const grants = (items: AdminVoucherGrant[], total = items.length, page = 1): Adm
 });
 
 const withRole = (role: string | null, ui: React.ReactNode) => (
-  <AdminRoleContext.Provider value={{ status: 'known', role }}>{ui}</AdminRoleContext.Provider>
+  <AdminRoleContext.Provider value={accessFor(role)}>{ui}</AdminRoleContext.Provider>
 );
 
 beforeEach(() => {
@@ -430,7 +431,9 @@ describe('Pricing and free transfers are admin and super_admin only', () => {
 
   it.each(['support', null])('hides the nav items from %s', (role) => {
     renderLayout(role);
-    expect(within(nav()).getByRole('link', { name: 'Stuck payments' })).toBeInTheDocument();
+    // Stuck payments needs reapply_payments: support has it, an unknown role does not.
+    if (role === 'support') expect(within(nav()).getByRole('link', { name: 'Stuck payments' })).toBeInTheDocument();
+    else expect(within(nav()).queryByRole('link', { name: 'Stuck payments' })).not.toBeInTheDocument();
     expect(within(nav()).queryByRole('link', { name: 'Pricing' })).not.toBeInTheDocument();
     expect(within(nav()).queryByRole('link', { name: 'Free transfers' })).not.toBeInTheDocument();
   });
@@ -451,12 +454,12 @@ describe('Pricing and free transfers are admin and super_admin only', () => {
   it('does not load either page for support', () => {
     render(withRole('support', (
       <MemoryRouter>
-        <AdminRoleGate roles={PRICING_ROLES}><AdminPricingPage /></AdminRoleGate>
-        <AdminRoleGate roles={PRICING_ROLES}><AdminVouchersPage /></AdminRoleGate>
+        <AdminPermissionGate permission={PERMISSIONS.managePricing}><AdminPricingPage /></AdminPermissionGate>
+        <AdminPermissionGate permission={PERMISSIONS.managePricing}><AdminVouchersPage /></AdminPermissionGate>
       </MemoryRouter>
     )));
 
-    expect(screen.getAllByRole('heading', { name: 'Admins only' })).toHaveLength(2);
+    expect(screen.getAllByRole('heading', { name: 'Not available for your role' })).toHaveLength(2);
     expect(api.getPricing).not.toHaveBeenCalled();
     expect(api.listVoucherGrants).not.toHaveBeenCalled();
   });
@@ -465,7 +468,7 @@ describe('Pricing and free transfers are admin and super_admin only', () => {
     api.getPricing.mockResolvedValue(pricing());
     render(withRole('admin', (
       <MemoryRouter>
-        <AdminRoleGate roles={PRICING_ROLES}><AdminPricingPage /></AdminRoleGate>
+        <AdminPermissionGate permission={PERMISSIONS.managePricing}><AdminPricingPage /></AdminPermissionGate>
       </MemoryRouter>
     )));
 
