@@ -6,7 +6,9 @@
 **Decisions:** "Token prices become admin-set … with free-transfer vouchers; admin + super_admin only" (Locked
 2026-10-03) and "Free-transfer vouchers are granted to an account, not issued as redeemable codes" (Locked 2026-10-11)
 
-Status: **Migration applied to staging; live DB checks 23/23. Backend + frontend built, tested and merged to `dev` locally; NOT yet deployed (Boss pushes).**
+Status: **✅ LIVE ON STAGING, verified 2026-10-25.** Migration applied (live checks 23/23), merged to `dev` (`472ad9a`),
+backend deployed (App Runner SUCCEEDED 23:34 2026-10-24), frontend deployed (`index-DoBTSBr0.js`). Console click-through
+verified against the audit log (§Live verification). A voucher transfer on a real chip is still to do (§Not verified live).
 See §Deploy and §Not verified live.
 
 ---
@@ -89,12 +91,26 @@ Support gets 403 on every pricing/voucher route (middleware) and `admin_forbidde
    without a token = route exists).
 3. Frontend: `scripts/deploy-frontend.sh staging` (Boss). The public site is unaffected.
 
+✅ All three done 2026-10-24/25.
+
 Order matters only one way: the old frontend cannot render a voucher-completed response, but no voucher can exist
 until an admin grants one from the new console.
+
+## Live verification (2026-10-25, Boss as super_admin, read back from `audit_logs`)
+
+| Toronto | Action | Recorded |
+|---|---|---|
+| 00:59:42 | `token_price_set` | transfer 250 → 300, `scheduled: true`, effective 2026-10-26 00:59 local (offset correct), previous 250 |
+| 00:59:51 | `token_price_cancel` | same row; `token_prices` row cancelled; `current_token_price('transfer')` still 250 |
+| 01:00:39 | `voucher_search` (scope `voucher_grant`) then `voucher_grant` | lookup row written before the grant; 1 to test2@, expires 2026-10-28 23:59:59 local |
+| 01:00:57 | `voucher_revoke` | `unused: 1`; grant revoked, remaining 1 (none used) |
+
+All rows carry the admin email and typed reason. Probes: `GET /nfc/prices` 401 (route live, auth required) vs
+`/nfc/not-a-route` 404. Minor: the vouchers page re-runs its email-filtered list after each action, so each refetch
+writes another `voucher_search` row (correct per the rule, noisy) → admin console UX backlog.
 
 ## Not verified live (yet)
 
 - A voucher-completed transfer on a real chip (needs a tap; Boss is conserving sample chips: do it the next time a
   transfer is tested anyway).
-- Setting and cancelling a price, and granting/revoking a voucher, through the deployed console.
 - Passkey step-up for price changes: waits for S-2FA (decision implication), not built.

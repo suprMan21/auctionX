@@ -133,13 +133,12 @@ token sale without admin tooling.
 - **Admin search + token names ✅ and `trust proxy` ✅ live + verified 2026-10-24**
   (`docs/S_ADMIN1_SEARCH_TRUST_PROXY_VERIFICATION.md`). Search audit-logged first; rate limits now per client.
 - **Admin console UX** (backlog, Boss 2026-10-24): resizable columns, whole-row click, emails throughout the token
-  detail page (custody from/to, taps), audit-log Action / Entity type dropdowns. ~1 session; pull forward any time.
-- **S-ADMIN1 Ph3b: admin pricing + vouchers** ✅ built 2026-10-24 (`docs/S_ADMIN1_PH3B_VERIFICATION.md`). Migration
-  applied (live 23/23); merged to `dev`. Price locked at transfer start; changes now or scheduled; voucher used by the
-  fee payer.
-  - [ ] Boss: push `dev`, `scripts/verify-backend-deploy.sh`, `scripts/deploy-frontend.sh staging`.
-  - [ ] Live: set + cancel a price and grant + revoke a voucher in the console; a voucher transfer on a chip the next
-        time a transfer is tested anyway (do not spend a chip for it).
+  detail page (custody from/to, taps), audit-log Action / Entity type dropdowns; Free transfers page should not
+  re-run (and re-audit) its email lookup after every grant/revoke. ~1 session; pull forward any time.
+- **S-ADMIN1 Ph3b: admin pricing + vouchers** ✅ live + verified 2026-10-25 (`docs/S_ADMIN1_PH3B_VERIFICATION.md`).
+  Price locked at transfer start; changes now or scheduled; voucher used by the fee payer. Console click-through
+  verified against the audit log.
+  - [ ] A voucher transfer on a real chip, the next time a transfer is tested anyway (do not spend a chip for it).
   - [ ] Passkey step-up for price changes once S-2FA lands.
 - **S-ADMIN2: users, roles and permissions.** User search and detail, suspend/reactivate, roles + `manage_users`,
   audit viewer, admin MFA (needs S-2FA). Owners stay anonymous except to support, with a logged reason. Owner
@@ -149,6 +148,11 @@ Locked decisions behind it: reset is **admin-only**; retired chips are **never r
 authz = admin_users + `manage_nfc` (2026-10-05).
 
 ## 🔵 HOUSEKEEPING
+
+- [ ] **Hardware keys (Boss, 2026-10-25):** daily AWS console is now IAM user `chris-admin` (both YubiKey 5C NFC, tested).
+      Still to do: YubiKeys on Google, GitHub, Stripe, 1Password, Supabase, GoDaddy (authentic-materials.com) and
+      Squarespace (cravingcorp.com); move the am-encoder TOTP seed onto both keys and out of 1Password; buy the two
+      Security Key C NFC break-glass keys (root + super_admin stay as-is until then); report `tccDev` group contents.
 
 - **Supabase staging stays on the free plan until launch** (Locked 2026-10-01). It auto-pauses after ~7 idle days, so if
   Supabase calls fail, run `supabase projects list` first and restore from the dashboard.
