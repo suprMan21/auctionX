@@ -73,6 +73,17 @@ export class AdminApiError extends Error {
   }
 }
 
+// Any admin request the server refuses (401/403) may mean this admin's access
+// was revoked or changed mid-session. The route guard listens and re-checks
+// GET /admin/me straight away (S-ADMIN2: forced sign-out on revoke).
+const refusalListeners = new Set<() => void>();
+
+/** Subscribe to refused admin requests. Returns the unsubscribe function. */
+export const onAdminRequestRefused = (listener: () => void): (() => void) => {
+  refusalListeners.add(listener);
+  return () => { refusalListeners.delete(listener); };
+};
+
 /**
  * Core fetch wrapper that attaches auth headers and parses JSON.
  * Throws an Error with the server's error message on non-2xx responses.
@@ -100,6 +111,9 @@ async function adminFetch<T>(
       code = typeof body.code === 'string' ? body.code : null;
     } catch {
       // body is not JSON — keep the HTTP status message
+    }
+    if ((response.status === 401 || response.status === 403) && path !== '/me') {
+      refusalListeners.forEach((listener) => listener());
     }
     throw new AdminApiError(message, response.status, code);
   }

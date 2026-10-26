@@ -5,17 +5,32 @@
  * console. Unauthenticated, or a 401 (expired / revoked session) → sign out
  * and /login; not an admin (403, incl. a suspended/retired account) → /.
  * Anything else (503, network) shows a retry screen.
+ *
+ * Access is re-checked while the console is open: every minute, when the tab
+ * comes back, and straight after any admin request the server refuses. If the
+ * admin's role was revoked (or the account suspended / retired) the session
+ * is signed out; a changed role updates what the console shows.
  * @module Module 10 — Admin Dashboard (S-ADMIN2 Ph1)
  */
 
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { AdminApiError, adminApi } from '../api/adminApi';
+import toast from 'react-hot-toast';
+import { AdminApiError, adminApi, onAdminRequestRefused } from '../api/adminApi';
 import { AdminRoleContext, type AdminAccessState } from '../lib/adminRole';
 
 type CheckState = 'loading' | 'admin' | 'not-admin' | 'unauthenticated' | 'signed-out' | 'needs-2fa' | 'error';
 type Checked = { userId: string; state: Exclude<CheckState, 'loading' | 'unauthenticated'>; access: AdminAccessState };
+
+const RECHECK_MS = 60_000;
+
+const accessOf = (me: { role: string; permissions: string[]; adminId: string }): AdminAccessState =>
+  ({ status: 'known', role: me.role, permissions: me.permissions, adminId: me.adminId });
+
+const sameAccess = (a: AdminAccessState, b: AdminAccessState) =>
+  a.status === 'known' && b.status === 'known' && a.role === b.role && a.adminId === b.adminId
+  && a.permissions.join(',') === b.permissions.join(',');
 
 export const AdminProtectedRoute = () => {
   const { session, loading: authLoading, initialized, signOut } = useAuth();
@@ -30,7 +45,7 @@ export const AdminProtectedRoute = () => {
       .getMe()
       .then((me) => {
         if (!cancelled) {
-          setChecked({ userId, state: 'admin', access: { status: 'known', role: me.role, permissions: me.permissions, adminId: me.adminId } });
+          setChecked({ userId, state: 'admin', access: accessOf(me) });
         }
       })
       .catch((err: unknown) => {
@@ -48,8 +63,52 @@ export const AdminProtectedRoute = () => {
   const checkedState = checked?.userId === userId ? checked.state : null;
   useEffect(() => {
     // The server no longer accepts this session: drop it so /login does not bounce back.
-    if (checkedState === 'signed-out') void signOut();
+    if (checkedState === 'signed-out') {
+      toast('Your admin access has changed. Please sign in again.', { id: 'admin-access-changed' });
+      void signOut();
+    }
   }, [checkedState, signOut]);
+
+  // While the console is open, keep checking that this admin still has access.
+  const isAdmin = checkedState === 'admin';
+  useEffect(() => {
+    if (!isAdmin || !userId) return;
+    let cancelled = false;
+    let inFlight = false;
+    const recheck = () => {
+      if (inFlight) return;
+      inFlight = true;
+      adminApi
+        .getMe()
+        .then((me) => {
+          if (cancelled) return;
+          const next = accessOf(me);
+          setChecked((prev) => (prev && prev.userId === userId && sameAccess(prev.access, next)
+            ? prev
+            : { userId, state: 'admin', access: next }));
+        })
+        .catch((err: unknown) => {
+          // Revoked, suspended, retired or signed out elsewhere. A network
+          // blip keeps the console: the server still refuses every request.
+          if (!cancelled && err instanceof AdminApiError && (err.status === 401 || err.status === 403)) {
+            setChecked({ userId, state: 'signed-out', access: { status: 'loading' } });
+          }
+        })
+        .finally(() => { inFlight = false; });
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') recheck(); };
+    const timer = setInterval(recheck, RECHECK_MS);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', recheck);
+    const unsubscribe = onAdminRequestRefused(recheck);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', recheck);
+      unsubscribe();
+    };
+  }, [isAdmin, userId]);
 
   const checkState: CheckState =
     !initialized || authLoading ? 'loading'

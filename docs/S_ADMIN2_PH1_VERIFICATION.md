@@ -125,6 +125,20 @@ Branch `feature/s-admin2-ph1`. Feature Backlog card "S-ADMIN2 — Admin Console:
 - Frontend: tsc 0; vitest **212 passed** (+25 `adminAccounts.test.tsx`); eslint 0 errors in touched files
   (repo baseline has 36 pre-existing errors elsewhere).
 
+## Follow-up: forced sign-out on revoke (2026-10-26, `20261026000001`)
+
+Live test: test2@ (support) stayed in the console after the role was revoked. The server held: every admin request
+was refused (`admin_users.last_active_at` 04:13:17 UTC, revoke 04:13:33, nothing after), but the browser kept
+showing the console with the permissions it loaded at sign-in.
+
+- DB: `admin_set_account_role` now ends every session and refresh token when a role is **changed or revoked**
+  (`admin_end_sessions`, as suspend / retire do); a grant does not. Audit `changes.sessions_ended`. Live check 34
+  (fails without the migration, passes with it).
+- Console: `AdminProtectedRoute` re-checks `GET /admin/me` every minute, when the tab regains focus, and straight
+  after any admin request the server refuses (401/403, `onAdminRequestRefused`). Access gone → toast + sign out →
+  /login. Changed role → the console follows the new permissions. Network blips keep the console (the server
+  still refuses). Frontend 219 tests.
+
 ## Deploy order (matters)
 
 1. `supabase db push --linked` (both migrations). **Before** the backend: `requireAuth` fails closed, so a backend

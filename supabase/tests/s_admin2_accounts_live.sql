@@ -5,7 +5,7 @@
 -- and the throwaway account) rolls back.
 --
 -- Run: supabase db query --linked -f supabase/tests/s_admin2_accounts_live.sql
--- Expect: ERROR  P0001: RESULTS {"ok": 33, "total": 33, "failures": {}}
+-- Expect: ERROR  P0001: RESULTS {"ok": 34, "total": 34, "failures": {}}
 
 DO $$
 DECLARE
@@ -352,6 +352,24 @@ BEGIN
   UPDATE users SET banned_by = v_temp WHERE id = v_user;
   v_ok := v_ok AND 'account_has_history' = ANY (account_delete_blockers(v_temp));
   v_res := v_res || jsonb_build_object('33_staff_row_references_block_delete', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL ' || array_to_string(account_delete_blockers(v_temp), ',') END);
+
+  -- 34. Changing or revoking a staff role signs the account out everywhere; a
+  --     grant does not (20261026000001). v_temp is an admin since check 29.
+  INSERT INTO auth.sessions (id, user_id, created_at, updated_at)
+  VALUES ('a2a2a2a2-0000-4000-8000-0000000000e1'::uuid, v_temp, now(), now());
+  PERFORM admin_set_account_role(v_super, v_temp, 'support', R);
+  v_ok := NOT EXISTS (SELECT 1 FROM auth.sessions WHERE user_id = v_temp);
+  INSERT INTO auth.sessions (id, user_id, created_at, updated_at)
+  VALUES ('a2a2a2a2-0000-4000-8000-0000000000e2'::uuid, v_temp, now(), now());
+  PERFORM admin_set_account_role(v_super, v_temp, NULL, R);
+  v_ok := v_ok AND NOT EXISTS (SELECT 1 FROM auth.sessions WHERE user_id = v_temp);
+  INSERT INTO auth.sessions (id, user_id, created_at, updated_at)
+  VALUES ('a2a2a2a2-0000-4000-8000-0000000000e3'::uuid, v_temp, now(), now());
+  PERFORM admin_set_account_role(v_super, v_temp, 'support', R);
+  v_ok := v_ok AND EXISTS (SELECT 1 FROM auth.sessions WHERE user_id = v_temp)
+      AND (SELECT (changes->>'sessions_ended')::int FROM audit_logs
+            WHERE entity_id = v_temp AND action = 'role_revoke' AND created_at = now() LIMIT 1) = 1;
+  v_res := v_res || jsonb_build_object('34_role_change_ends_sessions', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL' END);
 
   -- Compact summary: the error text is length-limited, so print totals plus
   -- every failing check in full (jsonb orders keys by length, long ones last).

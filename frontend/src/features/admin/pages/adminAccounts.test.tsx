@@ -41,7 +41,7 @@ import { AdminUserDetailPage } from './AdminUserDetailPage';
 import { AdminLayout } from '../AdminLayout';
 import { AdminProtectedRoute } from '../components/AdminProtectedRoute';
 import { AdminApiError } from '../api/adminApi';
-import { AdminRoleContext } from '../lib/adminRole';
+import { AdminRoleContext, useAdminRole } from '../lib/adminRole';
 import { accessFor } from '../test/adminAccess';
 import { afterProfileLanding } from '@/features/profile/lib/landing';
 
@@ -351,6 +351,55 @@ describe('admin route guard (GET /admin/me)', () => {
     api.getMe.mockRejectedValue(new AdminApiError('Admin access needs two-factor sign-in', 403, 'ADMIN_2FA_REQUIRED'));
     renderGuard();
     expect(await screen.findByRole('heading', { name: 'Two-factor sign-in needed' })).toBeInTheDocument();
+  });
+
+  const RoleProbe = () => {
+    const access = useAdminRole();
+    return <p>role: {access.status === 'known' ? access.role : 'none'}</p>;
+  };
+  const renderGuardWithProbe = () =>
+    render(
+      <MemoryRouter initialEntries={['/admin']}>
+        <Routes>
+          <Route path="/" element={<p>home page</p>} />
+          <Route path="/admin" element={<AdminProtectedRoute />}>
+            <Route index element={<RoleProbe />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+  const me = (role: string) => ({ adminId: 'me-1', email: 'boss@example.com', role, permissions: ['view_users'] });
+
+  it('role revoked mid-session: the next check signs out (focus re-checks)', async () => {
+    api.getMe.mockResolvedValueOnce(me('support'));
+    renderGuardWithProbe();
+    expect(await screen.findByText('role: support')).toBeInTheDocument();
+    api.getMe.mockRejectedValue(new AdminApiError('User is not an admin', 403, 'FORBIDDEN'));
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(auth.signOut).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('role: support')).not.toBeInTheDocument();
+    expect(screen.queryByText('home page')).not.toBeInTheDocument();
+  });
+
+  it('role changed mid-session: the console follows the new role', async () => {
+    api.getMe.mockResolvedValueOnce(me('admin'));
+    renderGuardWithProbe();
+    expect(await screen.findByText('role: admin')).toBeInTheDocument();
+    api.getMe.mockResolvedValue(me('support'));
+    window.dispatchEvent(new Event('focus'));
+    expect(await screen.findByText('role: support')).toBeInTheDocument();
+    expect(auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it('a network blip on a re-check keeps the console', async () => {
+    api.getMe.mockResolvedValueOnce(me('admin'));
+    renderGuardWithProbe();
+    expect(await screen.findByText('role: admin')).toBeInTheDocument();
+    api.getMe.mockRejectedValue(new TypeError('Failed to fetch'));
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(api.getMe).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('role: admin')).toBeInTheDocument();
+    expect(auth.signOut).not.toHaveBeenCalled();
   });
 
   it('signed out goes to login without asking the API', async () => {
