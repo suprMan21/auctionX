@@ -59,8 +59,25 @@ Follow-ups: Feature Backlog "Admin console UX-2", "UX-3", "GitHub Issues in the 
 No migration. `git push` (backend), confirm App Runner, then `scripts/deploy-frontend.sh staging`. Either order is safe:
 the new fields are optional on the frontend.
 
+## Follow-up (2026-10-26): Creator ID checks access + system status on top
+
+- Boss: Admin and Support may open Creator ID checks; only Admin and Super admin may change a status.
+  `review_sellers` also allowed status changes and parked-marketplace seller approvals, so two narrower permissions
+  replace it on the Yoti routes: `view_creator_ids` (super_admin, admin, support) and `manage_creator_ids`
+  (super_admin, admin). Migrations `20261026000002` (enum values) and `20261026000003` (grants); `review_sellers`
+  stays super_admin-only. Live checks `supabase/tests/creator_id_permissions_live.sql` (4).
+- Opening a creator ID record writes a `creator_id_view` audit row first (fails closed, like viewing an account's
+  tokens); the account ID is validated before anything runs.
+- Console: nav, routes and the record page use the new permissions; "Change status" shows only with
+  `manage_creator_ids`.
+- Dashboard: system status moved to the top, beside the heading.
+- Tests: backend 784 (+7 `creatorIdAccess.test.ts`), frontend 250 (+3). Enum migration dry-run (rolled back) OK;
+  the grant migration is checked live right after `db push` (its enum values must be committed first, and adding
+  them out of band was not allowed).
+
 ## Live check (Boss)
 
+- [x] Click-through 2026-10-26: looks good (Boss).
 - [ ] Dashboard shows Needs attention with counts; nav badges match.
 - [ ] Console search: an email with one account opens it; "chip_004" opens the token; a partial email lists both.
 - [ ] Token chip_004: owner, ownership history and taps show emails that open the account.

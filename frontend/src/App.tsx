@@ -411,8 +411,8 @@ function App() {
               {/* S22: Yoti verifications admin surface. Static "verifications"
                   before parameterized ":userId" sibling (Lesson #5). Legacy
                   seller-verification doc-pipeline page remains accessible. */}
-              <Route path="verifications" element={<AdminPermissionGate permission={PERMISSIONS.reviewSellers}><AdminVerificationsPage /></AdminPermissionGate>} />
-              <Route path="verifications/:userId" element={<AdminPermissionGate permission={PERMISSIONS.reviewSellers}><AdminVerificationDetailPage /></AdminPermissionGate>} />
+              <Route path="verifications" element={<AdminPermissionGate permission={PERMISSIONS.viewCreatorIds}><AdminVerificationsPage /></AdminPermissionGate>} />
+              <Route path="verifications/:userId" element={<AdminPermissionGate permission={PERMISSIONS.viewCreatorIds}><AdminVerificationDetailPage /></AdminPermissionGate>} />
               {marketplaceEnabled && <Route path="seller-verification" element={<AdminSellerVerificationPage />} />}
               {marketplaceEnabled && <Route path="escrow" element={<AdminEscrowPage />} />}
               {/* S-ADMIN1: token admin console (manage_nfc; the API enforces it too). */}

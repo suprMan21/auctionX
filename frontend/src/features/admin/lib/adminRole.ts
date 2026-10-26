@@ -30,6 +30,9 @@ export const PERMISSIONS = {
   reapplyPayments: 'reapply_payments',
   refundTokenFees: 'refund_token_fees',
   managePricing: 'manage_pricing',
+  /** Creator ID checks: open (super_admin, admin, support) / change a status (super_admin, admin). */
+  viewCreatorIds: 'view_creator_ids',
+  manageCreatorIds: 'manage_creator_ids',
   reviewSellers: 'review_sellers',
 } as const;
 

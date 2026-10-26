@@ -131,9 +131,32 @@ export const getVerificationDetail = async (req: Request & RequestWithId, res: R
   const logger = withLogContext({ requestId: req.requestId, route: req.path });
   try {
     const userId = req.params.userId;
-    if (typeof userId !== 'string' || !userId) throw new AppError('invalid_argument', 'userId is required');
+    if (typeof userId !== 'string' || !z.string().uuid().safeParse(userId).success) {
+      throw new AppError('invalid_argument', 'That is not a valid account ID.');
+    }
 
     const supabase = getServiceClient();
+
+    // Identity data: every view is recorded BEFORE it is read (fails closed),
+    // like viewing an account's tokens. Support may open these since 2026-10-26.
+    const admin = (req as Request & { admin?: { admin_id: string; email: string } }).admin;
+    if (!admin) throw new AppError('unauthenticated', 'Your session has ended. Sign in again.');
+    const { error: auditErr } = await supabase.from('audit_logs').insert({
+      admin_id: admin.admin_id,
+      admin_email: admin.email,
+      action: 'creator_id_view',
+      entity_type: 'user',
+      entity_id: userId,
+      changes: {},
+      reason: null,
+      brand: 'auctionx', // legacy brand key for the SFW stream (as the SQL audit writers use)
+      ip_address: req.ip ?? null,
+      user_agent: (req.headers?.['user-agent'] as string | undefined) ?? null,
+    });
+    if (auditErr) {
+      logger.error('admin_creator_id_view_audit_failed', { error: auditErr.message });
+      throw new AppError('unavailable', 'The view could not be recorded, so it was not opened. Try again.');
+    }
 
     const { data: user, error: userErr } = await supabase
       .from('users')

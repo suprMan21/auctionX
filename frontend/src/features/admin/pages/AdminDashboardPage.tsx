@@ -179,9 +179,18 @@ export const AdminDashboardPage = () => {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-gray-400 text-sm mt-1">Overview</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+          <p className="text-gray-400 text-sm mt-1">Overview</p>
+        </div>
+        {/* System status first: if something is down, staff see it before anything else. */}
+        {health !== null && (
+          <div className="flex items-center gap-2" role="status">
+            <span className="text-xs text-gray-400">System status:</span>
+            <HealthChip health={health} />
+          </div>
+        )}
       </div>
 
       {(canReissue || canStuck) && (
@@ -238,13 +247,6 @@ export const AdminDashboardPage = () => {
       </div>
       )}
 
-      {/* Health indicator */}
-      {health !== null && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">System status:</span>
-          <HealthChip health={health} />
-        </div>
-      )}
     </div>
   );
 };

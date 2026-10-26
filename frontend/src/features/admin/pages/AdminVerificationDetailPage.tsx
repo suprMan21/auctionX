@@ -19,6 +19,7 @@ import type {
 } from '../api/adminApi';
 import { ACTION_FAILED, NONE, errorMessage, formatWhen as fmt, loadFailed } from '../lib/display';
 import { auditActionLabel, codeLabel, idCheckPurposeLabel, idCheckStatusLabel, idSessionStatusLabel } from '../lib/labels';
+import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 
 const STATUS_BADGE: Record<AdminYotiVerificationStatus, string> = {
   NONE: 'bg-gray-500/20 text-gray-400',
@@ -43,6 +44,7 @@ const OVERRIDE_TARGETS: AdminYotiVerificationStatus[] = [
 export const AdminVerificationDetailPage = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
+  const canChange = hasPermission(useAdminRole(), PERMISSIONS.manageCreatorIds);
   const [data, setData] = useState<AdminYotiVerificationDetailResponse['data'] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -225,7 +227,8 @@ export const AdminVerificationDetailPage = () => {
         </div>
       )}
 
-      {/* Override actions */}
+      {/* Override actions: admin and super admin only (manage_creator_ids); the API checks too. */}
+      {canChange && (
       <div className="glass rounded-2xl p-6 border border-white/10">
         <h2 className="text-lg font-semibold text-white mb-3">Change status</h2>
         <p className="text-sm text-gray-400 mb-4">
@@ -245,6 +248,7 @@ export const AdminVerificationDetailPage = () => {
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 };

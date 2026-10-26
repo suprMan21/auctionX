@@ -16,6 +16,10 @@ export const PERMISSIONS = {
   reapplyPayments: 'reapply_payments',
   refundTokenFees: 'refund_token_fees',
   managePricing: 'manage_pricing',
+  /** Creator ID checks (Yoti): open the list and detail / change a status (2026-10-26). */
+  viewCreatorIds: 'view_creator_ids',
+  manageCreatorIds: 'manage_creator_ids',
+  /** Parked marketplace seller approvals only (super_admin). */
   reviewSellers: 'review_sellers',
   // Parked marketplace (routes mounted only when the marketplace flag is on).
   viewListings: 'view_listings',

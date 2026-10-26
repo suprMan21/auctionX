@@ -141,7 +141,7 @@ token sale without admin tooling.
   - [ ] **Support tickets (S29 + S30), in-house** (Decision 2026-10-26): customer tickets in the console, email from
         hello@, linked to account/token; GitHub stays engineering-only, support sees only issues escalated from
         their tickets.
-  - [ ] Creator ID checks need `review_sellers` (super_admin only today): Boss to say if Admin or Support need it.
+  - [ ] Creator ID checks: `view_creator_ids` (super_admin, admin, support) + `manage_creator_ids` (super_admin, admin), migrations `20261026000002/3`: Boss `db push`, then live checks.
 - **S-ADMIN1 Ph3b: admin pricing + vouchers** ✅ live + verified 2026-10-25 (`docs/S_ADMIN1_PH3B_VERIFICATION.md`).
   Price locked at transfer start; changes now or scheduled; voucher used by the fee payer. Console click-through
   verified against the audit log.

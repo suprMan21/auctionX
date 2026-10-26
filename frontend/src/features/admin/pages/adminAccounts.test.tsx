@@ -305,14 +305,14 @@ describe('nav by permission', () => {
     return within(nav).getAllByRole('link').map((l) => l.textContent?.trim());
   };
 
-  it('support: users and stuck payments, no tokens, pricing or audit', () => {
+  it('support: users, stuck payments and creator ID checks, no tokens, pricing or audit', () => {
     const links = navLinks('support');
-    expect(links).toEqual(expect.arrayContaining(['Accounts', 'Stuck payments']));
+    expect(links).toEqual(expect.arrayContaining(['Accounts', 'Stuck payments', 'Creator ID checks']));
     for (const hidden of ['Tokens', 'Re-issues', 'Pricing', 'Free transfers', 'Audit log']) expect(links).not.toContain(hidden);
   });
 
   it('admin: tokens, pricing and audit too', () => {
-    expect(navLinks('admin')).toEqual(expect.arrayContaining(['Accounts', 'Tokens', 'Re-issues', 'Stuck payments', 'Pricing', 'Free transfers', 'Audit log']));
+    expect(navLinks('admin')).toEqual(expect.arrayContaining(['Accounts', 'Tokens', 'Re-issues', 'Stuck payments', 'Pricing', 'Free transfers', 'Creator ID checks', 'Audit log']));
   });
 
   it('super admin: every page, in order, under the plain names', () => {

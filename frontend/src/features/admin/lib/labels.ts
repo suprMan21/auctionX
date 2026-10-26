@@ -101,6 +101,7 @@ const AUDIT_ACTION: Record<string, string> = {
   voucher_search: 'Free transfers search',
   voucher_list: 'Free transfers looked up',
   user_tokens_view: "Viewed account's tokens",
+  creator_id_view: "Viewed creator ID check",
   // Accounts
   account_suspend: 'Account suspended',
   account_unsuspend: 'Account suspension lifted',
