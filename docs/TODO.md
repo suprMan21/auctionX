@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-26 (S-ADMIN2 Ph1 live + verified: accounts, roles, one permission model)
+**Last updated:** 2026-10-26 (S-ADMIN2 Ph1 live + verified; admin console UX-1)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -132,9 +132,15 @@ token sale without admin tooling.
   - [ ] Boss: rotate `GITHUB_ISSUES_TOKEN` before it expires (no Issues are filed after it lapses).
 - **Admin search + token names ✅ and `trust proxy` ✅ live + verified 2026-10-24**
   (`docs/S_ADMIN1_SEARCH_TRUST_PROXY_VERIFICATION.md`). Search audit-logged first; rate limits now per client.
-- **Admin console UX** (backlog, Boss 2026-10-24): resizable columns, whole-row click, emails throughout the token
-  detail page (custody from/to, taps) (audit-log dropdowns ✅ in S-ADMIN2); Free transfers page should not
-  re-run (and re-audit) its email lookup after every grant/revoke. ~1 session; pull forward any time.
+- **Admin console UX-1 ✅ 2026-10-26** (`docs/ADMIN_UX1_VERIFICATION.md`): wording pass (Token / Account / Staff role /
+  Free transfers / Re-issue, plain labels, friendly sign-in errors), Needs attention + nav badges, console search,
+  accounts as links, audit time filter, free transfers no longer re-audited. Rule: every task in 2 to 3 clicks (Locked).
+  - [ ] **UX-2** (Feature Backlog): one table style (resizable columns, whole-row click, paging), chip combobox +
+        role radios, price card buttons, re-issues open on "Needs action", stuck re-issue fee → its request.
+  - [ ] **UX-3**: nav sections + Settings page, audit-log links, phone polish.
+  - [ ] **GitHub Issues in the console**: Boss to decide which issues support may see (label / incident type /
+        tied to an account) before it is built.
+  - [ ] Creator ID checks need `review_sellers` (super_admin only today): Boss to say if Admin or Support need it.
 - **S-ADMIN1 Ph3b: admin pricing + vouchers** ✅ live + verified 2026-10-25 (`docs/S_ADMIN1_PH3B_VERIFICATION.md`).
   Price locked at transfer start; changes now or scheduled; voucher used by the fee payer. Console click-through
   verified against the audit log.
@@ -145,7 +151,6 @@ token sale without admin tooling.
   staff roles super_admin / admin / support (super_admin only), one permission model, audit log filters. Revoking or
   changing a role signs the account out and the console re-checks access. Live: suspend test@ (sign-in refused,
   sessions ended, chip_004 still verified), support role grant/revoke, forced sign-out on revoke.
-  - [ ] Login page shows Supabase's raw "User is banned" for suspended/retired accounts → friendly copy.
   - [ ] Admin 2FA (`FEATURE_REQUIRE_ADMIN_2FA`, off) turns on with S-2FA enrolment.
   - [ ] Accepted: an access token issued before a suspend still reads own-row data straight from Supabase (≤ 1 h);
         every backend action is refused. Revisit in S-SEC1.
