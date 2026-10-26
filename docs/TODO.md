@@ -15,6 +15,16 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ## 🔴 BOSS ACTION
 
+### Verified Creator OAuth (DR-3, 2026-10-26)
+Source: Notion "OAuth Platform Approval Matrix v1.0" (https://app.notion.com/p/4053baf696648120be1af1894ffbe9b5).
+- [ ] **Confirm or change the Tier 1 list** (Decisions DB, Proposed): Twitch, TikTok, Instagram, YouTube;
+      X Tier 2 behind a flag + Discord; drop Facebook and Reddit.
+- [ ] **Decide where the Verified Creator flow lives on authentic-materials.com.** TikTok, Google and Meta
+      reviews need a real site + privacy policy + a reachable demo on the production domain; the public build
+      bars API calls today (`publicSite.test.ts`).
+- [ ] **Start Meta Business Verification** for The Craving Company Inc. (legal-name document, e.g. articles
+      of incorporation or CRA Business Number record, plus one showing address or phone; up to ~14 business days).
+
 ### S-NFC3 — remaining (not database)
 - [ ] **Resolve the duplicate "Stripe" 1Password items** before any token fee is charged. The vault
       has **three**: two LOGIN (`4jjqf5cazuxgjnk23lpwstzqoe`, `sejob6wh6bcjs4eyoimp4ugkk4`) and one
