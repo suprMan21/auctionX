@@ -34,6 +34,74 @@ const PUBLIC_TAG_COLUMNS =
   'id, tenant_id, tag_uid, item_id, seller_id, verification_id, status, sun_counter, registered_at, activated_at, metadata, created_at, updated_at, lifecycle_status, current_owner_id, linked_item_id, disclosure';
 
 /**
+ * The public view of a chip for the legacy GET /nfc/:tagId and /nfc/by-uid
+ * endpoints (anyone, no sign-in). Only what the public verify page may show.
+ */
+const PUBLIC_VIEW_COLUMNS = 'id, tag_uid, status, lifecycle_status, registered_at, activated_at, linked_item_id';
+const PUBLIC_UID_SUFFIX = 6;
+
+type PublicViewTag = {
+  id: string;
+  tag_uid: string;
+  status: string;
+  lifecycle_status: string | null;
+  registered_at: string | null;
+  activated_at: string | null;
+  linked_item_id: string | null;
+};
+
+const publicTagDetail = async (supabase: ReturnType<typeof getServiceClient>, tag: PublicViewTag) => {
+  const [events, nft, provenance] = await Promise.all([
+    supabase
+      .from('verification_events')
+      // Never ip_address, user_agent, sun_message, scanned_by or the counter.
+      .select('scan_type, cmac_valid, created_at, video_proof_status')
+      .eq('tag_id', tag.id)
+      .order('created_at', { ascending: false })
+      .limit(50),
+    supabase
+      .from('nft_metadata')
+      // On-chain facts only; not owner_wallet (ties a wallet to the owner).
+      .select('chain, contract_address, token_id, mint_tx_hash, metadata_uri, minted_at')
+      .eq('tag_id', tag.id)
+      .maybeSingle(),
+    supabase
+      .from('public_tag_provenance')
+      .select('creator_name')
+      .eq('tag_id', tag.id)
+      .maybeSingle(),
+  ]);
+  const creatorName = (provenance.data as { creator_name: string | null } | null)?.creator_name ?? null;
+
+  return {
+    tag: {
+      id: tag.id,
+      // Suffix only, like every other screen: the full UID is never public.
+      tag_uid: `…${tag.tag_uid.slice(-PUBLIC_UID_SUFFIX)}`,
+      status: tag.status,
+      lifecycle_status: tag.lifecycle_status,
+      registered_at: tag.registered_at,
+      activated_at: tag.activated_at,
+      linked_item_id: tag.linked_item_id,
+    },
+    // Fields picked explicitly as well as selected: a later select('*') cannot leak.
+    events: ((events.data ?? []) as Array<Record<string, unknown>>).map((e) => ({
+      scan_type: e.scan_type,
+      cmac_valid: e.cmac_valid,
+      created_at: e.created_at,
+      video_proof_status: e.video_proof_status ?? null,
+    })),
+    nft: nft.data
+      ? (({ chain, contract_address, token_id, mint_tx_hash, metadata_uri, minted_at }) =>
+          ({ chain, contract_address, token_id, mint_tx_hash, metadata_uri, minted_at }))(nft.data as Record<string, unknown>)
+      : null,
+    // Marketplace verification records are parked and never public.
+    verification: null,
+    seller: creatorName ? { display_name: creatorName } : null,
+  };
+};
+
+/**
  * POST /api/v1/nfc/register
  * Register an NTAG 424 DNA tag for a listing. (Parked route — see routes/nfc.ts.)
  *
@@ -352,72 +420,38 @@ export const confirmProof = async (req: NfcRequest, res: Response) => {
 };
 
 /**
- * GET /api/v1/nfc/:tagId
- * Public endpoint — returns full tag verification data.
+ * GET /api/v1/nfc/:tagId (public, no sign-in). Legacy endpoint from the first
+ * NFC prototype, still read by the mobile app. Returns ONLY public-safe data
+ * (2026-10-26): the same standard as the public verify page. Never the full
+ * chip UID, account IDs, the tap history's IP addresses / browsers / tap links /
+ * scanners, or marketplace review records. The creator name comes from the
+ * vetted public_tag_provenance view (respects the owner's disclosure choices).
  */
 export const getTagVerification = async (req: NfcRequest, res: Response) => {
   const logger = withLogContext({ requestId: req.requestId, route: req.path });
 
   try {
-    const { tagId } = req.params;
+    const parsedId = z.string().uuid().safeParse(req.params.tagId);
+    if (!parsedId.success) {
+      return res.status(404).json({ success: false, error: 'NFC tag not found' });
+    }
     const supabase = getServiceClient();
 
     const { data: tag, error } = await supabase
       .from('nfc_tags')
-      .select(PUBLIC_TAG_COLUMNS)
-      .eq('id', tagId)
+      .select(PUBLIC_VIEW_COLUMNS)
+      .eq('id', parsedId.data)
       .maybeSingle();
 
     if (error || !tag) {
       return res.status(404).json({ success: false, error: 'NFC tag not found' });
     }
 
-    // Fetch related data in parallel
-    const [eventsResult, nftResult, verificationsResult] = await Promise.all([
-      supabase
-        .from('verification_events')
-        .select('*')
-        .eq('tag_id', tagId)
-        .order('created_at', { ascending: false })
-        .limit(50),
-      supabase
-        .from('nft_metadata')
-        .select('*')
-        .eq('tag_id', tagId)
-        .maybeSingle(),
-      tag.verification_id
-        ? supabase
-            .from('item_verifications')
-            .select('*, listing:listings(title, description, listing_media(url, type, sort_order))')
-            .eq('id', tag.verification_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
-
-    // Fetch seller info
-    const { data: seller } = await supabase
-      .from('users')
-      .select('display_name')
-      .eq('id', tag.seller_id)
-      .maybeSingle();
-
-    logger.info('nfc_tag_viewed', { tagId });
-
-    // Explicit column list: aes_key_enc is never read (S-NFC3.5).
-    const publicTag = tag;
-
-    return res.json({
-      success: true,
-      data: {
-        tag: publicTag,
-        events: eventsResult.data ?? [],
-        nft: nftResult.data ?? null,
-        verification: verificationsResult.data ?? null,
-        seller: seller ?? null,
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({ success: false, error: 'Internal server error' });
+    const data = await publicTagDetail(supabase, tag as unknown as PublicViewTag);
+    logger.info('nfc_tag_viewed', { tagId: parsedId.data });
+    return res.json({ success: true, data });
+  } catch {
+    return res.status(500).json({ success: false, error: 'Something went wrong on our side. Try again.' });
   }
 };
 
@@ -671,23 +705,25 @@ export const mintNft = async (req: NfcRequest, res: Response) => {
 };
 
 /**
- * GET /api/v1/nfc/by-uid/:tagUid
- * Public endpoint — look up a tag by its physical UID.
- *
- * S-NFC-ID: v1 chips only. From key version 2 chips may share a UID, so a UID
- * does not name one chip; v2 chips are addressed by their serial (the tap URL).
+ * GET /api/v1/nfc/by-uid/:tagUid (public). Look up a v1 chip by its physical
+ * UID (from key version 2 chips may share a UID, so v2 chips are addressed by
+ * their serial in the tap URL). Same public-safe shape as GET /nfc/:tagId; the
+ * log records only the UID suffix, never the full UID.
  */
 export const getTagByUid = async (req: NfcRequest, res: Response) => {
-  const logger = withLogContext({ requestId: req.requestId, route: req.path });
+  const logger = withLogContext({ requestId: req.requestId, route: '/api/v1/nfc/by-uid/:tagUid' });
 
   try {
-    const tagUid = req.params.tagUid as string;
+    const tagUid = String(req.params.tagUid ?? '').toUpperCase();
+    if (!/^[0-9A-F]{14}$/.test(tagUid)) {
+      return res.status(404).json({ success: false, error: 'NFC tag not found' });
+    }
     const supabase = getServiceClient();
 
     const { data: tag, error } = await supabase
       .from('nfc_tags')
-      .select(PUBLIC_TAG_COLUMNS)
-      .eq('tag_uid', tagUid.toUpperCase())
+      .select(PUBLIC_VIEW_COLUMNS)
+      .eq('tag_uid', tagUid)
       .is('chip_serial', null)
       .maybeSingle();
 
@@ -695,49 +731,10 @@ export const getTagByUid = async (req: NfcRequest, res: Response) => {
       return res.status(404).json({ success: false, error: 'NFC tag not found' });
     }
 
-    // Fetch related data in parallel (same as getTagVerification)
-    const [eventsResult, nftResult, verificationsResult] = await Promise.all([
-      supabase
-        .from('verification_events')
-        .select('*')
-        .eq('tag_id', tag.id)
-        .order('created_at', { ascending: false })
-        .limit(50),
-      supabase
-        .from('nft_metadata')
-        .select('*')
-        .eq('tag_id', tag.id)
-        .maybeSingle(),
-      tag.verification_id
-        ? supabase
-            .from('item_verifications')
-            .select('*, listing:listings(title, description, listing_media(url, type, sort_order))')
-            .eq('id', tag.verification_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
-
-    const { data: seller } = await supabase
-      .from('users')
-      .select('display_name')
-      .eq('id', tag.seller_id)
-      .maybeSingle();
-
-    logger.info('nfc_tag_viewed_by_uid', { tagUid });
-
-    const publicTag = tag;
-
-    return res.json({
-      success: true,
-      data: {
-        tag: publicTag,
-        events: eventsResult.data ?? [],
-        nft: nftResult.data ?? null,
-        verification: verificationsResult.data ?? null,
-        seller: seller ?? null,
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({ success: false, error: 'Internal server error' });
+    const data = await publicTagDetail(supabase, tag as unknown as PublicViewTag);
+    logger.info('nfc_tag_viewed_by_uid', { uidSuffix: tagUid.slice(-PUBLIC_UID_SUFFIX) });
+    return res.json({ success: true, data });
+  } catch {
+    return res.status(500).json({ success: false, error: 'Something went wrong on our side. Try again.' });
   }
 };

@@ -54,7 +54,7 @@ S-DB1 (S-NFC3 migrations live) · S-NFC3.5 real AN12196 SDM with KMS-derived key
 First real NTAG 424 DNA (`chip_001`) encoded under the staging KMS roots; phone tap → `tapcheck` HTTP 200, valid.
 Details: `docs/S_NFC2_PH2_VERIFICATION.md`. Runbook: `tag-encoder/README.md` → "Physical encode".
 - [ ] **Boss: confirm** audit ledger keys on tag id (not UID). (K1/K4: now set on every v2 chip — S-NFC-ID.)
-- [ ] Not fixed: public `GET /nfc/by-uid` logs the raw UID (`nfc_tag_viewed_by_uid`). Fold into S-SEC1 or fix sooner.
+- Fixed 2026-10-26: public `GET /nfc/:tagId` and `/nfc/by-uid` returned tap IPs, browsers, tap links, account IDs and the full UID; now public-safe only, and the UID log is suffix-only (`legacyNfcPublic.test.ts`).
 
 ## ✅ Shipped 2026-10-03 — S-NFC3-FE Phase 1 (tap, verify, claim, My Tokens)
 
