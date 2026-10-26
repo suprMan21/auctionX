@@ -145,8 +145,11 @@ token sale without admin tooling.
 - **Admin console UX-1 ✅ 2026-10-26** (`docs/ADMIN_UX1_VERIFICATION.md`): wording pass (Token / Account / Staff role /
   Free transfers / Re-issue, plain labels, friendly sign-in errors), Needs attention + nav badges, console search,
   accounts as links, audit time filter, free transfers no longer re-audited. Rule: every task in 2 to 3 clicks (Locked).
-  - [ ] **UX-2** (Feature Backlog): one table style (resizable columns, whole-row click, paging), chip combobox +
-        role radios, price card buttons, re-issues open on "Needs action", stuck re-issue fee → its request.
+  - [x] **UX-2 ✅ merged to `dev` 2026-10-26** (`81cb95b`, `docs/ADMIN_UX2_VERIFICATION.md`): shared AdminTable,
+        search on Enter + out of URL, chip combobox, role radios, price card buttons, re-issues open on Needs action,
+        paging, stuck re-issue fee → its request. Security review: no blockers.
+    - [ ] Boss: push `dev` (backend FIRST: new `NEEDS_ACTION` filter), `scripts/verify-backend-deploy.sh`, then
+          `scripts/deploy-frontend.sh staging`; click through (chip list opens on dialog open; resize; row click).
   - [ ] **UX-3**: nav sections + Settings page, audit-log links, phone polish.
   - [ ] **Support tickets (S29 + S30), in-house** (Decision 2026-10-26): customer tickets in the console, email from
         hello@, linked to account/token; GitHub stays engineering-only, support sees only issues escalated from
