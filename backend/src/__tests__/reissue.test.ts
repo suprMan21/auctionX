@@ -774,4 +774,19 @@ describe('admin: queue', () => {
     expect(first.photoUrls).toHaveLength(1);
     expect(JSON.stringify(out.body)).not.toContain('reissue-evidence/');
   });
+
+  it('names the requester by email and a completed request by its new chip', async () => {
+    tables.reissue_requests.push(
+      reissueRow({ id: 'a0000000-0000-4000-8000-000000000005', payment_status: 'PAID', fulfilled_at: '2026-10-09T12:00:00.000Z', new_tag_id: OTHER_TAG }),
+    );
+    const { listReissueRequests } = await admin();
+    const req = makeReq(null);
+    req.query = { status: 'DONE' };
+
+    const out = await call(listReissueRequests, req);
+
+    const done = (out.body as { data: { requests: Array<Row> } }).data.requests[0];
+    expect(done).toMatchObject({ requesterAccountId: OWNER, requesterEmail: 'owner@example.com', newTagId: OTHER_TAG });
+    expect(done.newTagLabel).toBe('…936980'); // v1 chip, no name: UID suffix
+  });
 });

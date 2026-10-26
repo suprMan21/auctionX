@@ -176,12 +176,12 @@ describe('validation', () => {
 
 describe('database errors → safe API errors', () => {
   it.each([
-    ['admin_forbidden: actor lacks manage_admins', 403, 'Forbidden'],
-    ['cannot_act_on_self', 403, 'You cannot do this to your own account'],
-    ['account_not_found', 404, 'Account not found'],
-    ['already_retired', 409, 'This account is already retired'],
-    ['confirm_mismatch', 400, 'The confirmation does not match the account email'],
-    ['some_new_internal_error: secret detail', 500, 'The action could not be completed'],
+    ['admin_forbidden: actor lacks manage_admins', 403, 'Your staff role cannot do this.'],
+    ['cannot_act_on_self', 403, 'You cannot do this to your own account.'],
+    ['account_not_found', 404, 'Account not found.'],
+    ['already_retired', 409, 'This account is already retired.'],
+    ['confirm_mismatch', 400, 'That does not match the part of the email before the @.'],
+    ['some_new_internal_error: secret detail', 500, 'That did not work. Nothing was changed. Try again.'],
   ])('%s → %i', async (dbError, status, message) => {
     hooks.rpc = rpcReturning({ admin_retire_account: { error: dbError } });
     const app = await appWith('super_admin');
@@ -197,7 +197,7 @@ describe('database errors → safe API errors', () => {
     const res = await request(app).post(`/admin/users/${TARGET}/delete`).send({ confirm: 'test', reason: REASON });
     expect(res.status).toBe(409);
     expect(res.body.error).toBe(
-      'Cannot delete: the waiting window since Retire has not passed; the account owns tokens (they must be transferred first); the account performed admin actions (it stays retired permanently)',
+      'This account cannot be deleted yet. The waiting time after retiring has not passed yet. The account still owns tokens. Transfer them to another account first. The account took staff actions, so it stays retired.',
     );
   });
 });
@@ -218,6 +218,21 @@ describe('reads', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.logs.map((l: Row) => l.log_id)).toEqual(['l1']);
     expect(res.body.data.pagination.total).toBe(1);
+  });
+
+  it('audit log filters by time range (from inclusive, to exclusive)', async () => {
+    const app = await appWith('super_admin');
+    const res = await request(app).get('/admin/audit-logs?from=2026-10-25T01:30:00Z&to=2026-10-25T03:00:00Z');
+    expect(res.status).toBe(200);
+    expect(res.body.data.logs.map((l: Row) => l.log_id)).toEqual(['l2']);
+    const edge = await request(app).get('/admin/audit-logs?from=2026-10-25T01:00:00Z&to=2026-10-25T02:00:00Z');
+    expect(edge.body.data.logs.map((l: Row) => l.log_id)).toEqual(['l1']);
+  });
+
+  it('audit log refuses a range that ends before it starts, or a date without an offset', async () => {
+    const app = await appWith('super_admin');
+    expect((await request(app).get('/admin/audit-logs?from=2026-10-25T03:00:00Z&to=2026-10-25T01:00:00Z')).status).toBe(400);
+    expect((await request(app).get('/admin/audit-logs?from=yesterday')).status).toBe(400);
   });
 
   it('audit facets come from the database function', async () => {

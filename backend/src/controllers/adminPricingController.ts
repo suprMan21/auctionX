@@ -40,13 +40,13 @@ const pathParam = (value: string | string[] | undefined): string =>
 
 const requireAdminId = (req: AdminRequest): string => {
   const adminId = req.admin?.admin_id;
-  if (!adminId) throw new AppError('unauthenticated', 'Admin authentication required');
+  if (!adminId) throw new AppError('unauthenticated', 'Your session has ended. Sign in again.');
   return adminId;
 };
 
 const parse = <T>(schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: { issues: unknown } } }, value: unknown): T => {
   const parsed = schema.safeParse(value);
-  if (!parsed.success) throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  if (!parsed.success) throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   return parsed.data;
 };
 
@@ -55,30 +55,30 @@ const rpcError = (error: { message?: string } | null): AppError => {
   const key = (error?.message ?? '').split(':')[0].trim();
   switch (key) {
     case 'admin_forbidden':
-      return new AppError('permission_denied', 'Forbidden');
+      return new AppError('permission_denied', 'Your staff role cannot do this.');
     case 'reason_required':
-      return new AppError('invalid_argument', 'A reason of at least 10 characters is required');
+      return new AppError('invalid_argument', 'Give a reason of at least 10 characters.');
     case 'invalid_kind':
     case 'invalid_quantity':
-      return new AppError('invalid_argument', 'Validation failed');
+      return new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.');
     case 'effective_in_past':
-      return new AppError('invalid_argument', 'A price change cannot start in the past');
+      return new AppError('invalid_argument', 'A price change cannot start in the past.');
     case 'expiry_in_past':
-      return new AppError('invalid_argument', 'The expiry must be in the future');
+      return new AppError('invalid_argument', 'The expiry date must be in the future.');
     case 'price_not_found':
-      return new AppError('not_found', 'Price change not found');
+      return new AppError('not_found', 'Price change not found.');
     case 'price_already_cancelled':
-      return new AppError('conflict', 'This price change was already cancelled');
+      return new AppError('conflict', 'This price change was already cancelled.');
     case 'price_already_effective':
       return new AppError('conflict', 'This price is already in effect. Set a new price instead.');
     case 'user_not_found':
-      return new AppError('not_found', 'No account uses that email');
+      return new AppError('not_found', 'No account uses that email.');
     case 'grant_not_found':
-      return new AppError('not_found', 'Voucher grant not found');
+      return new AppError('not_found', 'Free transfer grant not found.');
     case 'grant_already_revoked':
-      return new AppError('conflict', 'This grant was already revoked');
+      return new AppError('conflict', 'These free transfers were already revoked.');
     default:
-      return new AppError('internal', 'The action could not be completed');
+      return new AppError('internal', 'That did not work. Nothing was changed. Try again.');
   }
 };
 
@@ -86,7 +86,7 @@ const emailsFor = async (supabase: SupabaseClient, ids: Array<string | null>): P
   const unique = [...new Set(ids.filter((id): id is string => !!id))];
   if (unique.length === 0) return new Map();
   const { data, error } = await supabase.from('users').select('id, email').in('id', unique);
-  if (error) throw new AppError('unavailable', 'Account emails could not be loaded');
+  if (error) throw new AppError('unavailable', 'Account emails could not be loaded. Try again.');
   return new Map(((data ?? []) as { id: string; email: string }[]).map((u) => [u.id, u.email]));
 };
 
@@ -98,7 +98,7 @@ const auditEmailLookup = async (
   scope: 'voucher_list' | 'voucher_grant',
 ): Promise<void> => {
   const admin = req.admin;
-  if (!admin) throw new AppError('unauthenticated', 'Admin authentication required');
+  if (!admin) throw new AppError('unauthenticated', 'Your session has ended. Sign in again.');
   const { error } = await supabase.from('audit_logs').insert({
     admin_id: admin.admin_id,
     admin_email: admin.email,
@@ -111,7 +111,7 @@ const auditEmailLookup = async (
     user_agent: (req.headers?.['user-agent'] as string | undefined) ?? null,
     brand: admin.brand === 'unmentionables' ? 'unmentionables' : 'auctionx',
   });
-  if (error) throw new AppError('unavailable', 'The lookup could not be recorded, so it was not run');
+  if (error) throw new AppError('unavailable', 'The lookup could not be recorded, so it was not run. Try again.');
 };
 
 // ── Prices ──────────────────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ export const listPrices = async (_req: AdminRequest, res: Response) => {
     .select(PRICE_COLUMNS)
     .order('effective_from', { ascending: false })
     .limit(PRICE_HISTORY_LIMIT);
-  if (error) throw new AppError('unavailable', 'Prices could not be loaded');
+  if (error) throw new AppError('unavailable', 'Prices could not be loaded. Try again.');
 
   const rows = (data ?? []) as unknown as PriceRow[];
   const [current, emails] = await Promise.all([
@@ -257,7 +257,7 @@ const grantStatus = (g: GrantRow, now: number): GrantStatus => {
 
 const findUserIdByEmail = async (supabase: SupabaseClient, email: string): Promise<string | null> => {
   const { data, error } = await supabase.from('users').select('id').eq('email', email).limit(2);
-  if (error) throw new AppError('unavailable', 'The account could not be looked up');
+  if (error) throw new AppError('unavailable', 'The account could not be looked up. Try again.');
   const rows = (data ?? []) as { id: string }[];
   // Emails are unique per account; two rows would mean we cannot tell who is meant.
   return rows.length === 1 ? rows[0].id : null;
@@ -285,7 +285,7 @@ export const listVouchers = async (req: AdminRequest, res: Response) => {
   if (userFilter) builder = builder.eq('user_id', userFilter);
 
   const { data, error, count } = await builder;
-  if (error) throw new AppError('unavailable', 'Vouchers could not be loaded');
+  if (error) throw new AppError('unavailable', 'Free transfers could not be loaded. Try again.');
 
   const rows = (data ?? []) as unknown as GrantRow[];
   const emails = await emailsFor(supabase, rows.flatMap((g) => [g.user_id, g.granted_by, g.revoked_by]));
@@ -320,7 +320,7 @@ export const grantVouchers = async (req: AdminRequest, res: Response) => {
 
   await auditEmailLookup(supabase, req, body.email, 'voucher_grant');
   const userId = await findUserIdByEmail(supabase, body.email);
-  if (!userId) throw new AppError('not_found', 'No account uses that email');
+  if (!userId) throw new AppError('not_found', 'No account uses that email.');
 
   const { data, error } = await supabase.rpc('admin_grant_transfer_vouchers', {
     p_admin: adminId,

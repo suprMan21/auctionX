@@ -56,6 +56,13 @@ export const auditLogQuerySchema = z.object({
   entity: z.string().trim().min(1).max(64).optional(),
   /** Target: the audit row's entity_id (an account, tag, payment…). */
   target: z.string().uuid().optional(),
+  /** Time range (ISO 8601 with offset): from is inclusive, to is exclusive. The
+   *  console sends the admin's local day bounds (e.g. "Yesterday"). */
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(50),
-}).strict();
+}).strict().refine((q) => !q.from || !q.to || Date.parse(q.from) < Date.parse(q.to), {
+  message: 'from must be before to',
+  path: ['to'],
+});

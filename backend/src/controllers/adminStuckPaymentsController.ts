@@ -64,13 +64,13 @@ const adminContext = (req: AdminRequest, route: string): SecurityLogContext => (
 
 const requireAdminId = (req: AdminRequest): string => {
   const adminId = req.admin?.admin_id;
-  if (!adminId) throw new AppError('unauthenticated', 'Admin authentication required');
+  if (!adminId) throw new AppError('unauthenticated', 'Your session has ended. Sign in again.');
   return adminId;
 };
 
 const parseIncidentId = (req: AdminRequest): string => {
   const parsed = incidentIdParamSchema.safeParse(pathParam(req.params.id));
-  if (!parsed.success) throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  if (!parsed.success) throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   return parsed.data;
 };
 
@@ -99,8 +99,8 @@ const loadIncident = async (supabase: SupabaseClient, incidentId: string): Promi
     .select(PAYMENT_INCIDENT_COLUMNS)
     .eq('id', incidentId)
     .maybeSingle();
-  if (error) throw new AppError('unavailable', 'The payment could not be loaded');
-  if (!data) throw new AppError('not_found', 'Stuck payment not found');
+  if (error) throw new AppError('unavailable', 'The payment could not be loaded. Try again.');
+  if (!data) throw new AppError('not_found', 'Stuck payment not found.');
   return data as unknown as IncidentRow;
 };
 
@@ -109,15 +109,15 @@ const rpcError = (error: { message?: string } | null): { appError: AppError; res
   const key = (error?.message ?? '').split(':')[0].trim();
   switch (key) {
     case 'admin_forbidden':
-      return { appError: new AppError('permission_denied', 'Forbidden'), result: 'forbidden' };
+      return { appError: new AppError('permission_denied', 'Your staff role cannot do this.'), result: 'forbidden' };
     case 'reason_required':
-      return { appError: new AppError('invalid_argument', 'A reason of at least 10 characters is required'), result: 'invalid_argument' };
+      return { appError: new AppError('invalid_argument', 'Give a reason of at least 10 characters.'), result: 'invalid_argument' };
     case 'incident_not_found':
-      return { appError: new AppError('not_found', 'Stuck payment not found'), result: 'not_found' };
+      return { appError: new AppError('not_found', 'Stuck payment not found.'), result: 'not_found' };
     case 'incident_not_open':
-      return { appError: new AppError('conflict', 'This payment has already been resolved'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'This payment has already been resolved.'), result: 'conflict' };
     default:
-      return { appError: new AppError('internal', 'The action could not be completed'), result: 'internal' };
+      return { appError: new AppError('internal', 'That did not work. Nothing was changed. Try again.'), result: 'internal' };
   }
 };
 
@@ -151,7 +151,7 @@ const QUEUE_TAG_COLUMNS = 'id, chip_name';
 
 export const listStuckPayments = async (req: AdminRequest, res: Response) => {
   const parsed = listIncidentsQuerySchema.safeParse(req.query);
-  if (!parsed.success) throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  if (!parsed.success) throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   const { status, page, limit } = parsed.data;
 
   const supabase = getServiceClient();
@@ -163,7 +163,7 @@ export const listStuckPayments = async (req: AdminRequest, res: Response) => {
   if (status !== 'ALL') query = query.eq('status', status);
 
   const { data, error, count } = await query;
-  if (error) throw new AppError('unavailable', 'Stuck payments could not be loaded');
+  if (error) throw new AppError('unavailable', 'Stuck payments could not be loaded. Try again.');
   const rows = (data ?? []) as unknown as IncidentRow[];
 
   // What each incident points at, as it is now (ids and states only).
@@ -178,7 +178,7 @@ export const listStuckPayments = async (req: AdminRequest, res: Response) => {
       .from('ownership_transfers')
       .select(QUEUE_TRANSFER_COLUMNS)
       .in('id', transferIds);
-    if (transferError) throw new AppError('unavailable', 'Stuck payments could not be loaded');
+    if (transferError) throw new AppError('unavailable', 'Stuck payments could not be loaded. Try again.');
     for (const t of (transfers ?? []) as Array<{ id: string; tag_id: string | null; status: string | null }>) {
       targets.set(t.id, { tagId: t.tag_id, status: t.status, paymentStatus: null });
     }
@@ -188,7 +188,7 @@ export const listStuckPayments = async (req: AdminRequest, res: Response) => {
       .from('reissue_requests')
       .select(QUEUE_REISSUE_COLUMNS)
       .in('id', reissueIds);
-    if (requestError) throw new AppError('unavailable', 'Stuck payments could not be loaded');
+    if (requestError) throw new AppError('unavailable', 'Stuck payments could not be loaded. Try again.');
     for (const r of (requests ?? []) as Array<{ id: string; tag_id: string; status: string; payment_status: string | null }>) {
       targets.set(r.id, { tagId: r.tag_id, status: r.status, paymentStatus: r.payment_status });
     }
@@ -201,7 +201,7 @@ export const listStuckPayments = async (req: AdminRequest, res: Response) => {
       .from('nfc_tags')
       .select(QUEUE_TAG_COLUMNS)
       .in('id', tagIds);
-    if (tagError) throw new AppError('unavailable', 'Stuck payments could not be loaded');
+    if (tagError) throw new AppError('unavailable', 'Stuck payments could not be loaded. Try again.');
     for (const t of (tags ?? []) as Array<{ id: string; chip_name: string | null }>) chipNames.set(t.id, t.chip_name);
   }
 
@@ -261,14 +261,14 @@ export const reapplyStuckPayment = async (req: AdminRequest, res: Response) => {
   const parsed = reapplyBodySchema.safeParse(req.body);
   if (!parsed.success) {
     emitAction(ctx, 'reapply', incidentId, 'invalid_argument');
-    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+    throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   }
 
   const supabase = getServiceClient();
   const incident = await loadIncident(supabase, incidentId);
   if (incident.status !== 'OPEN') {
     emitAction(ctx, 'reapply', incidentId, 'conflict');
-    throw new AppError('conflict', 'This payment has already been resolved');
+    throw new AppError('conflict', 'This payment has already been resolved.');
   }
 
   // Stripe first: the payment must still be there, and still be this payment.
@@ -298,7 +298,7 @@ export const reapplyStuckPayment = async (req: AdminRequest, res: Response) => {
       .select('id, tag_id')
       .eq('id', incident.transfer_id)
       .maybeSingle();
-    if (transferError) throw new AppError('unavailable', 'The transfer could not be loaded');
+    if (transferError) throw new AppError('unavailable', 'The transfer could not be loaded. Try again.');
     const tagId = (transfer?.tag_id as string | null) ?? null;
     if (!tagId) {
       emitAction(ctx, 'reapply', incidentId, 'conflict');
@@ -398,13 +398,13 @@ export const refundStuckPayment = async (req: AdminRequest, res: Response) => {
   // rule holds even if the route file is ever rearranged.
   if (!hasPermission(req.admin, PERMISSIONS.refundTokenFees)) {
     emitAction(ctx, 'refund', incidentId, 'forbidden');
-    throw new AppError('permission_denied', 'Forbidden');
+    throw new AppError('permission_denied', 'Your staff role cannot do this.');
   }
 
   const parsed = refundBodySchema.safeParse(req.body);
   if (!parsed.success) {
     emitAction(ctx, 'refund', incidentId, 'invalid_argument');
-    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+    throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   }
   const { reason, confirmSuffix } = parsed.data;
 
@@ -412,11 +412,11 @@ export const refundStuckPayment = async (req: AdminRequest, res: Response) => {
   const incident = await loadIncident(supabase, incidentId);
   if (incident.status !== 'OPEN') {
     emitAction(ctx, 'refund', incidentId, 'conflict');
-    throw new AppError('conflict', 'This payment has already been resolved');
+    throw new AppError('conflict', 'This payment has already been resolved.');
   }
   if (intentSuffix(incident.stripe_payment_intent_id) !== confirmSuffix) {
     emitAction(ctx, 'refund', incidentId, 'invalid_argument');
-    throw new AppError('invalid_argument', 'The confirmation does not match this payment');
+    throw new AppError('invalid_argument', 'That does not match. Type the characters shown in the dialog.');
   }
 
   const intent = await fetchIntent(incident.stripe_payment_intent_id);

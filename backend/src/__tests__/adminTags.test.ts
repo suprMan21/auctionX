@@ -396,6 +396,25 @@ describe('detail', () => {
     }
   });
 
+  it('names every account by its own email (custody from/to, taps), never the typed to_email', async () => {
+    tables.users = [
+      { id: ADMIN, email: 'staff.account@example.com' },
+      { id: OWNER, email: 'owner.account@example.com' },
+    ];
+    tables.verification_events[0].scanned_by = OWNER;
+    const { getTag } = await controllers();
+
+    const out = await call(getTag, makeReq({}, { tagId: OLD_TAG }));
+
+    const data = out.body.data as Row;
+    expect((data.custody as Row[])[0]).toMatchObject({
+      fromAccountId: ADMIN, fromEmail: 'staff.account@example.com',
+      toAccountId: OWNER, toEmail: 'owner.account@example.com',
+    });
+    expect((data.taps as Row[])[0]).toMatchObject({ accountId: OWNER, accountEmail: 'owner.account@example.com' });
+    expect(JSON.stringify(out.body)).not.toContain('owner@example.com');
+  });
+
   it('404s an unknown tag and 400s a malformed id', async () => {
     const { getTag } = await controllers();
 

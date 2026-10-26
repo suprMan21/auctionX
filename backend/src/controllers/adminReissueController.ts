@@ -95,13 +95,13 @@ const adminContext = (req: AdminRequest, route: string): SecurityLogContext => (
 
 const requireAdminId = (req: AdminRequest): string => {
   const adminId = req.admin?.admin_id;
-  if (!adminId) throw new AppError('unauthenticated', 'Admin authentication required');
+  if (!adminId) throw new AppError('unauthenticated', 'Your session has ended. Sign in again.');
   return adminId;
 };
 
 const parseRequestId = (req: AdminRequest): string => {
   const parsed = reissueIdParamSchema.safeParse(pathParam(req.params.id));
-  if (!parsed.success) throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  if (!parsed.success) throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   return parsed.data;
 };
 
@@ -133,36 +133,36 @@ const rpcError = (error: { message?: string } | null): { appError: AppError; res
   const key = (error?.message ?? '').split(':')[0].trim();
   switch (key) {
     case 'admin_forbidden':
-      return { appError: new AppError('permission_denied', 'Forbidden'), result: 'forbidden' };
+      return { appError: new AppError('permission_denied', 'Your staff role cannot do this.'), result: 'forbidden' };
     case 'reason_required':
-      return { appError: new AppError('invalid_argument', 'A reason of at least 10 characters is required'), result: 'invalid_argument' };
+      return { appError: new AppError('invalid_argument', 'Give a reason of at least 10 characters.'), result: 'invalid_argument' };
     case 'request_not_found':
-      return { appError: new AppError('not_found', 'Request not found'), result: 'not_found' };
+      return { appError: new AppError('not_found', 'Re-issue request not found.'), result: 'not_found' };
     case 'request_invalid_state':
-      return { appError: new AppError('conflict', 'This request is no longer in a state that allows this action'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'This request has already moved on. Reload the page.'), result: 'conflict' };
     case 'already_fulfilled':
-      return { appError: new AppError('conflict', 'This request has already been fulfilled'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'This re-issue is already complete.'), result: 'conflict' };
     case 'not_paid':
-      return { appError: new AppError('failed_precondition', 'This request has not been paid'), result: 'payment_required' };
+      return { appError: new AppError('failed_precondition', 'This re-issue has not been paid yet.'), result: 'payment_required' };
     case 'requester_not_owner':
-      return { appError: new AppError('conflict', 'The requester no longer owns this token'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'The person who asked no longer owns this token.'), result: 'conflict' };
     case 'tag_invalid_state':
     case 'old_tag_invalid_state':
-      return { appError: new AppError('conflict', 'Only an active or suspended token can be re-issued'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'Only an active or suspended token can be re-issued.'), result: 'conflict' };
     case 'old_tag_no_owner':
-      return { appError: new AppError('conflict', 'The token has no owner'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'This token has no owner.'), result: 'conflict' };
     case 'new_tag_not_found':
-      return { appError: new AppError('not_found', 'Replacement chip not found'), result: 'not_found' };
+      return { appError: new AppError('not_found', 'Replacement chip not found.'), result: 'not_found' };
     case 'new_tag_not_enrolled':
-      return { appError: new AppError('conflict', 'The replacement chip must be enrolled and unclaimed'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'The new chip must be set up and not yet claimed.'), result: 'conflict' };
     case 'same_tag':
-      return { appError: new AppError('invalid_argument', 'The replacement chip must be a different chip'), result: 'invalid_argument' };
+      return { appError: new AppError('invalid_argument', 'Pick a different chip. The new chip cannot be the old one.'), result: 'invalid_argument' };
     case 'transfer_pending':
-      return { appError: new AppError('conflict', 'A transfer is pending on this token; it must finish or be cancelled first'), result: 'transfer_pending' };
+      return { appError: new AppError('conflict', 'A transfer is in progress for this token. It must finish or be cancelled first.'), result: 'transfer_pending' };
     case 'tag_retired':
-      return { appError: new AppError('conflict', 'A retired chip cannot be changed or reused'), result: 'token_retired' };
+      return { appError: new AppError('conflict', 'A retired chip cannot be changed or used again.'), result: 'token_retired' };
     default:
-      return { appError: new AppError('internal', 'The action could not be completed'), result: 'internal' };
+      return { appError: new AppError('internal', 'That did not work. Nothing was changed. Try again.'), result: 'internal' };
   }
 };
 
@@ -172,8 +172,8 @@ const loadRequest = async (supabase: SupabaseClient, id: string): Promise<Reissu
     .select(ADMIN_REISSUE_COLUMNS)
     .eq('id', id)
     .maybeSingle();
-  if (error) throw new AppError('unavailable', 'Request could not be loaded');
-  if (!data) throw new AppError('not_found', 'Request not found');
+  if (error) throw new AppError('unavailable', 'The re-issue request could not be loaded. Try again.');
+  if (!data) throw new AppError('not_found', 'Re-issue request not found.');
   return data as unknown as ReissueRow;
 };
 
@@ -182,7 +182,7 @@ const loadRequest = async (supabase: SupabaseClient, id: string): Promise<Reissu
 export const listReissueRequests = async (req: AdminRequest, res: Response) => {
   const logger = withLogContext({ requestId: req.requestId, route: '/api/v1/admin/reissue-requests' });
   const parsed = listReissueQuerySchema.safeParse(req.query);
-  if (!parsed.success) throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  if (!parsed.success) throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   const q = parsed.data;
 
   const supabase = getServiceClient();
@@ -216,28 +216,41 @@ export const listReissueRequests = async (req: AdminRequest, res: Response) => {
 
   if (error) {
     logger.error('admin_reissue_list_failed', { error: error.message });
-    throw new AppError('unavailable', 'The re-issue queue could not be loaded');
+    throw new AppError('unavailable', 'Re-issue requests could not be loaded. Try again.');
   }
   const rows = (data ?? []) as unknown as ReissueRow[];
 
-  const tagIds = [...new Set(rows.map((r) => r.tag_id))];
+  // The new chip's name is shown too, so it is fetched with the requested tags.
+  const tagIds = [...new Set(rows.flatMap((r) => [r.tag_id, r.new_tag_id]).filter((id): id is string => !!id))];
   const sessionIds = rows.map((r) => r.tap_session_id).filter((id): id is string => !!id);
 
-  const [tags, sessions] = await Promise.all([
+  // Requester emails: one batched lookup, never logged (manage_nfc only).
+  const requesterIds = [...new Set(rows.map((r) => r.requester_id).filter((id): id is string => !!id))];
+  const [tags, sessions, requesters] = await Promise.all([
     tagIds.length
       ? supabase.from('nfc_tags').select(QUEUE_TAG_COLUMNS).in('id', tagIds)
       : Promise.resolve({ data: [], error: null }),
     sessionIds.length
       ? supabase.from('nfc_tap_sessions').select('id, created_at, consumed_at').in('id', sessionIds)
       : Promise.resolve({ data: [], error: null }),
+    requesterIds.length
+      ? supabase.from('users').select('id, email').in('id', requesterIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
-  for (const [name, part] of Object.entries({ tags, sessions })) {
+  for (const [name, part] of Object.entries({ tags, sessions, requesters })) {
     if (part.error) {
       logger.error('admin_reissue_list_part_failed', { part: name, error: part.error.message });
-      throw new AppError('unavailable', 'The re-issue queue could not be loaded');
+      throw new AppError('unavailable', 'Re-issue requests could not be loaded. Try again.');
     }
   }
   const tagById = new Map(((tags.data ?? []) as QueueTagRow[]).map((t) => [t.id, t]));
+  const emailById = new Map(((requesters.data ?? []) as Array<{ id: string; email: string }>).map((u) => [u.id, u.email]));
+  const chipLabel = (id: string | null) => {
+    const t = id ? tagById.get(id) : undefined;
+    if (!t) return null;
+    // Name, else the serial suffix (v2 chips), else the UID suffix (v1 chips).
+    return t.chip_name ?? `…${t.chip_serial ? t.chip_serial.slice(-UID_SUFFIX_LENGTH).toUpperCase() : uidSuffix(t.tag_uid)}`;
+  };
   const sessionById = new Map(
     ((sessions.data ?? []) as Array<{ id: string; created_at: string; consumed_at: string | null }>).map((s) => [s.id, s]),
   );
@@ -274,6 +287,7 @@ export const listReissueRequests = async (req: AdminRequest, res: Response) => {
           }
         : null,
       requesterAccountId: r.requester_id,
+      requesterEmail: emailById.get(r.requester_id) ?? null,
       status: r.status,
       paymentStatus: r.payment_status,
       listAmountUsdCents: r.list_amount_usd_cents,
@@ -289,6 +303,7 @@ export const listReissueRequests = async (req: AdminRequest, res: Response) => {
       paidAt: r.paid_at,
       fulfilledAt: r.fulfilled_at,
       newTagId: r.new_tag_id,
+      newTagLabel: chipLabel(r.new_tag_id),
       createdAt: r.created_at,
     };
   }));
@@ -313,7 +328,7 @@ const review = (approve: boolean) => async (req: AdminRequest, res: Response) =>
 
   if (!parsed.success) {
     emitReissueAction(ctx, action, requestId, null, 'invalid_argument');
-    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+    throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   }
 
   const supabase = getServiceClient();
@@ -367,7 +382,7 @@ export const fulfilReissue = async (req: AdminRequest, res: Response) => {
   const parsed = reissueFulfilBodySchema.safeParse(req.body);
   if (!parsed.success) {
     emitReissueAction(ctx, 'fulfil', requestId, null, 'invalid_argument');
-    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+    throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   }
   const { newTagId, reason, confirmSuffix } = parsed.data;
 
@@ -381,16 +396,16 @@ export const fulfilReissue = async (req: AdminRequest, res: Response) => {
     .maybeSingle();
   if (tagError) {
     logger.error('admin_reissue_fulfil_load_failed', { error: tagError.message });
-    throw new AppError('unavailable', 'Tag could not be loaded');
+    throw new AppError('unavailable', 'This token could not be loaded. Try again.');
   }
   if (!oldTag) {
     emitReissueAction(ctx, 'fulfil', requestId, request.tag_id, 'not_found', newTagId);
-    throw new AppError('not_found', 'Tag not found');
+    throw new AppError('not_found', 'Token not found.');
   }
 
   if (confirmationSuffix(oldTag as { tag_uid: string; chip_serial: string | null }) !== confirmSuffix.toUpperCase()) {
     emitReissueAction(ctx, 'fulfil', requestId, request.tag_id, 'invalid_argument', newTagId);
-    throw new AppError('invalid_argument', 'The confirmation does not match the chip being retired');
+    throw new AppError('invalid_argument', 'That does not match. Type the characters shown in the dialog.');
   }
 
   const custodyRecordId = randomUUID();

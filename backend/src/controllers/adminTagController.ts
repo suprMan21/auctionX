@@ -109,13 +109,16 @@ const toAdminTag = (row: AdminTagRow, emails: EmailMap = new Map()) => ({
 /**
  * Account emails for the owners and creators on screen. One query; never logged.
  */
-const loadEmails = async (supabase: SupabaseClient, rows: AdminTagRow[]): Promise<EmailMap> => {
-  const ids = [...new Set(rows.flatMap((r) => [r.current_owner_id, r.seller_id]).filter((id): id is string => !!id))];
+export const loadEmailsByIds = async (supabase: SupabaseClient, rawIds: Array<unknown>): Promise<EmailMap> => {
+  const ids = [...new Set(rawIds.filter((id): id is string => typeof id === 'string' && id.length > 0))];
   if (ids.length === 0) return new Map();
   const { data, error } = await supabase.from('users').select('id, email').in('id', ids);
-  if (error) throw new AppError('unavailable', 'Account emails could not be loaded');
+  if (error) throw new AppError('unavailable', 'Account emails could not be loaded. Try again.');
   return new Map(((data ?? []) as { id: string; email: string }[]).map((u) => [u.id, u.email]));
 };
+
+const loadEmails = (supabase: SupabaseClient, rows: AdminTagRow[]): Promise<EmailMap> =>
+  loadEmailsByIds(supabase, rows.flatMap((r) => [r.current_owner_id, r.seller_id]));
 
 /** Most accounts an email search may match before the admin is asked to narrow it. */
 export const EMAIL_MATCH_LIMIT = 50;
@@ -126,7 +129,7 @@ export const EMAIL_MATCH_LIMIT = 50;
  */
 const auditSearch = async (supabase: SupabaseClient, req: AdminRequest, term: string): Promise<void> => {
   const admin = req.admin;
-  if (!admin) throw new AppError('unauthenticated', 'Admin authentication required');
+  if (!admin) throw new AppError('unauthenticated', 'Your session has ended. Sign in again.');
   const { error } = await supabase.from('audit_logs').insert({
     admin_id: admin.admin_id,
     admin_email: admin.email,
@@ -140,7 +143,7 @@ const auditSearch = async (supabase: SupabaseClient, req: AdminRequest, term: st
     user_agent: (req.headers?.['user-agent'] as string | undefined) ?? null,
     brand: admin.brand === 'unmentionables' ? 'unmentionables' : 'auctionx',
   });
-  if (error) throw new AppError('unavailable', 'Search could not be recorded, so it was not run');
+  if (error) throw new AppError('unavailable', 'The search could not be recorded, so it was not run. Try again.');
 };
 
 /**
@@ -157,7 +160,7 @@ const searchTerms = async (
     .select('id')
     .ilike('email', `%${escapeLike(term)}%`)
     .limit(EMAIL_MATCH_LIMIT + 1);
-  if (error) throw new AppError('unavailable', 'Search could not be run');
+  if (error) throw new AppError('unavailable', 'The search could not be run. Try again.');
   const ids = ((data ?? []) as { id: string }[]).map((u) => u.id);
   const emailMatchesTruncated = ids.length > EMAIL_MATCH_LIMIT;
 
@@ -182,7 +185,7 @@ const adminContext = (req: AdminRequest, route: string): SecurityLogContext => (
 
 const requireAdminId = (req: AdminRequest): string => {
   const adminId = req.admin?.admin_id;
-  if (!adminId) throw new AppError('unauthenticated', 'Admin authentication required');
+  if (!adminId) throw new AppError('unauthenticated', 'Your session has ended. Sign in again.');
   return adminId;
 };
 
@@ -216,36 +219,36 @@ const rpcError = (error: { message?: string } | null): { appError: AppError; res
   const key = (error?.message ?? '').split(':')[0].trim();
   switch (key) {
     case 'admin_forbidden':
-      return { appError: new AppError('permission_denied', 'Forbidden'), result: 'forbidden' };
+      return { appError: new AppError('permission_denied', 'Your staff role cannot do this.'), result: 'forbidden' };
     case 'reason_required':
-      return { appError: new AppError('invalid_argument', 'A reason of at least 10 characters is required'), result: 'invalid_argument' };
+      return { appError: new AppError('invalid_argument', 'Give a reason of at least 10 characters.'), result: 'invalid_argument' };
     case 'tag_not_found':
     case 'old_tag_not_found':
-      return { appError: new AppError('not_found', 'Tag not found'), result: 'not_found' };
+      return { appError: new AppError('not_found', 'Token not found.'), result: 'not_found' };
     case 'new_tag_not_found':
-      return { appError: new AppError('not_found', 'Replacement tag not found'), result: 'not_found' };
+      return { appError: new AppError('not_found', 'Replacement chip not found.'), result: 'not_found' };
     case 'invalid_state':
-      return { appError: new AppError('conflict', 'The tag is not in a state that allows this action'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'This token cannot be changed in its current state. Reload the page.'), result: 'conflict' };
     case 'old_tag_invalid_state':
-      return { appError: new AppError('conflict', 'Only an active or suspended token can be reset'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'Only an active or suspended token can be moved to a new chip.'), result: 'conflict' };
     case 'old_tag_no_owner':
-      return { appError: new AppError('conflict', 'The token being reset has no owner'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'This token has no owner, so it cannot be moved to a new chip.'), result: 'conflict' };
     case 'new_tag_not_enrolled':
-      return { appError: new AppError('conflict', 'The replacement chip must be enrolled and unclaimed'), result: 'conflict' };
+      return { appError: new AppError('conflict', 'The new chip must be set up and not yet claimed.'), result: 'conflict' };
     case 'same_tag':
-      return { appError: new AppError('invalid_argument', 'The replacement chip must be a different chip'), result: 'invalid_argument' };
+      return { appError: new AppError('invalid_argument', 'Pick a different chip. The new chip cannot be the old one.'), result: 'invalid_argument' };
     case 'transfer_pending':
-      return { appError: new AppError('conflict', 'A transfer is pending on this token; cancel it first'), result: 'transfer_pending' };
+      return { appError: new AppError('conflict', 'A transfer is in progress for this token. It must finish or be cancelled first.'), result: 'transfer_pending' };
     case 'tag_retired':
-      return { appError: new AppError('conflict', 'A retired chip cannot be changed or reused'), result: 'token_retired' };
+      return { appError: new AppError('conflict', 'A retired chip cannot be changed or used again.'), result: 'token_retired' };
     default:
-      return { appError: new AppError('internal', 'The action could not be completed'), result: 'internal' };
+      return { appError: new AppError('internal', 'That did not work. Nothing was changed. Try again.'), result: 'internal' };
   }
 };
 
 const parseTagId = (req: AdminRequest): string => {
   const parsed = tagIdParamSchema.safeParse(pathParam(req.params.tagId));
-  if (!parsed.success) throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  if (!parsed.success) throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   return parsed.data;
 };
 
@@ -254,7 +257,7 @@ const parseTagId = (req: AdminRequest): string => {
 export const listTags = async (req: AdminRequest, res: Response) => {
   const logger = withLogContext({ requestId: req.requestId, route: '/api/v1/admin/tags' });
   const parsed = listTagsQuerySchema.safeParse(req.query);
-  if (!parsed.success) throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+  if (!parsed.success) throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   const q = parsed.data;
 
   const supabase = getServiceClient();
@@ -287,7 +290,7 @@ export const listTags = async (req: AdminRequest, res: Response) => {
 
   if (error) {
     logger.error('admin_tags_list_failed', { error: error.message });
-    throw new AppError('unavailable', 'Tag inventory could not be loaded');
+    throw new AppError('unavailable', 'Tokens could not be loaded. Try again.');
   }
 
   const rows = (data ?? []) as unknown as AdminTagRow[];
@@ -315,11 +318,12 @@ export const getTag = async (req: AdminRequest, res: Response) => {
 
   if (tagError) {
     logger.error('admin_tag_load_failed', { error: tagError.message });
-    throw new AppError('unavailable', 'Tag could not be loaded');
+    throw new AppError('unavailable', 'This token could not be loaded. Try again.');
   }
-  if (!tag) throw new AppError('not_found', 'Tag not found');
+  if (!tag) throw new AppError('not_found', 'Token not found.');
 
-  // Custody chain. Not `to_email` (what a sender typed); accounts by id here.
+  // Custody chain. Not `to_email` (what a sender typed): accounts by id, shown
+  // with the account's own email (one batched lookup below, never logged).
   const custody = await supabase
     .from('ownership_transfers')
     .select('id, transfer_type, status, from_user_id, to_user_id, initiated_at, completed_at, charged_amount, charged_currency, reissued_token')
@@ -361,13 +365,20 @@ export const getTag = async (req: AdminRequest, res: Response) => {
   for (const [name, part] of Object.entries({ custody, taps, proofs, audit, replaced })) {
     if (part.error) {
       logger.error('admin_tag_detail_part_failed', { part: name, error: part.error.message });
-      throw new AppError('unavailable', 'Tag details could not be loaded');
+      throw new AppError('unavailable', 'Token details could not be loaded. Try again.');
     }
   }
 
   const proof = (proofs.data ?? [])[0] as { created_at: string; anchored_at: string | null } | undefined;
   const tagRow = tag as unknown as AdminTagRow;
-  const emails = await loadEmails(supabase, [tagRow]);
+  const custodyRows = (custody.data ?? []) as Array<Record<string, unknown>>;
+  const tapRows = (taps.data ?? []) as Array<Record<string, unknown>>;
+  const emails = await loadEmailsByIds(supabase, [
+    tagRow.current_owner_id, tagRow.seller_id,
+    ...custodyRows.flatMap((t) => [t.from_user_id, t.to_user_id]),
+    ...tapRows.map((t) => t.scanned_by),
+  ]);
+  const emailOf = (id: unknown) => (typeof id === 'string' ? (emails.get(id) ?? null) : null);
 
   return ok(res, {
     tag: toAdminTag(tagRow, emails),
@@ -375,25 +386,28 @@ export const getTag = async (req: AdminRequest, res: Response) => {
     ownershipId: proof
       ? { status: 'current' as const, issuedAt: proof.created_at, anchoredAt: proof.anchored_at }
       : { status: 'none' as const, issuedAt: null, anchoredAt: null },
-    custody: ((custody.data ?? []) as Array<Record<string, unknown>>).map((t) => ({
+    custody: custodyRows.map((t) => ({
       id: t.id,
       type: t.transfer_type,
       status: t.status,
       fromAccountId: t.from_user_id,
       toAccountId: t.to_user_id,
+      fromEmail: emailOf(t.from_user_id),
+      toEmail: emailOf(t.to_user_id),
       initiatedAt: t.initiated_at,
       completedAt: t.completed_at,
       chargedAmount: t.charged_amount,
       chargedCurrency: t.charged_currency,
       reissue: t.reissued_token,
     })),
-    taps: ((taps.data ?? []) as Array<Record<string, unknown>>).map((t) => ({
+    taps: tapRows.map((t) => ({
       id: t.id,
       at: t.created_at,
       type: t.scan_type,
       valid: t.cmac_valid,
       counter: t.sun_counter_value,
       accountId: t.scanned_by,
+      accountEmail: emailOf(t.scanned_by),
     })),
     audit: ((audit.data ?? []) as Array<Record<string, unknown>>).map((a) => ({
       id: a.log_id,
@@ -419,7 +433,7 @@ const setSuspension = (suspend: boolean) => async (req: AdminRequest, res: Respo
   const parsed = suspensionBodySchema.safeParse(req.body);
   if (!parsed.success) {
     emitAdminAction(ctx, action, tagId, 'invalid_argument');
-    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+    throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   }
 
   const { data, error } = await getServiceClient().rpc('admin_set_tag_suspension', {
@@ -463,7 +477,7 @@ export const resetTag = async (req: AdminRequest, res: Response) => {
   const parsed = resetBodySchema.safeParse(req.body);
   if (!parsed.success) {
     emitAdminAction(ctx, 'reset', oldTagId, 'invalid_argument');
-    throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
+    throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   }
   const { newTagId, reason, confirmSuffix } = parsed.data;
 
@@ -476,18 +490,18 @@ export const resetTag = async (req: AdminRequest, res: Response) => {
 
   if (loadError) {
     logger.error('admin_reset_load_failed', { error: loadError.message });
-    throw new AppError('unavailable', 'Tag could not be loaded');
+    throw new AppError('unavailable', 'This token could not be loaded. Try again.');
   }
   if (!oldTag) {
     emitAdminAction(ctx, 'reset', oldTagId, 'not_found', newTagId);
-    throw new AppError('not_found', 'Tag not found');
+    throw new AppError('not_found', 'Token not found.');
   }
 
   // Typed confirmation: the admin must read the suffix off the chip being retired
   // (serial for v2 chips, UID for v1).
   if (confirmationSuffix(oldTag as { tag_uid: string; chip_serial: string | null }) !== confirmSuffix.toUpperCase()) {
     emitAdminAction(ctx, 'reset', oldTagId, 'invalid_argument', newTagId);
-    throw new AppError('invalid_argument', 'The confirmation does not match the chip being retired');
+    throw new AppError('invalid_argument', 'That does not match. Type the characters shown in the dialog.');
   }
 
   const custodyRecordId = randomUUID();

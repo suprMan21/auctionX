@@ -143,9 +143,9 @@ describe('prices', () => {
 
   it.each([
     ['effective_in_past', 400, /past/],
-    ['admin_forbidden: actor may not act on payments', 403, /forbidden/i],
+    ['admin_forbidden: actor may not act on payments', 403, /staff role cannot/],
     ['price_already_effective', 409, /already in effect/],
-    ['some unexpected relation "x" does not exist', 500, /could not be completed/],
+    ['some unexpected relation "x" does not exist', 500, /did not work/],
   ])('maps database error %s to %i without leaking it', async (dbError, status, message) => {
     hooks.rpc = rpcReturning({ admin_set_token_price: { error: dbError } });
     const app = await appWith('admin');

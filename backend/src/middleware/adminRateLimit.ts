@@ -60,7 +60,7 @@ function getProfile(req: Request): RateLimitConfig {
 export const adminRateLimit = (req: Request, res: Response, next: NextFunction): void => {
   // Must run after verifyAdminAuth so req.admin is populated
   if (!req.admin) {
-    res.status(401).json({ success: false, data: null, error: 'Not authenticated', code: 'UNAUTHENTICATED' });
+    res.status(401).json({ success: false, data: null, error: 'Your session has ended. Sign in again.', code: 'UNAUTHENTICATED' });
     return;
   }
 
@@ -81,7 +81,7 @@ export const adminRateLimit = (req: Request, res: Response, next: NextFunction):
       const retryAfter = Math.ceil((entry.blockedUntil - now) / 1000);
       res.set('Retry-After', String(retryAfter));
       res.status(429).json({
-        error: 'Rate limit exceeded. Try again later.',
+        error: 'Too many requests. Wait a minute and try again.',
         code: 'RATE_LIMITED',
         retryAfterSeconds: retryAfter
       });
@@ -109,7 +109,7 @@ export const adminRateLimit = (req: Request, res: Response, next: NextFunction):
       const retryAfter = Math.ceil(profile.blockDurationMs / 1000);
       res.set('Retry-After', String(retryAfter));
       res.status(429).json({
-        error: 'Rate limit exceeded. Try again later.',
+        error: 'Too many requests. Wait a minute and try again.',
         code: 'RATE_LIMITED',
         retryAfterSeconds: retryAfter
       });

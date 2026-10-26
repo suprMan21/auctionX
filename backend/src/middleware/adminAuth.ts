@@ -42,7 +42,7 @@ export const verifyAdminAuth = async (
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'No authorization token provided' });
+      res.status(401).json({ error: 'Your session has ended. Sign in again.' });
       return;
     }
 
@@ -54,14 +54,14 @@ export const verifyAdminAuth = async (
     if (authError) {
       const isExpired = authError.message?.toLowerCase().includes('expired');
       res.status(401).json({
-        error: isExpired ? 'Token expired' : 'Invalid token',
+        error: 'Your session has ended. Sign in again.',
         code: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID'
       });
       return;
     }
 
     if (!user) {
-      res.status(401).json({ error: 'Unauthenticated', code: 'UNAUTHENTICATED' });
+      res.status(401).json({ error: 'Your session has ended. Sign in again.', code: 'UNAUTHENTICATED' });
       return;
     }
 
@@ -84,7 +84,7 @@ export const verifyAdminAuth = async (
       .single();
 
     if (adminError || !adminData) {
-      res.status(403).json({ error: 'User is not an admin', code: 'FORBIDDEN' });
+      res.status(403).json({ error: 'This account does not have staff access.', code: 'FORBIDDEN' });
       return;
     }
 
@@ -99,7 +99,7 @@ export const verifyAdminAuth = async (
 
       if (tokenIssuedAt < adminData.session_version) {
         res.status(401).json({
-          error: 'Session has been invalidated. Please log in again.',
+          error: 'Your session has ended. Sign in again.',
           code: 'SESSION_REVOKED'
         });
         return;
@@ -155,7 +155,7 @@ export const verifyAdminAuth = async (
     next();
   } catch (error) {
     console.error('[adminAuth] Unexpected error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Something went wrong on our side. Try again.' });
   }
 };
 
@@ -163,13 +163,13 @@ export const verifyAdminAuth = async (
 export const requirePermission = (permission: AdminPermission) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.admin) {
-      res.status(401).json({ success: false, data: null, error: 'Not authenticated', code: 'UNAUTHENTICATED' });
+      res.status(401).json({ success: false, data: null, error: 'Your session has ended. Sign in again.', code: 'UNAUTHENTICATED' });
       return;
     }
 
     // The response never lists the admin's permissions (S-ADMIN2).
     if (!req.admin.permissions.includes(permission)) {
-      res.status(403).json({ success: false, data: null, error: 'Insufficient permissions', code: 'FORBIDDEN' });
+      res.status(403).json({ success: false, data: null, error: 'Your staff role cannot do this.', code: 'FORBIDDEN' });
       return;
     }
 
@@ -181,12 +181,12 @@ export const requirePermission = (permission: AdminPermission) => {
 export const requireBrandAccess = (brand: 'auctionx' | 'unmentionables') => {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.admin) {
-      res.status(401).json({ error: 'Not authenticated' });
+      res.status(401).json({ error: 'Your session has ended. Sign in again.' });
       return;
     }
 
     if (req.admin.brand !== 'both' && req.admin.brand !== brand) {
-      res.status(403).json({ success: false, data: null, error: 'Brand access denied', code: 'FORBIDDEN' });
+      res.status(403).json({ success: false, data: null, error: 'Your staff role cannot do this.', code: 'FORBIDDEN' });
       return;
     }
 
