@@ -138,8 +138,9 @@ token sale without admin tooling.
   - [ ] **UX-2** (Feature Backlog): one table style (resizable columns, whole-row click, paging), chip combobox +
         role radios, price card buttons, re-issues open on "Needs action", stuck re-issue fee → its request.
   - [ ] **UX-3**: nav sections + Settings page, audit-log links, phone polish.
-  - [ ] **GitHub Issues in the console**: Boss to decide which issues support may see (label / incident type /
-        tied to an account) before it is built.
+  - [ ] **Support tickets (S29 + S30), in-house** (Decision 2026-10-26): customer tickets in the console, email from
+        hello@, linked to account/token; GitHub stays engineering-only, support sees only issues escalated from
+        their tickets.
   - [ ] Creator ID checks need `review_sellers` (super_admin only today): Boss to say if Admin or Support need it.
 - **S-ADMIN1 Ph3b: admin pricing + vouchers** ✅ live + verified 2026-10-25 (`docs/S_ADMIN1_PH3B_VERIFICATION.md`).
   Price locked at transfer start; changes now or scheduled; voucher used by the fee payer. Console click-through
