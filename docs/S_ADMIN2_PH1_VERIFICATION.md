@@ -148,8 +148,14 @@ showing the console with the permissions it loaded at sign-in.
 4. `git push` → confirm App Runner deploy (`scripts/verify-backend-deploy.sh`), probe `GET /api/v1/admin/me` (401 not 404).
 5. `scripts/deploy-frontend.sh staging` right after: the old Users page sends `search=` which the new API refuses.
 
-## Pending live verification
+## Live verification (2026-10-26, Toronto evening of 2026-10-25)
 
-- [ ] Boss: console click-through as super_admin (search, detail, delete-window card, audit filters).
-- [ ] Suspend test@ while signed in on a phone → token actions refused; tap/verify of chip_004 still works; lift.
-- [ ] Grant test2@ `support` → sees Users + Stuck payments only; revoke.
+- [x] `db push` (`20261025000002/3`, then `20261026000001`); live suite on staging **34/34**, older suites pass;
+      backfill: 9b9e retired with `retired_role = super_admin`, 2b3f only active staff. Types regenerated.
+- [x] Backend deployed (`/admin/me` → 401), frontend deployed (bundle has the new console).
+- [x] Suspend test@ 1 h ("testing suspension", 04:17:58 UTC): 2 sessions ended; sign-in refused ("User is banned");
+      chip_004 tap verified 04:18:24 (CMAC valid) during the suspension; lifted 04:18:50, account clean.
+- [x] Support role on test2@ granted 04:12:46, revoked 04:13:33: no admin request accepted after the revoke
+      (`last_active_at` 04:13:17), but the console stayed open → follow-up `20261026000001` (above).
+- [x] Retest on test@ (grant 04:56:01, revoke 04:56:41, `sessions_ended: 1`): signed out of the console.
+- [x] Console click-through as super_admin.

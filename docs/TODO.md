@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-25 (S-SEC hotfix: admin RPCs + users table locked down; old accounts removed)
+**Last updated:** 2026-10-26 (S-ADMIN2 Ph1 live + verified: accounts, roles, one permission model)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -70,7 +70,7 @@ Live on staging: `chip_001` tapped → genuine/unclaimed → claimed by test@ �
 2026-10-05 (`docs/S_NFC3_FE_RECIPIENT_EMAIL_VERIFICATION.md`). → **S-ADMIN1 Ph1 ✅ live 2026-10-05** → **chip identity
 fix: S-NFC-ID ✅ live 2026-10-07** (KDF v2 per-chip serial + K1/K4; duplicate-UID finding was a suffix misread —
 `docs/S_NFC_ID_VERIFICATION.md`) → **S-ADMIN1 physical reset test ✅ 2026-10-09** (chip_002 → chip_003) → **S-ADMIN1 Ph2 ✅ 2026-10-09** (re-issue chip_003 → chip_004, $10) → S-ADMIN1
-Ph3a ✅ 2026-10-25 (stuck-payment queue + GitHub Issues) → admin search + token names ✅ 2026-10-24 → Ph3b (admin pricing + vouchers) ✅ 2026-10-24 → S-SEC hotfix (RPC + users lockdown) ✅ 2026-10-25 → S-ADMIN2 (users/roles) →
+Ph3a ✅ 2026-10-25 (stuck-payment queue + GitHub Issues) → admin search + token names ✅ 2026-10-24 → Ph3b (admin pricing + vouchers) ✅ 2026-10-24 → S-SEC hotfix (RPC + users lockdown) ✅ 2026-10-25 → S-ADMIN2 Ph1 (users/roles) ✅ 2026-10-26 →
 S-ANCHOR1 (Ownership Registry on Base) → S-NFC4 (external API; its fee section is outdated, use flat $2.50) →
 S-TIER1 (Premier + token checkout) → S-SEC1 (red team, hard gate before any public token sale) → S-SEC2 (external pentest).
 
@@ -133,16 +133,23 @@ token sale without admin tooling.
 - **Admin search + token names ✅ and `trust proxy` ✅ live + verified 2026-10-24**
   (`docs/S_ADMIN1_SEARCH_TRUST_PROXY_VERIFICATION.md`). Search audit-logged first; rate limits now per client.
 - **Admin console UX** (backlog, Boss 2026-10-24): resizable columns, whole-row click, emails throughout the token
-  detail page (custody from/to, taps), audit-log Action / Entity type dropdowns; Free transfers page should not
+  detail page (custody from/to, taps) (audit-log dropdowns ✅ in S-ADMIN2); Free transfers page should not
   re-run (and re-audit) its email lookup after every grant/revoke. ~1 session; pull forward any time.
 - **S-ADMIN1 Ph3b: admin pricing + vouchers** ✅ live + verified 2026-10-25 (`docs/S_ADMIN1_PH3B_VERIFICATION.md`).
   Price locked at transfer start; changes now or scheduled; voucher used by the fee payer. Console click-through
   verified against the audit log.
   - [ ] A voucher transfer on a real chip, the next time a transfer is tested anyway (do not spend a chip for it).
   - [ ] Passkey step-up for price changes once S-2FA lands.
-- **S-ADMIN2: users, roles and permissions.** User search and detail, suspend/reactivate, roles + `manage_users`,
-  audit viewer, admin MFA (needs S-2FA). Owners stay anonymous except to support, with a logged reason. Owner
-  override, if ever wanted, belongs here with verified identity.
+- **S-ADMIN2 Ph1: accounts, roles and permissions ✅ live + verified 2026-10-26** (`docs/S_ADMIN2_PH1_VERIFICATION.md`,
+  migrations `20261025000002/3`, `20261026000001`). Users search/detail, Suspend / Retire → Delete (24 h window),
+  staff roles super_admin / admin / support (super_admin only), one permission model, audit log filters. Revoking or
+  changing a role signs the account out and the console re-checks access. Live: suspend test@ (sign-in refused,
+  sessions ended, chip_004 still verified), support role grant/revoke, forced sign-out on revoke.
+  - [ ] Login page shows Supabase's raw "User is banned" for suspended/retired accounts → friendly copy.
+  - [ ] Admin 2FA (`FEATURE_REQUIRE_ADMIN_2FA`, off) turns on with S-2FA enrolment.
+  - [ ] Accepted: an access token issued before a suspend still reads own-row data straight from Supabase (≤ 1 h);
+        every backend action is refused. Revisit in S-SEC1.
+  - [ ] Delete has not been run on a real account (dry-run checks only); no account is eligible today.
 
 Locked decisions behind it: reset is **admin-only**; retired chips are **never reused** (now a DB trigger); token-admin
 authz = admin_users + `manage_nfc` (2026-10-05).
