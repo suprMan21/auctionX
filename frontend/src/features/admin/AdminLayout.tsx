@@ -9,7 +9,6 @@ import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { cn } from '@/lib/cn';
-import { BRAND_LABEL } from '@/constants/branding';
 import { isMarketplaceEnabledOnClient } from '../../lib/featureFlags';
 import { hasPermission, PERMISSIONS, useAdminRole } from './lib/adminRole';
 
@@ -34,19 +33,19 @@ const ALL_NAV_ITEMS: NavItem[] = [
   },
   {
     to: '/admin/users',
-    label: 'Users',
+    label: 'Accounts',
     permission: PERMISSIONS.viewUsers,
     icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
   },
   {
     to: '/admin/tags',
-    label: 'Tags',
+    label: 'Tokens',
     permission: PERMISSIONS.manageNfc,
     icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z',
   },
   {
     to: '/admin/reissue-requests',
-    label: 'Re-issue queue',
+    label: 'Re-issues',
     permission: PERMISSIONS.manageNfc,
     // arrows-circle (refresh): one chip swapped for another
     icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
@@ -74,7 +73,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   },
   {
     to: '/admin/verifications',
-    label: 'Verifications',
+    label: 'Creator ID checks',
     permission: PERMISSIONS.reviewSellers,
     icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
   },
@@ -98,13 +97,13 @@ const ALL_NAV_ITEMS: NavItem[] = [
   },
   {
     to: '/admin/audit-logs',
-    label: 'Audit Logs',
+    label: 'Audit log',
     permission: PERMISSIONS.viewAuditLogs,
     icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
   },
   {
     to: '/admin/health',
-    label: 'Health',
+    label: 'System health',
     icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
   },
 ];
@@ -162,7 +161,7 @@ export const AdminLayout = () => {
       {/* Logo */}
       <div className="p-6 border-b border-white/10">
         <span className="text-lg font-bold bg-gradient-to-r from-primary-400 to-accent-400 bg-clip-text text-transparent">
-          {BRAND_LABEL.AUCTIONX} Admin
+          Authentic Materials admin
         </span>
       </div>
 
@@ -237,7 +236,7 @@ export const AdminLayout = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="text-sm font-semibold text-white">{BRAND_LABEL.AUCTIONX} Admin</span>
+          <span className="text-sm font-semibold text-white">Authentic Materials admin</span>
         </header>
 
         <main className="flex-1 p-6 lg:p-8">

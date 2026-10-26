@@ -135,11 +135,11 @@ export type AuditFacets = z.infer<typeof auditFacetsSchema>;
 
 /** Plain-language Delete blockers, matching the database function's keys. */
 export const DELETE_BLOCKER_TEXT: Record<string, string> = {
-  not_retired: 'Retire the account first.',
-  delete_window_open: 'The waiting window since Retire has not passed yet.',
-  owns_tokens: 'The account owns tokens. They must be transferred first.',
-  created_tokens: 'The account created tokens, so it cannot be deleted.',
-  pending_transfer: 'The account has a pending transfer.',
-  audit_actor: 'The account performed admin actions, so it stays retired permanently.',
-  account_has_history: 'The account has payment or re-issue history, so it stays retired.',
+  not_retired: 'The account has not been retired yet. Retire it first.',
+  delete_window_open: 'The waiting time after retiring has not passed yet.',
+  owns_tokens: 'The account still owns tokens. Transfer them to another account first.',
+  created_tokens: 'The account created tokens, so it stays retired and cannot be deleted.',
+  pending_transfer: 'The account has a transfer in progress. Wait for it to finish or cancel it first.',
+  audit_actor: 'The account has taken staff actions, so it stays retired and cannot be deleted.',
+  account_has_history: 'The account has payment or re-issue history, so it stays retired and cannot be deleted.',
 };

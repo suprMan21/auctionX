@@ -11,6 +11,7 @@ import { GRANTABLE_ROLES, ROLE_LABELS, type AccountDetail, type GrantableRole } 
 import { AdminDialog, ADMIN_BUTTON_CLASS, ADMIN_FIELD_CLASS } from './AdminDialog';
 import { ErrorLine, REASON_MIN, ReasonField } from './AdminTagDialogs';
 import { deleteConfirmationOf } from '../lib/accountActions';
+import { ACTION_FAILED, errorMessage } from '../lib/display';
 
 export type AccountAction = 'suspend' | 'unsuspend' | 'retire' | 'reactivate' | 'delete' | 'role';
 
@@ -23,34 +24,39 @@ const SUSPEND_OPTIONS = [
 ] as const;
 
 
-const COPY: Record<Exclude<AccountAction, 'role'>, { title: string; button: string; danger: boolean; body: string }> = {
+const COPY: Record<Exclude<AccountAction, 'role'>, { title: string; button: string; busy: string; danger: boolean; body: string }> = {
   suspend: {
     title: 'Suspend account',
     button: 'Suspend account',
+    busy: 'Suspending…',
     danger: false,
     body: 'The account is signed out everywhere and cannot sign in or act on its tokens until the suspension ends or is lifted. Its tokens still verify.',
   },
   unsuspend: {
     title: 'Lift suspension',
     button: 'Lift suspension',
+    busy: 'Lifting suspension…',
     danger: false,
     body: 'The account can sign in again straight away.',
   },
   retire: {
     title: 'Retire account',
     button: 'Retire account',
+    busy: 'Retiring…',
     danger: true,
-    body: 'Step 1 of removing an account. It is signed out everywhere, cannot sign in, and loses any admin role. Its tokens still verify. You can reactivate it later; admin access is not restored.',
+    body: 'This is step 1 of deleting an account. It is signed out everywhere, cannot sign in, and loses any staff role. Its tokens still verify. You can reactivate it later, but the staff role does not come back.',
   },
   reactivate: {
     title: 'Reactivate account',
     button: 'Reactivate account',
+    busy: 'Reactivating…',
     danger: false,
-    body: 'The account can sign in again. Any admin role it had stays removed.',
+    body: 'The account can sign in again. Any staff role it had stays removed.',
   },
   delete: {
     title: 'Delete account',
     button: 'Delete account permanently',
+    busy: 'Deleting…',
     danger: true,
     body: 'This removes the sign-in account and profile for good. It cannot be undone. The audit history stays.',
   },
@@ -109,7 +115,7 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
       else await adminApi.accountAction(account.id, action, r);
       onDone(action);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The action failed');
+      setError(errorMessage(err, ACTION_FAILED));
     } finally {
       setBusy(false);
     }
@@ -117,7 +123,7 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
 
   const who = account.email ?? account.id;
   const copy = action === 'role'
-    ? { title: 'Change staff role', button: 'Save role', danger: false, body: 'Only a super admin can do this. The change applies on the account’s next admin request.' }
+    ? { title: 'Change staff role', button: 'Save staff role', busy: 'Saving…', danger: false, body: 'Only a super admin can do this. The change takes effect straight away and signs the account out.' }
     : COPY[action];
 
   return (
@@ -177,7 +183,7 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
           disabled={!canSubmit}
           className={`${ADMIN_BUTTON_CLASS} ${copy.danger ? 'bg-red-600 hover:bg-red-500' : action === 'suspend' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-primary-600 hover:bg-primary-500'} text-white`}
         >
-          {busy ? 'Working…' : copy.button}
+          {busy ? copy.busy : copy.button}
         </button>
       </div>
     </AdminDialog>

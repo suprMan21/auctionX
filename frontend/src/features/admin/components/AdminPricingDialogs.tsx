@@ -18,6 +18,7 @@ import {
   toIsoWithOffset,
   usd,
 } from '../lib/pricing';
+import { errorMessage } from '../lib/display';
 
 interface SetPriceDialogProps {
   open: boolean;
@@ -75,7 +76,7 @@ export const AdminSetPriceDialog = ({ open, current, onClose, onDone }: SetPrice
       });
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The price could not be saved');
+      setError(errorMessage(err, 'The price could not be saved. Try again.'));
     } finally {
       setBusy(false);
     }
@@ -85,7 +86,7 @@ export const AdminSetPriceDialog = ({ open, current, onClose, onDone }: SetPrice
     <AdminDialog
       open={open}
       onClose={onClose}
-      title="Change a price"
+      title="Change price"
       description="Prices are in US dollars. A change applies only to transfers started, and re-issue requests made, after it takes effect."
     >
       <div className="space-y-1">
@@ -128,7 +129,7 @@ export const AdminSetPriceDialog = ({ open, current, onClose, onDone }: SetPrice
                 onChange={() => setWhen(w)}
                 className="accent-primary-500"
               />
-              {w === 'now' ? 'Now' : 'Schedule'}
+              {w === 'now' ? 'Now' : 'Later'}
             </label>
           ))}
         </div>
@@ -202,7 +203,7 @@ export const AdminCancelPriceDialog = ({ open, change, currentCents, onClose, on
       await adminApi.cancelPrice(change.id, reason.trim());
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The change could not be cancelled');
+      setError(errorMessage(err, 'The change could not be cancelled. Try again.'));
     } finally {
       setBusy(false);
     }
@@ -222,7 +223,7 @@ export const AdminCancelPriceDialog = ({ open, change, currentCents, onClose, on
       <ErrorLine message={error} />
       <div className="flex justify-end gap-3">
         <button type="button" onClick={onClose} className={`${ADMIN_BUTTON_CLASS} bg-dark-700 text-gray-200 hover:bg-dark-600`}>
-          Keep it
+          Keep change
         </button>
         <button
           type="button"
@@ -230,7 +231,7 @@ export const AdminCancelPriceDialog = ({ open, change, currentCents, onClose, on
           disabled={busy || reason.trim().length < REASON_MIN}
           className={`${ADMIN_BUTTON_CLASS} bg-red-600 hover:bg-red-500 text-white`}
         >
-          {busy ? 'Working…' : 'Cancel the change'}
+          {busy ? 'Cancelling…' : 'Cancel change'}
         </button>
       </div>
     </AdminDialog>

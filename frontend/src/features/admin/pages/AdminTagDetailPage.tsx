@@ -11,13 +11,12 @@ import { adminApi, chipLabel, type AdminTagDetailResponse } from '../api/adminAp
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
 import { AdminResetDialog, AdminSuspendDialog } from '../components/AdminTagDialogs';
 import { ADMIN_BUTTON_CLASS } from '../components/AdminDialog';
+import { NONE, errorMessage, formatAmount, formatWhen as fmt, loadFailed } from '../lib/display';
+import { auditActionLabel, destructionLabel, transferStatusLabel, transferTypeLabel } from '../lib/labels';
 
 type Detail = AdminTagDetailResponse['data'];
 type OpenDialog = 'suspend' | 'unsuspend' | 'reset' | null;
 
-const fmt = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString() : '—');
-const money = (cents: number | null, currency: string | null): string =>
-  cents === null ? '—' : `${(cents / 100).toFixed(2)} ${(currency ?? 'usd').toUpperCase()}`;
 
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
   <section className="glass rounded-2xl p-5 space-y-3" aria-label={title}>
@@ -47,7 +46,7 @@ export const AdminTagDetailPage = () => {
     adminApi
       .getTag(tagId)
       .then((res) => { setFailure(null); setLoaded({ tagId, data: res.data }); })
-      .catch((err) => setFailure({ tagId, message: err instanceof Error ? err.message : 'Failed to load tag' }));
+      .catch((err) => setFailure({ tagId, message: errorMessage(err, loadFailed('The token')) }));
   }, [tagId]);
 
   useEffect(() => { load(); }, [load]);
@@ -59,13 +58,13 @@ export const AdminTagDetailPage = () => {
     return (
       <div className="glass rounded-2xl p-6 border border-red-500/30">
         <p role="alert" className="text-red-400 text-sm">{error}</p>
-        <Link to="/admin/tags" className="text-primary-300 text-sm hover:underline">Back to tags</Link>
+        <Link to="/admin/tags" className="text-primary-300 text-sm hover:underline">Back to tokens</Link>
       </div>
     );
   }
   if (!detail) {
     return (
-      <div className="flex items-center justify-center h-48" role="status" aria-label="Loading tag">
+      <div className="flex items-center justify-center h-48" role="status" aria-label="Loading token">
         <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -81,9 +80,9 @@ export const AdminTagDetailPage = () => {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
-          <Link to="/admin/tags" className="text-primary-300 text-sm hover:underline">← Tags</Link>
+          <Link to="/admin/tags" className="text-primary-300 text-sm hover:underline">← Tokens</Link>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <span className="font-mono">Chip {chipLabel(tag)}</span>
+            <span className="font-mono">Token {chipLabel(tag)}</span>
             <AdminLifecycleBadge status={tag.lifecycleStatus} />
           </h1>
         </div>
@@ -91,17 +90,17 @@ export const AdminTagDetailPage = () => {
           <div className="flex gap-2">
             {canSuspend && (
               <button type="button" onClick={() => setDialog('suspend')} className={`${ADMIN_BUTTON_CLASS} bg-amber-600 hover:bg-amber-500 text-white`}>
-                Suspend
+                Suspend token…
               </button>
             )}
             {canUnsuspend && (
               <button type="button" onClick={() => setDialog('unsuspend')} className={`${ADMIN_BUTTON_CLASS} bg-primary-600 hover:bg-primary-500 text-white`}>
-                Lift suspension
+                Lift suspension…
               </button>
             )}
             {canReset && (
               <button type="button" onClick={() => setDialog('reset')} className={`${ADMIN_BUTTON_CLASS} bg-red-600 hover:bg-red-500 text-white`}>
-                Reset token…
+                Move to new chip…
               </button>
             )}
           </div>
@@ -114,9 +113,9 @@ export const AdminTagDetailPage = () => {
 
       {tag.lifecycleStatus === 'RETIRED' && (
         <div className="glass rounded-2xl px-4 py-3 text-sm border border-red-500/30 text-red-300">
-          Retired {fmt(tag.retiredAt)}. Destruction: <strong>{tag.destructionStatus ?? '—'}</strong>.
+          Retired {fmt(tag.retiredAt)}. Chip destruction: <strong>{destructionLabel(tag.destructionStatus).toLowerCase()}</strong>.
           {tag.replacedByTagId && (
-            <> Replaced by <Link to={`/admin/tags/${tag.replacedByTagId}`} className="underline">this chip</Link>.</>
+            <> Moved to a new chip (<Link to={`/admin/tags/${tag.replacedByTagId}`} className="underline">view</Link>).</>
           )}
           {tag.retiredReason && <span className="block mt-1 text-gray-300">Reason: {tag.retiredReason}</span>}
         </div>
@@ -128,20 +127,20 @@ export const AdminTagDetailPage = () => {
         </div>
       )}
 
-      <Section title="Chip">
+      <Section title="Details">
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="Owner">
-            {tag.ownerEmail ?? '—'}
+            {tag.ownerEmail ?? NONE}
             {tag.ownerAccountId && <span className="block text-xs text-gray-400 font-mono">{tag.ownerAccountId}</span>}
           </Field>
           <Field label="Creator">
-            {tag.creatorEmail ?? '—'}
+            {tag.creatorEmail ?? NONE}
             {tag.creatorAccountId && <span className="block text-xs text-gray-400 font-mono">{tag.creatorAccountId}</span>}
           </Field>
-          <Field label="Item">{tag.itemId ?? '—'}</Field>
-          <Field label="Key version">{tag.sdmKeyVersion ?? '—'}</Field>
-          <Field label="Tap counter">{tag.sunCounter}</Field>
-          <Field label="Enrolled">{fmt(tag.registeredAt)}</Field>
+          <Field label="Item">{tag.itemId ?? NONE}</Field>
+          <Field label="Key version">{tag.sdmKeyVersion ?? NONE}</Field>
+          <Field label="Times tapped">{tag.sunCounter}</Field>
+          <Field label="Set up">{fmt(tag.registeredAt)}</Field>
           <Field label="Activated">{fmt(tag.activatedAt)}</Field>
           <Field label="Ownership ID">
             {detail.ownershipId.status === 'current' ? `Current since ${fmt(detail.ownershipId.issuedAt)}` : 'None'}
@@ -149,16 +148,16 @@ export const AdminTagDetailPage = () => {
         </dl>
         {detail.replacesTagIds.length > 0 && (
           <p className="text-sm text-gray-300">
-            Replaces{' '}
+            Moved here from a retired chip (
             {detail.replacesTagIds.map((id, i) => (
-              <span key={id}>{i > 0 && ', '}<Link to={`/admin/tags/${id}`} className="text-primary-300 underline">retired chip</Link></span>
+              <span key={id}>{i > 0 && ', '}<Link to={`/admin/tags/${id}`} className="text-primary-300 underline">view</Link></span>
             ))}
-            .
+            ).
           </p>
         )}
       </Section>
 
-      <Section title="Custody chain">
+      <Section title="Ownership history">
         {detail.custody.length === 0 ? (
           <p className="text-sm text-gray-400">No transfers recorded.</p>
         ) : (
@@ -177,11 +176,11 @@ export const AdminTagDetailPage = () => {
               <tbody>
                 {detail.custody.map((c) => (
                   <tr key={c.id} className="border-t border-white/5 text-gray-200">
-                    <td className="py-2 pr-4">{c.type}{c.reissue ? ' (re-issue)' : ''}</td>
-                    <td className="py-2 pr-4">{c.status ?? '—'}</td>
-                    <td className="py-2 pr-4 font-mono text-xs">{c.fromAccountId ?? '—'}</td>
-                    <td className="py-2 pr-4 font-mono text-xs">{c.toAccountId ?? '—'}</td>
-                    <td className="py-2 pr-4">{money(c.chargedAmount, c.chargedCurrency)}</td>
+                    <td className="py-2 pr-4">{transferTypeLabel(c.type)}{c.reissue && c.type !== 'REISSUE' ? ' (re-issue)' : ''}</td>
+                    <td className="py-2 pr-4">{transferStatusLabel(c.status)}</td>
+                    <td className="py-2 pr-4 font-mono text-xs">{c.fromAccountId ?? NONE}</td>
+                    <td className="py-2 pr-4 font-mono text-xs">{c.toAccountId ?? NONE}</td>
+                    <td className="py-2 pr-4">{formatAmount(c.chargedAmount, c.chargedCurrency)}</td>
                     <td className="py-2">{fmt(c.completedAt)}</td>
                   </tr>
                 ))}
@@ -199,8 +198,8 @@ export const AdminTagDetailPage = () => {
             {detail.taps.map((t) => (
               <li key={t.id} className="py-2 flex flex-wrap gap-x-4 text-gray-200">
                 <span>{fmt(t.at)}</span>
-                <span className={t.valid ? 'text-emerald-300' : 'text-red-300'}>{t.valid ? '✓ valid' : '✕ invalid'}</span>
-                <span>counter {t.counter ?? '—'}</span>
+                <span className={t.valid ? 'text-emerald-300' : 'text-red-300'}>{t.valid ? '✓ Valid' : '✕ Not valid'}</span>
+                {t.counter !== null && <span>tap #{t.counter}</span>}
                 {t.accountId && <span className="font-mono text-xs text-gray-400">by {t.accountId}</span>}
               </li>
             ))}
@@ -208,14 +207,14 @@ export const AdminTagDetailPage = () => {
         )}
       </Section>
 
-      <Section title="Admin audit trail">
+      <Section title="Staff actions">
         {detail.audit.length === 0 ? (
-          <p className="text-sm text-gray-400">No admin actions on this chip.</p>
+          <p className="text-sm text-gray-400">No staff actions on this token yet.</p>
         ) : (
           <ul className="divide-y divide-white/5 text-sm">
             {detail.audit.map((a) => (
               <li key={a.id} className="py-2 text-gray-200">
-                <span className="font-medium">{a.action}</span> by {a.adminEmail} · {fmt(a.at)}
+                <span className="font-medium" title={a.action}>{auditActionLabel(a.action)}</span> by {a.adminEmail} · {fmt(a.at)}
                 {a.reason && <span className="block text-gray-400">“{a.reason}”</span>}
               </li>
             ))}

@@ -4,7 +4,8 @@
  * Status and page are URL-synced like the other admin lists. The search term is
  * NOT: it is often an email, and the address bar would keep it in browser
  * history. One box matches owner email (partial), chip name, serial suffix or
- * UID suffix; the backend audit-logs every search.
+ * UID suffix (the placeholder does not mention the UID); the backend
+ * audit-logs every search.
  * Each row's chip label is a real link, so the table is keyboard navigable.
  */
 
@@ -12,19 +13,18 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { adminApi, chipLabel, type AdminTag, type AdminTagLifecycleStatus } from '../api/adminApi';
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
+import { NONE, errorMessage, formatWhen as fmt, loadFailed, shortId } from '../lib/display';
 
 const STATUS_OPTIONS: ReadonlyArray<{ label: string; value: '' | AdminTagLifecycleStatus }> = [
   { label: 'All', value: '' },
-  { label: 'Enrolled', value: 'ENROLLED' },
+  { label: 'Ready to claim', value: 'ENROLLED' },
   { label: 'Active', value: 'ACTIVE' },
   { label: 'Suspended', value: 'SUSPENDED' },
   { label: 'Retired', value: 'RETIRED' },
-  { label: 'Released', value: 'RELEASED' },
+  { label: 'Released by owner', value: 'RELEASED' },
 ];
 
 const PAGE_SIZE = 25;
-const fmt = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString() : '—');
-const shortId = (id: string | null): string => (id ? `${id.slice(0, 8)}…` : '—');
 
 export const AdminTagsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -54,7 +54,7 @@ export const AdminTagsPage = () => {
         }
       })
       .catch((err) => {
-        if (!cancelled) setFailure({ key: queryKey, message: err instanceof Error ? err.message : 'Failed to load tags' });
+        if (!cancelled) setFailure({ key: queryKey, message: errorMessage(err, loadFailed('Tokens')) });
       });
     return () => { cancelled = true; };
   }, [status, search, page, queryKey]);
@@ -84,8 +84,8 @@ export const AdminTagsPage = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Tags</h1>
-        <p className="text-gray-400 text-sm mt-1">{total} chip{total === 1 ? '' : 's'}</p>
+        <h1 className="text-2xl font-bold text-white">Tokens</h1>
+        <p className="text-gray-400 text-sm mt-1">{total} token{total === 1 ? '' : 's'}</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -115,13 +115,13 @@ export const AdminTagsPage = () => {
             if (page !== 1) update({ page: '1' });
           }}
         >
-          <label htmlFor="tag-search" className="sr-only">Search by owner email, chip name, serial or UID</label>
+          <label htmlFor="tag-search" className="sr-only">Search by owner email, token name or serial number</label>
           <input
             id="tag-search"
             type="search"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value.trim())}
-            placeholder="Email, chip name, serial or UID…"
+            placeholder="Owner email, token name or serial number…"
             aria-invalid={!searchValid}
             aria-describedby="tag-search-note"
             autoComplete="off"
@@ -142,12 +142,12 @@ export const AdminTagsPage = () => {
       <p id="tag-search-note" className="text-xs text-gray-400 -mt-3 text-right">Searches are recorded in the audit log.</p>
       {truncated && (
         <p role="status" className="text-amber-300 text-sm">
-          More than 50 accounts match that email. Only the first 50 are shown; type more of the address.
+          More than 50 accounts match that email. Showing the first 50. Type more of the address to narrow it down.
         </p>
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center h-48" role="status" aria-label="Loading tags">
+        <div className="flex items-center justify-center h-48" role="status" aria-label="Loading tokens">
           <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : error ? (
@@ -156,20 +156,20 @@ export const AdminTagsPage = () => {
         </div>
       ) : rows.length === 0 ? (
         <div className="glass rounded-2xl p-6">
-          <p className="text-gray-400 text-sm">No chips match the current filters.</p>
+          <p className="text-gray-400 text-sm">No tokens match. Try another status or search.</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-white/10">
           <table className="w-full text-sm">
             <thead className="bg-dark-700 text-gray-400">
               <tr>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Chip</th>
+                <th scope="col" className="text-left px-4 py-3 font-medium">Token</th>
                 <th scope="col" className="text-left px-4 py-3 font-medium">Status</th>
                 <th scope="col" className="text-left px-4 py-3 font-medium">Owner</th>
                 <th scope="col" className="text-left px-4 py-3 font-medium">Creator</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Key ver.</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Taps</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Enrolled</th>
+                <th scope="col" className="text-left px-4 py-3 font-medium">Key version</th>
+                <th scope="col" className="text-left px-4 py-3 font-medium">Times tapped</th>
+                <th scope="col" className="text-left px-4 py-3 font-medium">Set up</th>
               </tr>
             </thead>
             <tbody>
@@ -186,7 +186,7 @@ export const AdminTagsPage = () => {
                   <td className="px-4 py-3"><AdminLifecycleBadge status={row.lifecycleStatus} /></td>
                   <td className="px-4 py-3 text-gray-300 break-all">{row.ownerEmail ?? shortId(row.ownerAccountId)}</td>
                   <td className="px-4 py-3 text-gray-300 break-all">{row.creatorEmail ?? shortId(row.creatorAccountId)}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.sdmKeyVersion ?? '—'}</td>
+                  <td className="px-4 py-3 text-gray-300">{row.sdmKeyVersion ?? NONE}</td>
                   <td className="px-4 py-3 text-gray-300">{row.sunCounter}</td>
                   <td className="px-4 py-3 text-gray-400">{fmt(row.registeredAt)}</td>
                 </tr>

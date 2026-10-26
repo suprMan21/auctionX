@@ -21,10 +21,12 @@ import {
 } from '../api/adminApi';
 import { AdminReapplyPaymentDialog, AdminRefundPaymentDialog } from '../components/AdminStuckPaymentDialogs';
 import { moneyOf } from '../lib/stuckPayments';
+import { NONE, errorMessage, formatWhen as fmt, loadFailed, shortId } from '../lib/display';
+import { reissueStageLabel, stuckStatusLabel, transferStatusLabel } from '../lib/labels';
 
 const FILTERS: ReadonlyArray<{ label: string; value: AdminStuckPaymentFilter }> = [
   { label: 'Open', value: 'OPEN' },
-  { label: 'Applied', value: 'RESOLVED' },
+  { label: 'Resolved', value: 'RESOLVED' },
   { label: 'Refunded', value: 'REFUNDED' },
   { label: 'All', value: 'ALL' },
 ];
@@ -37,7 +39,7 @@ const REASON_COPY: Record<AdminStuckPaymentReason, { what: string; next: string 
   },
   apply_failed: {
     what: 'The payment arrived but applying it failed.',
-    next: 'Re-apply. If it fails again, the debug team has the details.',
+    next: 'Re-apply. If it fails again, wait: our engineers have been notified.',
   },
   no_recipient: {
     what: 'The payment arrived but the transfer has no recipient account yet.',
@@ -66,8 +68,12 @@ const RESOLUTION_COPY: Record<NonNullable<AdminStuckPayment['resolution']>, stri
   refund: 'Refunded',
 };
 
-const fmt = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString() : '—');
-const shortId = (id: string | null): string => (id ? `${id.slice(0, 8)}…` : '—');
+/** Where the transfer or re-issue the payment belongs to stands now. */
+const targetNow = (p: AdminStuckPayment): string => {
+  if (!p.target) return 'No longer exists';
+  if (p.kind === 'transfer_fee') return transferStatusLabel(p.target.status);
+  return p.target.status ? reissueStageLabel(p.target.status, p.target.paymentStatus) : NONE;
+};
 
 type OpenDialog =
   | { kind: 'none' }
@@ -97,7 +103,7 @@ export const AdminStuckPaymentsPage = () => {
         if (!cancelled) setResult({ key: queryKey, data: res.data });
       })
       .catch((err) => {
-        if (!cancelled) setFailure({ key: queryKey, message: err instanceof Error ? err.message : 'Failed to load stuck payments' });
+        if (!cancelled) setFailure({ key: queryKey, message: errorMessage(err, loadFailed('Stuck payments')) });
       });
     return () => { cancelled = true; };
   }, [filter, queryKey]);
@@ -128,7 +134,7 @@ export const AdminStuckPaymentsPage = () => {
       });
       setReloadKey((k) => k + 1);
     } catch (err) {
-      setCheckNote({ tone: 'error', text: err instanceof Error ? err.message : 'The check failed' });
+      setCheckNote({ tone: 'error', text: errorMessage(err, 'The check could not run. Try again in a minute.') });
     } finally {
       setChecking(false);
     }
@@ -168,10 +174,10 @@ export const AdminStuckPaymentsPage = () => {
       {data && (!data.sweepConfigured || !data.githubIssuesConfigured) && (
         <div role="note" className="glass rounded-2xl p-4 border border-amber-500/30 text-sm text-amber-300 space-y-1">
           {!data.sweepConfigured && (
-            <p>The automatic 10-minute check is not set up on this server. Use Check now until it is.</p>
+            <p>The automatic check every 10 minutes is off. Use Check now until it is turned on.</p>
           )}
           {!data.githubIssuesConfigured && (
-            <p>GitHub Issues are not set up on this server, so the debug team is not being told about new stuck payments.</p>
+            <p>Automatic alerts to engineers are off, so new stuck payments are not being reported.</p>
           )}
         </div>
       )}
@@ -218,7 +224,7 @@ export const AdminStuckPaymentsPage = () => {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="space-y-1">
                     <h2 className="text-white font-semibold">
-                      {p.kind === 'transfer_fee' ? 'Transfer fee' : 'Replacement chip fee'}, {moneyOf(p.amount, p.currency)}
+                      {p.kind === 'transfer_fee' ? 'Transfer fee' : 'Re-issue fee'}, {moneyOf(p.amount, p.currency)}
                     </h2>
                     <p className="text-sm text-gray-300">{copy.what}</p>
                   </div>
@@ -228,7 +234,7 @@ export const AdminStuckPaymentsPage = () => {
                         : p.status === 'REFUNDED' ? 'bg-dark-700 text-gray-300 border-white/10'
                         : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'}`}
                   >
-                    {open ? 'Open' : p.resolution ? RESOLUTION_COPY[p.resolution] : p.status}
+                    {open ? stuckStatusLabel(p.status) : p.resolution ? RESOLUTION_COPY[p.resolution] : stuckStatusLabel(p.status)}
                   </span>
                 </div>
 
@@ -246,31 +252,27 @@ export const AdminStuckPaymentsPage = () => {
                           {p.target.chipName ?? shortId(p.target.tagId)}
                         </Link>
                       ) : (
-                        <span className="text-gray-200">—</span>
+                        <span className="text-gray-200">{NONE}</span>
                       )}
                     </dd>
                   </div>
                   <div>
-                    <dt className="inline text-gray-400">{p.kind === 'transfer_fee' ? 'Transfer' : 'Request'} now: </dt>
-                    <dd className="inline text-gray-200">
-                      {p.target
-                        ? [p.target.status, p.target.paymentStatus].filter(Boolean).join(', ').toLowerCase().replace(/_/g, ' ')
-                        : 'no longer exists'}
-                    </dd>
+                    <dt className="inline text-gray-400">{p.kind === 'transfer_fee' ? 'Transfer' : 'Re-issue'} now: </dt>
+                    <dd className="inline text-gray-200">{targetNow(p)}</dd>
                   </div>
-                  <div><dt className="inline text-gray-400">Payment id: </dt><dd className="inline font-mono text-gray-200 break-all">{p.paymentIntentId}</dd></div>
+                  <div><dt className="inline text-gray-400">Payment ID: </dt><dd className="inline font-mono text-gray-200 break-all">{p.paymentIntentId}</dd></div>
                   <div>
-                    <dt className="inline text-gray-400">{p.kind === 'transfer_fee' ? 'Transfer id: ' : 'Request id: '}</dt>
+                    <dt className="inline text-gray-400">{p.kind === 'transfer_fee' ? 'Transfer ID: ' : 'Re-issue ID: '}</dt>
                     <dd className="inline font-mono text-gray-200">{shortId(p.transferId ?? p.reissueRequestId)}</dd>
                   </div>
                   <div><dt className="inline text-gray-400">First seen: </dt><dd className="inline text-gray-200">{fmt(p.firstSeenAt)}</dd></div>
-                  <div><dt className="inline text-gray-400">Last seen: </dt><dd className="inline text-gray-200">{fmt(p.lastSeenAt)} ({p.seenCount}×)</dd></div>
-                  {p.resolvedAt && <div><dt className="inline text-gray-400">Closed: </dt><dd className="inline text-gray-200">{fmt(p.resolvedAt)}</dd></div>}
-                  {p.refundId && <div><dt className="inline text-gray-400">Refund id: </dt><dd className="inline font-mono text-gray-200 break-all">{p.refundId}</dd></div>}
-                  {p.lastError && <div><dt className="inline text-gray-400">Error code: </dt><dd className="inline font-mono text-gray-200">{p.lastError}</dd></div>}
+                  <div><dt className="inline text-gray-400">Last seen: </dt><dd className="inline text-gray-200">{fmt(p.lastSeenAt)} (seen {p.seenCount} {p.seenCount === 1 ? 'time' : 'times'})</dd></div>
+                  {p.resolvedAt && <div><dt className="inline text-gray-400">Resolved: </dt><dd className="inline text-gray-200">{fmt(p.resolvedAt)}</dd></div>}
+                  {p.refundId && <div><dt className="inline text-gray-400">Refund ID: </dt><dd className="inline font-mono text-gray-200 break-all">{p.refundId}</dd></div>}
+                  {p.lastError && <div><dt className="inline text-gray-400">Technical detail: </dt><dd className="inline font-mono text-gray-200">{p.lastError}</dd></div>}
                   {p.githubIssueUrl && p.githubIssueNumber !== null && (
                     <div>
-                      <dt className="inline text-gray-400">Debug ticket: </dt>
+                      <dt className="inline text-gray-400">Engineering ticket: </dt>
                       <dd className="inline">
                         <a
                           href={p.githubIssueUrl}

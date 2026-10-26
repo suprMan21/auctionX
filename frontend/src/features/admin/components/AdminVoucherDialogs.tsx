@@ -10,6 +10,7 @@ import type { AdminVoucherGrant } from '../api/pricingSchemas';
 import { AdminDialog, ADMIN_BUTTON_CLASS, ADMIN_FIELD_CLASS } from './AdminDialog';
 import { ErrorLine, REASON_MIN, ReasonField } from './AdminTagDialogs';
 import { VOUCHER_MAX_QUANTITY, endOfLocalDay, toIsoWithOffset } from '../lib/pricing';
+import { errorMessage } from '../lib/display';
 
 const emailSchema = z.string().email().max(254);
 
@@ -60,7 +61,7 @@ export const AdminGrantVouchersDialog = ({ open, onClose, onDone }: GrantDialogP
       });
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The free transfers could not be granted');
+      setError(errorMessage(err, 'The free transfers could not be granted. Try again.'));
     } finally {
       setBusy(false);
     }
@@ -140,7 +141,7 @@ export const AdminGrantVouchersDialog = ({ open, onClose, onDone }: GrantDialogP
           disabled={!canSubmit}
           className={`${ADMIN_BUTTON_CLASS} bg-primary-600 hover:bg-primary-500 text-white`}
         >
-          {busy ? 'Granting…' : 'Grant'}
+          {busy ? 'Granting…' : 'Grant free transfers'}
         </button>
       </div>
     </AdminDialog>
@@ -170,7 +171,7 @@ export const AdminRevokeVouchersDialog = ({ open, grant, onClose, onDone }: Revo
       await adminApi.revokeVoucherGrant(grant.id, reason.trim());
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The grant could not be revoked');
+      setError(errorMessage(err, 'The free transfers could not be revoked. Try again.'));
     } finally {
       setBusy(false);
     }
@@ -183,8 +184,8 @@ export const AdminRevokeVouchersDialog = ({ open, grant, onClose, onDone }: Revo
       danger
       title="Revoke free transfers"
       description={
-        `This cancels the ${plural(grant.remaining)} still unused from this grant` +
-        `${grant.userEmail ? ` for ${grant.userEmail}` : ''}. Transfers already made with it are not affected. ` +
+        `This cancels the ${plural(grant.remaining)} still unused` +
+        `${grant.userEmail ? ` for ${grant.userEmail}` : ''}. Free transfers already used are not affected. ` +
         'This cannot be undone.'
       }
     >
@@ -200,7 +201,7 @@ export const AdminRevokeVouchersDialog = ({ open, grant, onClose, onDone }: Revo
           disabled={busy || reason.trim().length < REASON_MIN}
           className={`${ADMIN_BUTTON_CLASS} bg-red-600 hover:bg-red-500 text-white`}
         >
-          {busy ? 'Working…' : 'Revoke'}
+          {busy ? 'Revoking…' : 'Revoke free transfers'}
         </button>
       </div>
     </AdminDialog>

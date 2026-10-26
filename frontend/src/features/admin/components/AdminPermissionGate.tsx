@@ -19,8 +19,8 @@ export const AdminPermissionGate = ({ permission, children }: { permission: stri
   if (!hasPermission(access, permission)) {
     return (
       <div className="glass rounded-2xl p-6">
-        <h1 className="text-xl font-semibold text-white mb-2">Not available for your role</h1>
-        <p className="text-gray-400 text-sm">Your admin role does not include this page. Ask a super admin if you need access.</p>
+        <h1 className="text-xl font-semibold text-white mb-2">Not available for your staff role</h1>
+        <p className="text-gray-400 text-sm">Your staff role does not include this page. Ask a super admin if you need access.</p>
       </div>
     );
   }

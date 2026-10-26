@@ -35,6 +35,7 @@ import { AdminRoleContext, PERMISSIONS } from '../lib/adminRole';
 import { accessFor } from '../test/adminAccess';
 import { parseDollarsToCents, toIsoWithOffset } from '../lib/pricing';
 import { adminPricingSchema, parseEnvelope } from '../api/pricingSchemas';
+import { AdminApiError } from '../api/adminApi';
 
 const REASON = 'Raising the fee for the new chip order';
 const money = (cents: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -143,7 +144,7 @@ describe('AdminPricingPage', () => {
     const table = screen.getByRole('table');
     expect(within(table).getByText('Scheduled')).toBeInTheDocument();
     expect(within(table).getByText('In effect')).toBeInTheDocument();
-    expect(within(table).getByText('Launch default')).toBeInTheDocument();
+    expect(within(table).getByText('Default')).toBeInTheDocument();
     expect(within(table).getByText('admin@example.com')).toBeInTheDocument();
     expect(screen.getByText(/applies only to transfers started, and re-issue requests made, after it takes effect/)).toBeInTheDocument();
   });
@@ -158,8 +159,8 @@ describe('AdminPricingPage', () => {
     renderPage();
 
     await screen.findByRole('table');
-    expect(screen.getAllByRole('button', { name: /^Cancel the/ })).toHaveLength(1);
-    expect(screen.getByRole('button', { name: `Cancel the transfer fee change to ${money(300)}` })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Cancel change/ })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: `Cancel change: transfer fee to ${money(300)}` })).toBeInTheDocument();
     expect(screen.getByText(/Changed our mind/)).toBeInTheDocument();
   });
 
@@ -169,9 +170,9 @@ describe('AdminPricingPage', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: /^Cancel the transfer fee change/ }));
+    await user.click(await screen.findByRole('button', { name: /^Cancel change: transfer fee/ }));
     const dialog = screen.getByRole('dialog', { name: 'Cancel this scheduled change' });
-    const submit = within(dialog).getByRole('button', { name: 'Cancel the change' });
+    const submit = within(dialog).getByRole('button', { name: 'Cancel change' });
     expect(submit).toBeDisabled();
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     await user.click(submit);
@@ -183,14 +184,14 @@ describe('AdminPricingPage', () => {
 
   it('shows the server’s message when a cancel is refused', async () => {
     api.getPricing.mockResolvedValue(pricing());
-    api.cancelPrice.mockRejectedValue(new Error('This price is already in effect. Set a new price instead.'));
+    api.cancelPrice.mockRejectedValue(new AdminApiError('This price is already in effect. Set a new price instead.', 409, 'PRICE_ALREADY_EFFECTIVE'));
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: /^Cancel the transfer fee change/ }));
+    await user.click(await screen.findByRole('button', { name: /^Cancel change: transfer fee/ }));
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
-    await user.click(within(dialog).getByRole('button', { name: 'Cancel the change' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel change' }));
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('already in effect. Set a new price instead.');
   });
@@ -202,7 +203,7 @@ describe('AdminPricingPage', () => {
     renderPage();
 
     await user.click(await screen.findByRole('button', { name: 'Change price…' }));
-    const dialog = screen.getByRole('dialog', { name: 'Change a price' });
+    const dialog = screen.getByRole('dialog', { name: 'Change price' });
     const submit = within(dialog).getByRole('button', { name: 'Set price' });
     const amount = within(dialog).getByLabelText('New price (USD)');
 
@@ -250,7 +251,7 @@ describe('AdminPricingPage', () => {
     const dialog = screen.getByRole('dialog');
     await user.selectOptions(within(dialog).getByLabelText('Price'), 'reissue');
     await user.type(within(dialog).getByLabelText('New price (USD)'), '12');
-    await user.click(within(dialog).getByRole('radio', { name: 'Schedule' }));
+    await user.click(within(dialog).getByRole('radio', { name: 'Later' }));
     const submit = within(dialog).getByRole('button', { name: 'Schedule price' });
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     expect(submit).toBeDisabled();
@@ -266,7 +267,7 @@ describe('AdminPricingPage', () => {
   });
 
   it('shows the error when prices cannot be loaded', async () => {
-    api.getPricing.mockRejectedValue(new Error('Insufficient permissions'));
+    api.getPricing.mockRejectedValue(new AdminApiError('Insufficient permissions', 403, 'FORBIDDEN'));
     renderPage();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Insufficient permissions');
@@ -309,7 +310,7 @@ describe('AdminVouchersPage', () => {
 
     await screen.findByText('No free transfers have been granted yet.');
     await user.type(screen.getByLabelText('Account email (exact)'), '  Fan@Example.COM ');
-    await user.click(screen.getByRole('button', { name: 'Find' }));
+    await user.click(screen.getByRole('button', { name: 'Search' }));
 
     expect(api.listVoucherGrants).toHaveBeenLastCalledWith({ email: 'fan@example.com', page: 1, limit: 25 });
     expect(await screen.findByText('No free transfers have been granted to fan@example.com.')).toBeInTheDocument();
@@ -335,7 +336,7 @@ describe('AdminVouchersPage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Grant free transfers…' }));
     const dialog = screen.getByRole('dialog', { name: 'Grant free transfers' });
-    const submit = within(dialog).getByRole('button', { name: 'Grant' });
+    const submit = within(dialog).getByRole('button', { name: 'Grant free transfers' });
 
     await user.type(within(dialog).getByLabelText('Account email'), '  Fan@Example.COM ');
     const qty = within(dialog).getByLabelText('How many');
@@ -365,7 +366,7 @@ describe('AdminVouchersPage', () => {
     await user.type(within(dialog).getByLabelText('Account email'), 'fan@example.com');
     await user.type(within(dialog).getByLabelText('Expires (optional)'), '2099-12-31');
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
-    await user.click(within(dialog).getByRole('button', { name: 'Grant' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Grant free transfers' }));
 
     const body = api.grantVouchers.mock.calls[0][0] as { expiresAt: string };
     expect(body.expiresAt).toMatch(/^2099-12-31T23:59:59[+-]\d{2}:\d{2}$/);
@@ -373,7 +374,7 @@ describe('AdminVouchersPage', () => {
 
   it('shows the server’s message when the email has no account', async () => {
     api.listVoucherGrants.mockResolvedValue(grants([]));
-    api.grantVouchers.mockRejectedValue(new Error('No account uses that email'));
+    api.grantVouchers.mockRejectedValue(new AdminApiError('No account uses that email', 404, 'NOT_FOUND'));
     const user = userEvent.setup();
     renderPage();
 
@@ -381,7 +382,7 @@ describe('AdminVouchersPage', () => {
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByLabelText('Account email'), 'nobody@example.com');
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
-    await user.click(within(dialog).getByRole('button', { name: 'Grant' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Grant free transfers' }));
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('No account uses that email');
   });
@@ -394,8 +395,8 @@ describe('AdminVouchersPage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Revoke free transfers for fan@example.com' }));
     const dialog = screen.getByRole('dialog', { name: 'Revoke free transfers' });
-    expect(within(dialog).getByText(/cancels the 2 free transfers still unused from this grant for fan@example.com/)).toBeInTheDocument();
-    const submit = within(dialog).getByRole('button', { name: 'Revoke' });
+    expect(within(dialog).getByText(/cancels the 2 free transfers still unused for fan@example.com/)).toBeInTheDocument();
+    const submit = within(dialog).getByRole('button', { name: 'Revoke free transfers' });
     expect(submit).toBeDisabled();
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     await user.click(submit);
@@ -459,7 +460,7 @@ describe('Pricing and free transfers are admin and super_admin only', () => {
       </MemoryRouter>
     )));
 
-    expect(screen.getAllByRole('heading', { name: 'Not available for your role' })).toHaveLength(2);
+    expect(screen.getAllByRole('heading', { name: 'Not available for your staff role' })).toHaveLength(2);
     expect(api.getPricing).not.toHaveBeenCalled();
     expect(api.listVoucherGrants).not.toHaveBeenCalled();
   });

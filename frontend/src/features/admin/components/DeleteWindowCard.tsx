@@ -8,6 +8,7 @@ import { adminApi } from '../api/adminApi';
 import type { AccountSettings } from '../api/accountSchemas';
 import { AdminDialog, ADMIN_BUTTON_CLASS, ADMIN_FIELD_CLASS } from './AdminDialog';
 import { ErrorLine, REASON_MIN, ReasonField } from './AdminTagDialogs';
+import { ACTION_FAILED, errorMessage, loadFailed } from '../lib/display';
 
 export const DeleteWindowCard = ({ canEdit }: { canEdit: boolean }) => {
   const [settings, setSettings] = useState<AccountSettings | null>(null);
@@ -23,7 +24,7 @@ export const DeleteWindowCard = ({ canEdit }: { canEdit: boolean }) => {
     adminApi
       .getAccountSettings()
       .then((s) => { setSettings(s); setLoadError(null); })
-      .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : 'Settings could not be loaded'));
+      .catch((err: unknown) => setLoadError(errorMessage(err, loadFailed('The waiting time'))));
 
   useEffect(() => { void load(); }, []);
 
@@ -45,7 +46,7 @@ export const DeleteWindowCard = ({ canEdit }: { canEdit: boolean }) => {
       setOpen(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The change failed');
+      setError(errorMessage(err, ACTION_FAILED));
     } finally {
       setBusy(false);
     }
@@ -55,18 +56,18 @@ export const DeleteWindowCard = ({ canEdit }: { canEdit: boolean }) => {
     <section className="glass rounded-2xl p-5" aria-labelledby="delete-window-heading">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 id="delete-window-heading" className="text-base font-semibold text-white">Waiting time before Delete</h2>
+          <h2 id="delete-window-heading" className="text-base font-semibold text-white">Waiting time before deleting</h2>
           <p className="text-sm text-gray-400 mt-1">
             {loadError
               ? loadError
               : settings
                 ? `An account can be deleted ${settings.deleteWindowHours} hour${settings.deleteWindowHours === 1 ? '' : 's'} after it is retired.`
-                : 'Loading…'}
+                : 'Loading the waiting time…'}
           </p>
         </div>
         {canEdit && settings && (
           <button type="button" onClick={openDialog} className={`${ADMIN_BUTTON_CLASS} bg-dark-700 text-gray-200 hover:bg-dark-600 min-h-[44px]`}>
-            Change
+            Change waiting time…
           </button>
         )}
       </div>
@@ -74,7 +75,7 @@ export const DeleteWindowCard = ({ canEdit }: { canEdit: boolean }) => {
       <AdminDialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Change the waiting time before Delete"
+        title="Change waiting time before deleting"
         description="Applies to every retired account, including ones already retired. Minimum 1 hour."
       >
         <div className="space-y-1">
@@ -102,7 +103,7 @@ export const DeleteWindowCard = ({ canEdit }: { canEdit: boolean }) => {
             disabled={busy || !hoursOk || reason.trim().length < REASON_MIN}
             className={`${ADMIN_BUTTON_CLASS} bg-primary-600 hover:bg-primary-500 text-white`}
           >
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? 'Saving…' : 'Save waiting time'}
           </button>
         </div>
       </AdminDialog>

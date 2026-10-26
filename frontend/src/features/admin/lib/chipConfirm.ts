@@ -35,7 +35,7 @@ export const useEnrolledChips = (open: boolean, excludeId: string) => {
       .listTags({ status: 'ENROLLED', limit: 100 })
       .then((res) => { if (!cancelled) setResult({ load, tags: res.data.tags.filter((t) => t.id !== excludeId) }); })
       .catch((err) => {
-        if (!cancelled) setFailure({ load, message: err instanceof Error ? err.message : 'Could not load enrolled chips' });
+        if (!cancelled) setFailure({ load, message: err instanceof Error ? err.message : 'Available chips could not be loaded. Try again.' });
       });
     return () => { cancelled = true; };
   }, [open, excludeId, loadCount]);

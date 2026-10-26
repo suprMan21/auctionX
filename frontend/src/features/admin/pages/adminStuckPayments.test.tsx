@@ -22,6 +22,10 @@ vi.mock('../api/adminApi', async () => {
 });
 
 import { AdminStuckPaymentsPage } from './AdminStuckPaymentsPage';
+import { AdminApiError } from '../api/adminApi';
+
+/** Money as the page formats it (the viewer's locale), e.g. "$2.50". */
+const money = (cents: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(cents / 100);
 
 const INCIDENT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TAG = '55555555-5555-4555-8555-555555555555';
@@ -77,17 +81,19 @@ beforeEach(() => {
 });
 
 describe('AdminStuckPaymentsPage', () => {
-  it('shows an open payment with what went wrong, what to do, and the debug ticket', async () => {
+  it('shows an open payment with what went wrong, what to do, and the engineering ticket', async () => {
     api.listStuckPayments.mockResolvedValue(list([payment()]));
     renderQueue();
 
-    expect(await screen.findByRole('heading', { name: 'Transfer fee, 2.50 USD' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: `Transfer fee, ${money(250)}` })).toBeInTheDocument();
     expect(api.listStuckPayments).toHaveBeenCalledWith({ status: 'OPEN', limit: 50 });
     expect(screen.getByText('The payment arrived but the transfer has no recipient account yet.')).toBeInTheDocument();
     expect(screen.getByText('Ask the recipient to sign in and accept, then Re-apply.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'chip_009' })).toHaveAttribute('href', `/admin/tags/${TAG}`);
     expect(screen.getByRole('link', { name: /GitHub issue #41/ })).toHaveAttribute('href', 'https://github.com/suprMan21/auctionX/issues/41');
     expect(screen.getByText('pi_3TestStuckAB12CD')).toBeInTheDocument();
+    expect(screen.getByText('Engineering ticket:')).toBeInTheDocument();
+    expect(screen.getByText('Payment ID:')).toBeInTheDocument();
   });
 
   it('says so plainly when nothing is stuck', async () => {
@@ -117,7 +123,7 @@ describe('AdminStuckPaymentsPage', () => {
 
   it('keeps the dialog open and shows the server’s explanation when Re-apply changes nothing', async () => {
     api.listStuckPayments.mockResolvedValue(list([payment()]));
-    api.reapplyStuckPayment.mockRejectedValue(new Error('The transfer has no recipient account yet. Ask the recipient to sign in and accept, then try again.'));
+    api.reapplyStuckPayment.mockRejectedValue(new AdminApiError('The transfer has no recipient account yet. Ask the recipient to sign in and accept, then try again.', 409, 'NO_RECIPIENT'));
     const user = userEvent.setup();
     renderQueue();
 
@@ -130,23 +136,23 @@ describe('AdminStuckPaymentsPage', () => {
     expect(api.listStuckPayments).toHaveBeenCalledTimes(1);
   });
 
-  it('Refund needs a reason AND the last 6 characters of the payment id', async () => {
+  it('Refund needs a reason AND the last 6 characters of the payment ID', async () => {
     api.listStuckPayments.mockResolvedValue(list([payment({ reason: 'not_payable', target: { tagId: TAG, chipName: 'chip_009', status: 'CANCELLED', paymentStatus: null } })]));
     api.refundStuckPayment.mockResolvedValue({ success: true, data: {} });
     const user = userEvent.setup();
     renderQueue();
 
     await user.click(await screen.findByRole('button', { name: 'Refund…' }));
-    const dialog = screen.getByRole('dialog', { name: 'Refund 2.50 USD' });
+    const dialog = screen.getByRole('dialog', { name: `Refund ${money(250)}` });
     const submit = within(dialog).getByRole('button', { name: 'Refund payment' });
     expect(within(dialog).getByText(/cannot be undone/)).toBeInTheDocument();
 
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     expect(submit).toBeDisabled();
-    await user.type(within(dialog).getByLabelText(/last 6 characters of the payment id/), 'XXXXXX');
+    await user.type(within(dialog).getByLabelText(/last 6 characters of the payment ID/), 'XXXXXX');
     expect(submit).toBeDisabled();
-    await user.clear(within(dialog).getByLabelText(/last 6 characters of the payment id/));
-    await user.type(within(dialog).getByLabelText(/last 6 characters of the payment id/), 'AB12CD');
+    await user.clear(within(dialog).getByLabelText(/last 6 characters of the payment ID/));
+    await user.type(within(dialog).getByLabelText(/last 6 characters of the payment ID/), 'AB12CD');
     await user.click(submit);
 
     expect(api.refundStuckPayment).toHaveBeenCalledWith(INCIDENT, { reason: REASON, confirmSuffix: 'AB12CD' });
@@ -161,7 +167,7 @@ describe('AdminStuckPaymentsPage', () => {
     const dialog = screen.getByRole('dialog');
 
     expect(within(dialog).getByText(/transfer is cancelled and the token stays with its current owner/)).toBeInTheDocument();
-    expect(within(dialog).getByText('This payment may still be appliable. Try Re-apply first.')).toBeInTheDocument();
+    expect(within(dialog).getByText('We may still be able to apply this payment. Try Re-apply first.')).toBeInTheDocument();
   });
 
   it('offers support no Refund button', async () => {
@@ -181,19 +187,20 @@ describe('AdminStuckPaymentsPage', () => {
     expect(screen.getByText('A refund needs an admin.')).toBeInTheDocument();
   });
 
-  it('shows closed payments with how they were closed and no actions', async () => {
+  it('shows resolved payments with how they were resolved and no actions', async () => {
     api.listStuckPayments.mockResolvedValue(list([
       payment({ status: 'REFUNDED', resolution: 'refund', resolvedAt: '2026-10-11T10:00:00.000Z', refundId: 're_3Test' }),
     ]));
     renderQueue('/admin/stuck-payments?status=REFUNDED');
 
     expect(await screen.findByText('re_3Test')).toBeInTheDocument();
+    expect(screen.getByText('Resolved:')).toBeInTheDocument();
     expect(api.listStuckPayments).toHaveBeenCalledWith({ status: 'REFUNDED', limit: 50 });
     expect(screen.queryByRole('button', { name: 'Re-apply…' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Refund…' })).not.toBeInTheDocument();
   });
 
-  it('names a replacement chip fee as such', async () => {
+  it('names a re-issue fee as such, with where the re-issue stands in plain words', async () => {
     api.listStuckPayments.mockResolvedValue(list([payment({
       kind: 'reissue_fee', reason: 'not_payable', amount: 1000, transferId: null,
       reissueRequestId: '77777777-7777-4777-8777-777777777777',
@@ -201,8 +208,9 @@ describe('AdminStuckPaymentsPage', () => {
     })]));
     renderQueue();
 
-    expect(await screen.findByRole('heading', { name: 'Replacement chip fee, 10.00 USD' })).toBeInTheDocument();
-    expect(screen.getByText('cancelled, awaiting payment')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: `Re-issue fee, ${money(1000)}` })).toBeInTheDocument();
+    expect(screen.getByText('Cancelled')).toBeInTheDocument();
+    expect(screen.getByText('Re-issue ID:')).toBeInTheDocument();
   });
 
   it('Check now runs the check, reports the result and reloads', async () => {
@@ -220,19 +228,30 @@ describe('AdminStuckPaymentsPage', () => {
     expect(api.listStuckPayments).toHaveBeenCalledTimes(2);
   });
 
-  it('warns when the automatic check or the debug tickets are not set up', async () => {
+  it('warns when the automatic check or the engineer alerts are off', async () => {
     api.listStuckPayments.mockResolvedValue(list([], { sweepConfigured: false, githubIssuesConfigured: false }));
     renderQueue();
 
     const note = await screen.findByRole('note');
-    expect(note).toHaveTextContent('The automatic 10-minute check is not set up on this server.');
-    expect(note).toHaveTextContent('the debug team is not being told about new stuck payments');
+    expect(note).toHaveTextContent('The automatic check every 10 minutes is off.');
+    expect(note).toHaveTextContent('Automatic alerts to engineers are off, so new stuck payments are not being reported.');
   });
 
   it('shows the error when the queue cannot be loaded', async () => {
-    api.listStuckPayments.mockRejectedValue(new Error('Insufficient permissions'));
+    api.listStuckPayments.mockRejectedValue(new AdminApiError('Insufficient permissions', 403, 'FORBIDDEN'));
     renderQueue();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Insufficient permissions');
+  });
+
+  it('shows a plain message, not the raw error, when the check cannot run', async () => {
+    api.listStuckPayments.mockResolvedValue(list([]));
+    api.sweepStuckPayments.mockRejectedValue(new TypeError('Failed to fetch'));
+    const user = userEvent.setup();
+    renderQueue();
+
+    await user.click(await screen.findByRole('button', { name: 'Check now' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The check could not run. Try again in a minute.');
   });
 });

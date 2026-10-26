@@ -1,6 +1,6 @@
 /**
  * S-ADMIN1 Ph3a stuck-payment dialogs: Re-apply and Refund. Both need a typed
- * reason; Refund also needs the end of the payment id, like the chip
+ * reason; Refund also needs the end of the payment ID, like the chip
  * confirmation on a token reset.
  */
 
@@ -9,9 +9,10 @@ import { adminApi, type AdminStuckPayment } from '../api/adminApi';
 import { AdminDialog, ADMIN_BUTTON_CLASS, ADMIN_FIELD_CLASS } from './AdminDialog';
 import { ErrorLine, REASON_MIN, ReasonField } from './AdminTagDialogs';
 import { INTENT_SUFFIX_LENGTH, intentSuffix, moneyOf } from '../lib/stuckPayments';
+import { ACTION_FAILED, errorMessage } from '../lib/display';
 
 const subject = (p: AdminStuckPayment): string =>
-  p.kind === 'transfer_fee' ? 'transfer' : 'replacement chip request';
+  p.kind === 'transfer_fee' ? 'transfer' : 're-issue';
 
 interface DialogProps {
   open: boolean;
@@ -36,7 +37,7 @@ export const AdminReapplyPaymentDialog = ({ open, payment, onClose, onDone }: Di
       await adminApi.reapplyStuckPayment(payment.id, reason.trim());
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The action failed');
+      setError(errorMessage(err, ACTION_FAILED));
     } finally {
       setBusy(false);
     }
@@ -50,7 +51,7 @@ export const AdminReapplyPaymentDialog = ({ open, payment, onClose, onDone }: Di
       description={
         payment.kind === 'transfer_fee'
           ? 'We check with Stripe that the payment is still paid, then complete the transfer exactly as the normal payment step would. The token moves to the recipient. If it has already been applied, nothing changes.'
-          : 'We check with Stripe that the payment is still paid, then mark the replacement chip request as paid. The chip swap is still a separate step in the Re-issue queue.'
+          : 'We check with Stripe that the payment is still paid, then mark the re-issue as paid. You still move the token to a new chip on the Re-issues page.'
       }
     >
       <ReasonField value={reason} onChange={setReason} />
@@ -65,7 +66,7 @@ export const AdminReapplyPaymentDialog = ({ open, payment, onClose, onDone }: Di
           disabled={busy || reason.trim().length < REASON_MIN}
           className={`${ADMIN_BUTTON_CLASS} bg-primary-600 hover:bg-primary-500 text-white`}
         >
-          {busy ? 'Working…' : 'Re-apply payment'}
+          {busy ? 'Re-applying…' : 'Re-apply payment'}
         </button>
       </div>
     </AdminDialog>
@@ -92,7 +93,7 @@ export const AdminRefundPaymentDialog = ({ open, payment, onClose, onDone }: Dia
       await adminApi.refundStuckPayment(payment.id, { reason: reason.trim(), confirmSuffix: confirm.trim() });
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The action failed');
+      setError(errorMessage(err, ACTION_FAILED));
     } finally {
       setBusy(false);
     }
@@ -113,7 +114,7 @@ export const AdminRefundPaymentDialog = ({ open, payment, onClose, onDone }: Dia
               : ` The ${subject(payment)} is left as it is.`}
           </p>
           {payment.reason === 'no_recipient' || payment.reason === 'apply_failed' || payment.reason === 'webhook_missed' ? (
-            <p className="mt-2 text-amber-300">This payment may still be appliable. Try Re-apply first.</p>
+            <p className="mt-2 text-amber-300">We may still be able to apply this payment. Try Re-apply first.</p>
           ) : null}
         </>
       }
@@ -121,7 +122,7 @@ export const AdminRefundPaymentDialog = ({ open, payment, onClose, onDone }: Dia
       <ReasonField value={reason} onChange={setReason} />
       <div className="space-y-1">
         <label htmlFor={confirmId} className="block text-sm font-medium text-gray-200">
-          Type the last {INTENT_SUFFIX_LENGTH} characters of the payment id
+          Type the last {INTENT_SUFFIX_LENGTH} characters of the payment ID
         </label>
         <input
           id={confirmId}
@@ -146,7 +147,7 @@ export const AdminRefundPaymentDialog = ({ open, payment, onClose, onDone }: Dia
           disabled={busy || reason.trim().length < REASON_MIN || confirm.trim() !== expected}
           className={`${ADMIN_BUTTON_CLASS} bg-red-600 hover:bg-red-500 text-white`}
         >
-          {busy ? 'Working…' : 'Refund payment'}
+          {busy ? 'Refunding…' : 'Refund payment'}
         </button>
       </div>
     </AdminDialog>

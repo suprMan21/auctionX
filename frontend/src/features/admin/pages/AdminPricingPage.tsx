@@ -12,6 +12,7 @@ import { adminApi } from '../api/adminApi';
 import { PRICE_KINDS, type AdminPriceChange, type AdminPricing } from '../api/pricingSchemas';
 import { AdminCancelPriceDialog, AdminSetPriceDialog } from '../components/AdminPricingDialogs';
 import { PRICE_LABEL, fmtDateTime, usd } from '../lib/pricing';
+import { errorMessage, loadFailed } from '../lib/display';
 
 const STATUS_COPY: Record<AdminPriceChange['status'], { label: string; className: string }> = {
   in_effect: { label: 'In effect', className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' },
@@ -36,7 +37,7 @@ export const AdminPricingPage = () => {
         if (!cancelled) setResult({ key: reloadKey, data });
       })
       .catch((err) => {
-        if (!cancelled) setFailure({ key: reloadKey, message: err instanceof Error ? err.message : 'Failed to load prices' });
+        if (!cancelled) setFailure({ key: reloadKey, message: errorMessage(err, loadFailed('Prices')) });
       });
     return () => { cancelled = true; };
   }, [reloadKey]);
@@ -94,7 +95,7 @@ export const AdminPricingPage = () => {
                 <li key={kind} className="glass rounded-2xl p-5 space-y-1">
                   <h2 className="text-sm font-medium text-gray-400">{PRICE_LABEL[kind]}</h2>
                   <p className="text-2xl font-semibold text-white">{usd(data.current[kind])}</p>
-                  <p className="text-xs text-gray-400">Launch default {usd(data.defaults[kind])}</p>
+                  <p className="text-xs text-gray-400">Default price {usd(data.defaults[kind])}</p>
                   {next && (
                     <p className="text-xs text-amber-300">
                       Changes to {usd(next.amountUsdCents)} on {fmtDateTime(next.effectiveFrom)}
@@ -143,18 +144,18 @@ export const AdminPricingPage = () => {
                               </span>
                             )}
                           </td>
-                          <td className="py-2 pr-4 text-gray-300">{h.createdBy ?? 'Launch default'}</td>
+                          <td className="py-2 pr-4 text-gray-300">{h.createdBy ?? 'Default'}</td>
                           <td className="py-2">
                             {h.status === 'scheduled' && (
                               <button
                                 type="button"
                                 onClick={() => setDialog({ kind: 'cancel', change: h })}
-                                aria-label={`Cancel the ${PRICE_LABEL[h.kind].toLowerCase()} change to ${usd(h.amountUsdCents)}`}
+                                aria-label={`Cancel change: ${PRICE_LABEL[h.kind].toLowerCase()} to ${usd(h.amountUsdCents)}`}
                                 className="px-3 py-1.5 rounded-xl text-xs font-medium bg-red-600/20 text-red-300 border border-red-500/30
                                   hover:bg-red-600/30 focus:outline-none focus:ring-2 focus:ring-primary-500
                                   focus:ring-offset-2 focus:ring-offset-dark-800"
                               >
-                                Cancel…
+                                Cancel change…
                               </button>
                             )}
                           </td>

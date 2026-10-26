@@ -20,6 +20,7 @@ vi.mock('../api/adminApi', async () => {
 
 import { AdminTagsPage } from './AdminTagsPage';
 import { AdminTagDetailPage } from './AdminTagDetailPage';
+import { AdminApiError } from '../api/adminApi';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ describe('AdminTagsPage', () => {
     const link = await screen.findByRole('link', { name: '…936980' });
     expect(link).toHaveAttribute('href', `/admin/tags/${OLD_ID}`);
     expect(screen.getByRole('link', { name: '…ACC040' })).toBeInTheDocument();
-    expect(screen.getByText('2 chips')).toBeInTheDocument();
+    expect(screen.getByText('2 tokens')).toBeInTheDocument();
   });
 
   it('leads the chip label with its name when it has one', async () => {
@@ -106,7 +107,7 @@ describe('AdminTagsPage', () => {
     const user = userEvent.setup();
 
     render(<MemoryRouter initialEntries={['/admin/tags']}><AdminTagsPage /></MemoryRouter>);
-    await screen.findByText('No chips match the current filters.');
+    await screen.findByText('No tokens match. Try another status or search.');
     await user.click(screen.getByRole('button', { name: 'Suspended' }));
 
     await waitFor(() => expect(api.listTags).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'SUSPENDED', page: 1 })));
@@ -124,8 +125,8 @@ describe('AdminTagsPage', () => {
         <LocationProbe />
       </MemoryRouter>,
     );
-    await screen.findByText('No chips match the current filters.');
-    await user.type(screen.getByRole('searchbox', { name: /owner email, chip name, serial or UID/ }), 'collector@example.com');
+    await screen.findByText('No tokens match. Try another status or search.');
+    await user.type(screen.getByRole('searchbox', { name: /owner email, token name or serial number/ }), 'collector@example.com');
     await user.click(screen.getByRole('button', { name: 'Search' }));
 
     await waitFor(() =>
@@ -140,7 +141,7 @@ describe('AdminTagsPage', () => {
     const user = userEvent.setup();
 
     render(<MemoryRouter initialEntries={['/admin/tags']}><AdminTagsPage /></MemoryRouter>);
-    await screen.findByText('No chips match the current filters.');
+    await screen.findByText('No tokens match. Try another status or search.');
     await user.type(screen.getByRole('searchbox'), 'a,b');
 
     expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
@@ -168,25 +169,47 @@ describe('AdminTagsPage', () => {
   });
 
   it('shows the server error instead of an empty table', async () => {
-    api.listTags.mockRejectedValue(new Error('Insufficient permissions'));
+    api.listTags.mockRejectedValue(new AdminApiError('Insufficient permissions', 403, 'FORBIDDEN'));
 
     render(<MemoryRouter initialEntries={['/admin/tags']}><AdminTagsPage /></MemoryRouter>);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Insufficient permissions');
+  });
+
+  it('never shows the raw text of a server crash', async () => {
+    api.listTags.mockRejectedValue(new AdminApiError('relation "nfc_tags" does not exist', 500, null));
+
+    render(<MemoryRouter initialEntries={['/admin/tags']}><AdminTagsPage /></MemoryRouter>);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Tokens could not be loaded. Try again.');
+    expect(screen.queryByText(/nfc_tags/)).not.toBeInTheDocument();
+  });
+
+  it('labels statuses in plain words, keeping the raw value as a title', async () => {
+    api.listTags.mockResolvedValue({
+      success: true,
+      data: { tags: [tag({ lifecycleStatus: 'ENROLLED', ownerAccountId: null })], pagination: { page: 1, limit: 25, total: 1 } },
+    });
+
+    render(<MemoryRouter initialEntries={['/admin/tags']}><AdminTagsPage /></MemoryRouter>);
+
+    const badge = await screen.findByTitle('ENROLLED');
+    expect(badge).toHaveTextContent('Ready to claim');
+    expect(screen.queryByText('ENROLLED')).not.toBeInTheDocument();
   });
 });
 
 // ── Detail + actions ────────────────────────────────────────────────────────
 
 describe('AdminTagDetailPage', () => {
-  it('offers Suspend and Reset for an ACTIVE chip, not Lift suspension', async () => {
+  it('offers Suspend and Move to new chip for an ACTIVE token, not Lift suspension', async () => {
     api.getTag.mockResolvedValue(detail(tag()));
 
     renderDetail();
 
-    expect(await screen.findByRole('button', { name: 'Suspend' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reset token…' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Lift suspension' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Suspend token…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move to new chip…' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Lift suspension…' })).not.toBeInTheDocument();
   });
 
   it('offers no actions at all for a RETIRED chip, and links to its replacement', async () => {
@@ -197,9 +220,11 @@ describe('AdminTagDetailPage', () => {
 
     renderDetail();
 
-    await screen.findByText(/Destruction:/);
-    expect(screen.queryByRole('button', { name: /suspend|reset/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'this chip' })).toHaveAttribute('href', `/admin/tags/${NEW_ID}`);
+    await screen.findByText(/Chip destruction:/);
+    expect(screen.getByText('pending')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /suspend|move/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Moved to a new chip/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'view' })).toHaveAttribute('href', `/admin/tags/${NEW_ID}`);
   });
 
   it('suspends only after a reason of at least 10 characters, then reloads', async () => {
@@ -208,9 +233,9 @@ describe('AdminTagDetailPage', () => {
     const user = userEvent.setup();
 
     renderDetail();
-    await user.click(await screen.findByRole('button', { name: 'Suspend' }));
+    await user.click(await screen.findByRole('button', { name: 'Suspend token…' }));
 
-    const dialog = screen.getByRole('dialog', { name: /Suspend chip …936980/ });
+    const dialog = screen.getByRole('dialog', { name: /Suspend token …936980/ });
     const submit = within(dialog).getByRole('button', { name: 'Suspend token' });
     const reason = within(dialog).getByLabelText(/Reason/);
     expect(reason).toHaveFocus();
@@ -220,7 +245,7 @@ describe('AdminTagDetailPage', () => {
     await user.click(submit);
 
     expect(api.setTagSuspension).toHaveBeenCalledWith(OLD_ID, true, 'too short — now long enough');
-    expect(await screen.findByRole('button', { name: 'Lift suspension' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Lift suspension…' })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Token suspended.');
   });
 
@@ -229,7 +254,7 @@ describe('AdminTagDetailPage', () => {
     const user = userEvent.setup();
 
     renderDetail();
-    await user.click(await screen.findByRole('button', { name: 'Suspend' }));
+    await user.click(await screen.findByRole('button', { name: 'Suspend token…' }));
     await user.keyboard('{Escape}');
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -249,10 +274,11 @@ describe('AdminTagDetailPage', () => {
     const user = userEvent.setup();
 
     renderDetail();
-    await user.click(await screen.findByRole('button', { name: 'Reset token…' }));
-    const dialog = screen.getByRole('dialog', { name: /Reset token on chip …936980/ });
+    await user.click(await screen.findByRole('button', { name: 'Move to new chip…' }));
+    const dialog = screen.getByRole('dialog', { name: 'Move token to a new chip' });
+    expect(dialog).toHaveTextContent(/Token …936980 moves to the replacement chip/);
     expect(dialog).toHaveTextContent(/cannot be undone/i);
-    const submit = within(dialog).getByRole('button', { name: 'Retire chip and reset token' });
+    const submit = within(dialog).getByRole('button', { name: 'Move token and retire old chip' });
 
     expect(api.listTags).toHaveBeenCalledWith({ status: 'ENROLLED', limit: 100 });
     await user.selectOptions(await within(dialog).findByLabelText(/Replacement chip/), NEW_ID);
@@ -275,16 +301,16 @@ describe('AdminTagDetailPage', () => {
       success: true,
       data: { tags: [tag({ id: NEW_ID, uidSuffix: 'ACC040', lifecycleStatus: 'ENROLLED', ownerAccountId: null })], pagination: { page: 1, limit: 100, total: 1 } },
     });
-    api.resetTag.mockRejectedValue(new Error('A transfer is pending on this token; cancel it first'));
+    api.resetTag.mockRejectedValue(new AdminApiError('A transfer is pending on this token; cancel it first', 409, 'CONFLICT'));
     const user = userEvent.setup();
 
     renderDetail();
-    await user.click(await screen.findByRole('button', { name: 'Reset token…' }));
+    await user.click(await screen.findByRole('button', { name: 'Move to new chip…' }));
     const dialog = screen.getByRole('dialog');
     await user.selectOptions(await within(dialog).findByLabelText(/Replacement chip/), NEW_ID);
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     await user.type(within(dialog).getByLabelText(/last 6 characters/), '936980');
-    await user.click(within(dialog).getByRole('button', { name: 'Retire chip and reset token' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Move token and retire old chip' }));
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('A transfer is pending');
     expect(screen.getByRole('dialog')).toBeInTheDocument();

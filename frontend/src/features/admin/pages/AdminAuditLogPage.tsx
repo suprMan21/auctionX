@@ -1,7 +1,7 @@
 /**
  * Admin audit log (S-ADMIN2 Ph1).
- * Filter by actor, action, entity type and target; the dropdowns list values
- * that exist in the log. Rows expand to show the recorded change and reason.
+ * Filter by staff member, action, type and target; the dropdowns list values
+ * that exist in the log, shown with plain-English labels. Rows expand to show the recorded change and reason.
  * @module Module 10 — Admin Dashboard
  */
 
@@ -9,11 +9,11 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { adminApi } from '../api/adminApi';
 import type { AuditFacets, AuditLogEntry, AuditLogList } from '../api/accountSchemas';
+import { errorMessage, formatWhen, loadFailed, shortId } from '../lib/display';
+import { auditActionLabel, auditEntityLabel } from '../lib/labels';
 
 const SELECT_CLASS =
   'min-h-[44px] px-3 py-2 rounded-xl bg-dark-700 text-white border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500';
-
-const label = (value: string) => value.replace(/_/g, ' ');
 
 const Pagination = ({ page, pages, onPage }: { page: number; pages: number; onPage: (p: number) => void }) => {
   if (pages <= 1) return null;
@@ -21,12 +21,12 @@ const Pagination = ({ page, pages, onPage }: { page: number; pages: number; onPa
     <div className="flex items-center gap-2 justify-center pt-4">
       <button type="button" onClick={() => onPage(page - 1)} disabled={page === 1}
         className="min-h-[44px] px-3 rounded-xl text-sm text-gray-300 hover:text-white hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-        ← Prev
+        Previous
       </button>
       <span className="text-sm text-gray-400">Page {page} of {pages}</span>
       <button type="button" onClick={() => onPage(page + 1)} disabled={page === pages}
         className="min-h-[44px] px-3 rounded-xl text-sm text-gray-300 hover:text-white hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-        Next →
+        Next
       </button>
     </div>
   );
@@ -37,11 +37,11 @@ const AuditRow = ({ log }: { log: AuditLogEntry }) => {
   return (
     <>
       <tr className="bg-dark-800 hover:bg-dark-700 transition-colors">
-        <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
+        <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{formatWhen(log.created_at)}</td>
         <td className="px-4 py-3 text-sm text-white max-w-[200px] truncate">{log.admin_email}</td>
-        <td className="px-4 py-3 text-sm text-primary-300">{label(log.action)}</td>
-        <td className="px-4 py-3 text-xs text-gray-400">{label(log.entity_type)}</td>
-        <td className="px-4 py-3 text-xs text-gray-400 font-mono">{log.entity_id.slice(0, 8)}…</td>
+        <td className="px-4 py-3 text-sm text-primary-300" title={log.action}>{auditActionLabel(log.action)}</td>
+        <td className="px-4 py-3 text-xs text-gray-400" title={log.entity_type}>{auditEntityLabel(log.entity_type)}</td>
+        <td className="px-4 py-3 text-xs text-gray-400 font-mono">{shortId(log.entity_id)}</td>
         <td className="px-4 py-3 text-right">
           <button
             type="button"
@@ -56,9 +56,12 @@ const AuditRow = ({ log }: { log: AuditLogEntry }) => {
       {expanded && (
         <tr className="bg-dark-700">
           <td colSpan={6} className="px-6 py-4 space-y-2">
-            <p className="text-xs text-gray-400">Target id: <span className="font-mono">{log.entity_id}</span></p>
+            <p className="text-xs text-gray-400">Target ID: <span className="font-mono">{log.entity_id}</span></p>
             {log.changes ? (
+              <>
+              <p className="text-xs text-gray-400">Recorded change</p>
               <pre className="text-xs text-gray-300 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(log.changes, null, 2)}</pre>
+              </>
             ) : (
               <p className="text-xs text-gray-400">No change data recorded.</p>
             )}
@@ -92,7 +95,7 @@ export const AdminAuditLogPage = () => {
       .getAuditLogs({ page, limit: 50, admin: admin || undefined, action: action || undefined, entity: entity || undefined, target: target || undefined })
       .then((data) => { if (!cancelled) setLoaded({ key: queryKey, data, error: null }); })
       .catch((err: unknown) => {
-        if (!cancelled) setLoaded({ key: queryKey, data: null, error: err instanceof Error ? err.message : 'Audit entries could not be loaded' });
+        if (!cancelled) setLoaded({ key: queryKey, data: null, error: errorMessage(err, loadFailed('Audit entries')) });
       });
     return () => { cancelled = true; };
   }, [admin, action, entity, target, page, queryKey]);
@@ -117,9 +120,9 @@ export const AdminAuditLogPage = () => {
 
       <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
         <label>
-          <span className="sr-only">Filter by admin</span>
+          <span className="sr-only">Filter by staff member</span>
           <select value={admin} onChange={(e) => set('admin', e.target.value)} className={SELECT_CLASS}>
-            <option value="">All admins</option>
+            <option value="">All staff</option>
             {facets?.actors.map((a) => <option key={a.admin_id} value={a.admin_id}>{a.email}</option>)}
           </select>
         </label>
@@ -127,19 +130,19 @@ export const AdminAuditLogPage = () => {
           <span className="sr-only">Filter by action</span>
           <select value={action} onChange={(e) => set('action', e.target.value)} className={SELECT_CLASS}>
             <option value="">All actions</option>
-            {facets?.actions.map((a) => <option key={a} value={a}>{label(a)}</option>)}
+            {facets?.actions.map((a) => <option key={a} value={a}>{auditActionLabel(a)}</option>)}
           </select>
         </label>
         <label>
-          <span className="sr-only">Filter by entity type</span>
+          <span className="sr-only">Filter by type</span>
           <select value={entity} onChange={(e) => set('entity', e.target.value)} className={SELECT_CLASS}>
-            <option value="">All entity types</option>
-            {facets?.entity_types.map((t) => <option key={t} value={t}>{label(t)}</option>)}
+            <option value="">All types</option>
+            {facets?.entity_types.map((t) => <option key={t} value={t}>{auditEntityLabel(t)}</option>)}
           </select>
         </label>
         {target && (
           <div className="flex items-center gap-2 text-sm text-gray-300">
-            <span>Target <span className="font-mono">{target.slice(0, 8)}…</span></span>
+            <span>Target ID <span className="font-mono">{shortId(target)}</span></span>
             <button type="button" onClick={() => set('target', '')}
               className="min-h-[44px] px-3 rounded-xl bg-dark-700 hover:bg-dark-600 text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
               Clear
@@ -163,7 +166,7 @@ export const AdminAuditLogPage = () => {
               <table className="w-full">
                 <thead className="bg-dark-700 border-b border-white/10">
                   <tr>
-                    {['When', 'Admin', 'Action', 'Entity', 'Target', ''].map((h, i) => (
+                    {['When', 'Staff member', 'Action', 'Type', 'Target', ''].map((h, i) => (
                       <th key={h || i} scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>

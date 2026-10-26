@@ -96,9 +96,9 @@ describe('account detail: actions by role', () => {
     api.getAccount.mockResolvedValue(account());
     renderDetail('admin');
     const region = await screen.findByRole('region', { name: 'Actions' });
-    expect(within(region).getByRole('button', { name: 'Suspend' })).toBeInTheDocument();
-    expect(within(region).getByRole('button', { name: 'Retire' })).toBeInTheDocument();
-    expect(within(region).queryByRole('button', { name: 'Change staff role' })).not.toBeInTheDocument();
+    expect(within(region).getByRole('button', { name: 'Suspend account…' })).toBeInTheDocument();
+    expect(within(region).getByRole('button', { name: 'Retire account…' })).toBeInTheDocument();
+    expect(within(region).queryByRole('button', { name: 'Change staff role…' })).not.toBeInTheDocument();
     expect(within(region).queryByRole('button', { name: /Delete/ })).not.toBeInTheDocument();
   });
 
@@ -106,7 +106,7 @@ describe('account detail: actions by role', () => {
     api.getAccount.mockResolvedValue(account({ staff_role: 'super_admin' }));
     renderDetail('admin');
     expect(await screen.findByText('This is a staff account. Only a super admin can change it.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Suspend account…' })).not.toBeInTheDocument();
   });
 
   it('own account: no actions', async () => {
@@ -119,7 +119,7 @@ describe('account detail: actions by role', () => {
     api.getAccount.mockResolvedValue(account({ status: 'suspended', staff_role: 'admin' }));
     renderDetail('super_admin');
     const region = await screen.findByRole('region', { name: 'Actions' });
-    await userEvent.click(within(region).getByRole('button', { name: 'Remove staff role' }));
+    await userEvent.click(within(region).getByRole('button', { name: 'Remove staff role…' }));
     const options = within(screen.getByLabelText('Staff role')).getAllByRole('option').map((o) => o.textContent);
     expect(options).toEqual(['No staff role']);
   });
@@ -128,13 +128,13 @@ describe('account detail: actions by role', () => {
     api.getAccount.mockResolvedValue(account({ status: 'retired', retired_at: '2026-10-25T00:00:00Z', retired_staff_role: 'support' }));
     renderDetail('admin');
     expect(await screen.findByText(/Only a super admin can reactivate it/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Reactivate' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reactivate account…' })).not.toBeInTheDocument();
   });
 
   it('admin on an account retired without a staff role: Reactivate offered', async () => {
     api.getAccount.mockResolvedValue(account({ status: 'retired', retired_at: '2026-10-25T00:00:00Z', retired_staff_role: null }));
     renderDetail('admin');
-    expect(await screen.findByRole('button', { name: 'Reactivate' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Reactivate account…' })).toBeInTheDocument();
   });
 
   it('support: no Actions section at all', async () => {
@@ -149,7 +149,7 @@ describe('account detail: actions by role', () => {
     api.suspendAccount.mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderDetail('admin');
-    await user.click(await screen.findByRole('button', { name: 'Suspend' }));
+    await user.click(await screen.findByRole('button', { name: 'Suspend account…' }));
     const dialog = screen.getByRole('dialog');
     const submit = within(dialog).getByRole('button', { name: 'Suspend account' });
     expect(submit).toBeDisabled();
@@ -158,7 +158,7 @@ describe('account detail: actions by role', () => {
     await user.click(submit);
     expect(api.suspendAccount).toHaveBeenCalledWith(ID, 72, REASON);
     expect(await screen.findByText('Account suspended and signed out everywhere.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Lift suspension' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Lift suspension…' })).toBeInTheDocument();
   });
 });
 
@@ -169,10 +169,10 @@ describe('two-step delete', () => {
       delete: { window_hours: 24, eligible_at: '2026-10-26T00:00:00Z', blockers: ['delete_window_open', 'owns_tokens'] },
     }));
     renderDetail('super_admin');
-    expect(await screen.findByText(/The waiting window since Retire has not passed yet/)).toBeInTheDocument();
-    expect(screen.getByText('The account owns tokens. They must be transferred first.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Delete permanently' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reactivate' })).toBeInTheDocument();
+    expect(await screen.findByText(/The waiting time after retiring has not passed yet/)).toBeInTheDocument();
+    expect(screen.getByText('The account still owns tokens. Transfer them to another account first.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete account…' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reactivate account…' })).toBeInTheDocument();
   });
 
   it('eligible: Delete needs the typed email part and a reason', async () => {
@@ -183,7 +183,7 @@ describe('two-step delete', () => {
     api.deleteAccount.mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderDetail('super_admin');
-    await user.click(await screen.findByRole('button', { name: 'Delete permanently' }));
+    await user.click(await screen.findByRole('button', { name: 'Delete account…' }));
     const dialog = screen.getByRole('dialog');
     const submit = within(dialog).getByRole('button', { name: 'Delete account permanently' });
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
@@ -200,8 +200,8 @@ describe('two-step delete', () => {
   it('admin (not super admin) never sees Delete even when eligible', async () => {
     api.getAccount.mockResolvedValue(account({ status: 'retired', retired_at: '2026-10-20T00:00:00Z' }));
     renderDetail('admin');
-    await screen.findByRole('button', { name: 'Reactivate' });
-    expect(screen.queryByRole('button', { name: 'Delete permanently' })).not.toBeInTheDocument();
+    await screen.findByRole('button', { name: 'Reactivate account…' });
+    expect(screen.queryByRole('button', { name: 'Delete account…' })).not.toBeInTheDocument();
   });
 });
 
@@ -211,10 +211,10 @@ describe('role change', () => {
     api.setAccountRole.mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderDetail('super_admin');
-    await user.click(await screen.findByRole('button', { name: 'Change staff role' }));
+    await user.click(await screen.findByRole('button', { name: 'Change staff role…' }));
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
-    const save = within(dialog).getByRole('button', { name: 'Save role' });
+    const save = within(dialog).getByRole('button', { name: 'Save staff role' });
     expect(save).toBeDisabled();
     await user.selectOptions(within(dialog).getByLabelText('Staff role'), 'support');
     await user.click(save);
@@ -225,7 +225,7 @@ describe('role change', () => {
     api.getAccount.mockResolvedValue(account());
     const user = userEvent.setup();
     renderDetail('super_admin');
-    await user.click(await screen.findByRole('button', { name: 'Change staff role' }));
+    await user.click(await screen.findByRole('button', { name: 'Change staff role…' }));
     const options = within(screen.getByLabelText('Staff role')).getAllByRole('option').map((o) => o.textContent);
     expect(options).toEqual(['No staff role', 'Super admin', 'Admin', 'Support']);
   });
@@ -235,14 +235,25 @@ describe('token holdings (AC 4)', () => {
   it('load only when asked, for manage_nfc', async () => {
     api.getAccount.mockResolvedValue(account());
     api.getAccountTokens.mockResolvedValue({
-      tokens: [{ id: 't1', chip_name: 'chip_004', serial_suffix: '8A0351DE', lifecycle_status: 'ACTIVE', registered_at: null }],
-      reissue_requests: [],
+      tokens: [
+        { id: 't1', chip_name: 'chip_004', serial_suffix: '8A0351DE', lifecycle_status: 'ACTIVE', registered_at: null },
+        { id: 't2', chip_name: null, serial_suffix: null, lifecycle_status: 'ENROLLED', registered_at: null },
+      ],
+      reissue_requests: [
+        { id: 'r1', tag_id: 't1', status: 'APPROVED', payment_status: 'AWAITING_PAYMENT', created_at: '2026-10-20T00:00:00Z' },
+      ],
     });
     const user = userEvent.setup();
     renderDetail('admin');
     await user.click(await screen.findByRole('button', { name: 'Show tokens' }));
     expect(api.getAccountTokens).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole('link', { name: 'chip_004' })).toHaveAttribute('href', '/admin/tags/t1');
+    // Plain words, never the raw id or enum.
+    expect(screen.getByRole('link', { name: 'Unnamed token' })).toHaveAttribute('href', '/admin/tags/t2');
+    const holdings = screen.getByRole('region', { name: 'Tokens and re-issues' });
+    expect(within(holdings).getByTitle('ACTIVE')).toHaveTextContent('Active');
+    expect(within(holdings).getByTitle('ENROLLED')).toHaveTextContent('Ready to claim');
+    expect(screen.getByText(/: Waiting for payment$/)).toBeInTheDocument();
   });
 
   it('support (no manage_nfc) has no token section', async () => {
@@ -274,7 +285,7 @@ describe('users list', () => {
     const table = screen.getByRole('table');
     expect(within(table).getByText('Suspended')).toBeInTheDocument();
     expect(within(table).getByText('Support')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Change' })).not.toBeInTheDocument(); // window edit: super admin only
+    expect(screen.queryByRole('button', { name: 'Change waiting time…' })).not.toBeInTheDocument(); // window edit: super admin only
 
     await user.type(screen.getByTestId('user-search'), 'staff');
     await waitFor(() => expect(api.searchAccounts).toHaveBeenLastCalledWith({ q: 'staff', status: 'all', page: 1, limit: 25 }), { timeout: 2000 });
@@ -296,12 +307,19 @@ describe('nav by permission', () => {
 
   it('support: users and stuck payments, no tokens, pricing or audit', () => {
     const links = navLinks('support');
-    expect(links).toEqual(expect.arrayContaining(['Users', 'Stuck payments']));
-    for (const hidden of ['Tags', 'Re-issue queue', 'Pricing', 'Free transfers', 'Audit Logs']) expect(links).not.toContain(hidden);
+    expect(links).toEqual(expect.arrayContaining(['Accounts', 'Stuck payments']));
+    for (const hidden of ['Tokens', 'Re-issues', 'Pricing', 'Free transfers', 'Audit log']) expect(links).not.toContain(hidden);
   });
 
   it('admin: tokens, pricing and audit too', () => {
-    expect(navLinks('admin')).toEqual(expect.arrayContaining(['Users', 'Tags', 'Re-issue queue', 'Stuck payments', 'Pricing', 'Free transfers', 'Audit Logs']));
+    expect(navLinks('admin')).toEqual(expect.arrayContaining(['Accounts', 'Tokens', 'Re-issues', 'Stuck payments', 'Pricing', 'Free transfers', 'Audit log']));
+  });
+
+  it('super admin: every page, in order, under the plain names', () => {
+    expect(navLinks('super_admin')).toEqual([
+      'Dashboard', 'Accounts', 'Tokens', 'Re-issues', 'Stuck payments', 'Pricing', 'Free transfers',
+      'Creator ID checks', 'Audit log', 'System health',
+    ]);
   });
 });
 

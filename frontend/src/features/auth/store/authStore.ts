@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { signInErrorMessage } from "../lib/signInError";
 
 interface AuthState {
   user: User | null;
@@ -75,8 +76,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
       if (error) throw error;
       set({ user: data.user, session: data.session });
-    } catch (error: any) {
-      set({ error: error.message });
+    } catch (error: unknown) {
+      set({ error: signInErrorMessage(error) });
       throw error;
     } finally {
       set({ loading: false });

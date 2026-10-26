@@ -60,7 +60,7 @@ const ADMIN_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:3001/api
 async function getAuthHeader(): Promise<{ Authorization: string }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) {
-    throw new Error('Not authenticated');
+    throw new AdminApiError('Your session has ended. Sign in again.', 401, 'NO_SESSION');
   }
   return { Authorization: `Bearer ${session.access_token}` };
 }
@@ -103,14 +103,14 @@ async function adminFetch<T>(
   });
 
   if (!response.ok) {
-    let message = `HTTP ${response.status}`;
+    let message = 'Something went wrong on our side. Try again.';
     let code: string | null = null;
     try {
       const body = await response.json();
       message = body.error || message;
       code = typeof body.code === 'string' ? body.code : null;
     } catch {
-      // body is not JSON — keep the HTTP status message
+      // body is not JSON: keep the generic message
     }
     if ((response.status === 401 || response.status === 403) && path !== '/me') {
       refusalListeners.forEach((listener) => listener());

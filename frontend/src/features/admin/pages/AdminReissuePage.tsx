@@ -4,8 +4,8 @@
  * A re-issue replaces a chip that is coming loose, before it falls off, for the
  * registered owner. Each request carries a live tap of the old chip and 1–3
  * photos from the web camera. Flow: Pending → approve (owner pays on the
- * website) or approve without fee → Ready for a chip → Fulfil. Nothing is
- * fulfilled unpaid.
+ * website) or approve without fee → Ready for a chip → Move token to new chip
+ * (the API calls this step "fulfil"). Nothing is completed unpaid.
  *
  * Photos are 5-minute signed links; reloading the page refreshes them.
  */
@@ -19,30 +19,20 @@ import {
   AdminReissueReviewDialog,
   type ReissueDecision,
 } from '../components/AdminReissueDialogs';
+import { errorMessage, formatAmount, formatWhen as fmt, loadFailed, shortId } from '../lib/display';
+import { reissueStageLabel } from '../lib/labels';
 
 const FILTERS: ReadonlyArray<{ label: string; value: AdminReissueFilter }> = [
-  { label: 'Pending review', value: 'PENDING' },
-  { label: 'Awaiting payment', value: 'AWAITING_PAYMENT' },
-  { label: 'Ready for a chip', value: 'READY' },
+  { label: 'Waiting for review', value: 'PENDING' },
+  { label: 'Waiting for payment', value: 'AWAITING_PAYMENT' },
+  { label: 'Ready for a new chip', value: 'READY' },
   { label: 'Done', value: 'DONE' },
   { label: 'Rejected', value: 'REJECTED' },
   { label: 'Cancelled', value: 'CANCELLED' },
   { label: 'All', value: 'ALL' },
 ];
 
-const fmt = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString() : '—');
-const shortId = (id: string | null): string => (id ? `${id.slice(0, 8)}…` : '—');
-const money = (amount: number | null, currency: string | null): string =>
-  amount === null ? '—' : `${(amount / 100).toFixed(2)} ${(currency ?? 'usd').toUpperCase()}`;
-
-const stageOf = (r: AdminReissueRequest): string => {
-  if (r.fulfilledAt) return 'Done';
-  if (r.status === 'PENDING') return 'Pending review';
-  if (r.status === 'APPROVED' && r.paymentStatus === 'AWAITING_PAYMENT') return 'Awaiting payment';
-  if (r.status === 'APPROVED' && r.paymentStatus === 'PAID') return 'Paid, ready for a chip';
-  if (r.status === 'APPROVED' && r.paymentStatus === 'WAIVED') return 'Fee waived, ready for a chip';
-  return r.status.charAt(0) + r.status.slice(1).toLowerCase();
-};
+const stageOf = (r: AdminReissueRequest): string => reissueStageLabel(r.status, r.paymentStatus, Boolean(r.fulfilledAt));
 
 type OpenDialog =
   | { kind: 'none' }
@@ -69,7 +59,7 @@ export const AdminReissuePage = () => {
         if (!cancelled) setResult({ key: queryKey, rows: res.data.requests, total: res.data.pagination.total });
       })
       .catch((err) => {
-        if (!cancelled) setFailure({ key: queryKey, message: err instanceof Error ? err.message : 'Failed to load the queue' });
+        if (!cancelled) setFailure({ key: queryKey, message: errorMessage(err, loadFailed('Re-issues')) });
       });
     return () => { cancelled = true; };
   }, [filter, queryKey]);
@@ -86,10 +76,10 @@ export const AdminReissuePage = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Re-issue queue</h1>
+        <h1 className="text-2xl font-bold text-white">Re-issues</h1>
         <p className="text-gray-400 text-sm mt-1">
-          Replacement chips for owners whose chip is coming loose. Approve only when the photos show the chip still
-          attached to the item.
+          Requests from owners whose chip is coming loose. Approve only when the photos show the chip still attached
+          to the item.
         </p>
       </div>
 
@@ -112,7 +102,7 @@ export const AdminReissuePage = () => {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-48" role="status" aria-label="Loading the re-issue queue">
+        <div className="flex items-center justify-center h-48" role="status" aria-label="Loading re-issues">
           <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : error ? (
@@ -145,10 +135,10 @@ export const AdminReissuePage = () => {
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 <div><dt className="inline text-gray-400">Requester: </dt><dd className="inline font-mono text-gray-200">{shortId(r.requesterAccountId)}</dd></div>
                 <div><dt className="inline text-gray-400">Requested: </dt><dd className="inline text-gray-200">{fmt(r.createdAt)}</dd></div>
-                <div><dt className="inline text-gray-400">Proof tap: </dt><dd className="inline text-gray-200">{fmt(r.tappedAt)}</dd></div>
-                <div><dt className="inline text-gray-400">Fee: </dt><dd className="inline text-gray-200">{r.paymentStatus === 'WAIVED' ? 'Waived' : money(r.chargedAmount, r.chargedCurrency)}</dd></div>
+                <div><dt className="inline text-gray-400">Proof tap at: </dt><dd className="inline text-gray-200">{fmt(r.tappedAt)}</dd></div>
+                <div><dt className="inline text-gray-400">Fee: </dt><dd className="inline text-gray-200">{r.paymentStatus === 'WAIVED' ? 'Waived' : formatAmount(r.chargedAmount, r.chargedCurrency)}</dd></div>
                 {r.paidAt && <div><dt className="inline text-gray-400">Paid: </dt><dd className="inline text-gray-200">{fmt(r.paidAt)}</dd></div>}
-                {r.reviewReason && <div className="sm:col-span-2"><dt className="inline text-gray-400">Review reason: </dt><dd className="inline text-gray-200">{r.reviewReason}</dd></div>}
+                {r.reviewReason && <div className="sm:col-span-2"><dt className="inline text-gray-400">Reason: </dt><dd className="inline text-gray-200">{r.reviewReason}</dd></div>}
                 {r.fulfilledAt && r.newTagId && (
                   <div className="sm:col-span-2">
                     <dt className="inline text-gray-400">New chip: </dt>
@@ -199,7 +189,7 @@ export const AdminReissuePage = () => {
               )}
               {r.status === 'APPROVED' && !r.fulfilledAt && (r.paymentStatus === 'PAID' || r.paymentStatus === 'WAIVED') && (
                 <ActionButton onClick={() => setDialog({ kind: 'fulfil', request: r })} tone="danger">
-                  Fulfil with a new chip…
+                  Move to new chip…
                 </ActionButton>
               )}
             </li>

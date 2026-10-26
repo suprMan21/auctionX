@@ -8,6 +8,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { adminApi } from '../api/adminApi';
 import type { HealthStatus, HealthComponent } from '../types/admin';
+import { formatWhen } from '../lib/display';
+import { healthComponentLabel, healthStatusLabel } from '../lib/labels';
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -16,11 +18,12 @@ const POLL_INTERVAL_MS = 30_000;
 /** Overall status chip. */
 const StatusChip = ({ status }: { status: 'ok' | 'degraded' | 'down' }) => {
   const map = {
-    ok: { label: 'Operational', cls: 'bg-success-500/20 text-success-400', dot: 'bg-success-400' },
-    degraded: { label: 'Degraded', cls: 'bg-warning-500/20 text-warning-400', dot: 'bg-warning-400' },
-    down: { label: 'Down', cls: 'bg-error-500/20 text-error-400', dot: 'bg-error-400' },
+    ok: { cls: 'bg-success-500/20 text-success-400', dot: 'bg-success-400' },
+    degraded: { cls: 'bg-warning-500/20 text-warning-400', dot: 'bg-warning-400' },
+    down: { cls: 'bg-error-500/20 text-error-400', dot: 'bg-error-400' },
   };
-  const { label, cls, dot } = map[status];
+  const { cls, dot } = map[status];
+  const label = healthStatusLabel(status);
 
   return (
     <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${cls}`}>
@@ -44,14 +47,14 @@ const ComponentRow = ({ name, component }: { name: string; component: HealthComp
         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
           component.status === 'ok' ? 'bg-success-400' : component.status === 'degraded' ? 'bg-warning-400' : 'bg-error-400'
         }`} />
-        <span className="text-white text-sm capitalize">{name.replace(/_/g, ' ')}</span>
+        <span className="text-white text-sm">{healthComponentLabel(name)}</span>
       </div>
       <div className="flex items-center gap-4 text-right">
         {component.latencyMs != null && (
-          <span className="text-xs text-gray-400">{component.latencyMs}ms</span>
+          <span className="text-xs text-gray-400">{component.latencyMs} ms</span>
         )}
         <span className={`text-sm font-medium ${colorMap[component.status]}`}>
-          {component.status}
+          {healthStatusLabel(component.status)}
         </span>
       </div>
     </div>
@@ -118,7 +121,7 @@ export const AdminHealthPage = () => {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-white">System Health</h1>
+          <h1 className="text-2xl font-bold text-white">System health</h1>
           {lastFetched && (
             <p className="text-gray-400 text-sm mt-1">
               Last checked: {lastFetched.toLocaleTimeString()} · Refreshing in {countdown}s
@@ -135,7 +138,7 @@ export const AdminHealthPage = () => {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-48">
+        <div className="flex items-center justify-center h-48" role="status" aria-label="Checking systems">
           <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : notDeployed ? (
@@ -145,12 +148,9 @@ export const AdminHealthPage = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <h2 className="text-warning-400 font-semibold">Health endpoint not deployed</h2>
+            <h2 className="text-warning-400 font-semibold">System status unavailable</h2>
           </div>
-          <p className="text-gray-400 text-sm">
-            The <code className="text-warning-300 bg-dark-700 px-1 py-0.5 rounded">GET /admin/health</code> endpoint
-            returned an error. This endpoint may not yet be deployed on the backend.
-          </p>
+          <p className="text-gray-400 text-sm">We could not check system status. Try again in a minute.</p>
         </div>
       ) : health ? (
         <>
@@ -162,7 +162,7 @@ export const AdminHealthPage = () => {
             </div>
             {health.timestamp && (
               <p className="text-xs text-gray-400">
-                Server time: {new Date(health.timestamp).toLocaleString()}
+                Server time: {formatWhen(health.timestamp)}
               </p>
             )}
           </div>
@@ -170,7 +170,7 @@ export const AdminHealthPage = () => {
           {/* Component breakdown */}
           {componentEntries.length > 0 && (
             <div className="glass rounded-2xl p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">Components</h2>
+              <h2 className="text-lg font-semibold text-white mb-4">Systems</h2>
               <div>
                 {componentEntries.map(([name, component]) => (
                   <ComponentRow key={name} name={name} component={component} />

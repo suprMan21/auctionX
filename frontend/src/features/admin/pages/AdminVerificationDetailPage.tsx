@@ -1,8 +1,8 @@
 /**
  * AdminVerificationDetailPage (S22). Mirror of AdminAuctionDetailPage:
- * back link → header → user info → session history → review history →
- * destructive override action gated by window.confirm + window.prompt(reason)
- * + react-hot-toast.
+ * back link → header → account info → session history → review history →
+ * status change gated by window.confirm + window.prompt(reason)
+ * + react-hot-toast. Shown as part of "Creator ID checks".
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -17,6 +17,8 @@ import type {
   AdminYotiVerificationStatus,
   AdminYotiVerificationUserDetail,
 } from '../api/adminApi';
+import { ACTION_FAILED, NONE, errorMessage, formatWhen as fmt, loadFailed } from '../lib/display';
+import { auditActionLabel, codeLabel, idCheckPurposeLabel, idCheckStatusLabel, idSessionStatusLabel } from '../lib/labels';
 
 const STATUS_BADGE: Record<AdminYotiVerificationStatus, string> = {
   NONE: 'bg-gray-500/20 text-gray-400',
@@ -29,8 +31,6 @@ const STATUS_BADGE: Record<AdminYotiVerificationStatus, string> = {
   FLAGGED: 'bg-orange-500/20 text-orange-400',
   REVOKED: 'bg-red-500/20 text-red-400',
 };
-
-const fmt = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString() : '—');
 
 const OVERRIDE_TARGETS: AdminYotiVerificationStatus[] = [
   'VERIFIED',
@@ -56,7 +56,7 @@ export const AdminVerificationDetailPage = () => {
       const res = await adminApi.getYotiVerificationDetail(userId);
       setData(res.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load verification detail');
+      setError(errorMessage(err, loadFailed('This ID check')));
     } finally {
       setLoading(false);
     }
@@ -66,25 +66,26 @@ export const AdminVerificationDetailPage = () => {
 
   const handleOverride = async (newStatus: AdminYotiVerificationStatus) => {
     if (!userId || !data) return;
+    const label = idCheckStatusLabel(newStatus);
     if (newStatus === data.user.seller_verification_status) {
-      toast.error(`User is already ${newStatus}`);
+      toast.error(`The status is already ${label}.`);
       return;
     }
-    if (!window.confirm(`Override verification to ${newStatus}? This is audited.`)) return;
+    if (!window.confirm(`Change the status to ${label}? This is recorded in the audit log.`)) return;
     const reason = window.prompt(
-      `Reason for override → ${newStatus} (min 10 chars). This is written to the audit log.`,
+      `Why are you changing the status to ${label}? At least 10 characters. This is recorded in the audit log.`,
     );
     if (!reason || reason.trim().length < 10) {
-      toast.error('Override cancelled — reason must be at least 10 characters.');
+      toast.error('Status not changed. The reason needs at least 10 characters.');
       return;
     }
     setSubmitting(true);
     try {
       await adminApi.overrideYotiVerification(userId, newStatus, reason.trim());
-      toast.success(`Status overridden to ${newStatus}`);
+      toast.success(`Status changed to ${label}.`);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to override verification');
+      toast.error(errorMessage(err, ACTION_FAILED));
     } finally {
       setSubmitting(false);
     }
@@ -102,10 +103,10 @@ export const AdminVerificationDetailPage = () => {
     return (
       <div className="space-y-4">
         <Link to="/admin/verifications" className="text-sm text-gray-400 hover:text-white">
-          ← Back to verifications
+          ← All creator ID checks
         </Link>
         <div className="glass rounded-2xl p-6 border border-red-500/30">
-          <p className="text-red-400 text-sm">{error || 'Verification not found'}</p>
+          <p className="text-red-400 text-sm">{error || 'ID check not found. Check the link or search again.'}</p>
         </div>
       </div>
     );
@@ -119,7 +120,7 @@ export const AdminVerificationDetailPage = () => {
         onClick={() => navigate('/admin/verifications')}
         className="text-sm text-gray-400 hover:text-white transition-colors"
       >
-        ← Back to verifications
+        ← All creator ID checks
       </button>
 
       {/* Header */}
@@ -131,11 +132,12 @@ export const AdminVerificationDetailPage = () => {
           <p className="text-gray-400 text-sm">{user.email}</p>
         </div>
         <span
+          title={user.seller_verification_status}
           className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
             STATUS_BADGE[user.seller_verification_status] ?? 'bg-gray-500/20 text-gray-400'
           }`}
         >
-          {user.seller_verification_status}
+          {idCheckStatusLabel(user.seller_verification_status)}
         </span>
       </div>
 
@@ -150,48 +152,48 @@ export const AdminVerificationDetailPage = () => {
           <p className="text-white">{fmt(user.seller_verification_reviewed_at)}</p>
         </div>
         <div>
-          <p className="text-gray-400">Age Verified</p>
+          <p className="text-gray-400">Age verified</p>
           <p className="text-white">
             {user.age_verified ? `Yes (${fmt(user.age_verified_at)})` : 'No'}
             {user.yoti_age_estimate != null && (
-              <span className="text-xs text-gray-500"> — estimate {user.yoti_age_estimate}</span>
+              <span className="text-xs text-gray-500"> (estimated age {user.yoti_age_estimate})</span>
             )}
           </p>
         </div>
         <div>
-          <p className="text-gray-400">Verification Provider</p>
-          <p className="text-white">{user.age_verification_provider ?? '—'}</p>
+          <p className="text-gray-400">Checked by</p>
+          <p className="text-white">{codeLabel(user.age_verification_provider, NONE)}</p>
         </div>
         <div className="md:col-span-2">
-          <p className="text-gray-400">Rejection Reason</p>
-          <p className="text-white">{user.seller_verification_rejection_reason || '—'}</p>
+          <p className="text-gray-400">Reason for rejection</p>
+          <p className="text-white">{user.seller_verification_rejection_reason || NONE}</p>
         </div>
       </div>
 
       {/* Yoti session history */}
       <div className="glass rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-white mb-4">
-          Yoti Sessions ({data.sessions.length})
+          ID check sessions ({data.sessions.length})
         </h2>
         {data.sessions.length === 0 ? (
-          <p className="text-gray-400 text-sm">No Yoti sessions yet.</p>
+          <p className="text-gray-400 text-sm">No ID check sessions yet.</p>
         ) : (
           <ul className="space-y-3">
             {data.sessions.map((sess: AdminYotiSessionRow) => (
               <li key={sess.id} className="bg-dark-800 rounded-xl p-3 border border-white/5">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                   <span className="font-mono text-xs text-gray-300">{sess.yoti_session_id}</span>
-                  <span className="text-xs text-gray-400">{sess.purpose}</span>
+                  <span className="text-xs text-gray-400">{idCheckPurposeLabel(sess.purpose)}</span>
                 </div>
                 <div className="text-xs text-gray-400">
-                  status: <span className="text-white">{sess.status}</span> · last event:{' '}
-                  <span className="text-white">{sess.last_event_type ?? '—'}</span> · at:{' '}
+                  Status: <span className="text-white">{idSessionStatusLabel(sess.status)}</span> · Last update:{' '}
+                  <span className="text-white">{codeLabel(sess.last_event_type, NONE)}</span> · At:{' '}
                   <span className="text-white">{fmt(sess.last_event_at)}</span>
                   {sess.age_estimate != null && (
-                    <> · age est: <span className="text-white">{sess.age_estimate}</span></>
+                    <> · Estimated age: <span className="text-white">{sess.age_estimate}</span></>
                   )}
                   {sess.rejection_reason && (
-                    <> · reason: <span className="text-red-400">{sess.rejection_reason}</span></>
+                    <> · Reason: <span className="text-red-400">{sess.rejection_reason}</span></>
                   )}
                 </div>
               </li>
@@ -203,19 +205,19 @@ export const AdminVerificationDetailPage = () => {
       {/* Review / override history */}
       {data.reviews.length > 0 && (
         <div className="glass rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Review History</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">Review history</h2>
           <ul className="space-y-3">
             {data.reviews.map((review: AdminYotiVerificationReview) => (
               <li key={review.id} className="bg-dark-800 rounded-xl p-3 border border-white/5">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-gray-500/20 text-gray-300">
-                    {review.action}
+                    {auditActionLabel(review.action)}
                   </span>
                   <span className="text-xs text-gray-500">{fmt(review.created_at)}</span>
                 </div>
                 <p className="text-sm text-gray-300">{review.notes}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {review.previous_status} → {review.new_status}
+                  {idCheckStatusLabel(review.previous_status)} → {idCheckStatusLabel(review.new_status)}
                 </p>
               </li>
             ))}
@@ -225,10 +227,10 @@ export const AdminVerificationDetailPage = () => {
 
       {/* Override actions */}
       <div className="glass rounded-2xl p-6 border border-white/10">
-        <h2 className="text-lg font-semibold text-white mb-3">Manual Override</h2>
+        <h2 className="text-lg font-semibold text-white mb-3">Change status</h2>
         <p className="text-sm text-gray-400 mb-4">
-          Force the verification status. Requires a reason ≥ 10 chars. Action is written to the audit
-          log + `seller_verification_reviews` table.
+          Set the status yourself. You give a reason (at least 10 characters), and the change is recorded in the
+          audit log and the review history.
         </p>
         <div className="flex flex-wrap gap-2">
           {OVERRIDE_TARGETS.map((target) => (
@@ -238,7 +240,7 @@ export const AdminVerificationDetailPage = () => {
               disabled={submitting || target === user.seller_verification_status}
               onClick={() => handleOverride(target)}
             >
-              {submitting ? 'Working…' : `Set ${target}`}
+              {submitting ? 'Saving…' : `Set to ${idCheckStatusLabel(target)}…`}
             </Button>
           ))}
         </div>

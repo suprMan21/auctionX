@@ -12,6 +12,8 @@ import type { HealthStatus } from '../types/admin';
 import type { AuditLogEntry } from '../api/accountSchemas';
 import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { isMarketplaceEnabledOnClient } from '@/lib/featureFlags';
+import { formatWhen } from '../lib/display';
+import { auditActionLabel, auditEntityLabel } from '../lib/labels';
 
 /** Settles to null instead of throwing, so one failed panel does not blank the dashboard. */
 const orNull = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
@@ -49,13 +51,13 @@ const StatCard = ({
 const AuditRow = ({ log }: { log: AuditLogEntry }) => (
   <div className="flex items-start justify-between gap-4 py-3 border-b border-white/5 last:border-0">
     <div className="min-w-0">
-      <p className="text-sm text-white font-medium truncate">{log.action.replace(/_/g, ' ')}</p>
+      <p className="text-sm text-white font-medium truncate" title={log.action}>{auditActionLabel(log.action)}</p>
       <p className="text-xs text-gray-400 truncate">
-        {log.admin_email} · {log.entity_type} {log.entity_id.slice(0, 8)}…
+        {log.admin_email} · {auditEntityLabel(log.entity_type)}
       </p>
     </div>
     <time className="text-xs text-gray-400 flex-shrink-0">
-      {log.created_at ? new Date(log.created_at).toLocaleString() : '—'}
+      {formatWhen(log.created_at)}
     </time>
   </div>
 );
@@ -68,10 +70,16 @@ const HealthChip = ({ health }: { health: HealthStatus | null | 'error' }) => {
     return (
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-warning-500/20 text-warning-500">
         <span className="w-1.5 h-1.5 rounded-full bg-warning-500" />
-        Health endpoint not available
+        System status unavailable
       </span>
     );
   }
+
+  const textMap: Record<string, string> = {
+    ok: 'All systems working',
+    degraded: 'Some systems slow',
+    down: 'System down',
+  };
 
   const colorMap: Record<string, string> = {
     ok: 'bg-success-500/20 text-success-500',
@@ -91,7 +99,7 @@ const HealthChip = ({ health }: { health: HealthStatus | null | 'error' }) => {
       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${colorMap[health.status] ?? 'bg-gray-500/20 text-gray-400'}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${dotMap[health.status] ?? 'bg-gray-400'}`} />
-      System {health.status}
+      {textMap[health.status] ?? 'System status unknown'}
     </Link>
   );
 };
@@ -145,22 +153,22 @@ export const AdminDashboardPage = () => {
     );
   }
 
-  const shown = (v: number | null) => (v === null ? '—' : v);
+  const shown = (v: number | null) => (v === null ? 'Unavailable' : v);
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-gray-400 text-sm mt-1">Platform overview</p>
+        <p className="text-gray-400 text-sm mt-1">Overview</p>
       </div>
 
-      {/* Stat cards: only the ones this admin may open ("—" when a count could not be loaded) */}
+      {/* Stat cards: only the ones this admin may open ("Unavailable" when a count could not be loaded) */}
       {(canViewUsers || marketplace) && (
         <div data-testid="stats-cards" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {canViewUsers && <StatCard label="Total Users" value={shown(stats.totalUsers)} to="/admin/users" />}
-          {marketplace && <StatCard label="Pending Moderation" value={shown(stats.pendingModeration)} to="/admin/moderation" />}
-          {marketplace && <StatCard label="Active Listings" value={shown(stats.activeListings)} to="/admin/moderation" />}
-          {marketplace && <StatCard label="Active Auctions" value={shown(stats.activeAuctions)} to="/admin/auctions" />}
+          {canViewUsers && <StatCard label="Accounts" value={shown(stats.totalUsers)} to="/admin/users" />}
+          {marketplace && <StatCard label="Pending moderation" value={shown(stats.pendingModeration)} to="/admin/moderation" />}
+          {marketplace && <StatCard label="Active listings" value={shown(stats.activeListings)} to="/admin/moderation" />}
+          {marketplace && <StatCard label="Active auctions" value={shown(stats.activeAuctions)} to="/admin/auctions" />}
         </div>
       )}
 
@@ -168,12 +176,12 @@ export const AdminDashboardPage = () => {
       {canViewAudit && (
       <div className="glass rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Recent Activity</h2>
+          <h2 className="text-lg font-semibold text-white">Recent activity</h2>
           <Link
             to="/admin/audit-logs"
             className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
           >
-            View all →
+            View audit log
           </Link>
         </div>
 

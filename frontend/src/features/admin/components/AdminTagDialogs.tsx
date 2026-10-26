@@ -1,5 +1,6 @@
 /**
- * S-ADMIN1 action dialogs: suspend/unsuspend and the token reset.
+ * S-ADMIN1 action dialogs: suspend/unsuspend and the token reset ("Move token
+ * to a new chip" on screen).
  * Every action needs a typed reason (min 10 chars, matching the API + DB rule).
  */
 
@@ -7,6 +8,7 @@ import { useEffect, useId, useState } from 'react';
 import { adminApi, chipLabel, confirmationSuffixOf, type AdminTag } from '../api/adminApi';
 import { AdminDialog, ADMIN_BUTTON_CLASS, ADMIN_FIELD_CLASS } from './AdminDialog';
 import { confirmsChip, useEnrolledChips } from '../lib/chipConfirm';
+import { ACTION_FAILED, errorMessage, formatDay } from '../lib/display';
 
 export const REASON_MIN = 10;
 
@@ -63,7 +65,7 @@ export const AdminSuspendDialog = ({ open, tag, suspend, onClose, onDone }: Susp
       await adminApi.setTagSuspension(tag.id, suspend, reason.trim());
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The action failed');
+      setError(errorMessage(err, ACTION_FAILED));
     } finally {
       setBusy(false);
     }
@@ -73,10 +75,10 @@ export const AdminSuspendDialog = ({ open, tag, suspend, onClose, onDone }: Susp
     <AdminDialog
       open={open}
       onClose={onClose}
-      title={suspend ? `Suspend chip ${chipLabel(tag)}` : `Lift suspension on chip ${chipLabel(tag)}`}
+      title={suspend ? `Suspend token ${chipLabel(tag)}` : `Lift suspension on token ${chipLabel(tag)}`}
       description={suspend
-        ? 'The token will verify as invalid (reason: suspended) and cannot be transferred until the suspension is lifted. The tap counter is not changed.'
-        : 'The token returns to Active and verifies normally again.'}
+        ? 'Taps will show the token as suspended, and it cannot be transferred until you lift the suspension.'
+        : 'The token is active again and verifies normally.'}
     >
       <ReasonField value={reason} onChange={setReason} />
       <ErrorLine message={error} />
@@ -90,7 +92,7 @@ export const AdminSuspendDialog = ({ open, tag, suspend, onClose, onDone }: Susp
           disabled={busy || reason.trim().length < REASON_MIN}
           className={`${ADMIN_BUTTON_CLASS} ${suspend ? 'bg-amber-600 hover:bg-amber-500' : 'bg-primary-600 hover:bg-primary-500'} text-white`}
         >
-          {busy ? 'Working…' : suspend ? 'Suspend token' : 'Lift suspension'}
+          {busy ? (suspend ? 'Suspending…' : 'Lifting suspension…') : suspend ? 'Suspend token' : 'Lift suspension'}
         </button>
       </div>
     </AdminDialog>
@@ -106,19 +108,19 @@ export const ReplacementChipField = (
   const chipId = useId();
   return (
     <div className="space-y-1">
-      <label htmlFor={chipId} className="block text-sm font-medium text-gray-200">Replacement chip (enrolled, unclaimed)</label>
+      <label htmlFor={chipId} className="block text-sm font-medium text-gray-200">Replacement chip (set up, not yet claimed)</label>
       {loadError ? (
         <ErrorLine message={loadError} />
       ) : candidates === null ? (
-        <p className="text-sm text-gray-400">Loading enrolled chips…</p>
+        <p className="text-sm text-gray-400">Loading available chips…</p>
       ) : candidates.length === 0 ? (
-        <p className="text-sm text-amber-300">No enrolled chips are available. Encode one first.</p>
+        <p className="text-sm text-amber-300">No blank chips are ready. Set up a new chip with the encoder first.</p>
       ) : (
         <select id={chipId} value={value} onChange={(e) => onChange(e.target.value)} className={ADMIN_FIELD_CLASS}>
           <option value="">Choose a chip…</option>
           {candidates.map((c) => (
             <option key={c.id} value={c.id}>
-              {chipLabel(c)} (enrolled {c.registeredAt ? new Date(c.registeredAt).toLocaleDateString() : '—'})
+              {chipLabel(c)} (set up {formatDay(c.registeredAt)})
             </option>
           ))}
         </select>
@@ -129,7 +131,8 @@ export const ReplacementChipField = (
 
 /**
  * The admin types the last 6 characters of the chip being retired: its serial on
- * a v2 chip (the whole lot shares UID …936980), else its UID.
+ * a v2 chip (the whole lot shares UID …936980), else its UID. On screen the
+ * UID is called the chip's hardware ID.
  */
 export const ConfirmChipField = (
   { chip, value, onChange }:
@@ -154,7 +157,7 @@ export const ConfirmChipField = (
         className={`${ADMIN_FIELD_CLASS} font-mono uppercase`}
       />
       <p id={confirmHintId} className="text-xs text-gray-400">
-        Expected: {expected} ({chip.serialSuffix ? 'end of the chip serial' : 'end of the chip UID'})
+        Expected: {expected} ({chip.serialSuffix ? 'end of the chip serial number' : "end of the chip's hardware ID"})
       </p>
     </div>
   );
@@ -190,7 +193,7 @@ export const AdminResetDialog = ({ open, tag, onClose, onDone }: ResetDialogProp
       const res = await adminApi.resetTag(tag.id, { newTagId, reason: reason.trim(), confirmSuffix: confirm.trim() });
       onDone(res.data.newTagId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The reset failed');
+      setError(errorMessage(err, ACTION_FAILED));
     } finally {
       setBusy(false);
     }
@@ -201,12 +204,12 @@ export const AdminResetDialog = ({ open, tag, onClose, onDone }: ResetDialogProp
       open={open}
       onClose={onClose}
       danger
-      title={`Reset token on chip ${chipLabel(tag)}`}
+      title="Move token to a new chip"
       description={
         <>
           <p>
-            Ownership, the item link, disclosure settings and the full history move to the replacement chip, and the
-            owner gets a new Ownership ID.
+            Token {chipLabel(tag)} moves to the replacement chip. Ownership, the item link, disclosure settings and the
+            full history move with it, and the owner gets a new Ownership ID.
           </p>
           <p className="mt-2 font-semibold text-red-300">
             Chip {chipLabel(tag)} is retired permanently and marked for destruction. This cannot be undone.
@@ -224,7 +227,7 @@ export const AdminResetDialog = ({ open, tag, onClose, onDone }: ResetDialogProp
           Cancel
         </button>
         <button type="button" onClick={submit} disabled={!ready} className={`${ADMIN_BUTTON_CLASS} bg-red-600 hover:bg-red-500 text-white`}>
-          {busy ? 'Resetting…' : 'Retire chip and reset token'}
+          {busy ? 'Moving…' : 'Move token and retire old chip'}
         </button>
       </div>
     </AdminDialog>

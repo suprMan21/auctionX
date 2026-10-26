@@ -1,5 +1,6 @@
 /**
- * AdminVerificationsPage (S22) — list of Yoti-driven seller verifications.
+ * AdminVerificationsPage (S22): list of Yoti ID checks that link creators'
+ * accounts to their ID ("Creator ID checks" on screen).
  *
  * Mirrors the AdminAuctionsPage shape: URL-synced filters, status pills,
  * debounced search, row-click into a detail page where overrides happen.
@@ -12,6 +13,8 @@ import type {
   AdminYotiVerificationListRow,
   AdminYotiVerificationStatus,
 } from '../api/adminApi';
+import { errorMessage, formatWhen as fmt, loadFailed } from '../lib/display';
+import { idCheckStatusLabel } from '../lib/labels';
 
 const STATUS_OPTIONS: ReadonlyArray<{ label: string; value: string }> = [
   { label: 'All', value: '' },
@@ -20,7 +23,7 @@ const STATUS_OPTIONS: ReadonlyArray<{ label: string; value: string }> = [
   { label: 'Rejected', value: 'REJECTED' },
   { label: 'Revoked', value: 'REVOKED' },
   { label: 'Flagged', value: 'FLAGGED' },
-  { label: 'None', value: 'NONE' },
+  { label: 'Not started', value: 'NONE' },
 ];
 
 const statusClass = (status: AdminYotiVerificationStatus): string => {
@@ -41,12 +44,10 @@ const statusClass = (status: AdminYotiVerificationStatus): string => {
 };
 
 const StatusBadge = ({ status }: { status: AdminYotiVerificationStatus }) => (
-  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusClass(status)}`}>
-    {status}
+  <span title={status} className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusClass(status)}`}>
+    {idCheckStatusLabel(status)}
   </span>
 );
-
-const fmt = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString() : '—');
 
 export const AdminVerificationsPage = () => {
   const navigate = useNavigate();
@@ -101,7 +102,7 @@ export const AdminVerificationsPage = () => {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Failed to load verifications');
+        setError(errorMessage(err, loadFailed('Creator ID checks')));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -132,9 +133,9 @@ export const AdminVerificationsPage = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Verifications</h1>
+        <h1 className="text-2xl font-bold text-white">Creator ID checks</h1>
         <p className="text-gray-400 text-sm mt-1">
-          {total} user{total === 1 ? '' : 's'} with Yoti verification activity
+          {total} account{total === 1 ? '' : 's'} with ID check activity
         </p>
       </div>
 
@@ -159,8 +160,8 @@ export const AdminVerificationsPage = () => {
           type="search"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search email or display name"
-          aria-label="Search verifications"
+          placeholder="Email or display name…"
+          aria-label="Search creator ID checks"
           className="ml-auto px-3 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-500
             border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
             min-w-[14rem]"
@@ -169,27 +170,27 @@ export const AdminVerificationsPage = () => {
 
       {/* Table */}
       {loading ? (
-        <div className="flex items-center justify-center h-48">
+        <div className="flex items-center justify-center h-48" role="status" aria-label="Loading creator ID checks">
           <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : error ? (
         <div className="glass rounded-2xl p-6 border border-red-500/30">
-          <p className="text-red-400 text-sm">{error}</p>
+          <p role="alert" className="text-red-400 text-sm">{error}</p>
         </div>
       ) : rows.length === 0 ? (
         <div className="glass rounded-2xl p-6">
-          <p className="text-gray-400 text-sm">No verifications match the current filters.</p>
+          <p className="text-gray-400 text-sm">No ID checks match. Try another status or search.</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-white/10">
           <table className="w-full text-sm">
             <thead className="bg-dark-700 text-gray-400">
               <tr>
-                <th className="text-left px-4 py-3 font-medium">User</th>
+                <th className="text-left px-4 py-3 font-medium">Account</th>
                 <th className="text-left px-4 py-3 font-medium">Status</th>
-                <th className="text-left px-4 py-3 font-medium">Age Verified</th>
+                <th className="text-left px-4 py-3 font-medium">Age verified</th>
                 <th className="text-left px-4 py-3 font-medium">Submitted</th>
-                <th className="text-left px-4 py-3 font-medium">Last Event</th>
+                <th className="text-left px-4 py-3 font-medium">Last update</th>
               </tr>
             </thead>
             <tbody>
@@ -229,7 +230,7 @@ export const AdminVerificationsPage = () => {
             onClick={() => setPage(page - 1)}
             className="px-3 py-1.5 rounded-xl bg-dark-700 text-gray-300 hover:bg-dark-600 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Prev
+            Previous
           </button>
           <span className="text-sm text-gray-400">
             Page {page} of {totalPages}

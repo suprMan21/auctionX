@@ -11,6 +11,7 @@ import { adminApi } from '../api/adminApi';
 import { ROLE_LABELS, type AccountSearch, type AccountStatus } from '../api/accountSchemas';
 import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { DeleteWindowCard } from '../components/DeleteWindowCard';
+import { NONE, errorMessage, formatDay, loadFailed } from '../lib/display';
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All accounts' },
@@ -42,7 +43,7 @@ const Pagination = ({ page, pages, onPage }: { page: number; pages: number; onPa
         disabled={page === 1}
         className="min-h-[44px] px-3 rounded-xl text-sm text-gray-300 hover:text-white hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
-        ← Prev
+        Previous
       </button>
       <span className="text-sm text-gray-400">Page {page} of {pages}</span>
       <button
@@ -51,13 +52,11 @@ const Pagination = ({ page, pages, onPage }: { page: number; pages: number; onPa
         disabled={page === pages}
         className="min-h-[44px] px-3 rounded-xl text-sm text-gray-300 hover:text-white hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
-        Next →
+        Next
       </button>
     </div>
   );
 };
-
-const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : '—');
 
 export const AdminUsersPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -88,7 +87,7 @@ export const AdminUsersPage = () => {
       .searchAccounts({ q: q || undefined, status, page, limit: 25 })
       .then((data) => { if (!cancelled) setLoaded({ key: queryKey, data, error: null }); })
       .catch((err: unknown) => {
-        if (!cancelled) setLoaded({ key: queryKey, data: null, error: err instanceof Error ? err.message : 'Accounts could not be loaded' });
+        if (!cancelled) setLoaded({ key: queryKey, data: null, error: errorMessage(err, loadFailed('Accounts')) });
       });
     return () => { cancelled = true; };
   }, [q, status, page, queryKey]);
@@ -115,7 +114,7 @@ export const AdminUsersPage = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Users</h1>
+        <h1 className="text-2xl font-bold text-white">Accounts</h1>
         <p className="text-gray-400 text-sm mt-1">
           {result ? `${result.pagination.total.toLocaleString()} matching accounts. ` : ''}
           Searches are recorded in the audit log.
@@ -130,7 +129,7 @@ export const AdminUsersPage = () => {
             type="search"
             value={draft}
             onChange={(e) => onSearch(e.target.value)}
-            placeholder="Email, display name or account id…"
+            placeholder="Email, display name or account ID…"
             className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-400 border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </label>
@@ -154,14 +153,14 @@ export const AdminUsersPage = () => {
         ) : error ? (
           <p className="p-6 text-error-500 text-sm" role="alert">{error}</p>
         ) : !result || result.accounts.length === 0 ? (
-          <p className="p-6 text-gray-400 text-sm">No accounts found.</p>
+          <p className="p-6 text-gray-400 text-sm">No accounts match. Try another search or status.</p>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-dark-700 border-b border-white/10">
                   <tr>
-                    {['Email', 'Display name', 'Role', 'Status', 'Last sign-in', 'Created'].map((h) => (
+                    {['Email', 'Display name', 'Staff role', 'Status', 'Last sign-in', 'Created'].map((h) => (
                       <th key={h} scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
@@ -174,11 +173,11 @@ export const AdminUsersPage = () => {
                           {a.email ?? a.id}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-300">{a.display_name ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-300">{a.staff_role ? (ROLE_LABELS[a.staff_role] ?? a.staff_role) : '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{a.display_name ?? NONE}</td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{a.staff_role ? (ROLE_LABELS[a.staff_role] ?? a.staff_role) : NONE}</td>
                       <td className="px-4 py-3"><AccountStatusBadge status={a.status} /></td>
-                      <td className="px-4 py-3 text-sm text-gray-400">{formatDate(a.last_sign_in_at)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-400">{formatDate(a.created_at)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-400">{formatDay(a.last_sign_in_at)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-400">{formatDay(a.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>

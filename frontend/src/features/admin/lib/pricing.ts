@@ -60,5 +60,5 @@ export const endOfLocalDay = (value: string): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-export const fmtDateTime = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString() : '—');
-export const fmtDate = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleDateString() : '—');
+/** Kept for existing imports; the shared helpers live in display.ts. */
+export { formatWhen as fmtDateTime, formatDay as fmtDate } from './display';

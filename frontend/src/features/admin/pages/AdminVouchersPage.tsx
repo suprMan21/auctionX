@@ -14,6 +14,7 @@ import type { AdminVoucherGrant, AdminVoucherList } from '../api/pricingSchemas'
 import { AdminGrantVouchersDialog, AdminRevokeVouchersDialog } from '../components/AdminVoucherDialogs';
 import { ADMIN_FIELD_CLASS } from '../components/AdminDialog';
 import { fmtDate, fmtDateTime } from '../lib/pricing';
+import { errorMessage, loadFailed } from '../lib/display';
 
 const PAGE_SIZE = 25;
 
@@ -49,7 +50,7 @@ export const AdminVouchersPage = () => {
         if (!cancelled) setResult({ key: queryKey, data });
       })
       .catch((err) => {
-        if (!cancelled) setFailure({ key: queryKey, message: err instanceof Error ? err.message : 'Failed to load free transfers' });
+        if (!cancelled) setFailure({ key: queryKey, message: errorMessage(err, loadFailed('Free transfers')) });
       });
     return () => { cancelled = true; };
   }, [email, page, queryKey]);
@@ -120,7 +121,7 @@ export const AdminVouchersPage = () => {
           className="px-3 py-2 rounded-xl text-sm font-medium bg-dark-700 text-gray-200 hover:bg-dark-600
             focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
         >
-          Find
+          Search
         </button>
         {email && (
           <button
@@ -152,7 +153,7 @@ export const AdminVouchersPage = () => {
           </p>
         </div>
       ) : (
-        <section aria-label="Grants" className="glass rounded-2xl p-5 space-y-4">
+        <section aria-label="Free transfers granted" className="glass rounded-2xl p-5 space-y-4">
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-gray-400">
@@ -203,7 +204,7 @@ export const AdminVouchersPage = () => {
                               hover:bg-red-600/30 focus:outline-none focus:ring-2 focus:ring-primary-500
                               focus:ring-offset-2 focus:ring-offset-dark-800"
                           >
-                            Revoke…
+                            Revoke free transfers…
                           </button>
                         )}
                       </td>

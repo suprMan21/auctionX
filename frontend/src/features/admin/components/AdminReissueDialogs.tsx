@@ -9,32 +9,36 @@ import { adminApi, chipLabel, type AdminReissueRequest } from '../api/adminApi';
 import { AdminDialog, ADMIN_BUTTON_CLASS } from './AdminDialog';
 import { ConfirmChipField, ErrorLine, REASON_MIN, ReasonField, ReplacementChipField } from './AdminTagDialogs';
 import { confirmsChip, useEnrolledChips } from '../lib/chipConfirm';
+import { ACTION_FAILED, errorMessage } from '../lib/display';
 
 export type ReissueDecision = 'approve' | 'approve_waived' | 'reject';
 
 const chipOf = (r: AdminReissueRequest): string =>
   r.tag ? chipLabel(r.tag) : r.tagId.slice(0, 8);
 
-const DECISION_COPY: Record<ReissueDecision, { title: string; description: string; button: string; tone: string }> = {
+const DECISION_COPY: Record<ReissueDecision, { title: string; description: string; button: string; busy: string; tone: string }> = {
   approve: {
-    title: 'Approve replacement',
+    title: 'Approve re-issue',
     description:
-      'The owner is emailed a link to pay the replacement fee on the website. Nothing is charged until they pay, and you fulfil only after payment arrives.',
+      'The owner is emailed a link to pay the re-issue fee on the website. Nothing is charged until they pay, and you move the token to a new chip only after payment arrives.',
     button: 'Approve and request payment',
+    busy: 'Approving…',
     tone: 'bg-primary-600 hover:bg-primary-500',
   },
   approve_waived: {
     title: 'Approve without the fee',
     description:
-      'No payment is taken. The request goes straight to Ready for a chip. Use this only when the problem is our fault. Your reason is recorded as the waiver reason.',
+      'No payment is taken. It is ready for a new chip straight away. Use this only when the problem is our fault. Your reason is recorded as the reason for waiving the fee.',
     button: 'Approve with no fee',
+    busy: 'Approving…',
     tone: 'bg-amber-600 hover:bg-amber-500',
   },
   reject: {
-    title: 'Reject replacement',
+    title: 'Reject re-issue',
     description:
       'Nothing is charged and the token stays on its current chip. The owner is emailed that the request was not approved. Your reason stays internal.',
     button: 'Reject request',
+    busy: 'Rejecting…',
     tone: 'bg-red-600 hover:bg-red-500',
   },
 };
@@ -64,7 +68,7 @@ export const AdminReissueReviewDialog = ({ open, request, decision, onClose, onD
       await adminApi.reviewReissue(request.id, decision, reason.trim());
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The action failed');
+      setError(errorMessage(err, ACTION_FAILED));
     } finally {
       setBusy(false);
     }
@@ -75,7 +79,7 @@ export const AdminReissueReviewDialog = ({ open, request, decision, onClose, onD
       open={open}
       onClose={onClose}
       danger={decision === 'reject'}
-      title={`${copy.title} for chip ${chipOf(request)}`}
+      title={`${copy.title} for ${chipOf(request)}`}
       description={copy.description}
     >
       {request.tag && !request.tag.requesterStillOwner && decision !== 'reject' && (
@@ -95,7 +99,7 @@ export const AdminReissueReviewDialog = ({ open, request, decision, onClose, onD
           disabled={busy || reason.trim().length < REASON_MIN}
           className={`${ADMIN_BUTTON_CLASS} ${copy.tone} text-white`}
         >
-          {busy ? 'Working…' : copy.button}
+          {busy ? copy.busy : copy.button}
         </button>
       </div>
     </AdminDialog>
@@ -132,7 +136,7 @@ export const AdminReissueFulfilDialog = ({ open, request, onClose, onDone }: Ful
       const res = await adminApi.fulfilReissue(request.id, { newTagId, reason: reason.trim(), confirmSuffix: confirm.trim() });
       onDone(res.data.newTagId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fulfilment failed');
+      setError(errorMessage(err, 'The re-issue could not be completed. Nothing was changed. Try again.'));
     } finally {
       setBusy(false);
     }
@@ -143,12 +147,12 @@ export const AdminReissueFulfilDialog = ({ open, request, onClose, onDone }: Ful
       open={open}
       onClose={onClose}
       danger
-      title={`Fulfil replacement for chip ${chipOf(request)}`}
+      title={`Complete re-issue for ${chipOf(request)}`}
       description={
         <>
           <p>
             The token moves to the replacement chip with the same owner, and the owner gets a new Ownership ID.
-            Encode and enroll the replacement chip first.
+            Set up the new chip with the encoder first.
           </p>
           <p className="mt-2 font-semibold text-red-300">
             Chip {chipOf(request)} is retired permanently and marked for destruction. This cannot be undone.
@@ -165,7 +169,7 @@ export const AdminReissueFulfilDialog = ({ open, request, onClose, onDone }: Ful
           Cancel
         </button>
         <button type="button" onClick={submit} disabled={!ready} className={`${ADMIN_BUTTON_CLASS} bg-red-600 hover:bg-red-500 text-white`}>
-          {busy ? 'Fulfilling…' : 'Retire old chip and move token'}
+          {busy ? 'Moving…' : 'Move token and retire old chip'}
         </button>
       </div>
     </AdminDialog>

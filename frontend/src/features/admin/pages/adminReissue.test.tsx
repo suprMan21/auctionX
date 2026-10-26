@@ -22,6 +22,7 @@ vi.mock('../api/adminApi', async () => {
 });
 
 import { AdminReissuePage } from './AdminReissuePage';
+import { AdminApiError } from '../api/adminApi';
 
 const REQ = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TAG = '55555555-5555-4555-8555-555555555555';
@@ -89,7 +90,7 @@ describe('AdminReissuePage', () => {
     expect(screen.getByRole('button', { name: 'Approve…' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve without fee…' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reject…' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Fulfil/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Move to new chip/ })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -120,32 +121,32 @@ describe('AdminReissuePage', () => {
     expect(await screen.findByText('The requester no longer owns this token.')).toBeInTheDocument();
   });
 
-  it('offers no fulfil while payment is outstanding', async () => {
+  it('offers no move to a new chip while payment is outstanding', async () => {
     api.listReissueRequests.mockResolvedValue(list([request({ status: 'APPROVED', paymentStatus: 'AWAITING_PAYMENT' })]));
     renderQueue('/admin/reissue-requests?status=AWAITING_PAYMENT');
 
-    expect(await screen.findByText('Awaiting payment', { selector: 'p' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Fulfil/ })).not.toBeInTheDocument();
+    expect(await screen.findByText('Waiting for payment', { selector: 'p' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Move to new chip/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Approve…' })).not.toBeInTheDocument();
   });
 
-  it('fulfils a paid request only with a chip, a reason and the SERIAL suffix of the old chip', async () => {
+  it('completes a paid re-issue only with a chip, a reason and the SERIAL suffix of the old chip', async () => {
     api.listReissueRequests.mockResolvedValue(list([request({ status: 'APPROVED', paymentStatus: 'PAID', paidAt: '2026-10-09T11:00:00.000Z' })]));
     api.listTags.mockResolvedValue({ success: true, data: { tags: [enrolled()], pagination: { page: 1, limit: 100, total: 1 } } });
     api.fulfilReissue.mockResolvedValue({ success: true, data: { newTagId: NEW_TAG } });
     const user = userEvent.setup();
     renderQueue('/admin/reissue-requests?status=READY');
 
-    await user.click(await screen.findByRole('button', { name: 'Fulfil with a new chip…' }));
-    const dialog = screen.getByRole('dialog');
-    const submit = within(dialog).getByRole('button', { name: 'Retire old chip and move token' });
+    await user.click(await screen.findByRole('button', { name: 'Move to new chip…' }));
+    const dialog = screen.getByRole('dialog', { name: 'Complete re-issue for …936980 · sn …AE6CA9' });
+    const submit = within(dialog).getByRole('button', { name: 'Move token and retire old chip' });
 
     await user.selectOptions(await within(dialog).findByLabelText(/Replacement chip/), NEW_TAG);
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     // The UID suffix every chip in the lot shares must not unlock it.
     await user.type(within(dialog).getByLabelText(/last 6 characters/), '936980');
     expect(submit).toBeDisabled();
-    expect(within(dialog).getByText(/Expected: AE6CA9/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Expected: AE6CA9 \(end of the chip serial number\)/)).toBeInTheDocument();
 
     await user.clear(within(dialog).getByLabelText(/last 6 characters/));
     await user.type(within(dialog).getByLabelText(/last 6 characters/), 'ae6ca9');
@@ -158,7 +159,7 @@ describe('AdminReissuePage', () => {
 
   it('keeps the dialog open with the server error', async () => {
     api.listReissueRequests.mockResolvedValue(list([request()]));
-    api.reviewReissue.mockRejectedValue(new Error('The requester no longer owns this token'));
+    api.reviewReissue.mockRejectedValue(new AdminApiError('The requester no longer owns this token', 409, 'CONFLICT'));
     const user = userEvent.setup();
     renderQueue();
 
@@ -169,5 +170,26 @@ describe('AdminReissuePage', () => {
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('The requester no longer owns this token');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('says the re-issue was not completed when the server fails, without its raw text', async () => {
+    api.listReissueRequests.mockResolvedValue(list([request({ status: 'APPROVED', paymentStatus: 'WAIVED' })]));
+    api.listTags.mockResolvedValue({ success: true, data: { tags: [enrolled()], pagination: { page: 1, limit: 100, total: 1 } } });
+    api.fulfilReissue.mockRejectedValue(new AdminApiError('deadlock detected', 500, null));
+    const user = userEvent.setup();
+    renderQueue('/admin/reissue-requests?status=READY');
+
+    expect(await screen.findByText('Fee waived, ready for a new chip', { selector: 'p' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Move to new chip…' }));
+    const dialog = screen.getByRole('dialog');
+    await user.selectOptions(await within(dialog).findByLabelText(/Replacement chip/), NEW_TAG);
+    await user.type(within(dialog).getByLabelText(/Reason/), REASON);
+    await user.type(within(dialog).getByLabelText(/last 6 characters/), 'AE6CA9');
+    await user.click(within(dialog).getByRole('button', { name: 'Move token and retire old chip' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'The re-issue could not be completed. Nothing was changed. Try again.',
+    );
+    expect(within(dialog).queryByText(/deadlock/)).not.toBeInTheDocument();
   });
 });
