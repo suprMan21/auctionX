@@ -11,7 +11,7 @@ import { useEffect, useId, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { adminApi } from '../api/adminApi';
 import type { AdminVoucherGrant, AdminVoucherList } from '../api/pricingSchemas';
-import { AdminGrantVouchersDialog, AdminRevokeVouchersDialog } from '../components/AdminVoucherDialogs';
+import { AdminGrantVouchersDialog, AdminRevokeVouchersDialog, type GrantedVouchers } from '../components/AdminVoucherDialogs';
 import { ADMIN_FIELD_CLASS } from '../components/AdminDialog';
 import { fmtDate, fmtDateTime } from '../lib/pricing';
 import { errorMessage, loadFailed } from '../lib/display';
@@ -70,9 +70,48 @@ export const AdminVouchersPage = () => {
     setSearchParams(params);
   };
 
-  const closeAndReload = () => {
+  // An email-filtered list is an audited lookup: after a grant or revoke, update
+  // the rows in place instead of looking the email up (and auditing) again.
+  // The unfiltered list is not audited, so it simply reloads.
+  const patchRows = (update: (grants: AdminVoucherGrant[]) => AdminVoucherGrant[], totalDelta = 0) =>
+    setResult((prev) => (prev && prev.key === queryKey
+      ? { key: prev.key, data: { ...prev.data, grants: update(prev.data.grants), total: prev.data.total + totalDelta } }
+      : prev));
+
+  const afterGrant = (granted: GrantedVouchers) => {
     setDialog({ kind: 'none' });
-    setReloadKey((k) => k + 1);
+    if (!email) {
+      setReloadKey((k) => k + 1);
+      return;
+    }
+    if ((granted.userEmail ?? '').toLowerCase() !== email) return;
+    const row: AdminVoucherGrant = {
+      id: granted.id,
+      userEmail: granted.userEmail,
+      quantity: granted.quantity,
+      remaining: granted.remaining,
+      used: granted.quantity - granted.remaining,
+      reason: granted.reason,
+      expiresAt: granted.expiresAt,
+      status: 'active',
+      grantedBy: null,
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+      revokedBy: null,
+      revokeReason: null,
+    };
+    patchRows((grants) => [row, ...grants], 1);
+  };
+
+  const afterRevoke = (revoked: { id: string; revokedAt: string; reason: string }) => {
+    setDialog({ kind: 'none' });
+    if (!email) {
+      setReloadKey((k) => k + 1);
+      return;
+    }
+    patchRows((grants) => grants.map((g) => (g.id === revoked.id
+      ? { ...g, status: 'revoked' as const, remaining: 0, revokedAt: revoked.revokedAt, revokeReason: revoked.reason }
+      : g)));
   };
 
   return (
@@ -242,10 +281,10 @@ export const AdminVouchersPage = () => {
       )}
 
       {dialog.kind === 'grant' && (
-        <AdminGrantVouchersDialog open onClose={() => setDialog({ kind: 'none' })} onDone={closeAndReload} />
+        <AdminGrantVouchersDialog open onClose={() => setDialog({ kind: 'none' })} onDone={afterGrant} />
       )}
       {dialog.kind === 'revoke' && (
-        <AdminRevokeVouchersDialog open grant={dialog.grant} onClose={() => setDialog({ kind: 'none' })} onDone={closeAndReload} />
+        <AdminRevokeVouchersDialog open grant={dialog.grant} onClose={() => setDialog({ kind: 'none' })} onDone={afterRevoke} />
       )}
     </div>
   );

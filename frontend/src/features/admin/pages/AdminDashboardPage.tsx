@@ -1,6 +1,7 @@
 /**
  * Admin Dashboard landing page.
- * Shows 4 stat cards, recent audit entries, and a system health indicator.
+ * Shows what needs attention (re-issue and stuck-payment queues), account count,
+ * recent audit entries and system health, each only for staff who may open it.
  * @module Module 10 — Admin Dashboard
  */
 
@@ -14,6 +15,7 @@ import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { isMarketplaceEnabledOnClient } from '@/lib/featureFlags';
 import { formatWhen } from '../lib/display';
 import { auditActionLabel, auditEntityLabel } from '../lib/labels';
+import { useWorkQueues } from '../lib/workQueues';
 
 /** Settles to null instead of throwing, so one failed panel does not blank the dashboard. */
 const orNull = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
@@ -26,6 +28,23 @@ interface DashboardStats {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+/** A queue that needs staff: the count, what it means, and one click to act. */
+const QueueCard = ({ count, label, to, action }: { count: number | null; label: string; to: string; action: string }) => {
+  const waiting = (count ?? 0) > 0;
+  return (
+    <Link
+      to={to}
+      className={`glass rounded-2xl p-5 flex flex-col gap-1 border transition-colors hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
+        waiting ? 'border-warning-500/40' : 'border-white/10'
+      }`}
+    >
+      <span className={`text-3xl font-bold ${waiting ? 'text-warning-500' : 'text-white'}`}>{count === null ? 'Unavailable' : count}</span>
+      <span className="text-sm text-gray-300">{label}</span>
+      <span className="text-sm text-primary-300 mt-1">{waiting ? action : 'Open'} →</span>
+    </Link>
+  );
+};
 
 /** A single stat card on the dashboard. */
 const StatCard = ({
@@ -116,6 +135,9 @@ export const AdminDashboardPage = () => {
   const [health, setHealth] = useState<HealthStatus | null | 'error'>(null);
 
   const canViewUsers = hasPermission(access, PERMISSIONS.viewUsers);
+  const canReissue = hasPermission(access, PERMISSIONS.manageNfc);
+  const canStuck = hasPermission(access, PERMISSIONS.reapplyPayments);
+  const queues = useWorkQueues();
   const canViewAudit = hasPermission(access, PERMISSIONS.viewAuditLogs);
   // The marketplace is parked: its endpoints are not mounted, so do not call them.
   const marketplace = isMarketplaceEnabledOnClient();
@@ -161,6 +183,23 @@ export const AdminDashboardPage = () => {
         <h1 className="text-2xl font-bold text-white">Dashboard</h1>
         <p className="text-gray-400 text-sm mt-1">Overview</p>
       </div>
+
+      {(canReissue || canStuck) && (
+        <section aria-labelledby="attention-heading" className="space-y-3">
+          <h2 id="attention-heading" className="text-lg font-semibold text-white">Needs attention</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {canReissue && (
+              <QueueCard count={queues.reissuesToReview} label="Re-issues to review" to="/admin/reissue-requests?status=PENDING" action="Review" />
+            )}
+            {canReissue && (
+              <QueueCard count={queues.reissuesReady} label="Re-issues ready for a new chip" to="/admin/reissue-requests?status=READY" action="Move to new chip" />
+            )}
+            {canStuck && (
+              <QueueCard count={queues.stuckPayments} label="Stuck payments" to="/admin/stuck-payments?status=OPEN" action="Resolve" />
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Stat cards: only the ones this admin may open ("Unavailable" when a count could not be loaded) */}
       {(canViewUsers || marketplace) && (

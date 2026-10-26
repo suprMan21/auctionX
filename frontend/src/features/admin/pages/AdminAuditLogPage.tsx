@@ -5,6 +5,7 @@
  * @module Module 10 — Admin Dashboard
  */
 
+import { isTimeRange, TIME_RANGES, timeRangeOf, type TimeRangeValue } from '../lib/timeRange';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { adminApi } from '../api/adminApi';
@@ -82,23 +83,28 @@ export const AdminAuditLogPage = () => {
   const action = searchParams.get('action') ?? '';
   const entity = searchParams.get('entity') ?? '';
   const target = searchParams.get('target') ?? '';
+  const rawWhen = searchParams.get('when') ?? '';
+  const when: TimeRangeValue = isTimeRange(rawWhen) ? rawWhen : '';
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
 
   useEffect(() => {
     adminApi.getAuditFacets().then(setFacets).catch(() => setFacets({ actions: [], entity_types: [], actors: [] }));
   }, []);
 
-  const queryKey = `${admin}|${action}|${entity}|${target}|${page}`;
+  const queryKey = `${admin}|${action}|${entity}|${target}|${when}|${page}`;
   useEffect(() => {
     let cancelled = false;
     adminApi
-      .getAuditLogs({ page, limit: 50, admin: admin || undefined, action: action || undefined, entity: entity || undefined, target: target || undefined })
+      .getAuditLogs({
+        page, limit: 50, admin: admin || undefined, action: action || undefined,
+        entity: entity || undefined, target: target || undefined, ...timeRangeOf(when),
+      })
       .then((data) => { if (!cancelled) setLoaded({ key: queryKey, data, error: null }); })
       .catch((err: unknown) => {
         if (!cancelled) setLoaded({ key: queryKey, data: null, error: errorMessage(err, loadFailed('Audit entries')) });
       });
     return () => { cancelled = true; };
-  }, [admin, action, entity, target, page, queryKey]);
+  }, [admin, action, entity, target, when, page, queryKey]);
   const loading = loaded?.key !== queryKey;
   const result = loading ? null : loaded?.data ?? null;
   const error = loading ? null : loaded?.error ?? null;
@@ -119,6 +125,12 @@ export const AdminAuditLogPage = () => {
       </div>
 
       <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+        <label>
+          <span className="sr-only">Filter by time</span>
+          <select value={when} onChange={(e) => set('when', e.target.value)} className={SELECT_CLASS}>
+            {TIME_RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        </label>
         <label>
           <span className="sr-only">Filter by staff member</span>
           <select value={admin} onChange={(e) => set('admin', e.target.value)} className={SELECT_CLASS}>

@@ -1,0 +1,47 @@
+/**
+ * Loads the work-queue counts (see lib/workQueues.ts) for the queues this admin
+ * may act on, refreshes them every minute and when the tab comes back.
+ */
+
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { adminApi } from '../api/adminApi';
+import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
+import { EMPTY_WORK_QUEUES, WORK_QUEUE_REFRESH_MS, WorkQueueContext, type WorkQueueCounts } from '../lib/workQueues';
+
+const countOrNull = (load: () => Promise<number>): Promise<number | null> =>
+  Promise.resolve().then(load).catch(() => null);
+
+export const WorkQueueProvider = ({ children }: { children: ReactNode }) => {
+  const access = useAdminRole();
+  const canReissue = hasPermission(access, PERMISSIONS.manageNfc);
+  const canStuck = hasPermission(access, PERMISSIONS.reapplyPayments);
+  const [counts, setCounts] = useState<Omit<WorkQueueCounts, 'refresh'>>(EMPTY_WORK_QUEUES);
+  const [tick, setTick] = useState(0);
+  const refresh = useCallback(() => setTick((t) => t + 1), []);
+
+  useEffect(() => {
+    if (!canReissue && !canStuck) return;
+    let cancelled = false;
+    const load = () => {
+      void Promise.all([
+        canReissue ? countOrNull(() => adminApi.listReissueRequests({ status: 'PENDING', limit: 1 }).then((r) => r.data.pagination.total)) : null,
+        canReissue ? countOrNull(() => adminApi.listReissueRequests({ status: 'READY', limit: 1 }).then((r) => r.data.pagination.total)) : null,
+        canStuck ? countOrNull(() => adminApi.listStuckPayments({ status: 'OPEN', limit: 1 }).then((r) => r.data.total)) : null,
+      ]).then(([reissuesToReview, reissuesReady, stuckPayments]) => {
+        if (!cancelled) setCounts({ reissuesToReview, reissuesReady, stuckPayments });
+      });
+    };
+    load();
+    const timer = setInterval(load, WORK_QUEUE_REFRESH_MS);
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [canReissue, canStuck, tick]);
+
+  const value = useMemo(() => ({ ...counts, refresh }), [counts, refresh]);
+  return <WorkQueueContext.Provider value={value}>{children}</WorkQueueContext.Provider>;
+};

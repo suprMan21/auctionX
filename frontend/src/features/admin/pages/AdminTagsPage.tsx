@@ -10,10 +10,11 @@
  */
 
 import { useEffect, useState } from 'react';
+import { AccountLink } from '../components/AccountLink';
 import { Link, useSearchParams } from 'react-router-dom';
 import { adminApi, chipLabel, type AdminTag, type AdminTagLifecycleStatus } from '../api/adminApi';
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
-import { NONE, errorMessage, formatWhen as fmt, loadFailed, shortId } from '../lib/display';
+import { NONE, errorMessage, formatWhen as fmt, loadFailed } from '../lib/display';
 
 const STATUS_OPTIONS: ReadonlyArray<{ label: string; value: '' | AdminTagLifecycleStatus }> = [
   { label: 'All', value: '' },
@@ -184,8 +185,8 @@ export const AdminTagsPage = () => {
                     </Link>
                   </td>
                   <td className="px-4 py-3"><AdminLifecycleBadge status={row.lifecycleStatus} /></td>
-                  <td className="px-4 py-3 text-gray-300 break-all">{row.ownerEmail ?? shortId(row.ownerAccountId)}</td>
-                  <td className="px-4 py-3 text-gray-300 break-all">{row.creatorEmail ?? shortId(row.creatorAccountId)}</td>
+                  <td className="px-4 py-3 text-gray-300"><AccountLink id={row.ownerAccountId} email={row.ownerEmail} /></td>
+                  <td className="px-4 py-3 text-gray-300"><AccountLink id={row.creatorAccountId} email={row.creatorEmail} /></td>
                   <td className="px-4 py-3 text-gray-300">{row.sdmKeyVersion ?? NONE}</td>
                   <td className="px-4 py-3 text-gray-300">{row.sunCounter}</td>
                   <td className="px-4 py-3 text-gray-400">{fmt(row.registeredAt)}</td>

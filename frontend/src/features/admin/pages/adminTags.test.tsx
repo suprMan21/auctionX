@@ -164,7 +164,7 @@ describe('AdminTagsPage', () => {
 
     expect(await screen.findByText('collector@example.com')).toBeInTheDocument();
     expect(screen.getByText('studio@example.com')).toBeInTheDocument();
-    expect(screen.getByText('22222222…')).toBeInTheDocument();
+    expect(screen.getByText('Account 22222222…')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('More than 50 accounts match');
   });
 

@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { AccountLink } from '../components/AccountLink';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { adminApi, chipLabel, type AdminTagDetailResponse } from '../api/adminApi';
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
@@ -130,12 +131,10 @@ export const AdminTagDetailPage = () => {
       <Section title="Details">
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="Owner">
-            {tag.ownerEmail ?? NONE}
-            {tag.ownerAccountId && <span className="block text-xs text-gray-400 font-mono">{tag.ownerAccountId}</span>}
+            <AccountLink id={tag.ownerAccountId} email={tag.ownerEmail} />
           </Field>
           <Field label="Creator">
-            {tag.creatorEmail ?? NONE}
-            {tag.creatorAccountId && <span className="block text-xs text-gray-400 font-mono">{tag.creatorAccountId}</span>}
+            <AccountLink id={tag.creatorAccountId} email={tag.creatorEmail} />
           </Field>
           <Field label="Item">{tag.itemId ?? NONE}</Field>
           <Field label="Key version">{tag.sdmKeyVersion ?? NONE}</Field>
@@ -178,8 +177,8 @@ export const AdminTagDetailPage = () => {
                   <tr key={c.id} className="border-t border-white/5 text-gray-200">
                     <td className="py-2 pr-4">{transferTypeLabel(c.type)}{c.reissue && c.type !== 'REISSUE' ? ' (re-issue)' : ''}</td>
                     <td className="py-2 pr-4">{transferStatusLabel(c.status)}</td>
-                    <td className="py-2 pr-4 font-mono text-xs">{c.fromAccountId ?? NONE}</td>
-                    <td className="py-2 pr-4 font-mono text-xs">{c.toAccountId ?? NONE}</td>
+                    <td className="py-2 pr-4"><AccountLink id={c.fromAccountId} email={c.fromEmail} /></td>
+                    <td className="py-2 pr-4"><AccountLink id={c.toAccountId} email={c.toEmail} /></td>
                     <td className="py-2 pr-4">{formatAmount(c.chargedAmount, c.chargedCurrency)}</td>
                     <td className="py-2">{fmt(c.completedAt)}</td>
                   </tr>
@@ -200,7 +199,7 @@ export const AdminTagDetailPage = () => {
                 <span>{fmt(t.at)}</span>
                 <span className={t.valid ? 'text-emerald-300' : 'text-red-300'}>{t.valid ? '✓ Valid' : '✕ Not valid'}</span>
                 {t.counter !== null && <span>tap #{t.counter}</span>}
-                {t.accountId && <span className="font-mono text-xs text-gray-400">by {t.accountId}</span>}
+                {t.accountId && <span className="text-gray-400">by <AccountLink id={t.accountId} email={t.accountEmail} /></span>}
               </li>
             ))}
           </ul>

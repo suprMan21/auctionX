@@ -5,6 +5,9 @@
  * @module Module 10 — Admin Dashboard
  */
 
+import { ConsoleSearch } from './components/ConsoleSearch';
+import { WorkQueueProvider } from './components/WorkQueueProvider';
+import { useWorkQueues, type WorkQueueCounts } from './lib/workQueues';
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -136,12 +139,29 @@ const NavIcon = ({ path }: { path: string }) => (
  * AdminLayout — sidebar navigation + main content area.
  * The sidebar collapses into a hamburger-toggled overlay on mobile.
  */
-export const AdminLayout = () => {
+/** How many items wait in a nav item's queue (null hides the badge). */
+const badgeFor = (to: string, q: WorkQueueCounts): number | null => {
+  if (to === '/admin/reissue-requests') {
+    if (q.reissuesToReview === null && q.reissuesReady === null) return null;
+    return (q.reissuesToReview ?? 0) + (q.reissuesReady ?? 0);
+  }
+  if (to === '/admin/stuck-payments') return q.stuckPayments;
+  return null;
+};
+
+export const AdminLayout = () => (
+  <WorkQueueProvider>
+    <AdminShell />
+  </WorkQueueProvider>
+);
+
+const AdminShell = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { session, signOut } = useAuth();
   const navigate = useNavigate();
   const access = useAdminRole();
   const navItems = NAV_ITEMS.filter((item) => !item.permission || hasPermission(access, item.permission));
+  const queues = useWorkQueues();
 
   const handleLogout = async () => {
     await signOut();
@@ -176,7 +196,15 @@ export const AdminLayout = () => {
             onClick={() => setSidebarOpen(false)}
           >
             <NavIcon path={item.icon} />
-            {item.label}
+            <span className="flex-1">{item.label}</span>
+            {(() => {
+              const n = badgeFor(item.to, queues);
+              return n ? (
+                <span className="min-w-[1.5rem] px-1.5 py-0.5 rounded-full bg-warning-500/20 text-warning-500 text-xs font-semibold text-center">
+                  {n}<span className="sr-only"> waiting</span>
+                </span>
+              ) : null;
+            })()}
           </NavLink>
         ))}
       </nav>
@@ -239,7 +267,8 @@ export const AdminLayout = () => {
           <span className="text-sm font-semibold text-white">Authentic Materials admin</span>
         </header>
 
-        <main className="flex-1 p-6 lg:p-8">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
+          <ConsoleSearch />
           <Outlet />
         </main>
       </div>

@@ -16,10 +16,20 @@ const emailSchema = z.string().email().max(254);
 
 const plural = (n: number): string => `${n} free ${n === 1 ? 'transfer' : 'transfers'}`;
 
+/** What a grant created, so the page can show it without looking the email up again. */
+export interface GrantedVouchers {
+  id: string;
+  userEmail: string | null;
+  quantity: number;
+  remaining: number;
+  expiresAt: string | null;
+  reason: string;
+}
+
 interface GrantDialogProps {
   open: boolean;
   onClose: () => void;
-  onDone: () => void;
+  onDone: (granted: GrantedVouchers) => void;
 }
 
 export const AdminGrantVouchersDialog = ({ open, onClose, onDone }: GrantDialogProps) => {
@@ -53,13 +63,13 @@ export const AdminGrantVouchersDialog = ({ open, onClose, onDone }: GrantDialogP
     setBusy(true);
     setError(null);
     try {
-      await adminApi.grantVouchers({
+      const granted = await adminApi.grantVouchers({
         email: normalisedEmail,
         quantity: qty,
         reason: reason.trim(),
         expiresAt: expiresAt ? toIsoWithOffset(expiresAt) : null,
       });
-      onDone();
+      onDone({ ...granted, reason: reason.trim() });
     } catch (err) {
       setError(errorMessage(err, 'The free transfers could not be granted. Try again.'));
     } finally {
@@ -152,7 +162,7 @@ interface RevokeDialogProps {
   open: boolean;
   grant: AdminVoucherGrant;
   onClose: () => void;
-  onDone: () => void;
+  onDone: (revoked: { id: string; revokedAt: string; reason: string }) => void;
 }
 
 export const AdminRevokeVouchersDialog = ({ open, grant, onClose, onDone }: RevokeDialogProps) => {
@@ -168,8 +178,8 @@ export const AdminRevokeVouchersDialog = ({ open, grant, onClose, onDone }: Revo
     setBusy(true);
     setError(null);
     try {
-      await adminApi.revokeVoucherGrant(grant.id, reason.trim());
-      onDone();
+      const revoked = await adminApi.revokeVoucherGrant(grant.id, reason.trim());
+      onDone({ id: revoked.id, revokedAt: revoked.revokedAt, reason: reason.trim() });
     } catch (err) {
       setError(errorMessage(err, 'The free transfers could not be revoked. Try again.'));
     } finally {

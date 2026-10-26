@@ -240,6 +240,9 @@ export const adminApi = {
     entity?: string;
     admin?: string;
     target?: string;
+    /** ISO 8601 with offset; from inclusive, to exclusive. */
+    from?: string;
+    to?: string;
   } = {}): Promise<AuditLogList> {
     const qs = new URLSearchParams();
     if (params.page) qs.set('page', String(params.page));
@@ -248,6 +251,8 @@ export const adminApi = {
     if (params.entity) qs.set('entity', params.entity);
     if (params.admin) qs.set('admin', params.admin);
     if (params.target) qs.set('target', params.target);
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
     const query = qs.toString() ? `?${qs}` : '';
     return parseEnvelope(auditLogListSchema, await adminFetch<unknown>(`/audit-logs${query}`));
   },
@@ -845,6 +850,9 @@ export interface AdminTagCustodyRow {
   status: string | null;
   fromAccountId: string | null;
   toAccountId: string | null;
+  /** The account's own email (not what a sender typed). */
+  fromEmail?: string | null;
+  toEmail?: string | null;
   initiatedAt: string | null;
   completedAt: string | null;
   chargedAmount: number | null;
@@ -859,6 +867,7 @@ export interface AdminTagTapRow {
   valid: boolean | null;
   counter: number | null;
   accountId: string | null;
+  accountEmail?: string | null;
 }
 
 export interface AdminTagAuditRow {
@@ -914,6 +923,7 @@ export interface AdminReissueRequest {
     requesterStillOwner: boolean;
   } | null;
   requesterAccountId: string;
+  requesterEmail?: string | null;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
   paymentStatus: 'AWAITING_PAYMENT' | 'PAID' | 'WAIVED' | null;
   listAmountUsdCents: number | null;
@@ -930,6 +940,8 @@ export interface AdminReissueRequest {
   paidAt: string | null;
   fulfilledAt: string | null;
   newTagId: string | null;
+  /** The new chip's name (or serial suffix), once moved. */
+  newTagLabel?: string | null;
   createdAt: string;
 }
 

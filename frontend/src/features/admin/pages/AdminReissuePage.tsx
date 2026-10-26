@@ -10,7 +10,9 @@
  * Photos are 5-minute signed links; reloading the page refreshes them.
  */
 
+import { useWorkQueues } from '../lib/workQueues';
 import { useEffect, useState } from 'react';
+import { AccountLink } from '../components/AccountLink';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { adminApi, chipLabel, type AdminReissueFilter, type AdminReissueRequest } from '../api/adminApi';
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
@@ -46,6 +48,9 @@ export const AdminReissuePage = () => {
   const filter: AdminReissueFilter = FILTERS.some((f) => f.value === raw) ? (raw as AdminReissueFilter) : 'PENDING';
 
   const [reloadKey, setReloadKey] = useState(0);
+  const { refresh: refreshQueues } = useWorkQueues();
+  // Any reload after an action also updates the dashboard and nav counts.
+  useEffect(() => { if (reloadKey > 0) refreshQueues(); }, [reloadKey, refreshQueues]);
   const queryKey = `${filter}|${reloadKey}`;
   const [result, setResult] = useState<{ key: string; rows: AdminReissueRequest[]; total: number } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
@@ -133,7 +138,7 @@ export const AdminReissuePage = () => {
               </div>
 
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <div><dt className="inline text-gray-400">Requester: </dt><dd className="inline font-mono text-gray-200">{shortId(r.requesterAccountId)}</dd></div>
+                <div><dt className="inline text-gray-400">Requester: </dt><dd className="inline text-gray-200"><AccountLink id={r.requesterAccountId} email={r.requesterEmail} /></dd></div>
                 <div><dt className="inline text-gray-400">Requested: </dt><dd className="inline text-gray-200">{fmt(r.createdAt)}</dd></div>
                 <div><dt className="inline text-gray-400">Proof tap at: </dt><dd className="inline text-gray-200">{fmt(r.tappedAt)}</dd></div>
                 <div><dt className="inline text-gray-400">Fee: </dt><dd className="inline text-gray-200">{r.paymentStatus === 'WAIVED' ? 'Waived' : formatAmount(r.chargedAmount, r.chargedCurrency)}</dd></div>
@@ -142,7 +147,7 @@ export const AdminReissuePage = () => {
                 {r.fulfilledAt && r.newTagId && (
                   <div className="sm:col-span-2">
                     <dt className="inline text-gray-400">New chip: </dt>
-                    <dd className="inline"><Link to={`/admin/tags/${r.newTagId}`} className="font-mono text-primary-300 hover:underline">{shortId(r.newTagId)}</Link></dd>
+                    <dd className="inline"><Link to={`/admin/tags/${r.newTagId}`} className="text-primary-300 hover:underline">{r.newTagLabel ?? shortId(r.newTagId)}</Link></dd>
                   </div>
                 )}
               </dl>
@@ -212,6 +217,7 @@ export const AdminReissuePage = () => {
           request={dialog.request}
           onClose={() => setDialog({ kind: 'none' })}
           onDone={(newTagId) => {
+            refreshQueues();
             setDialog({ kind: 'none' });
             navigate(`/admin/tags/${newTagId}`);
           }}

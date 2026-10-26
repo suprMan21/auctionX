@@ -61,8 +61,9 @@ export const AdminDialog = ({ open, title, description, onClose, children, dange
 
   if (!open) return null;
 
+  // Tall dialogs scroll inside the panel so Confirm stays reachable on a phone.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="absolute inset-0 bg-black/70" aria-hidden="true" onClick={onClose} />
       <div
         ref={panelRef}
@@ -70,7 +71,7 @@ export const AdminDialog = ({ open, title, description, onClose, children, dange
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
-        className={`relative glass rounded-2xl w-full max-w-lg p-6 space-y-4 border ${danger ? 'border-red-500/40' : 'border-white/10'}`}
+        className={`relative glass rounded-2xl w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto p-6 space-y-4 border ${danger ? 'border-red-500/40' : 'border-white/10'}`}
       >
         <h2 id={titleId} className={`text-lg font-semibold ${danger ? 'text-red-300' : 'text-white'}`}>
           {title}

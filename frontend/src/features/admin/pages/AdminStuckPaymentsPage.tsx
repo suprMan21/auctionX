@@ -10,6 +10,7 @@
  * The check also runs by itself every 10 minutes; "Check now" runs it at once.
  */
 
+import { useWorkQueues } from '../lib/workQueues';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -88,6 +89,9 @@ export const AdminStuckPaymentsPage = () => {
   const filter: AdminStuckPaymentFilter = FILTERS.some((f) => f.value === raw) ? (raw as AdminStuckPaymentFilter) : 'OPEN';
 
   const [reloadKey, setReloadKey] = useState(0);
+  const { refresh: refreshQueues } = useWorkQueues();
+  // Any reload after an action also updates the dashboard and nav counts.
+  useEffect(() => { if (reloadKey > 0) refreshQueues(); }, [reloadKey, refreshQueues]);
   const queryKey = `${filter}|${reloadKey}`;
   const [result, setResult] = useState<{ key: string; data: QueueData } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
