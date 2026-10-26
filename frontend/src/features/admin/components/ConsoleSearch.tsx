@@ -15,6 +15,8 @@ import { errorMessage } from '../lib/display';
 import { lifecycleLabel } from '../lib/labels';
 
 const LIMIT = 5;
+/** The token search accepts only these characters (backend searchTermSchema). */
+const TOKEN_TERM = /^[A-Za-z0-9@._+'-]+$/;
 
 type Account = AccountSearch['accounts'][number];
 interface Results {
@@ -74,9 +76,17 @@ export const ConsoleSearch = () => {
     if (q.length < 2 || busy) return;
     setBusy(true);
     setError(null);
+    // A display name with a space ("Jane Doe") can only match an account: the
+    // token search would refuse it, so it is not sent.
+    const searchTokens = canTokens && TOKEN_TERM.test(q);
+    if (!canAccounts && !searchTokens) {
+      setBusy(false);
+      setError('Token search takes an owner email, token name or serial number, without spaces.');
+      return;
+    }
     const [acc, tok] = await Promise.allSettled([
       canAccounts ? adminApi.searchAccounts({ q, limit: LIMIT }) : Promise.resolve(null),
-      canTokens ? adminApi.listTags({ q, limit: LIMIT }) : Promise.resolve(null),
+      searchTokens ? adminApi.listTags({ q, limit: LIMIT }) : Promise.resolve(null),
     ]);
     setBusy(false);
     const accounts = acc.status === 'fulfilled' && acc.value ? acc.value.accounts : [];

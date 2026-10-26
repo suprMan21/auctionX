@@ -102,6 +102,16 @@ describe('console search', () => {
     expect(screen.getByTestId('where')).toHaveTextContent('/admin');
   });
 
+  it('a name with a space searches accounts only, and one match still opens it', async () => {
+    api.searchAccounts.mockResolvedValue(accounts([{ id: ACCOUNT, email: 'jane@example.com' }]));
+    withRole('super_admin', <ConsoleSearch />);
+
+    await userEvent.type(screen.getByRole('searchbox'), 'Jane Doe{Enter}');
+
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`/admin/users/${ACCOUNT}`));
+    expect(api.listTags).not.toHaveBeenCalled();
+  });
+
   it('support searches accounts only (no token permission), and nothing runs until submitted', async () => {
     api.searchAccounts.mockResolvedValue(accounts([]));
     withRole('support', <ConsoleSearch />);

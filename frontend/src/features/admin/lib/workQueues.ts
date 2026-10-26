@@ -7,16 +7,16 @@
 
 import { createContext, useContext } from 'react';
 
-/** null = not loaded, not allowed, or could not be loaded. */
+/** undefined = still loading; null = not allowed or could not be loaded. */
 export interface WorkQueueCounts {
-  reissuesToReview: number | null;
-  reissuesReady: number | null;
-  stuckPayments: number | null;
+  reissuesToReview: number | null | undefined;
+  reissuesReady: number | null | undefined;
+  stuckPayments: number | null | undefined;
   /** Reload the counts now (call after an action that changes a queue). */
   refresh: () => void;
 }
 
-export const EMPTY_WORK_QUEUES: WorkQueueCounts = { reissuesToReview: null, reissuesReady: null, stuckPayments: null, refresh: () => {} };
+export const EMPTY_WORK_QUEUES: WorkQueueCounts = { reissuesToReview: undefined, reissuesReady: undefined, stuckPayments: undefined, refresh: () => {} };
 export const WORK_QUEUE_REFRESH_MS = 60_000;
 
 export const WorkQueueContext = createContext<WorkQueueCounts>(EMPTY_WORK_QUEUES);

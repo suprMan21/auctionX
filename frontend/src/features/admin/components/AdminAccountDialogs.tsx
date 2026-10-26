@@ -123,7 +123,7 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
 
   const who = account.email ?? account.id;
   const copy = action === 'role'
-    ? { title: 'Change staff role', button: 'Save staff role', busy: 'Saving…', danger: false, body: 'Only a super admin can do this. The change takes effect straight away and signs the account out.' }
+    ? { title: 'Change staff role', button: 'Save staff role', busy: 'Saving…', danger: false, body: 'Only a super admin can do this. The change takes effect straight away. Changing or removing a role also signs the account out.' }
     : COPY[action];
 
   return (

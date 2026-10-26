@@ -23,6 +23,8 @@ export const WorkQueueProvider = ({ children }: { children: ReactNode }) => {
     if (!canReissue && !canStuck) return;
     let cancelled = false;
     const load = () => {
+      // A console left open in a background tab does not keep polling.
+      if (document.visibilityState === 'hidden') return;
       void Promise.all([
         canReissue ? countOrNull(() => adminApi.listReissueRequests({ status: 'PENDING', limit: 1 }).then((r) => r.data.pagination.total)) : null,
         canReissue ? countOrNull(() => adminApi.listReissueRequests({ status: 'READY', limit: 1 }).then((r) => r.data.pagination.total)) : null,

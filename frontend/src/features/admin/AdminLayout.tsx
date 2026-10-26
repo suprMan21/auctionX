@@ -140,9 +140,9 @@ const NavIcon = ({ path }: { path: string }) => (
  * The sidebar collapses into a hamburger-toggled overlay on mobile.
  */
 /** How many items wait in a nav item's queue (null hides the badge). */
-const badgeFor = (to: string, q: WorkQueueCounts): number | null => {
+const badgeFor = (to: string, q: WorkQueueCounts): number | null | undefined => {
   if (to === '/admin/reissue-requests') {
-    if (q.reissuesToReview === null && q.reissuesReady === null) return null;
+    if (q.reissuesToReview == null && q.reissuesReady == null) return null;
     return (q.reissuesToReview ?? 0) + (q.reissuesReady ?? 0);
   }
   if (to === '/admin/stuck-payments') return q.stuckPayments;

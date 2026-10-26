@@ -30,7 +30,7 @@ interface DashboardStats {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 /** A queue that needs staff: the count, what it means, and one click to act. */
-const QueueCard = ({ count, label, to, action }: { count: number | null; label: string; to: string; action: string }) => {
+const QueueCard = ({ count, label, to, action }: { count: number | null | undefined; label: string; to: string; action: string }) => {
   const waiting = (count ?? 0) > 0;
   return (
     <Link
@@ -39,7 +39,7 @@ const QueueCard = ({ count, label, to, action }: { count: number | null; label: 
         waiting ? 'border-warning-500/40' : 'border-white/10'
       }`}
     >
-      <span className={`text-3xl font-bold ${waiting ? 'text-warning-500' : 'text-white'}`}>{count === null ? 'Unavailable' : count}</span>
+      <span className={`text-3xl font-bold ${waiting ? 'text-warning-500' : 'text-white'}`}>{count === undefined ? '…' : count === null ? 'Unavailable' : count}</span>
       <span className="text-sm text-gray-300">{label}</span>
       <span className="text-sm text-primary-300 mt-1">{waiting ? action : 'Open'} →</span>
     </Link>

@@ -84,7 +84,8 @@ export const AdminVouchersPage = () => {
       setReloadKey((k) => k + 1);
       return;
     }
-    if ((granted.userEmail ?? '').toLowerCase() !== email) return;
+    // New grants are listed first, so only page 1 shows it; other pages stay as they are.
+    if ((granted.userEmail ?? '').toLowerCase() !== email || page !== 1) return;
     const row: AdminVoucherGrant = {
       id: granted.id,
       userEmail: granted.userEmail,
