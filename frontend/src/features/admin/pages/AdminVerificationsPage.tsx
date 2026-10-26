@@ -3,11 +3,14 @@
  * accounts to their ID ("Creator ID checks" on screen).
  *
  * Mirrors the AdminAuctionsPage shape: URL-synced filters, status pills,
- * debounced search, row-click into a detail page where overrides happen.
+ * search on Enter (kept out of the URL), whole-row click into the detail
+ * page where status changes happen.
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { AdminTable, Wrap, type AdminColumn } from '../components/AdminTable';
+import { AdminPagination, AdminSearchBox, FilterPills, ListState } from '../components/AdminListParts';
 import { adminApi } from '../api/adminApi';
 import type {
   AdminYotiVerificationListRow,
@@ -50,85 +53,68 @@ const StatusBadge = ({ status }: { status: AdminYotiVerificationStatus }) => (
 );
 
 export const AdminVerificationsPage = () => {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const statusFilter = searchParams.get('status') ?? '';
-  const initialSearch = searchParams.get('search') ?? '';
   const page = Math.max(parseInt(searchParams.get('page') ?? '1', 10) || 1, 1);
+  // Kept out of the URL: it is often an email.
+  const [search, setSearch] = useState('');
 
-  const [searchInput, setSearchInput] = useState(initialSearch);
-  const [rows, setRows] = useState<AdminYotiVerificationListRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const debounceRef = useRef<number | null>(null);
-
-  // Debounced search-param sync (350ms).
-  useEffect(() => {
-    if (debounceRef.current !== null) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        if (searchInput) next.set('search', searchInput);
-        else next.delete('search');
-        next.set('page', '1');
-        return next;
-      });
-    }, 350);
-    return () => {
-      if (debounceRef.current !== null) window.clearTimeout(debounceRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput]);
+  const queryKey = `${statusFilter}|${search}|${page}`;
+  const [result, setResult] = useState<{ key: string; rows: AdminYotiVerificationListRow[]; total: number; pages: number } | null>(null);
+  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     adminApi
-      .listYotiVerifications({
-        status: statusFilter || undefined,
-        search: searchParams.get('search') ?? undefined,
-        page,
-        limit: 25,
-      })
+      .listYotiVerifications({ status: statusFilter || undefined, search: search || undefined, page, limit: 25 })
       .then((res) => {
-        if (cancelled) return;
-        setRows(res.data.results);
-        setTotal(res.data.total);
-        setTotalPages(res.data.totalPages || 1);
+        if (!cancelled) setResult({ key: queryKey, rows: res.data.results, total: res.data.total, pages: res.data.totalPages || 1 });
       })
       .catch((err) => {
-        if (cancelled) return;
-        setError(errorMessage(err, loadFailed('Creator ID checks')));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setFailure({ key: queryKey, message: errorMessage(err, loadFailed('Creator ID checks')) });
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [statusFilter, searchParams, page]);
+    return () => { cancelled = true; };
+  }, [statusFilter, search, page, queryKey]);
 
-  const setStatus = (value: string) => {
+  const error = failure?.key === queryKey ? failure.message : null;
+  const loading = !error && result?.key !== queryKey;
+  const rows = result?.key === queryKey ? result.rows : [];
+  const total = result?.total ?? 0;
+
+  const setParams = (changes: Record<string, string>) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      if (value) next.set('status', value);
-      else next.delete('status');
-      next.set('page', '1');
+      for (const [k, v] of Object.entries(changes)) {
+        if (v) next.set(k, v); else next.delete(k);
+      }
       return next;
     });
   };
 
-  const setPage = (p: number) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set('page', String(p));
-      return next;
-    });
-  };
+  const columns: ReadonlyArray<AdminColumn<AdminYotiVerificationListRow>> = [
+    {
+      key: 'account', header: 'Account', width: 260,
+      cell: (row) => (
+        <>
+          <Link
+            to={`/admin/verifications/${row.user_id}`}
+            className="text-white font-medium hover:text-primary-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            {row.display_name || row.email}
+          </Link>
+          {row.display_name && <Wrap text={row.email} className="block text-xs text-gray-400" />}
+        </>
+      ),
+    },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+    {
+      key: 'age', header: 'Age verified',
+      cell: (row) => (row.age_verified ? <span className="text-emerald-400">Yes</span> : <span className="text-gray-400">No</span>),
+    },
+    { key: 'submitted', header: 'Submitted', cell: (row) => fmt(row.submitted_at) },
+    { key: 'updated', header: 'Last update', cell: (row) => fmt(row.yoti_last_event_at) },
+  ];
 
   return (
     <div className="space-y-6">
@@ -139,111 +125,30 @@ export const AdminVerificationsPage = () => {
         </p>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-2 flex-wrap">
-          {STATUS_OPTIONS.map((opt) => (
-            <button
-              key={opt.value || 'all'}
-              onClick={() => setStatus(opt.value)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors
-                focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
-                ${statusFilter === opt.value
-                  ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                  : 'bg-dark-700 text-gray-400 hover:text-white hover:bg-dark-600'}`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        <input
-          type="search"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
+      <div className="flex flex-wrap items-start gap-3">
+        <FilterPills label="Filter by status" options={STATUS_OPTIONS} value={statusFilter} onChange={(v) => setParams({ status: v, page: '' })} />
+        <AdminSearchBox
+          label="Search creator ID checks"
           placeholder="Email or display name…"
-          aria-label="Search creator ID checks"
-          className="ml-auto px-3 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-500
-            border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
-            min-w-[14rem]"
+          active={search}
+          note="Search runs when you press Enter."
+          onSearch={(term) => { setSearch(term); setParams({ page: '' }); }}
         />
       </div>
 
-      {/* Table */}
-      {loading ? (
-        <div className="flex items-center justify-center h-48" role="status" aria-label="Loading creator ID checks">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <ListState loading={loading} error={error} empty={rows.length === 0} emptyText="No ID checks match. Try another status or search." what="creator ID checks">
+        <div className="space-y-4">
+          <AdminTable
+            id="creator-id-checks"
+            label="Creator ID checks"
+            columns={columns}
+            rows={rows}
+            rowKey={(r) => r.user_id}
+            rowHref={(r) => `/admin/verifications/${r.user_id}`}
+          />
+          <AdminPagination page={page} pages={result?.pages ?? 1} onPage={(p) => setParams({ page: String(p) })} />
         </div>
-      ) : error ? (
-        <div className="glass rounded-2xl p-6 border border-red-500/30">
-          <p role="alert" className="text-red-400 text-sm">{error}</p>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="glass rounded-2xl p-6">
-          <p className="text-gray-400 text-sm">No ID checks match. Try another status or search.</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full text-sm">
-            <thead className="bg-dark-700 text-gray-400">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium">Account</th>
-                <th className="text-left px-4 py-3 font-medium">Status</th>
-                <th className="text-left px-4 py-3 font-medium">Age verified</th>
-                <th className="text-left px-4 py-3 font-medium">Submitted</th>
-                <th className="text-left px-4 py-3 font-medium">Last update</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.user_id}
-                  onClick={() => navigate(`/admin/verifications/${row.user_id}`)}
-                  className="border-t border-white/5 cursor-pointer hover:bg-white/[0.04] focus-within:bg-white/[0.04]"
-                >
-                  <td className="px-4 py-3">
-                    <div className="text-white font-medium">{row.display_name || row.email}</div>
-                    <div className="text-xs text-gray-500">{row.email}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={row.status} />
-                  </td>
-                  <td className="px-4 py-3 text-gray-300">
-                    {row.age_verified ? (
-                      <span className="text-emerald-400">Yes</span>
-                    ) : (
-                      <span className="text-gray-500">No</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-300">{fmt(row.submitted_at)}</td>
-                  <td className="px-4 py-3 text-gray-300">{fmt(row.yoti_last_event_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-            className="px-3 py-1.5 rounded-xl bg-dark-700 text-gray-300 hover:bg-dark-600 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          <span className="text-sm text-gray-400">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-            className="px-3 py-1.5 rounded-xl bg-dark-700 text-gray-300 hover:bg-dark-600 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
-      )}
+      </ListState>
     </div>
   );
 };

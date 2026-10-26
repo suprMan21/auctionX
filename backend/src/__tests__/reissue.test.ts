@@ -775,6 +775,50 @@ describe('admin: queue', () => {
     expect(JSON.stringify(out.body)).not.toContain('reissue-evidence/');
   });
 
+  it('NEEDS_ACTION lists requests to review and requests ready for a chip, nothing else', async () => {
+    tables.reissue_requests.push(
+      reissueRow({ id: 'a0000000-0000-4000-8000-000000000011', status: 'PENDING', payment_status: null }),
+      reissueRow({ id: 'a0000000-0000-4000-8000-000000000012', payment_status: 'PAID' }),
+      reissueRow({ id: 'a0000000-0000-4000-8000-000000000013', payment_status: 'WAIVED' }),
+      reissueRow({ id: 'a0000000-0000-4000-8000-000000000014' }), // waiting for payment
+      reissueRow({ id: 'a0000000-0000-4000-8000-000000000015', payment_status: 'PAID', fulfilled_at: '2026-10-09T12:00:00.000Z' }),
+      reissueRow({ id: 'a0000000-0000-4000-8000-000000000016', status: 'REJECTED', payment_status: null }),
+      reissueRow({ id: 'a0000000-0000-4000-8000-000000000017', status: 'CANCELLED', payment_status: 'PAID' }),
+    );
+    const { listReissueRequests } = await admin();
+    const req = makeReq(null);
+    req.query = { status: 'NEEDS_ACTION' };
+
+    const out = await call(listReissueRequests, req);
+
+    expect(out.threw).toBeNull();
+    const ids = (out.body as { data: { requests: Array<Row> } }).data.requests.map((r) => r.id).sort();
+    expect(ids).toEqual([
+      'a0000000-0000-4000-8000-000000000011',
+      'a0000000-0000-4000-8000-000000000012',
+      'a0000000-0000-4000-8000-000000000013',
+    ]);
+  });
+
+  it('id= returns that one request whatever its stage, and rejects a non-UUID', async () => {
+    tables.reissue_requests.push(
+      reissueRow({ id: 'a0000000-0000-4000-8000-000000000021', payment_status: 'PAID' }),
+      reissueRow({ id: 'a0000000-0000-4000-8000-000000000022', status: 'PENDING', payment_status: null }),
+    );
+    const { listReissueRequests } = await admin();
+    const req = makeReq(null);
+    req.query = { id: 'a0000000-0000-4000-8000-000000000021' };
+
+    const out = await call(listReissueRequests, req);
+
+    const ids = (out.body as { data: { requests: Array<Row> } }).data.requests.map((r) => r.id);
+    expect(ids).toEqual(['a0000000-0000-4000-8000-000000000021']);
+
+    const bad = makeReq(null);
+    bad.query = { id: 'not-a-uuid' };
+    expect((await call(listReissueRequests, bad)).threw).not.toBeNull();
+  });
+
   it('names the requester by email and a completed request by its new chip', async () => {
     tables.reissue_requests.push(
       reissueRow({ id: 'a0000000-0000-4000-8000-000000000005', payment_status: 'PAID', fulfilled_at: '2026-10-09T12:00:00.000Z', new_tag_id: OTHER_TAG }),

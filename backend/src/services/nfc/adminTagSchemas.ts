@@ -80,15 +80,18 @@ export const resetBodySchema = z.object({
 
 /**
  * Queue filter. READY = approved and paid (or waived), waiting for a chip.
+ * NEEDS_ACTION = PENDING or READY (the two stages where staff act next).
  * DONE = fulfilled.
  */
 export const REISSUE_QUEUE_FILTERS = [
-  'PENDING', 'AWAITING_PAYMENT', 'READY', 'DONE', 'REJECTED', 'CANCELLED', 'ALL',
+  'NEEDS_ACTION', 'PENDING', 'AWAITING_PAYMENT', 'READY', 'DONE', 'REJECTED', 'CANCELLED', 'ALL',
 ] as const;
 export type ReissueQueueFilter = (typeof REISSUE_QUEUE_FILTERS)[number];
 
 export const listReissueQuerySchema = z.object({
   status: z.enum(REISSUE_QUEUE_FILTERS).default('PENDING'),
+  /** One request by id (a stuck re-issue fee links to it). Overrides status. */
+  id: uuid.optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(25),
 }).strict();

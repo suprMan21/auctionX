@@ -8,7 +8,8 @@ import { useEffect, useId, useState } from 'react';
 import { adminApi, chipLabel, confirmationSuffixOf, type AdminTag } from '../api/adminApi';
 import { AdminDialog, ADMIN_BUTTON_CLASS, ADMIN_FIELD_CLASS } from './AdminDialog';
 import { confirmsChip, useEnrolledChips } from '../lib/chipConfirm';
-import { ACTION_FAILED, errorMessage, formatDay } from '../lib/display';
+import { ACTION_FAILED, errorMessage } from '../lib/display';
+import { ChipCombobox } from './ChipCombobox';
 
 export const REASON_MIN = 10;
 
@@ -101,33 +102,11 @@ export const AdminSuspendDialog = ({ open, tag, suspend, onClose, onDone }: Susp
 
 // ── Shared: replacement chip + typed confirmation ───────────────────────────
 
+/** The replacement chip, chosen by typing its name (UX-2). Choosing never calls the API. */
 export const ReplacementChipField = (
   { candidates, loadError, value, onChange }:
   { candidates: AdminTag[] | null; loadError: string | null; value: string; onChange: (id: string) => void },
-) => {
-  const chipId = useId();
-  return (
-    <div className="space-y-1">
-      <label htmlFor={chipId} className="block text-sm font-medium text-gray-200">Replacement chip (set up, not yet claimed)</label>
-      {loadError ? (
-        <ErrorLine message={loadError} />
-      ) : candidates === null ? (
-        <p className="text-sm text-gray-400">Loading available chips…</p>
-      ) : candidates.length === 0 ? (
-        <p className="text-sm text-amber-300">No blank chips are ready. Set up a new chip with the encoder first.</p>
-      ) : (
-        <select id={chipId} value={value} onChange={(e) => onChange(e.target.value)} className={ADMIN_FIELD_CLASS}>
-          <option value="">Choose a chip…</option>
-          {candidates.map((c) => (
-            <option key={c.id} value={c.id}>
-              {chipLabel(c)} (set up {formatDay(c.registeredAt)})
-            </option>
-          ))}
-        </select>
-      )}
-    </div>
-  );
-};
+) => <ChipCombobox candidates={candidates} loadError={loadError} value={value} onChange={onChange} />;
 
 /**
  * The admin types the last 6 characters of the chip being retired: its serial on

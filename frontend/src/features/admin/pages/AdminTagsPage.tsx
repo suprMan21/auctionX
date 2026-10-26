@@ -15,6 +15,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { adminApi, chipLabel, type AdminTag, type AdminTagLifecycleStatus } from '../api/adminApi';
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
 import { NONE, errorMessage, formatWhen as fmt, loadFailed } from '../lib/display';
+import { AdminTable, type AdminColumn } from '../components/AdminTable';
+import { AdminPagination, AdminSearchBox, FilterPills, ListState } from '../components/AdminListParts';
 
 const STATUS_OPTIONS: ReadonlyArray<{ label: string; value: '' | AdminTagLifecycleStatus }> = [
   { label: 'All', value: '' },
@@ -32,7 +34,6 @@ export const AdminTagsPage = () => {
   const status = (searchParams.get('status') ?? '') as '' | AdminTagLifecycleStatus;
   const page = Math.max(parseInt(searchParams.get('page') ?? '1', 10) || 1, 1);
 
-  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   // Results are keyed by the query that produced them, so "loading" is derived
   // (no synchronous setState inside the effect).
@@ -78,9 +79,27 @@ export const AdminTagsPage = () => {
     });
   };
 
-  // Mirrors the backend's searchTermSchema.
-  const searchValid = searchInput === '' || /^[A-Za-z0-9@._+'-]{2,254}$/.test(searchInput);
   const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
+
+  const columns: ReadonlyArray<AdminColumn<AdminTag>> = [
+    {
+      key: 'token', header: 'Token', width: 180,
+      cell: (row) => (
+        <Link
+          to={`/admin/tags/${row.id}`}
+          className="font-mono text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          {chipLabel(row)}
+        </Link>
+      ),
+    },
+    { key: 'status', header: 'Status', cell: (row) => <AdminLifecycleBadge status={row.lifecycleStatus} /> },
+    { key: 'owner', header: 'Owner', width: 220, cell: (row) => <AccountLink id={row.ownerAccountId} email={row.ownerEmail} /> },
+    { key: 'creator', header: 'Creator', width: 220, cell: (row) => <AccountLink id={row.creatorAccountId} email={row.creatorEmail} /> },
+    { key: 'key', header: 'Key version', cell: (row) => row.sdmKeyVersion ?? NONE },
+    { key: 'taps', header: 'Times tapped', cell: (row) => row.sunCounter },
+    { key: 'setup', header: 'Set up', className: 'text-gray-400', cell: (row) => fmt(row.registeredAt) },
+  ];
 
   return (
     <div className="space-y-6">
@@ -89,135 +108,32 @@ export const AdminTagsPage = () => {
         <p className="text-gray-400 text-sm mt-1">{total} token{total === 1 ? '' : 's'}</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-2 flex-wrap" role="group" aria-label="Filter by status">
-          {STATUS_OPTIONS.map((opt) => (
-            <button
-              key={opt.value || 'all'}
-              type="button"
-              aria-pressed={status === opt.value}
-              onClick={() => update({ status: opt.value })}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors
-                focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
-                ${status === opt.value
-                  ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                  : 'bg-dark-700 text-gray-400 hover:text-white hover:bg-dark-600'}`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        <form
-          className="ml-auto flex items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!searchValid) return;
-            setSearch(searchInput);
+      <div className="flex flex-wrap items-start gap-3">
+        <FilterPills label="Filter by status" options={STATUS_OPTIONS} value={status} onChange={(v) => update({ status: v })} />
+        <AdminSearchBox
+          label="Search by owner email, token name or serial number"
+          placeholder="Owner email, token name or serial number…"
+          active={search}
+          // Mirrors the backend's searchTermSchema.
+          validate={(t) => (/^[A-Za-z0-9@._+'-]{2,254}$/.test(t) ? null : 'Use 2 or more letters, numbers or @ . _ + \' -')}
+          onSearch={(term) => {
+            setSearch(term);
             if (page !== 1) update({ page: '1' });
           }}
-        >
-          <label htmlFor="tag-search" className="sr-only">Search by owner email, token name or serial number</label>
-          <input
-            id="tag-search"
-            type="search"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value.trim())}
-            placeholder="Owner email, token name or serial number…"
-            aria-invalid={!searchValid}
-            aria-describedby="tag-search-note"
-            autoComplete="off"
-            className="px-3 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-400
-              border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
-              min-w-[16rem]"
-          />
-          <button
-            type="submit"
-            disabled={!searchValid}
-            className="px-3 py-2 rounded-xl text-sm bg-dark-700 text-gray-200 hover:bg-dark-600 disabled:opacity-50
-              focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
-          >
-            Search
-          </button>
-        </form>
+        />
       </div>
-      <p id="tag-search-note" className="text-xs text-gray-400 -mt-3 text-right">Searches are recorded in the audit log.</p>
       {truncated && (
         <p role="status" className="text-amber-300 text-sm">
           More than 50 accounts match that email. Showing the first 50. Type more of the address to narrow it down.
         </p>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center h-48" role="status" aria-label="Loading tokens">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <ListState loading={loading} error={error} empty={rows.length === 0} emptyText="No tokens match. Try another status or search." what="tokens">
+        <div className="space-y-4">
+          <AdminTable id="tokens" label="Tokens" columns={columns} rows={rows} rowKey={(r) => r.id} rowHref={(r) => `/admin/tags/${r.id}`} />
+          <AdminPagination page={page} pages={totalPages} onPage={(p) => update({ page: String(p) })} />
         </div>
-      ) : error ? (
-        <div className="glass rounded-2xl p-6 border border-red-500/30">
-          <p role="alert" className="text-red-400 text-sm">{error}</p>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="glass rounded-2xl p-6">
-          <p className="text-gray-400 text-sm">No tokens match. Try another status or search.</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full text-sm">
-            <thead className="bg-dark-700 text-gray-400">
-              <tr>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Token</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Status</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Owner</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Creator</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Key version</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Times tapped</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium">Set up</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-t border-white/5 hover:bg-white/[0.04]">
-                  <td className="px-4 py-3">
-                    <Link
-                      to={`/admin/tags/${row.id}`}
-                      className="font-mono text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      {chipLabel(row)}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3"><AdminLifecycleBadge status={row.lifecycleStatus} /></td>
-                  <td className="px-4 py-3 text-gray-300"><AccountLink id={row.ownerAccountId} email={row.ownerEmail} /></td>
-                  <td className="px-4 py-3 text-gray-300"><AccountLink id={row.creatorAccountId} email={row.creatorEmail} /></td>
-                  <td className="px-4 py-3 text-gray-300">{row.sdmKeyVersion ?? NONE}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.sunCounter}</td>
-                  <td className="px-4 py-3 text-gray-400">{fmt(row.registeredAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {totalPages > 1 && (
-        <nav className="flex items-center justify-between text-sm text-gray-400" aria-label="Pagination">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => update({ page: String(page - 1) })}
-            className="px-3 py-1.5 rounded-xl bg-dark-700 hover:bg-dark-600 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            Previous
-          </button>
-          <span>Page {page} of {totalPages}</span>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => update({ page: String(page + 1) })}
-            className="px-3 py-1.5 rounded-xl bg-dark-700 hover:bg-dark-600 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            Next
-          </button>
-        </nav>
-      )}
+      </ListState>
     </div>
   );
 };

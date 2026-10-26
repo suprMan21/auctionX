@@ -1,11 +1,12 @@
 /**
  * S-ADMIN1 Ph3b price dialogs: set a price (now or scheduled) and cancel a
- * scheduled change. Both need a typed reason for the audit log.
+ * scheduled change. UX-2: opened from a price's card; an empty start date
+ * means "starts now". Both need a typed reason for the audit log.
  */
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { adminApi } from '../api/adminApi';
-import { PRICE_KINDS, type AdminPriceChange, type AdminPricing, type PriceKind } from '../api/pricingSchemas';
+import { type AdminPriceChange, type AdminPricing, type PriceKind } from '../api/pricingSchemas';
 import { AdminDialog, ADMIN_BUTTON_CLASS, ADMIN_FIELD_CLASS } from './AdminDialog';
 import { ErrorLine, REASON_MIN, ReasonField } from './AdminTagDialogs';
 import {
@@ -22,22 +23,29 @@ import { errorMessage } from '../lib/display';
 
 interface SetPriceDialogProps {
   open: boolean;
+  /** The price being changed: the dialog is opened from that price's card, so there is no picker. */
+  kind: PriceKind;
   current: AdminPricing['current'];
   onClose: () => void;
   onDone: () => void;
 }
 
-type When = 'now' | 'schedule';
-
-export const AdminSetPriceDialog = ({ open, current, onClose, onDone }: SetPriceDialogProps) => {
-  const [kind, setKind] = useState<PriceKind>('transfer');
+export const AdminSetPriceDialog = ({ open, kind, current, onClose, onDone }: SetPriceDialogProps) => {
   const [amount, setAmount] = useState('');
-  const [when, setWhen] = useState<When>('now');
   const [startsAt, setStartsAt] = useState('');
+  // A half-typed datetime-local reads as '' — never let that pass as "starts now".
+  const [startsIncomplete, setStartsIncomplete] = useState(false);
+  const startsRef = useRef<HTMLInputElement>(null);
+  // A half-typed field keeps value '' so no change event fires; read badInput on every keystroke and blur too.
+  const syncStarts = () => {
+    const el = startsRef.current;
+    if (!el) return;
+    setStartsAt(el.value);
+    setStartsIncomplete(el.validity?.badInput ?? false);
+  };
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const kindId = useId();
   const amountId = useId();
   const amountHintId = useId();
   const startsId = useId();
@@ -45,9 +53,9 @@ export const AdminSetPriceDialog = ({ open, current, onClose, onDone }: SetPrice
 
   useEffect(() => {
     if (open) {
-      setKind('transfer'); setAmount(''); setWhen('now'); setStartsAt(''); setReason(''); setError(null);
+      setAmount(''); setStartsAt(''); setStartsIncomplete(false); setReason(''); setError(null);
     }
-  }, [open]);
+  }, [open, kind]);
 
   const cents = parseDollarsToCents(amount);
   const amountOk = cents !== null && cents >= PRICE_MIN_CENTS && cents <= PRICE_MAX_CENTS;
@@ -55,23 +63,33 @@ export const AdminSetPriceDialog = ({ open, current, onClose, onDone }: SetPrice
     ? `Enter an amount from ${usd(PRICE_MIN_CENTS)} to ${usd(PRICE_MAX_CENTS)}.`
     : null;
 
-  const start = when === 'schedule' ? parseLocalDateTime(startsAt) : null;
-  // Checked at render time; the server rejects a start in the past anyway.
+  // Empty start = starts now; a date = scheduled.
+  const scheduled = startsAt !== '' || startsIncomplete;
+  const start = startsAt !== '' ? parseLocalDateTime(startsAt) : null;
+  // Checked at render time; the server rejects a start in the past anyway (no backdating).
   const startInFuture = start !== null && start.getTime() > Date.now();
-  const whenOk = when === 'now' || startInFuture;
-  const startProblem = when === 'schedule' && startsAt !== '' && !startInFuture ? 'Pick a time in the future.' : null;
+  const whenOk = !scheduled || startInFuture;
+  const startProblem = startsIncomplete
+    ? 'Finish the date and time, or clear it to start now.'
+    : scheduled && !startInFuture ? 'Pick a time in the future.' : null;
 
   const canSubmit = amountOk && whenOk && reason.trim().length >= REASON_MIN && !busy;
+  const label = PRICE_LABEL[kind];
 
   const submit = async () => {
     if (!canSubmit || cents === null) return;
+    // Last check at the moment of Confirm: a half-typed date must never become "starts now".
+    if (startsRef.current?.validity?.badInput) {
+      setStartsIncomplete(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       await adminApi.setPrice({
         kind,
         amountUsdCents: cents,
-        effectiveFrom: when === 'schedule' && start ? toIsoWithOffset(start) : null,
+        effectiveFrom: scheduled && start ? toIsoWithOffset(start) : null,
         reason: reason.trim(),
       });
       onDone();
@@ -86,18 +104,9 @@ export const AdminSetPriceDialog = ({ open, current, onClose, onDone }: SetPrice
     <AdminDialog
       open={open}
       onClose={onClose}
-      title="Change price"
-      description="Prices are in US dollars. A change applies only to transfers started, and re-issue requests made, after it takes effect."
+      title={`Change ${label.toLowerCase()}`}
+      description={`Now ${usd(current[kind])}. Prices are in US dollars. A change applies only to transfers started, and re-issue requests made, after it takes effect.`}
     >
-      <div className="space-y-1">
-        <label htmlFor={kindId} className="block text-sm font-medium text-gray-200">Price</label>
-        <select id={kindId} value={kind} onChange={(e) => setKind(e.target.value as PriceKind)} className={ADMIN_FIELD_CLASS}>
-          {PRICE_KINDS.map((k) => (
-            <option key={k} value={k}>{PRICE_LABEL[k]} (now {usd(current[k])})</option>
-          ))}
-        </select>
-      </div>
-
       <div className="space-y-1">
         <label htmlFor={amountId} className="block text-sm font-medium text-gray-200">New price (USD)</label>
         <input
@@ -116,50 +125,54 @@ export const AdminSetPriceDialog = ({ open, current, onClose, onDone }: SetPrice
         </p>
       </div>
 
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium text-gray-200">Takes effect</legend>
-        <div className="flex gap-4">
-          {(['now', 'schedule'] as const).map((w) => (
-            <label key={w} className="flex items-center gap-2 text-sm text-gray-200 cursor-pointer">
-              <input
-                type="radio"
-                name="price-when"
-                value={w}
-                checked={when === w}
-                onChange={() => setWhen(w)}
-                className="accent-primary-500"
-              />
-              {w === 'now' ? 'Now' : 'Later'}
-            </label>
-          ))}
+      <div className="space-y-1">
+        <label htmlFor={startsId} className="block text-sm font-medium text-gray-200">
+          Start date and time (optional, your local time)
+        </label>
+        <div className="flex gap-2">
+          <input
+            id={startsId}
+            type="datetime-local"
+            ref={startsRef}
+            value={startsAt}
+            onChange={syncStarts}
+            onInput={syncStarts}
+            onKeyUp={syncStarts}
+            onBlur={syncStarts}
+            aria-invalid={startProblem ? true : undefined}
+            aria-describedby={startsHintId}
+            className={ADMIN_FIELD_CLASS}
+          />
+          {scheduled && (
+            <button
+              type="button"
+              onClick={() => {
+                // Also clears half-typed date segments, which React state cannot see.
+                if (startsRef.current) startsRef.current.value = '';
+                setStartsAt('');
+                setStartsIncomplete(false);
+              }}
+              className={`${ADMIN_BUTTON_CLASS} shrink-0 bg-dark-700 text-gray-200 hover:bg-dark-600`}
+            >
+              Clear
+            </button>
+          )}
         </div>
-        {when === 'schedule' && (
-          <div className="space-y-1">
-            <label htmlFor={startsId} className="block text-sm font-medium text-gray-200">
-              Start date and time (your local time)
-            </label>
-            <input
-              id={startsId}
-              type="datetime-local"
-              value={startsAt}
-              onChange={(e) => setStartsAt(e.target.value)}
-              aria-invalid={startProblem ? true : undefined}
-              aria-describedby={startProblem ? startsHintId : undefined}
-              className={ADMIN_FIELD_CLASS}
-            />
-            {startProblem && <p id={startsHintId} className="text-xs text-red-400">{startProblem}</p>}
-          </div>
-        )}
-      </fieldset>
+        <p id={startsHintId} className={`text-xs ${startProblem ? 'text-red-400' : 'text-gray-400'}`}>
+          {startProblem ?? 'Leave empty to start now.'}
+        </p>
+      </div>
 
       <ReasonField value={reason} onChange={setReason} />
 
-      {amountOk && whenOk && cents !== null && (
-        <p className="text-sm text-gray-200" role="status">
-          {PRICE_LABEL[kind]} changes from {usd(current[kind])} to {usd(cents)}{' '}
-          {when === 'now' || !start ? 'now' : `on ${start.toLocaleString()}`}.
-        </p>
-      )}
+      <div className="text-sm text-gray-200 space-y-1" role="status">
+        {amountOk && cents !== null && <p>{label} changes from {usd(current[kind])} to {usd(cents)}.</p>}
+        {!startProblem && (
+          <p className="font-semibold">
+            {scheduled && start ? `Starts on ${fmtDateTime(start.toISOString())}.` : 'Starts now.'}
+          </p>
+        )}
+      </div>
 
       <ErrorLine message={error} />
       <div className="flex justify-end gap-3">
@@ -172,7 +185,7 @@ export const AdminSetPriceDialog = ({ open, current, onClose, onDone }: SetPrice
           disabled={!canSubmit}
           className={`${ADMIN_BUTTON_CLASS} bg-primary-600 hover:bg-primary-500 text-white`}
         >
-          {busy ? 'Saving…' : when === 'now' ? 'Set price' : 'Schedule price'}
+          {busy ? 'Saving…' : scheduled ? 'Schedule price' : 'Set price'}
         </button>
       </div>
     </AdminDialog>

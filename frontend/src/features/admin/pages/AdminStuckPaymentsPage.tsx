@@ -12,15 +12,19 @@
 
 import { useWorkQueues } from '../lib/workQueues';
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   adminApi,
   type AdminStuckPayment,
   type AdminStuckPaymentFilter,
   type AdminStuckPaymentListResponse,
   type AdminStuckPaymentReason,
+  type AdminReissueRequest,
 } from '../api/adminApi';
 import { AdminReapplyPaymentDialog, AdminRefundPaymentDialog } from '../components/AdminStuckPaymentDialogs';
+import { AdminReissueFulfilDialog } from '../components/AdminReissueDialogs';
+import { AdminPagination, FilterPills, ListState } from '../components/AdminListParts';
+import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { moneyOf } from '../lib/stuckPayments';
 import { NONE, errorMessage, formatWhen as fmt, loadFailed, shortId } from '../lib/display';
 import { reissueStageLabel, stuckStatusLabel, transferStatusLabel } from '../lib/labels';
@@ -79,7 +83,16 @@ const targetNow = (p: AdminStuckPayment): string => {
 type OpenDialog =
   | { kind: 'none' }
   | { kind: 'reapply'; payment: AdminStuckPayment }
-  | { kind: 'refund'; payment: AdminStuckPayment };
+  | { kind: 'refund'; payment: AdminStuckPayment }
+  | { kind: 'fulfil'; request: AdminReissueRequest };
+
+const PAGE_SIZE = 25;
+
+/** A re-issue fee that has now gone through, for a request still waiting for its chip. */
+const readyForChip = (p: AdminStuckPayment): boolean =>
+  p.kind !== 'transfer_fee' && Boolean(p.reissueRequestId) && p.status !== 'REFUNDED'
+  && p.target?.status === 'APPROVED' && (p.target.paymentStatus === 'PAID' || p.target.paymentStatus === 'WAIVED')
+  && p.target.fulfilled === false;
 
 type QueueData = AdminStuckPaymentListResponse['data'];
 
@@ -87,12 +100,17 @@ export const AdminStuckPaymentsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const raw = searchParams.get('status');
   const filter: AdminStuckPaymentFilter = FILTERS.some((f) => f.value === raw) ? (raw as AdminStuckPaymentFilter) : 'OPEN';
+  const page = Math.max(parseInt(searchParams.get('page') ?? '1', 10) || 1, 1);
+  const navigate = useNavigate();
+  // Re-issue requests need manage_nfc; support can Re-apply but not open them.
+  const canManageNfc = hasPermission(useAdminRole(), PERMISSIONS.manageNfc);
+  const [opening, setOpening] = useState<{ id: string; error: string | null } | null>(null);
 
   const [reloadKey, setReloadKey] = useState(0);
   const { refresh: refreshQueues } = useWorkQueues();
   // Any reload after an action also updates the dashboard and nav counts.
   useEffect(() => { if (reloadKey > 0) refreshQueues(); }, [reloadKey, refreshQueues]);
-  const queryKey = `${filter}|${reloadKey}`;
+  const queryKey = `${filter}|${page}|${reloadKey}`;
   const [result, setResult] = useState<{ key: string; data: QueueData } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
   const [dialog, setDialog] = useState<OpenDialog>({ kind: 'none' });
@@ -102,7 +120,7 @@ export const AdminStuckPaymentsPage = () => {
   useEffect(() => {
     let cancelled = false;
     adminApi
-      .listStuckPayments({ status: filter, limit: 50 })
+      .listStuckPayments({ status: filter, page, limit: PAGE_SIZE })
       .then((res) => {
         if (!cancelled) setResult({ key: queryKey, data: res.data });
       })
@@ -110,12 +128,32 @@ export const AdminStuckPaymentsPage = () => {
         if (!cancelled) setFailure({ key: queryKey, message: errorMessage(err, loadFailed('Stuck payments')) });
       });
     return () => { cancelled = true; };
-  }, [filter, queryKey]);
+  }, [filter, page, queryKey]);
 
   const error = failure?.key === queryKey ? failure.message : null;
   const loading = !error && result?.key !== queryKey;
   const data = result?.key === queryKey ? result.data : null;
   const rows = data?.items ?? [];
+  const pages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
+
+  // Loads the re-issue request behind a fee, then opens Move to new chip.
+  const openFulfil = async (p: AdminStuckPayment) => {
+    if (!p.reissueRequestId) return;
+    setOpening({ id: p.id, error: null });
+    try {
+      const res = await adminApi.listReissueRequests({ id: p.reissueRequestId });
+      const request = res.data.requests[0];
+      const paid = request?.paymentStatus === 'PAID' || request?.paymentStatus === 'WAIVED';
+      if (!request || request.fulfilledAt || request.status !== 'APPROVED' || !paid) {
+        setOpening({ id: p.id, error: 'This re-issue is no longer waiting for a chip. Reload to see where it stands.' });
+        return;
+      }
+      setOpening(null);
+      setDialog({ kind: 'fulfil', request });
+    } catch (err) {
+      setOpening({ id: p.id, error: errorMessage(err, loadFailed('The re-issue request')) });
+    }
+  };
 
   const closeAndReload = () => {
     setDialog({ kind: 'none' });
@@ -186,136 +224,150 @@ export const AdminStuckPaymentsPage = () => {
         </div>
       )}
 
-      <div className="flex gap-2 flex-wrap" role="group" aria-label="Filter by state">
-        {FILTERS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            aria-pressed={filter === opt.value}
-            onClick={() => setSearchParams({ status: opt.value })}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors
-              focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
-              ${filter === opt.value
-                ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                : 'bg-dark-700 text-gray-400 hover:text-white hover:bg-dark-600'}`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+      <FilterPills label="Filter by state" options={FILTERS} value={filter} onChange={(v) => setSearchParams({ status: v })} />
 
-      {loading ? (
-        <div className="flex items-center justify-center h-48" role="status" aria-label="Loading stuck payments">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : error ? (
-        <div className="glass rounded-2xl p-6 border border-red-500/30">
-          <p role="alert" className="text-red-400 text-sm">{error}</p>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="glass rounded-2xl p-6">
-          <p className="text-gray-400 text-sm">
-            {filter === 'OPEN' ? 'No stuck payments. Every paid fee has gone through.' : 'Nothing here.'}
-          </p>
-        </div>
-      ) : (
-        <ul className="space-y-4" aria-label="Stuck payments">
-          {rows.map((p) => {
-            const copy = REASON_COPY[p.reason];
-            const open = p.status === 'OPEN';
-            return (
-              <li key={p.id} className="glass rounded-2xl p-5 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <h2 className="text-white font-semibold">
-                      {p.kind === 'transfer_fee' ? 'Transfer fee' : 'Re-issue fee'}, {moneyOf(p.amount, p.currency)}
-                    </h2>
-                    <p className="text-sm text-gray-300">{copy.what}</p>
+      <ListState
+        loading={loading}
+        error={error}
+        empty={rows.length === 0}
+        emptyText={filter === 'OPEN' ? 'No stuck payments. Every paid fee has gone through.' : 'Nothing here.'}
+        what="stuck payments"
+      >
+        <div className="space-y-4">
+          <ul className="space-y-4" aria-label="Stuck payments">
+            {rows.map((p) => {
+              const copy = REASON_COPY[p.reason];
+              const open = p.status === 'OPEN';
+              return (
+                <li key={p.id} className="glass rounded-2xl p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <h2 className="text-white font-semibold">
+                        {p.kind === 'transfer_fee' ? 'Transfer fee' : 'Re-issue fee'}, {moneyOf(p.amount, p.currency)}
+                      </h2>
+                      <p className="text-sm text-gray-300">{copy.what}</p>
+                    </div>
+                    <span
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border
+                        ${open ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                          : p.status === 'REFUNDED' ? 'bg-dark-700 text-gray-300 border-white/10'
+                          : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'}`}
+                    >
+                      {open ? stuckStatusLabel(p.status) : p.resolution ? RESOLUTION_COPY[p.resolution] : stuckStatusLabel(p.status)}
+                    </span>
                   </div>
-                  <span
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border
-                      ${open ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                        : p.status === 'REFUNDED' ? 'bg-dark-700 text-gray-300 border-white/10'
-                        : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'}`}
-                  >
-                    {open ? stuckStatusLabel(p.status) : p.resolution ? RESOLUTION_COPY[p.resolution] : stuckStatusLabel(p.status)}
-                  </span>
-                </div>
 
-                {open && <p className="text-sm text-gray-200">{copy.next}</p>}
+                  {open && <p className="text-sm text-gray-200">{copy.next}</p>}
 
-                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                  <div>
-                    <dt className="inline text-gray-400">Token: </dt>
-                    <dd className="inline">
-                      {p.target?.tagId ? (
-                        <Link
-                          to={`/admin/tags/${p.target.tagId}`}
-                          className="font-mono text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        >
-                          {p.target.chipName ?? shortId(p.target.tagId)}
-                        </Link>
-                      ) : (
-                        <span className="text-gray-200">{NONE}</span>
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="inline text-gray-400">{p.kind === 'transfer_fee' ? 'Transfer' : 'Re-issue'} now: </dt>
-                    <dd className="inline text-gray-200">{targetNow(p)}</dd>
-                  </div>
-                  <div><dt className="inline text-gray-400">Payment ID: </dt><dd className="inline font-mono text-gray-200 break-all">{p.paymentIntentId}</dd></div>
-                  <div>
-                    <dt className="inline text-gray-400">{p.kind === 'transfer_fee' ? 'Transfer ID: ' : 'Re-issue ID: '}</dt>
-                    <dd className="inline font-mono text-gray-200">{shortId(p.transferId ?? p.reissueRequestId)}</dd>
-                  </div>
-                  <div><dt className="inline text-gray-400">First seen: </dt><dd className="inline text-gray-200">{fmt(p.firstSeenAt)}</dd></div>
-                  <div><dt className="inline text-gray-400">Last seen: </dt><dd className="inline text-gray-200">{fmt(p.lastSeenAt)} (seen {p.seenCount} {p.seenCount === 1 ? 'time' : 'times'})</dd></div>
-                  {p.resolvedAt && <div><dt className="inline text-gray-400">Resolved: </dt><dd className="inline text-gray-200">{fmt(p.resolvedAt)}</dd></div>}
-                  {p.refundId && <div><dt className="inline text-gray-400">Refund ID: </dt><dd className="inline font-mono text-gray-200 break-all">{p.refundId}</dd></div>}
-                  {p.lastError && <div><dt className="inline text-gray-400">Technical detail: </dt><dd className="inline font-mono text-gray-200">{p.lastError}</dd></div>}
-                  {p.githubIssueUrl && p.githubIssueNumber !== null && (
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                     <div>
-                      <dt className="inline text-gray-400">Engineering ticket: </dt>
+                      <dt className="inline text-gray-400">Token: </dt>
                       <dd className="inline">
-                        <a
-                          href={p.githubIssueUrl}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        >
-                          GitHub issue #{p.githubIssueNumber}
-                          <span className="sr-only"> (opens in a new tab)</span>
-                        </a>
+                        {p.target?.tagId ? (
+                          <Link
+                            to={`/admin/tags/${p.target.tagId}`}
+                            className="font-mono text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          >
+                            {p.target.chipName ?? shortId(p.target.tagId)}
+                          </Link>
+                        ) : (
+                          <span className="text-gray-200">{NONE}</span>
+                        )}
                       </dd>
                     </div>
-                  )}
-                </dl>
-
-                {open && (
-                  <div className="flex flex-wrap gap-2">
-                    {CAN_REAPPLY.has(p.reason) && (
-                      <ActionButton onClick={() => setDialog({ kind: 'reapply', payment: p })} tone="primary">
-                        Re-apply…
-                      </ActionButton>
+                    <div>
+                      <dt className="inline text-gray-400">{p.kind === 'transfer_fee' ? 'Transfer' : 'Re-issue'} now: </dt>
+                      <dd className="inline text-gray-200">{targetNow(p)}</dd>
+                    </div>
+                    <div><dt className="inline text-gray-400">Payment ID: </dt><dd className="inline font-mono text-gray-200 break-all">{p.paymentIntentId}</dd></div>
+                    <div>
+                      <dt className="inline text-gray-400">{p.kind === 'transfer_fee' ? 'Transfer ID: ' : 'Re-issue ID: '}</dt>
+                      <dd className="inline font-mono text-gray-200">
+                        {p.reissueRequestId && canManageNfc ? (
+                          <Link
+                            to={`/admin/reissue-requests?request=${p.reissueRequestId}`}
+                            className="text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          >
+                            {shortId(p.reissueRequestId)}<span className="sr-only"> (open the re-issue request)</span>
+                          </Link>
+                        ) : shortId(p.transferId ?? p.reissueRequestId)}
+                      </dd>
+                    </div>
+                    <div><dt className="inline text-gray-400">First seen: </dt><dd className="inline text-gray-200">{fmt(p.firstSeenAt)}</dd></div>
+                    <div><dt className="inline text-gray-400">Last seen: </dt><dd className="inline text-gray-200">{fmt(p.lastSeenAt)} (seen {p.seenCount} {p.seenCount === 1 ? 'time' : 'times'})</dd></div>
+                    {p.resolvedAt && <div><dt className="inline text-gray-400">Resolved: </dt><dd className="inline text-gray-200">{fmt(p.resolvedAt)}</dd></div>}
+                    {p.refundId && <div><dt className="inline text-gray-400">Refund ID: </dt><dd className="inline font-mono text-gray-200 break-all">{p.refundId}</dd></div>}
+                    {p.lastError && <div><dt className="inline text-gray-400">Technical detail: </dt><dd className="inline font-mono text-gray-200">{p.lastError}</dd></div>}
+                    {p.githubIssueUrl && p.githubIssueNumber !== null && (
+                      <div>
+                        <dt className="inline text-gray-400">Engineering ticket: </dt>
+                        <dd className="inline">
+                          <a
+                            href={p.githubIssueUrl}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          >
+                            GitHub issue #{p.githubIssueNumber}
+                            <span className="sr-only"> (opens in a new tab)</span>
+                          </a>
+                        </dd>
+                      </div>
                     )}
-                    {data?.canRefund ? (
-                      <ActionButton onClick={() => setDialog({ kind: 'refund', payment: p })} tone="danger">
-                        Refund…
+                  </dl>
+
+                  {canManageNfc && readyForChip(p) && (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <p className="text-sm text-gray-200">The fee has gone through. The owner is waiting for their new chip.</p>
+                      <ActionButton onClick={() => { void openFulfil(p); }} tone="danger">
+                        {opening?.id === p.id && !opening.error ? 'Opening…' : 'Move to new chip…'}
                       </ActionButton>
-                    ) : !CAN_REAPPLY.has(p.reason) ? (
-                      <p className="text-sm text-gray-400">A refund needs an admin.</p>
-                    ) : null}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                      {opening?.id === p.id && opening.error && <p role="alert" className="text-sm text-red-400">{opening.error}</p>}
+                    </div>
+                  )}
+
+                  {open && (
+                    <div className="flex flex-wrap gap-2">
+                      {CAN_REAPPLY.has(p.reason) && (
+                        <ActionButton onClick={() => setDialog({ kind: 'reapply', payment: p })} tone="primary">
+                          Re-apply…
+                        </ActionButton>
+                      )}
+                      {data?.canRefund ? (
+                        <ActionButton onClick={() => setDialog({ kind: 'refund', payment: p })} tone="danger">
+                          Refund…
+                        </ActionButton>
+                      ) : !CAN_REAPPLY.has(p.reason) ? (
+                        <p className="text-sm text-gray-400">A refund needs an admin.</p>
+                      ) : null}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        <AdminPagination
+          page={page}
+          pages={pages}
+          onPage={(p) => setSearchParams({ status: filter, ...(p > 1 ? { page: String(p) } : {}) })}
+        />
+        </div>
+      </ListState>
 
       {dialog.kind === 'reapply' && (
         <AdminReapplyPaymentDialog open payment={dialog.payment} onClose={() => setDialog({ kind: 'none' })} onDone={closeAndReload} />
+      )}
+      {dialog.kind === 'fulfil' && (
+        <AdminReissueFulfilDialog
+          open
+          request={dialog.request}
+          onClose={() => setDialog({ kind: 'none' })}
+          onDone={(newTagId) => {
+            refreshQueues();
+            setDialog({ kind: 'none' });
+            navigate(`/admin/tags/${newTagId}`);
+          }}
+        />
       )}
       {dialog.kind === 'refund' && (
         <AdminRefundPaymentDialog open payment={dialog.payment} onClose={() => setDialog({ kind: 'none' })} onDone={closeAndReload} />

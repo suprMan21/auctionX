@@ -281,7 +281,8 @@ describe('AdminTagDetailPage', () => {
     const submit = within(dialog).getByRole('button', { name: 'Move token and retire old chip' });
 
     expect(api.listTags).toHaveBeenCalledWith({ status: 'ENROLLED', limit: 100 });
-    await user.selectOptions(await within(dialog).findByLabelText(/Replacement chip/), NEW_ID);
+    await user.type(await within(dialog).findByRole('combobox', { name: /Replacement chip/ }), 'ACC040');
+    await user.click(await within(dialog).findByRole('option', { name: /ACC040/ }));
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     // The replacement chip's suffix is the classic slip — must not unlock the button.
     await user.type(within(dialog).getByLabelText(/last 6 characters/), 'ACC040');
@@ -307,7 +308,8 @@ describe('AdminTagDetailPage', () => {
     renderDetail();
     await user.click(await screen.findByRole('button', { name: 'Move to new chip…' }));
     const dialog = screen.getByRole('dialog');
-    await user.selectOptions(await within(dialog).findByLabelText(/Replacement chip/), NEW_ID);
+    await user.type(await within(dialog).findByRole('combobox', { name: /Replacement chip/ }), 'ACC040');
+    await user.click(await within(dialog).findByRole('option', { name: /ACC040/ }));
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     await user.type(within(dialog).getByLabelText(/last 6 characters/), '936980');
     await user.click(within(dialog).getByRole('button', { name: 'Move token and retire old chip' }));

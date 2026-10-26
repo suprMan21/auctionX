@@ -80,7 +80,7 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
   const hoursId = useId();
   const confirmId = useId();
   const confirmHintId = useId();
-  const roleId = useId();
+  const roleName = useId();
 
   useEffect(() => {
     if (open) {
@@ -144,14 +144,28 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
       )}
 
       {action === 'role' && (
-        <div className="space-y-1">
-          <label htmlFor={roleId} className="block text-sm font-medium text-gray-200">Staff role</label>
-          <select id={roleId} value={role} onChange={(e) => setRole(e.target.value as GrantableRole | '')} className={ADMIN_FIELD_CLASS}>
-            <option value="">No staff role</option>
-            {/* Only an active account can be given a role; any account can lose one. */}
-            {(account.status === 'active' ? GRANTABLE_ROLES : []).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-          </select>
-        </div>
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-gray-200">Staff role</legend>
+          {/* Only an active account can be given a role; any account can lose one. Choosing only sets the form. */}
+          {(['', ...(account.status === 'active' ? GRANTABLE_ROLES : [])] as const).map((r) => (
+            <label
+              key={r || 'none'}
+              className="flex min-h-[44px] items-center gap-3 rounded-xl px-3 text-sm text-gray-200 cursor-pointer hover:bg-dark-700
+                has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary-500"
+            >
+              <input
+                type="radio"
+                name={roleName}
+                value={r}
+                checked={role === r}
+                onChange={() => setRole(r)}
+                className="h-4 w-4 accent-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              {r === '' ? 'No staff role' : ROLE_LABELS[r]}
+              {r === (account.staff_role ?? '') && <span className="text-xs text-gray-400"> (current)</span>}
+            </label>
+          ))}
+        </fieldset>
       )}
 
       {action === 'delete' && (

@@ -783,7 +783,7 @@ describe('admin: queue', () => {
     expect(data.total).toBe(1);
     expect(data.items[0]).toMatchObject({
       kind: 'transfer_fee', reason: 'no_recipient', status: 'OPEN', paymentIntentId: PI, amount: 250,
-      target: { tagId: TAG_ID, chipName: 'chip_009', status: 'PENDING' },
+      target: { tagId: TAG_ID, chipName: 'chip_009', status: 'PENDING', fulfilled: false },
     });
     expect(data.canRefund).toBe(false);
     const blob = JSON.stringify(res.body);

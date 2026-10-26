@@ -146,7 +146,7 @@ const fetchIntent = async (intentId: string): Promise<Stripe.PaymentIntent> => {
 // ── GET /api/v1/admin/stuck-payments ────────────────────────────────────────
 
 const QUEUE_TRANSFER_COLUMNS = 'id, tag_id, status';
-const QUEUE_REISSUE_COLUMNS = 'id, tag_id, status, payment_status';
+const QUEUE_REISSUE_COLUMNS = 'id, tag_id, status, payment_status, fulfilled_at';
 const QUEUE_TAG_COLUMNS = 'id, chip_name';
 
 export const listStuckPayments = async (req: AdminRequest, res: Response) => {
@@ -170,7 +170,7 @@ export const listStuckPayments = async (req: AdminRequest, res: Response) => {
   const transferIds = rows.flatMap((r) => (r.transfer_id ? [r.transfer_id] : []));
   const reissueIds = rows.flatMap((r) => (r.reissue_request_id ? [r.reissue_request_id] : []));
 
-  type Target = { tagId: string | null; status: string | null; paymentStatus: string | null };
+  type Target = { tagId: string | null; status: string | null; paymentStatus: string | null; fulfilled: boolean };
   const targets = new Map<string, Target>();
 
   if (transferIds.length > 0) {
@@ -180,7 +180,7 @@ export const listStuckPayments = async (req: AdminRequest, res: Response) => {
       .in('id', transferIds);
     if (transferError) throw new AppError('unavailable', 'Stuck payments could not be loaded. Try again.');
     for (const t of (transfers ?? []) as Array<{ id: string; tag_id: string | null; status: string | null }>) {
-      targets.set(t.id, { tagId: t.tag_id, status: t.status, paymentStatus: null });
+      targets.set(t.id, { tagId: t.tag_id, status: t.status, paymentStatus: null, fulfilled: false });
     }
   }
   if (reissueIds.length > 0) {
@@ -189,8 +189,8 @@ export const listStuckPayments = async (req: AdminRequest, res: Response) => {
       .select(QUEUE_REISSUE_COLUMNS)
       .in('id', reissueIds);
     if (requestError) throw new AppError('unavailable', 'Stuck payments could not be loaded. Try again.');
-    for (const r of (requests ?? []) as Array<{ id: string; tag_id: string; status: string; payment_status: string | null }>) {
-      targets.set(r.id, { tagId: r.tag_id, status: r.status, paymentStatus: r.payment_status });
+    for (const r of (requests ?? []) as Array<{ id: string; tag_id: string; status: string; payment_status: string | null; fulfilled_at: string | null }>) {
+      targets.set(r.id, { tagId: r.tag_id, status: r.status, paymentStatus: r.payment_status, fulfilled: Boolean(r.fulfilled_at) });
     }
   }
 
@@ -232,6 +232,8 @@ export const listStuckPayments = async (req: AdminRequest, res: Response) => {
             chipName: target.tagId ? (chipNames.get(target.tagId) ?? null) : null,
             status: target.status,
             paymentStatus: target.paymentStatus,
+            /** Re-issue only: the new chip is already done. */
+            fulfilled: target.fulfilled,
           }
         : null,
     };

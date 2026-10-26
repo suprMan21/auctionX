@@ -196,14 +196,14 @@ describe('AdminPricingPage', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('already in effect. Set a new price instead.');
   });
 
-  it('Change price validates the amount and reason, confirms the change, and posts cents with effectiveFrom null for Now', async () => {
+  it('Change on a card validates the amount and reason, confirms the change, and posts cents with effectiveFrom null when no start date', async () => {
     api.getPricing.mockResolvedValue(pricing());
     api.setPrice.mockResolvedValue({ id: 'new', kind: 'transfer', amountUsdCents: 300, effectiveFrom: '2026-10-24T00:00:00.000Z' });
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Change price…' }));
-    const dialog = screen.getByRole('dialog', { name: 'Change price' });
+    await user.click(await screen.findByRole('button', { name: /^Change transfer fee/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Change transfer fee' });
     const submit = within(dialog).getByRole('button', { name: 'Set price' });
     const amount = within(dialog).getByLabelText('New price (USD)');
 
@@ -216,7 +216,7 @@ describe('AdminPricingPage', () => {
     await user.clear(amount);
     await user.type(amount, '3');
     expect(within(dialog).queryByText(/Enter an amount from/)).not.toBeInTheDocument();
-    expect(within(dialog).getByRole('status')).toHaveTextContent(`Transfer fee changes from ${money(250)} to ${money(300)} now.`);
+    expect(within(dialog).getByRole('status')).toHaveTextContent(`Transfer fee changes from ${money(250)} to ${money(300)}.Starts now.`);
 
     await user.clear(within(dialog).getByLabelText(/Reason/));
     await user.type(within(dialog).getByLabelText(/Reason/), 'too short');
@@ -234,7 +234,7 @@ describe('AdminPricingPage', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Change price…' }));
+    await user.click(await screen.findByRole('button', { name: /^Change transfer fee/ }));
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByLabelText('New price (USD)'), '1000.01');
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
@@ -247,18 +247,23 @@ describe('AdminPricingPage', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Change price…' }));
-    const dialog = screen.getByRole('dialog');
-    await user.selectOptions(within(dialog).getByLabelText('Price'), 'reissue');
+    await user.click(await screen.findByRole('button', { name: /^Change re-issue fee/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Change re-issue fee' });
     await user.type(within(dialog).getByLabelText('New price (USD)'), '12');
-    await user.click(within(dialog).getByRole('radio', { name: 'Later' }));
-    const submit = within(dialog).getByRole('button', { name: 'Schedule price' });
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
-    expect(submit).toBeDisabled();
 
     const startsAt = within(dialog).getByLabelText(/Start date and time/);
+    // A start in the past is refused (no backdating).
+    await user.type(startsAt, '2000-03-01T09:00');
+    const submit = within(dialog).getByRole('button', { name: 'Schedule price' });
+    expect(submit).toBeDisabled();
+    expect(within(dialog).getByText('Pick a time in the future.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('status')).not.toHaveTextContent('Starts');
+
+    await user.clear(startsAt);
     await user.type(startsAt, '2099-03-01T09:00');
-    expect(within(dialog).getByRole('status')).toHaveTextContent(`Re-issue fee changes from ${money(1000)} to ${money(1200)} on`);
+    expect(within(dialog).getByRole('status')).toHaveTextContent(`Re-issue fee changes from ${money(1000)} to ${money(1200)}.`);
+    expect(within(dialog).getByRole('status')).toHaveTextContent(`Starts on ${new Date(2099, 2, 1, 9, 0).toLocaleString()}.`);
     await user.click(submit);
 
     const body = api.setPrice.mock.calls[0][0] as { effectiveFrom: string };

@@ -490,7 +490,7 @@ export const adminApi = {
   // ─── Re-issue queue (S-ADMIN1 Ph2) ──────────────────────────────────────────
 
   /** GET /admin/reissue-requests?status= — the queue, oldest first for open filters. */
-  listReissueRequests(params: { status?: AdminReissueFilter; page?: number; limit?: number } = {}): Promise<AdminReissueListResponse> {
+  listReissueRequests(params: { status?: AdminReissueFilter; id?: string; page?: number; limit?: number } = {}): Promise<AdminReissueListResponse> {
     const qs = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined) qs.set(key, String(value));
@@ -909,7 +909,7 @@ export interface AdminTagResetResponse {
 
 // ─── Re-issue Queue Types (S-ADMIN1 Ph2) ────────────────────────────────────
 
-export type AdminReissueFilter = 'PENDING' | 'AWAITING_PAYMENT' | 'READY' | 'DONE' | 'REJECTED' | 'CANCELLED' | 'ALL';
+export type AdminReissueFilter = 'NEEDS_ACTION' | 'PENDING' | 'AWAITING_PAYMENT' | 'READY' | 'DONE' | 'REJECTED' | 'CANCELLED' | 'ALL';
 
 export interface AdminReissueRequest {
   id: string;
@@ -983,7 +983,14 @@ export interface AdminStuckPayment {
   resolvedAt: string | null;
   refundId: string | null;
   /** What the payment points at, as it is now. Null when the row no longer exists. */
-  target: { tagId: string | null; chipName: string | null; status: string | null; paymentStatus: string | null } | null;
+  target: {
+    tagId: string | null;
+    chipName: string | null;
+    status: string | null;
+    paymentStatus: string | null;
+    /** Re-issue only: the new chip is already done. */
+    fulfilled?: boolean;
+  } | null;
 }
 
 export interface AdminStuckPaymentListResponse {

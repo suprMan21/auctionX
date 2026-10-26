@@ -188,7 +188,16 @@ export const listReissueRequests = async (req: AdminRequest, res: Response) => {
   const supabase = getServiceClient();
   let query = supabase.from('reissue_requests').select(ADMIN_REISSUE_COLUMNS, { count: 'exact' });
 
-  switch (q.status) {
+  if (q.id) {
+    query = query.eq('id', q.id);
+  } else switch (q.status) {
+    case 'NEEDS_ACTION':
+      // PENDING, or APPROVED + paid/waived + no chip yet (= READY).
+      query = query
+        .in('status', ['PENDING', 'APPROVED'])
+        .is('fulfilled_at', null)
+        .or('status.eq.PENDING,payment_status.in.(PAID,WAIVED)');
+      break;
     case 'PENDING':
       query = query.eq('status', 'PENDING');
       break;
@@ -211,7 +220,7 @@ export const listReissueRequests = async (req: AdminRequest, res: Response) => {
 
   const offset = (q.page - 1) * q.limit;
   const { data, error, count } = await query
-    .order('created_at', { ascending: q.status === 'PENDING' || q.status === 'READY' })
+    .order('created_at', { ascending: q.status === 'PENDING' || q.status === 'READY' || q.status === 'NEEDS_ACTION' })
     .range(offset, offset + q.limit - 1);
 
   if (error) {

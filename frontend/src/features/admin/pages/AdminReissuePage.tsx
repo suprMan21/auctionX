@@ -23,8 +23,13 @@ import {
 } from '../components/AdminReissueDialogs';
 import { errorMessage, formatAmount, formatWhen as fmt, loadFailed, shortId } from '../lib/display';
 import { reissueStageLabel } from '../lib/labels';
+import { AdminPagination, FilterPills, ListState } from '../components/AdminListParts';
+
+const PAGE_SIZE = 25;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const FILTERS: ReadonlyArray<{ label: string; value: AdminReissueFilter }> = [
+  { label: 'Needs action', value: 'NEEDS_ACTION' },
   { label: 'Waiting for review', value: 'PENDING' },
   { label: 'Waiting for payment', value: 'AWAITING_PAYMENT' },
   { label: 'Ready for a new chip', value: 'READY' },
@@ -45,13 +50,18 @@ export const AdminReissuePage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const raw = searchParams.get('status');
-  const filter: AdminReissueFilter = FILTERS.some((f) => f.value === raw) ? (raw as AdminReissueFilter) : 'PENDING';
+  // Opens on what staff act on next: requests to review and ones ready for a chip.
+  const filter: AdminReissueFilter = FILTERS.some((f) => f.value === raw) ? (raw as AdminReissueFilter) : 'NEEDS_ACTION';
+  // ?request=<id> shows one request (a stuck re-issue fee links here).
+  const rawRequest = searchParams.get('request') ?? '';
+  const requestId = UUID.test(rawRequest) ? rawRequest : '';
+  const page = Math.max(parseInt(searchParams.get('page') ?? '1', 10) || 1, 1);
 
   const [reloadKey, setReloadKey] = useState(0);
   const { refresh: refreshQueues } = useWorkQueues();
   // Any reload after an action also updates the dashboard and nav counts.
   useEffect(() => { if (reloadKey > 0) refreshQueues(); }, [reloadKey, refreshQueues]);
-  const queryKey = `${filter}|${reloadKey}`;
+  const queryKey = `${filter}|${requestId}|${page}|${reloadKey}`;
   const [result, setResult] = useState<{ key: string; rows: AdminReissueRequest[]; total: number } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
   const [dialog, setDialog] = useState<OpenDialog>({ kind: 'none' });
@@ -59,7 +69,7 @@ export const AdminReissuePage = () => {
   useEffect(() => {
     let cancelled = false;
     adminApi
-      .listReissueRequests({ status: filter, limit: 50 })
+      .listReissueRequests(requestId ? { id: requestId } : { status: filter, page, limit: PAGE_SIZE })
       .then((res) => {
         if (!cancelled) setResult({ key: queryKey, rows: res.data.requests, total: res.data.pagination.total });
       })
@@ -67,11 +77,12 @@ export const AdminReissuePage = () => {
         if (!cancelled) setFailure({ key: queryKey, message: errorMessage(err, loadFailed('Re-issues')) });
       });
     return () => { cancelled = true; };
-  }, [filter, queryKey]);
+  }, [filter, requestId, page, queryKey]);
 
   const error = failure?.key === queryKey ? failure.message : null;
   const loading = !error && result?.key !== queryKey;
   const rows = result?.key === queryKey ? result.rows : [];
+  const pages = Math.max(Math.ceil((result?.total ?? 0) / PAGE_SIZE), 1);
 
   const closeAndReload = () => {
     setDialog({ kind: 'none' });
@@ -88,119 +99,119 @@ export const AdminReissuePage = () => {
         </p>
       </div>
 
-      <div className="flex gap-2 flex-wrap" role="group" aria-label="Filter by stage">
-        {FILTERS.map((opt) => (
+      {requestId ? (
+        <div role="status" className="flex flex-wrap items-center gap-3 text-sm text-gray-300">
+          <span>Showing one request.</span>
           <button
-            key={opt.value}
             type="button"
-            aria-pressed={filter === opt.value}
-            onClick={() => setSearchParams({ status: opt.value })}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors
-              focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
-              ${filter === opt.value
-                ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                : 'bg-dark-700 text-gray-400 hover:text-white hover:bg-dark-600'}`}
+            onClick={() => setSearchParams({})}
+            className="min-h-[44px] px-4 rounded-xl bg-dark-700 text-gray-200 hover:bg-dark-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
-            {opt.label}
+            Show all re-issues
           </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center h-48" role="status" aria-label="Loading re-issues">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : error ? (
-        <div className="glass rounded-2xl p-6 border border-red-500/30">
-          <p role="alert" className="text-red-400 text-sm">{error}</p>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="glass rounded-2xl p-6">
-          <p className="text-gray-400 text-sm">No requests at this stage.</p>
         </div>
       ) : (
-        <ul className="space-y-4" aria-label="Re-issue requests">
-          {rows.map((r) => (
-            <li key={r.id} className="glass rounded-2xl p-5 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <h2 className="text-white font-semibold">
-                    <Link
-                      to={`/admin/tags/${r.tagId}`}
-                      className="font-mono text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      {r.tag ? chipLabel(r.tag) : shortId(r.tagId)}
-                    </Link>
-                  </h2>
-                  <p className="text-sm text-gray-400">{stageOf(r)}</p>
-                </div>
-                {r.tag && <AdminLifecycleBadge status={r.tag.lifecycleStatus} />}
-              </div>
+        <FilterPills label="Filter by stage" options={FILTERS} value={filter} onChange={(v) => setSearchParams({ status: v })} />
+      )}
 
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <div><dt className="inline text-gray-400">Requester: </dt><dd className="inline text-gray-200"><AccountLink id={r.requesterAccountId} email={r.requesterEmail} /></dd></div>
-                <div><dt className="inline text-gray-400">Requested: </dt><dd className="inline text-gray-200">{fmt(r.createdAt)}</dd></div>
-                <div><dt className="inline text-gray-400">Proof tap at: </dt><dd className="inline text-gray-200">{fmt(r.tappedAt)}</dd></div>
-                <div><dt className="inline text-gray-400">Fee: </dt><dd className="inline text-gray-200">{r.paymentStatus === 'WAIVED' ? 'Waived' : formatAmount(r.chargedAmount, r.chargedCurrency)}</dd></div>
-                {r.paidAt && <div><dt className="inline text-gray-400">Paid: </dt><dd className="inline text-gray-200">{fmt(r.paidAt)}</dd></div>}
-                {r.reviewReason && <div className="sm:col-span-2"><dt className="inline text-gray-400">Reason: </dt><dd className="inline text-gray-200">{r.reviewReason}</dd></div>}
-                {r.fulfilledAt && r.newTagId && (
-                  <div className="sm:col-span-2">
-                    <dt className="inline text-gray-400">New chip: </dt>
-                    <dd className="inline"><Link to={`/admin/tags/${r.newTagId}`} className="text-primary-300 hover:underline">{r.newTagLabel ?? shortId(r.newTagId)}</Link></dd>
+      <ListState
+        loading={loading}
+        error={error}
+        empty={rows.length === 0}
+        emptyText={requestId ? 'That re-issue request was not found.' : filter === 'NEEDS_ACTION' ? 'Nothing needs action. Every request has been reviewed and every paid one has its new chip.' : 'No requests at this stage.'}
+        what="re-issues"
+      >
+        <div className="space-y-4">
+          <ul className="space-y-4" aria-label="Re-issue requests">
+            {rows.map((r) => (
+              <li key={r.id} className="glass rounded-2xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <h2 className="text-white font-semibold">
+                      <Link
+                        to={`/admin/tags/${r.tagId}`}
+                        className="font-mono text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        {r.tag ? chipLabel(r.tag) : shortId(r.tagId)}
+                      </Link>
+                    </h2>
+                    <p className="text-sm text-gray-400">{stageOf(r)}</p>
+                  </div>
+                  {r.tag && <AdminLifecycleBadge status={r.tag.lifecycleStatus} />}
+                </div>
+
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <div><dt className="inline text-gray-400">Requester: </dt><dd className="inline text-gray-200"><AccountLink id={r.requesterAccountId} email={r.requesterEmail} /></dd></div>
+                  <div><dt className="inline text-gray-400">Requested: </dt><dd className="inline text-gray-200">{fmt(r.createdAt)}</dd></div>
+                  <div><dt className="inline text-gray-400">Proof tap at: </dt><dd className="inline text-gray-200">{fmt(r.tappedAt)}</dd></div>
+                  <div><dt className="inline text-gray-400">Fee: </dt><dd className="inline text-gray-200">{r.paymentStatus === 'WAIVED' ? 'Waived' : formatAmount(r.chargedAmount, r.chargedCurrency)}</dd></div>
+                  {r.paidAt && <div><dt className="inline text-gray-400">Paid: </dt><dd className="inline text-gray-200">{fmt(r.paidAt)}</dd></div>}
+                  {r.reviewReason && <div className="sm:col-span-2"><dt className="inline text-gray-400">Reason: </dt><dd className="inline text-gray-200">{r.reviewReason}</dd></div>}
+                  {r.fulfilledAt && r.newTagId && (
+                    <div className="sm:col-span-2">
+                      <dt className="inline text-gray-400">New chip: </dt>
+                      <dd className="inline"><Link to={`/admin/tags/${r.newTagId}`} className="text-primary-300 hover:underline">{r.newTagLabel ?? shortId(r.newTagId)}</Link></dd>
+                    </div>
+                  )}
+                </dl>
+
+                {r.tag && !r.tag.requesterStillOwner && !r.fulfilledAt && r.status !== 'REJECTED' && r.status !== 'CANCELLED' && (
+                  <p role="note" className="text-sm text-amber-300">The requester no longer owns this token.</p>
+                )}
+
+                {r.photoUrls.length > 0 ? (
+                  <div className="flex flex-wrap gap-3">
+                    {r.photoUrls.map((url, i) => (
+                      <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="block rounded-xl overflow-hidden border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <img
+                          src={url}
+                          alt={`Photo ${i + 1} of ${r.photoUrls.length} of the chip on the item`}
+                          className="h-32 w-32 object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                ) : r.photoCount > 0 ? (
+                  <p className="text-xs text-gray-500">{r.photoCount} photo{r.photoCount === 1 ? '' : 's'} on file.</p>
+                ) : null}
+
+                {r.status === 'PENDING' && (
+                  <div className="flex flex-wrap gap-2">
+                    <ActionButton onClick={() => setDialog({ kind: 'review', request: r, decision: 'approve' })} tone="primary">
+                      Approve…
+                    </ActionButton>
+                    <ActionButton onClick={() => setDialog({ kind: 'review', request: r, decision: 'approve_waived' })}>
+                      Approve without fee…
+                    </ActionButton>
+                    <ActionButton onClick={() => setDialog({ kind: 'review', request: r, decision: 'reject' })} tone="danger">
+                      Reject…
+                    </ActionButton>
                   </div>
                 )}
-              </dl>
-
-              {r.tag && !r.tag.requesterStillOwner && !r.fulfilledAt && r.status !== 'REJECTED' && r.status !== 'CANCELLED' && (
-                <p role="note" className="text-sm text-amber-300">The requester no longer owns this token.</p>
-              )}
-
-              {r.photoUrls.length > 0 ? (
-                <div className="flex flex-wrap gap-3">
-                  {r.photoUrls.map((url, i) => (
-                    <a
-                      key={url}
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="block rounded-xl overflow-hidden border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <img
-                        src={url}
-                        alt={`Photo ${i + 1} of ${r.photoUrls.length} of the chip on the item`}
-                        className="h-32 w-32 object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    </a>
-                  ))}
-                </div>
-              ) : r.photoCount > 0 ? (
-                <p className="text-xs text-gray-500">{r.photoCount} photo{r.photoCount === 1 ? '' : 's'} on file.</p>
-              ) : null}
-
-              {r.status === 'PENDING' && (
-                <div className="flex flex-wrap gap-2">
-                  <ActionButton onClick={() => setDialog({ kind: 'review', request: r, decision: 'approve' })} tone="primary">
-                    Approve…
+                {r.status === 'APPROVED' && !r.fulfilledAt && (r.paymentStatus === 'PAID' || r.paymentStatus === 'WAIVED') && (
+                  <ActionButton onClick={() => setDialog({ kind: 'fulfil', request: r })} tone="danger">
+                    Move to new chip…
                   </ActionButton>
-                  <ActionButton onClick={() => setDialog({ kind: 'review', request: r, decision: 'approve_waived' })}>
-                    Approve without fee…
-                  </ActionButton>
-                  <ActionButton onClick={() => setDialog({ kind: 'review', request: r, decision: 'reject' })} tone="danger">
-                    Reject…
-                  </ActionButton>
-                </div>
-              )}
-              {r.status === 'APPROVED' && !r.fulfilledAt && (r.paymentStatus === 'PAID' || r.paymentStatus === 'WAIVED') && (
-                <ActionButton onClick={() => setDialog({ kind: 'fulfil', request: r })} tone="danger">
-                  Move to new chip…
-                </ActionButton>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+                )}
+              </li>
+            ))}
+          </ul>
+        {!requestId && (
+          <AdminPagination
+            page={page}
+            pages={pages}
+            onPage={(p) => setSearchParams({ status: filter, ...(p > 1 ? { page: String(p) } : {}) })}
+          />
+        )}
+        </div>
+      </ListState>
 
       {dialog.kind === 'review' && (
         <AdminReissueReviewDialog

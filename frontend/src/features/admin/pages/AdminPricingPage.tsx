@@ -2,14 +2,15 @@
  * AdminPricingPage (S-ADMIN1 Ph3b) — token prices, set by an admin.
  *
  * Shows the price in effect for each kind, any scheduled changes, and the
- * history. A change can start now or at a set time; a scheduled change can be
+ * history. Each price card has its own Change button (UX-2); a change starts
+ * now when no start date is entered, else at that time; a scheduled change can be
  * cancelled before it starts. A price already in effect is never edited: set a
  * new one. Admin and super_admin only.
  */
 
 import { useEffect, useState } from 'react';
 import { adminApi } from '../api/adminApi';
-import { PRICE_KINDS, type AdminPriceChange, type AdminPricing } from '../api/pricingSchemas';
+import { PRICE_KINDS, type AdminPriceChange, type AdminPricing, type PriceKind } from '../api/pricingSchemas';
 import { AdminCancelPriceDialog, AdminSetPriceDialog } from '../components/AdminPricingDialogs';
 import { PRICE_LABEL, fmtDateTime, usd } from '../lib/pricing';
 import { errorMessage, loadFailed } from '../lib/display';
@@ -21,7 +22,7 @@ const STATUS_COPY: Record<AdminPriceChange['status'], { label: string; className
   cancelled: { label: 'Cancelled', className: 'bg-dark-700 text-gray-400 border-white/10 line-through' },
 };
 
-type OpenDialog = { kind: 'none' } | { kind: 'set' } | { kind: 'cancel'; change: AdminPriceChange };
+type OpenDialog = { kind: 'none' } | { kind: 'set'; price: PriceKind } | { kind: 'cancel'; change: AdminPriceChange };
 
 export const AdminPricingPage = () => {
   const [reloadKey, setReloadKey] = useState(0);
@@ -66,16 +67,6 @@ export const AdminPricingPage = () => {
             and re-issue requests made, after it takes effect. Transfers already started keep the price they started with.
           </p>
         </div>
-        {data && (
-          <button
-            type="button"
-            onClick={() => setDialog({ kind: 'set' })}
-            className="px-3 py-2 rounded-xl text-sm font-medium bg-primary-600 text-white hover:bg-primary-500
-              focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
-          >
-            Change price…
-          </button>
-        )}
       </div>
 
       {loading ? (
@@ -101,6 +92,16 @@ export const AdminPricingPage = () => {
                       Changes to {usd(next.amountUsdCents)} on {fmtDateTime(next.effectiveFrom)}
                     </p>
                   )}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setDialog({ kind: 'set', price: kind })}
+                      className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-medium bg-primary-600 text-white hover:bg-primary-500
+                        focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800"
+                    >
+                      Change<span className="sr-only"> {PRICE_LABEL[kind].toLowerCase()}</span>…
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -171,7 +172,7 @@ export const AdminPricingPage = () => {
       ) : null}
 
       {dialog.kind === 'set' && data && (
-        <AdminSetPriceDialog open current={data.current} onClose={() => setDialog({ kind: 'none' })} onDone={closeAndReload} />
+        <AdminSetPriceDialog open kind={dialog.price} current={data.current} onClose={() => setDialog({ kind: 'none' })} onDone={closeAndReload} />
       )}
       {dialog.kind === 'cancel' && data && (
         <AdminCancelPriceDialog

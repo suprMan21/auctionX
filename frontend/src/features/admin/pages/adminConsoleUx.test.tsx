@@ -181,14 +181,17 @@ describe('free transfers after a change', () => {
   it('an email-filtered list is updated in place, not looked up (and audited) again', async () => {
     api.listVoucherGrants.mockResolvedValue({ grants: [grant], total: 1, page: 1, limit: 25 });
     api.revokeVoucherGrant.mockResolvedValue({ id: grant.id, revokedAt: '2026-10-26T12:00:00.000Z', unused: 2 });
-    withRole('admin', <AdminVouchersPage />, '/admin/vouchers?email=fan%40example.com');
+    withRole('admin', <AdminVouchersPage />, '/admin/vouchers');
+    await userEvent.type(await screen.findByLabelText('Account email (exact)'), 'fan@example.com{Enter}');
+    await waitFor(() => expect(api.listVoucherGrants).toHaveBeenLastCalledWith({ email: 'fan@example.com', page: 1, limit: 25 }));
+    const lookups = api.listVoucherGrants.mock.calls.length;
 
     await userEvent.click(await screen.findByRole('button', { name: /Revoke free transfers for fan@example.com/ }));
     await userEvent.type(screen.getByLabelText(/Reason/), 'Granted to the wrong account');
     await userEvent.click(screen.getByRole('button', { name: 'Revoke free transfers' }));
 
     expect(await screen.findByText('Revoked')).toBeInTheDocument();
-    expect(api.listVoucherGrants).toHaveBeenCalledTimes(1);
+    expect(api.listVoucherGrants).toHaveBeenCalledTimes(lookups);
   });
 });
 

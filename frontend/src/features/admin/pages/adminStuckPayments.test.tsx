@@ -11,6 +11,9 @@ import type { AdminStuckPayment, AdminStuckPaymentListResponse } from '../api/ad
 
 const api = vi.hoisted(() => ({
   listStuckPayments: vi.fn(),
+  listReissueRequests: vi.fn(),
+  listTags: vi.fn(),
+  fulfilReissue: vi.fn(),
   reapplyStuckPayment: vi.fn(),
   refundStuckPayment: vi.fn(),
   sweepStuckPayments: vi.fn(),
@@ -23,6 +26,8 @@ vi.mock('../api/adminApi', async () => {
 
 import { AdminStuckPaymentsPage } from './AdminStuckPaymentsPage';
 import { AdminApiError } from '../api/adminApi';
+import { AdminRoleContext } from '../lib/adminRole';
+import { accessFor } from '../test/adminAccess';
 
 /** Money as the page formats it (the viewer's locale), e.g. "$2.50". */
 const money = (cents: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -86,7 +91,7 @@ describe('AdminStuckPaymentsPage', () => {
     renderQueue();
 
     expect(await screen.findByRole('heading', { name: `Transfer fee, ${money(250)}` })).toBeInTheDocument();
-    expect(api.listStuckPayments).toHaveBeenCalledWith({ status: 'OPEN', limit: 50 });
+    expect(api.listStuckPayments).toHaveBeenCalledWith({ status: 'OPEN', page: 1, limit: 25 });
     expect(screen.getByText('The payment arrived but the transfer has no recipient account yet.')).toBeInTheDocument();
     expect(screen.getByText('Ask the recipient to sign in and accept, then Re-apply.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'chip_009' })).toHaveAttribute('href', `/admin/tags/${TAG}`);
@@ -195,7 +200,7 @@ describe('AdminStuckPaymentsPage', () => {
 
     expect(await screen.findByText('re_3Test')).toBeInTheDocument();
     expect(screen.getByText('Resolved:')).toBeInTheDocument();
-    expect(api.listStuckPayments).toHaveBeenCalledWith({ status: 'REFUNDED', limit: 50 });
+    expect(api.listStuckPayments).toHaveBeenCalledWith({ status: 'REFUNDED', page: 1, limit: 25 });
     expect(screen.queryByRole('button', { name: 'Re-apply…' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Refund…' })).not.toBeInTheDocument();
   });
@@ -253,5 +258,65 @@ describe('AdminStuckPaymentsPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Check now' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The check could not run. Try again in a minute.');
+  });
+});
+
+describe('a stuck re-issue fee that has gone through', () => {
+  const REQUEST = '77777777-7777-4777-8777-777777777777';
+  const reissueFee = payment({
+    kind: 'reissue_fee', reason: 'webhook_missed', status: 'RESOLVED', resolution: 'reapply',
+    transferId: null, reissueRequestId: REQUEST,
+    target: { tagId: TAG, chipName: 'chip_009', status: 'APPROVED', paymentStatus: 'PAID', fulfilled: false },
+  });
+  const renderAs = (role: string) =>
+    render(
+      <AdminRoleContext.Provider value={accessFor(role)}>
+        <MemoryRouter initialEntries={['/admin/stuck-payments?status=RESOLVED']}>
+          <Routes><Route path="/admin/stuck-payments" element={<AdminStuckPaymentsPage />} /></Routes>
+        </MemoryRouter>
+      </AdminRoleContext.Provider>,
+    );
+
+  it('links an admin to its request and offers Move to new chip, which only opens the dialog', async () => {
+    api.listStuckPayments.mockResolvedValue(list([reissueFee]));
+    api.listReissueRequests.mockResolvedValue({
+      success: true,
+      data: {
+        requests: [{
+          id: REQUEST, tagId: TAG, tag: null, requesterAccountId: 'owner', requesterEmail: null, status: 'APPROVED',
+          paymentStatus: 'PAID', listAmountUsdCents: 1000, chargedAmount: 1000, chargedCurrency: 'usd', photoCount: 0,
+          photoUrls: [], tappedAt: null, reviewReason: null, waiveReason: null, reviewedBy: null, reviewedAt: null,
+          paidAt: null, fulfilledAt: null, newTagId: null, newTagLabel: null, createdAt: '2026-10-11T09:00:00.000Z',
+        }],
+        pagination: { page: 1, limit: 25, total: 1 },
+      },
+    });
+    api.listTags.mockResolvedValue({ success: true, data: { tags: [], pagination: { page: 1, limit: 100, total: 0 } } });
+    const user = userEvent.setup();
+    renderAs('admin');
+
+    expect(await screen.findByRole('link', { name: /open the re-issue request/ })).toHaveAttribute('href', `/admin/reissue-requests?request=${REQUEST}`);
+    await user.click(screen.getByRole('button', { name: 'Move to new chip…' }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(api.listReissueRequests).toHaveBeenCalledWith({ id: REQUEST });
+    expect(api.fulfilReissue).not.toHaveBeenCalled();
+  });
+
+  it('support (who may Re-apply) sees neither the link nor Move to new chip', async () => {
+    api.listStuckPayments.mockResolvedValue(list([reissueFee]));
+    renderAs('support');
+
+    expect(await screen.findByText('Re-issue ID:')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /open the re-issue request/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Move to new chip…' })).not.toBeInTheDocument();
+  });
+
+  it('is not offered once the new chip is done', async () => {
+    api.listStuckPayments.mockResolvedValue(list([{ ...reissueFee, target: { ...reissueFee.target!, fulfilled: true } }]));
+    renderAs('admin');
+
+    expect(await screen.findByText('Re-issue ID:')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Move to new chip…' })).not.toBeInTheDocument();
   });
 });

@@ -120,7 +120,7 @@ describe('account detail: actions by role', () => {
     renderDetail('super_admin');
     const region = await screen.findByRole('region', { name: 'Actions' });
     await userEvent.click(within(region).getByRole('button', { name: 'Remove staff role…' }));
-    const options = within(screen.getByLabelText('Staff role')).getAllByRole('option').map((o) => o.textContent);
+    const options = within(screen.getByRole('group', { name: 'Staff role' })).getAllByRole('radio').map((o) => o.closest('label')?.textContent);
     expect(options).toEqual(['No staff role']);
   });
 
@@ -216,7 +216,8 @@ describe('role change', () => {
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     const save = within(dialog).getByRole('button', { name: 'Save staff role' });
     expect(save).toBeDisabled();
-    await user.selectOptions(within(dialog).getByLabelText('Staff role'), 'support');
+    await user.click(within(dialog).getByRole('radio', { name: 'Support' }));
+    expect(api.setAccountRole).not.toHaveBeenCalled();
     await user.click(save);
     expect(api.setAccountRole).toHaveBeenCalledWith(ID, 'support', REASON);
   });
@@ -226,8 +227,8 @@ describe('role change', () => {
     const user = userEvent.setup();
     renderDetail('super_admin');
     await user.click(await screen.findByRole('button', { name: 'Change staff role…' }));
-    const options = within(screen.getByLabelText('Staff role')).getAllByRole('option').map((o) => o.textContent);
-    expect(options).toEqual(['No staff role', 'Super admin', 'Admin', 'Support']);
+    const options = within(screen.getByRole('group', { name: 'Staff role' })).getAllByRole('radio').map((o) => o.closest('label')?.textContent);
+    expect(options).toEqual(['No staff role (current)', 'Super admin', 'Admin', 'Support']);
   });
 });
 
@@ -270,7 +271,7 @@ describe('users list', () => {
     accounts, pagination: { page: 1, limit: 25, total: accounts.length, pages: 1 },
   });
 
-  it('shows role and status, and searches after a pause', async () => {
+  it('shows role and status, and searches on Enter only, not while typing', async () => {
     api.searchAccounts.mockResolvedValue(page([
       { id: ID, email: 'fan@example.com', display_name: 'Fan', created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'suspended', staff_role: null },
       { id: 'b', email: 'staff@example.com', display_name: null, created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'active', staff_role: 'support' },
@@ -287,8 +288,11 @@ describe('users list', () => {
     expect(within(table).getByText('Support')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change waiting time…' })).not.toBeInTheDocument(); // window edit: super admin only
 
-    await user.type(screen.getByTestId('user-search'), 'staff');
-    await waitFor(() => expect(api.searchAccounts).toHaveBeenLastCalledWith({ q: 'staff', status: 'all', page: 1, limit: 25 }), { timeout: 2000 });
+    const box = screen.getByRole('searchbox', { name: 'Search accounts' });
+    await user.type(box, 'staff');
+    expect(api.searchAccounts).not.toHaveBeenCalledWith(expect.objectContaining({ q: 'staff' }));
+    await user.type(box, '{Enter}');
+    await waitFor(() => expect(api.searchAccounts).toHaveBeenLastCalledWith({ q: 'staff', status: 'all', page: 1, limit: 25 }));
   });
 });
 

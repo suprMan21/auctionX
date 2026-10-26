@@ -5,13 +5,15 @@
  * @module Module 10 — Admin Dashboard
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { adminApi } from '../api/adminApi';
 import { ROLE_LABELS, type AccountSearch, type AccountStatus } from '../api/accountSchemas';
 import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { DeleteWindowCard } from '../components/DeleteWindowCard';
 import { NONE, errorMessage, formatDay, loadFailed } from '../lib/display';
+import { AdminTable, type AdminColumn } from '../components/AdminTable';
+import { AdminPagination, AdminSearchBox, FilterPills, ListState } from '../components/AdminListParts';
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All accounts' },
@@ -20,6 +22,8 @@ const STATUS_FILTERS = [
   { value: 'retired', label: 'Retired' },
   { value: 'staff', label: 'Staff' },
 ] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number]['value'];
+type AccountRow = AccountSearch['accounts'][number];
 
 const STATUS_STYLE: Record<AccountStatus, string> = {
   active: 'bg-success-500/10 text-success-500',
@@ -33,51 +37,17 @@ export const AccountStatusBadge = ({ status }: { status: AccountStatus }) => (
   </span>
 );
 
-const Pagination = ({ page, pages, onPage }: { page: number; pages: number; onPage: (p: number) => void }) => {
-  if (pages <= 1) return null;
-  return (
-    <div className="flex items-center gap-2 justify-center pt-4">
-      <button
-        type="button"
-        onClick={() => onPage(page - 1)}
-        disabled={page === 1}
-        className="min-h-[44px] px-3 rounded-xl text-sm text-gray-300 hover:text-white hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-      >
-        Previous
-      </button>
-      <span className="text-sm text-gray-400">Page {page} of {pages}</span>
-      <button
-        type="button"
-        onClick={() => onPage(page + 1)}
-        disabled={page === pages}
-        className="min-h-[44px] px-3 rounded-xl text-sm text-gray-300 hover:text-white hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-      >
-        Next
-      </button>
-    </div>
-  );
-};
-
 export const AdminUsersPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const access = useAdminRole();
   const [loaded, setLoaded] = useState<{ key: string; data: AccountSearch | null; error: string | null } | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The search term stays out of the URL (it is often an email; the address
+  // bar would keep it in browser history). Status and page are in the URL.
+  const [q, setQ] = useState('');
 
-  const q = searchParams.get('q') ?? '';
   const rawStatus = searchParams.get('status') ?? 'all';
   // An unknown ?status= falls back to all rather than a 400 from the API.
-  const status = STATUS_FILTERS.some((f) => f.value === rawStatus) ? rawStatus : 'all';
-  const [draft, setDraft] = useState(q);
-  const [draftFor, setDraftFor] = useState(q);
-  if (draftFor !== q) {
-    // The URL changed (Back/Forward, filter reset): show the search it holds.
-    setDraftFor(q);
-    setDraft(q);
-  }
-
-  // A search still waiting to fire must not navigate after the page is left.
-  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+  const status: StatusFilter = STATUS_FILTERS.some((f) => f.value === rawStatus) ? (rawStatus as StatusFilter) : 'all';
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
 
   const queryKey = `${q}|${status}|${page}`;
@@ -104,91 +74,68 @@ export const AdminUsersPage = () => {
       return next;
     });
 
-  const onSearch = (value: string) => {
-    setDraft(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    // A longer pause than a typeahead: every search writes an audit row.
-    debounceRef.current = setTimeout(() => update({ q: value.trim() || null, page: '1' }), 500);
-  };
+  const columns: ReadonlyArray<AdminColumn<AccountRow>> = [
+    {
+      key: 'email', header: 'Email', width: 260, className: 'text-sm',
+      cell: (a) => (
+        <Link to={`/admin/users/${a.id}`} title={a.email ?? a.id} className="break-all text-white hover:text-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded">
+          {a.email ?? a.id}
+        </Link>
+      ),
+    },
+    { key: 'name', header: 'Display name', cell: (a) => a.display_name ?? NONE },
+    { key: 'role', header: 'Staff role', cell: (a) => (a.staff_role ? (ROLE_LABELS[a.staff_role] ?? a.staff_role) : NONE) },
+    { key: 'status', header: 'Status', cell: (a) => <AccountStatusBadge status={a.status} /> },
+    { key: 'signin', header: 'Last sign-in', className: 'text-gray-400', cell: (a) => formatDay(a.last_sign_in_at) },
+    { key: 'created', header: 'Created', className: 'text-gray-400', cell: (a) => formatDay(a.created_at) },
+  ];
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Accounts</h1>
         <p className="text-gray-400 text-sm mt-1">
-          {result ? `${result.pagination.total.toLocaleString()} matching accounts. ` : ''}
-          Searches are recorded in the audit log.
+          {result ? `${result.pagination.total.toLocaleString()} matching accounts.` : '\u00a0'}
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <label className="flex-1">
-          <span className="sr-only">Search accounts</span>
-          <input
-            data-testid="user-search"
-            type="search"
-            value={draft}
-            onChange={(e) => onSearch(e.target.value)}
-            placeholder="Email, display name or account ID…"
-            className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white placeholder:text-gray-400 border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
-        </label>
-        <label>
-          <span className="sr-only">Filter by status</span>
-          <select
-            value={status}
-            onChange={(e) => update({ status: e.target.value === 'all' ? null : e.target.value, page: '1' })}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-dark-700 text-white border border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            {STATUS_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-          </select>
-        </label>
+      <div className="flex flex-wrap items-start gap-3">
+        <FilterPills
+          label="Filter by status"
+          options={STATUS_FILTERS}
+          value={status}
+          onChange={(v) => update({ status: v === 'all' ? null : v, page: null })}
+        />
+        <AdminSearchBox
+          label="Search accounts"
+          placeholder="Email, display name or account ID…"
+          active={q}
+          onSearch={(term) => { setQ(term); update({ page: null }); }}
+        />
       </div>
 
-      <div data-testid="users-table" className="glass rounded-2xl overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center h-48" role="status" aria-label="Loading accounts">
-            <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <ListState
+        loading={loading}
+        error={error}
+        empty={!result || result.accounts.length === 0}
+        emptyText="No accounts match. Try another search or status."
+        what="accounts"
+      >
+        {result && (
+          <div className="space-y-4">
+            <AdminTable
+              id="accounts"
+              label="Accounts"
+              testId="users-table"
+              columns={columns}
+              rows={result.accounts}
+              rowKey={(a) => a.id}
+              rowHref={(a) => `/admin/users/${a.id}`}
+            />
+            <AdminPagination page={result.pagination.page} pages={result.pagination.pages} onPage={(p) => update({ page: String(p) })} />
           </div>
-        ) : error ? (
-          <p className="p-6 text-error-500 text-sm" role="alert">{error}</p>
-        ) : !result || result.accounts.length === 0 ? (
-          <p className="p-6 text-gray-400 text-sm">No accounts match. Try another search or status.</p>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-dark-700 border-b border-white/10">
-                  <tr>
-                    {['Email', 'Display name', 'Staff role', 'Status', 'Last sign-in', 'Created'].map((h) => (
-                      <th key={h} scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {result.accounts.map((a) => (
-                    <tr key={a.id} className="bg-dark-800 hover:bg-dark-700 transition-colors">
-                      <td className="px-4 py-3 text-sm max-w-[240px] truncate">
-                        <Link to={`/admin/users/${a.id}`} className="text-white hover:text-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded">
-                          {a.email ?? a.id}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-300">{a.display_name ?? NONE}</td>
-                      <td className="px-4 py-3 text-sm text-gray-300">{a.staff_role ? (ROLE_LABELS[a.staff_role] ?? a.staff_role) : NONE}</td>
-                      <td className="px-4 py-3"><AccountStatusBadge status={a.status} /></td>
-                      <td className="px-4 py-3 text-sm text-gray-400">{formatDay(a.last_sign_in_at)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-400">{formatDay(a.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="p-4 border-t border-white/10">
-              <Pagination page={result.pagination.page} pages={result.pagination.pages} onPage={(p) => update({ page: String(p) })} />
-            </div>
-          </>
         )}
-      </div>
+      </ListState>
 
       <DeleteWindowCard canEdit={hasPermission(access, PERMISSIONS.manageAdmins)} />
     </div>

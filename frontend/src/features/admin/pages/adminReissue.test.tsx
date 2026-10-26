@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { AdminReissueRequest, AdminTag } from '../api/adminApi';
@@ -80,17 +80,38 @@ beforeEach(() => {
 });
 
 describe('AdminReissuePage', () => {
-  it('shows pending requests with the chip, the proof tap and the evidence photos', async () => {
+  it('opens on Needs action and shows requests with the chip, the proof tap and the evidence photos', async () => {
     api.listReissueRequests.mockResolvedValue(list([request()]));
     renderQueue();
 
     expect(await screen.findByRole('link', { name: '…936980 · sn …AE6CA9' })).toBeInTheDocument();
-    expect(api.listReissueRequests).toHaveBeenCalledWith({ status: 'PENDING', limit: 50 });
+    expect(api.listReissueRequests).toHaveBeenCalledWith({ status: 'NEEDS_ACTION', page: 1, limit: 25 });
+    expect(screen.getByRole('button', { name: 'Needs action' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getAllByRole('img', { name: /of the chip on the item/ })).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Approve…' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve without fee…' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reject…' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Move to new chip/ })).not.toBeInTheDocument();
+  });
+
+  it('pages through a long queue instead of stopping at 50', async () => {
+    api.listReissueRequests.mockResolvedValue({ ...list([request()]), data: { ...list([request()]).data, pagination: { page: 1, limit: 25, total: 60 } } });
+    const user = userEvent.setup();
+    renderQueue();
+
+    expect(await screen.findByText('Page 1 of 3')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(api.listReissueRequests).toHaveBeenLastCalledWith({ status: 'NEEDS_ACTION', page: 2, limit: 25 }));
+  });
+
+  it('?request= shows that one request, with a way back to the queue', async () => {
+    api.listReissueRequests.mockResolvedValue(list([request()]));
+    renderQueue(`/admin/reissue-requests?request=${request().id}`);
+
+    expect(await screen.findByText('Showing one request.')).toBeInTheDocument();
+    expect(api.listReissueRequests).toHaveBeenCalledWith({ id: request().id });
+    expect(screen.getByRole('button', { name: 'Show all re-issues' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Filter by stage' })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -141,7 +162,8 @@ describe('AdminReissuePage', () => {
     const dialog = screen.getByRole('dialog', { name: 'Complete re-issue for …936980 · sn …AE6CA9' });
     const submit = within(dialog).getByRole('button', { name: 'Move token and retire old chip' });
 
-    await user.selectOptions(await within(dialog).findByLabelText(/Replacement chip/), NEW_TAG);
+    await user.type(await within(dialog).findByRole('combobox', { name: /Replacement chip/ }), '11AA22');
+    await user.click(await within(dialog).findByRole('option', { name: /11AA22/ }));
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     // The UID suffix every chip in the lot shares must not unlock it.
     await user.type(within(dialog).getByLabelText(/last 6 characters/), '936980');
@@ -182,7 +204,8 @@ describe('AdminReissuePage', () => {
     expect(await screen.findByText('Fee waived, ready for a new chip', { selector: 'p' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Move to new chip…' }));
     const dialog = screen.getByRole('dialog');
-    await user.selectOptions(await within(dialog).findByLabelText(/Replacement chip/), NEW_TAG);
+    await user.type(await within(dialog).findByRole('combobox', { name: /Replacement chip/ }), '11AA22');
+    await user.click(await within(dialog).findByRole('option', { name: /11AA22/ }));
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     await user.type(within(dialog).getByLabelText(/last 6 characters/), 'AE6CA9');
     await user.click(within(dialog).getByRole('button', { name: 'Move token and retire old chip' }));
