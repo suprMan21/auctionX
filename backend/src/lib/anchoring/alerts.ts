@@ -17,6 +17,7 @@ export type AnchorAlertKind =
   | 'unmatched_event'
   | 'writer_changed'
   | 'writer_mismatch'
+  | 'owner_changed'
   | 'low_balance'
   | 'anchor_failing'
   | 'anchor_reverted'
@@ -28,6 +29,7 @@ const TITLES: Record<AnchorAlertKind, string> = {
   unmatched_event: 'Registry write with no matching batch (possible forged write)',
   writer_changed: 'Registry writer changed to an address that is not our KMS writer',
   writer_mismatch: 'Registry writer is not our KMS key: anchoring sends are paused',
+  owner_changed: 'Registry ownership is changing hands',
   low_balance: 'Anchoring writer wallet is low on Base ETH',
   anchor_failing: 'Anchor batch keeps failing to send',
   anchor_reverted: 'Anchor transaction reverted',
@@ -49,7 +51,7 @@ export const raiseAnchorAlert = async (
   kind: AnchorAlertKind,
   dedupeKey: string,
   detail: AlertDetail,
-): Promise<void> => {
+): Promise<boolean> => {
   log.error('anchor_alert', { kind, dedupeKey, ...detail });
 
   const { data, error } = await supabase.rpc('record_anchor_alert', {
@@ -59,16 +61,19 @@ export const raiseAnchorAlert = async (
   });
   if (error) {
     log.error('anchor_alert_record_failed', { kind, code: error.code ?? null });
-    return;
+    return false;
   }
 
   const row = (Array.isArray(data) ? data[0] : data) as
     | { alert_id: string; is_new: boolean; github_issue_number: number | null }
     | undefined;
-  if (!row?.is_new || row.github_issue_number !== null || !isGithubIssuesConfigured()) return;
+  if (!row) return false;
+  // Open the issue whenever there is none yet, not only on the first sighting,
+  // so a GitHub outage on the first one is retried on the next.
+  if (row.github_issue_number !== null || !isGithubIssuesConfigured()) return true;
 
   const issue = await createIssue(`[anchoring] ${TITLES[kind]}`, issueBody(kind, dedupeKey, detail), [ANCHORING_LABEL]);
-  if (!issue) return;
+  if (!issue) return true;
 
   const { error: linkError } = await supabase
     .from('anchor_alerts')
@@ -76,4 +81,5 @@ export const raiseAnchorAlert = async (
     .eq('id', row.alert_id)
     .is('github_issue_number', null);
   if (linkError) log.error('anchor_alert_issue_link_failed', { code: linkError.code ?? null });
+  return true;
 };

@@ -98,6 +98,15 @@ describe("OwnershipRegistry", () => {
         .to.be.revertedWithCustomError(registry, "OwnableUnauthorizedAccount");
     });
 
+    it("the writer can never be lined up as owner, nor a pending owner as writer", async () => {
+      const { registry, owner, writer, newOwner } = await deploy();
+      await expect(registry.connect(owner).transferOwnership(writer.address))
+        .to.be.revertedWithCustomError(registry, "WriterIsOwner");
+      await registry.connect(owner).transferOwnership(newOwner.address);
+      await expect(registry.connect(owner).setWriter(newOwner.address))
+        .to.be.revertedWithCustomError(registry, "WriterIsOwner");
+    });
+
     it("moves in two steps and the new owner then controls rotation", async () => {
       const { registry, owner, newOwner, newWriter } = await deploy();
       await registry.connect(owner).transferOwnership(newOwner.address);

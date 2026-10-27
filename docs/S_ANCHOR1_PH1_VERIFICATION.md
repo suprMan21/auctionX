@@ -13,7 +13,7 @@
 |---|---|
 | Registry contract: writer appends (`anchor`, `anchorRoot`), owner can only rotate the writer (`setWriter`, zero = stop writes), two-step ownership, renounce disabled, no per-item state | `contracts/contracts/OwnershipRegistry.sol` |
 | Deploy script (throwaway deployer gets no role; Base Sepolia only; Basescan verify) | `contracts/scripts/deploy-registry.ts` |
-| Migration: `anchor_batches`, `anchor_chain_state`, `anchor_alerts`; `ownership_proofs.anchor_batch_id` + `merkle_proof`; `record_anchor_batch`, `confirm_anchor_batch`, `record_anchor_alert` (service_role only); pg_cron `anchor-tick` hourly at :07 | `supabase/migrations/20261027000004_s_anchor1_registry.sql` — **applied to staging 2026-10-27** |
+| Migration: `anchor_batches`, `anchor_chain_state`, `anchor_alerts`; `ownership_proofs.anchor_batch_id` + `merkle_proof`; `record_anchor_batch`, `confirm_anchor_batch`, `record_anchor_alert` (service_role only); pg_cron `anchor-tick` hourly at :07 | `supabase/migrations/20261027000004_s_anchor1_registry.sql` + `…000005_s_anchor1_hardening.sql` (`sent_tx_hashes`, `owner_changed`) — **both applied to staging 2026-10-27** |
 | KMS signer (secp256k1, DER → low-s → recovery bit; key never leaves KMS) | `backend/src/lib/anchoring/kmsSigner.ts` |
 | Daily root: OpenZeppelin StandardMerkleTree (`bytes32` leaves) + one random padding leaf; published every day, even empty | `backend/src/lib/anchoring/merkle.ts` |
 | Hourly tick: writer check → confirm → batch → send (tx hash stored before broadcast) → reconcile → balance | `backend/src/lib/anchoring/anchorTick.ts`, `registry.ts` |
@@ -32,11 +32,11 @@ the next day's root, never lost.
 
 | Suite | Result |
 |---|---|
-| Contracts (Hardhat) | 11 passing |
-| Backend vitest | 863 passed / 23 skipped (was 829; +31 `anchoring.test.ts`, +2 Receipt, +1 internal-route pin; the 2 new skips are the opt-in chain test) |
+| Contracts (Hardhat) | 12 passing |
+| Backend vitest | 868 passed / 23 skipped (was 829; +36 `anchoring.test.ts`, +2 Receipt, +1 internal-route pin; the 2 new skips are the opt-in chain test) |
 | Frontend vitest | 321 (was 318) |
 | tsc | 0 errors, both sides |
-| Live SQL `supabase/tests/s_anchor1_live.sql` | **20/20** on the dry run (BEGIN … ROLLBACK) and again after `db push` |
+| Live SQL `supabase/tests/s_anchor1_live.sql` | **22/22** (dry run BEGIN … ROLLBACK, then after both `db push`es) |
 | Opt-in end to end `anchoring.chain.test.ts` (local Hardhat node on chain id 84532, real contract, real viem client, KMS-format high-s signatures) | **2/2** |
 
 Mutation checks (rule removed → suite fails): low-s normalisation (2 fail), reconciliation match (4 fail),
@@ -44,6 +44,31 @@ record-before-broadcast claim (10 fail).
 
 End-to-end run: `cd contracts && npx hardhat compile && HARDHAT_CHAIN_ID=84532 npx hardhat node`, then
 `cd backend && ANCHOR_E2E_RPC=http://127.0.0.1:8545 npx vitest run src/__tests__/anchoring.chain.test.ts`.
+
+## Security review (before merge)
+
+Independent review of `7d0f6b8`: **no blockers**; no leak of salt, padding leaf, account ids or UIDs on-chain, in
+responses, logs or issues; KMS signer correct. Should-fixes, all done in the follow-up commit:
+
+1. A forged write whose alert could not be stored let the scan cursor move on → reconcile now throws unless the
+   alert is recorded, so the block is scanned again.
+2. A GitHub outage on an alert's first sighting meant no issue ever → an issue is opened whenever none exists.
+3. A stolen writer could replay a known root without alerting → every signed tx hash is kept
+   (`sent_tx_hashes`); a write matches only on value **and** tx.
+4. Owner-key changes were not watched → `OwnershipTransferStarted` / `OwnershipTransferred` alert
+   (`owner_changed`; the deploy's own transfer from zero is ignored).
+5. A broadcast error could double-send → the row stays `submitted`; only a tx seen dropped for 10 min is re-signed.
+6. A missed UTC day got no root → every missing day since the last root is built, oldest first (31 per tick).
+7. **Residual risk (accepted for Ph1):** any IAM admin can rewrite the key policy (`PutKeyPolicy`) and remove the
+   Deny, or change the instance role's trust policy. Detection is the follow-up: CloudTrail/EventBridge alarm on
+   `PutKeyPolicy`, `CreateGrant`, `DisableKey`, `ScheduleKeyDeletion` for the writer key and
+   `UpdateAssumeRolePolicy` on `am-backend-staging-instance`. Required before mainnet.
+
+Nits fixed: `{ error }` checked on the failure write; one bad receipt lookup no longer stops other confirmations;
+per_event counts only created batches; the contract refuses a pending owner as writer and the writer as owner.
+Not fixed: a stuck (underpriced) tx only alerts, no fee bump (fine on Sepolia; revisit for mainnet). Noted for
+Ph2/counsel: a Receipt's sibling hashes let its holder test whether another *publicly known* Ownership ID was
+anchored the same day.
 
 ## Boss runbook (testnet setup)
 
@@ -89,8 +114,7 @@ End-to-end run: `cd contracts && npx hardhat compile && HARDHAT_CHAIN_ID=84532 n
 
 ## Not in Ph1 / follow-ups
 
-- **CloudTrail tripwires** (alert on key-policy change, disable, deletion of the writer key). The explicit Deny
-  already blocks any other signer; the tripwire is detection on top. Ph2 or S-SEC1.
+- **CloudTrail tripwires** (review item 7 above). Required before mainnet; Ph2 or S-SEC1.
 - The 7 existing staging proofs all go into the first daily root (they predate anchoring).
 - Public lookup `GET /ownership/:id` does not show anchor status yet (Ph2 with the public docs).
 - Incident runbook (rotate writer, publish notice, flag forged window): the drill in runbook 9 is its rehearsal;

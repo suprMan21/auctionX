@@ -5,7 +5,8 @@
 -- existing ownership_proofs rows (needs at least two unbatched proofs).
 --
 -- Run: supabase db query --linked -f supabase/tests/s_anchor1_live.sql
--- Expect: ERROR  P0001: RESULTS {"ok": 20, "total": 20, "failures": {}}
+-- Covers 20261027000005 too.
+-- Expect: ERROR  P0001: RESULTS {"ok": 22, "total": 22, "failures": {}}
 
 DO $$
 DECLARE
@@ -157,7 +158,7 @@ BEGIN
   v_res := v_res || jsonb_build_object('14_pending_not_confirmable', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL' END);
 
   -- 15. Only the bound tx confirms; it stamps every proof in the batch.
-  UPDATE anchor_batches SET status = 'submitted', tx_hash = v_tx, tx_nonce = 7, submitted_at = now() WHERE id = v_batch;
+  UPDATE anchor_batches SET status = 'submitted', tx_hash = v_tx, tx_nonce = 7, submitted_at = now(), sent_tx_hashes = ARRAY[v_tx] WHERE id = v_batch;
   v_ok := NOT confirm_anchor_batch(v_batch, '0x' || repeat('e', 64), 100, now());
   v_ok := v_ok AND confirm_anchor_batch(v_batch, v_tx, 100, TIMESTAMPTZ '2001-01-02 00:00:05+00');
   SELECT count(*) INTO v_n FROM ownership_proofs
@@ -195,6 +196,17 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN v_t := SQLERRM; END;
   v_ok := v_ok AND (v_t LIKE '%anchor_alerts_kind_chk%' OR v_t LIKE '%null value%');
   v_res := v_res || jsonb_build_object('19_alert_kind_checked', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL ' || v_t END);
+
+  -- 21. tx_hash must be one of the hashes we recorded signing.
+  BEGIN
+    UPDATE anchor_batches SET tx_hash = '0x' || repeat('f', 64) WHERE id = v_batch;
+    v_t := 'no error';
+  EXCEPTION WHEN OTHERS THEN v_t := SQLERRM; END;
+  v_res := v_res || jsonb_build_object('21_tx_hash_in_sent_list', CASE WHEN v_t LIKE '%anchor_batches_sent_tx_chk%' THEN 'ok' ELSE 'FAIL ' || v_t END);
+
+  -- 22. owner_changed is an accepted alert kind.
+  SELECT is_new INTO v_created FROM record_anchor_alert('owner_changed', 'live-test:owner', '{}'::jsonb);
+  v_res := v_res || jsonb_build_object('22_owner_changed_kind', CASE WHEN v_created THEN 'ok' ELSE 'FAIL' END);
 
   -- 20. The hourly tick is scheduled.
   SELECT schedule INTO v_t FROM cron.job WHERE jobname = 'anchor-tick';

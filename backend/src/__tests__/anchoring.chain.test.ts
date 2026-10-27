@@ -83,7 +83,7 @@ describe.skipIf(!RPC)('anchoring end to end (local EVM, chain id 84532)', () => 
     writer: signer.address,
     now: () => clock,
     randomLeaf,
-    alert: async (kind, key) => { alerts.push({ kind, key }); },
+    alert: async (kind, key) => { alerts.push({ kind, key }); return true; },
   });
 
   beforeAll(async () => {

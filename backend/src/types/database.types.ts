@@ -163,6 +163,7 @@ export type Database = {
           next_attempt_at: string
           padding_leaf: string | null
           registry_address: string
+          sent_tx_hashes: string[]
           status: string
           submitted_at: string | null
           tx_hash: string | null
@@ -184,6 +185,7 @@ export type Database = {
           next_attempt_at?: string
           padding_leaf?: string | null
           registry_address: string
+          sent_tx_hashes?: string[]
           status?: string
           submitted_at?: string | null
           tx_hash?: string | null
@@ -205,6 +207,7 @@ export type Database = {
           next_attempt_at?: string
           padding_leaf?: string | null
           registry_address?: string
+          sent_tx_hashes?: string[]
           status?: string
           submitted_at?: string | null
           tx_hash?: string | null

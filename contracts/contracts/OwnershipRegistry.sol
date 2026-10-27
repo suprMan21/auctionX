@@ -63,10 +63,16 @@ contract OwnershipRegistry is Ownable2Step {
 
     /// Replace the writer. address(0) stops all writes until a new writer is set.
     function setWriter(address newWriter) external onlyOwner {
-        if (newWriter != address(0) && newWriter == owner()) revert WriterIsOwner();
+        if (newWriter != address(0) && (newWriter == owner() || newWriter == pendingOwner())) revert WriterIsOwner();
         address previous = writer;
         writer = newWriter;
         emit WriterChanged(previous, newWriter);
+    }
+
+    /// The hot writer key must never become (or be lined up to become) the owner.
+    function transferOwnership(address newOwner) public override onlyOwner {
+        if (newOwner != address(0) && newOwner == writer) revert WriterIsOwner();
+        super.transferOwnership(newOwner);
     }
 
     /// An ownerless registry could never rotate a stolen writer key.

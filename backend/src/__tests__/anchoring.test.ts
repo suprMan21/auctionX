@@ -285,6 +285,7 @@ describe('anchor tick', () => {
   let chain: FakeChain;
   let clock: Date;
   let alerts: Array<{ kind: AnchorAlertKind; key: string; detail: AlertDetail }>;
+  let alertRecorded: boolean;
 
   const tick = (over: Partial<AnchorConfig> = {}, deps: Partial<TickDeps> = {}) =>
     runAnchorTick({
@@ -294,7 +295,7 @@ describe('anchor tick', () => {
       writer: WRITER,
       now: () => clock,
       randomLeaf,
-      alert: async (kind, key, detail) => { alerts.push({ kind, key, detail }); },
+      alert: async (kind, key, detail) => { alerts.push({ kind, key, detail }); return alertRecorded; },
       ...deps,
     });
 
@@ -311,6 +312,7 @@ describe('anchor tick', () => {
     chain = new FakeChain();
     clock = new Date('2026-10-28T01:07:00.000Z');
     alerts = [];
+    alertRecorded = true;
   });
 
   it('closes yesterday (UTC) into one root, files each path, and stores the tx hash before broadcast', async () => {
@@ -392,23 +394,27 @@ describe('anchor tick', () => {
     expect(alerts[0].kind).toBe('writer_mismatch');
   });
 
-  it('a failed broadcast backs off, then alerts after repeated failures', async () => {
+  it('a failed broadcast stays submitted (it may have gone out), requeues once seen dropped, and alerts after repeated failures', async () => {
     chain.failBroadcast = true;
     let s = await tick();
     expect(s.sendFailures).toBe(1);
     const [batch] = tables.anchor_batches;
-    expect(batch).toMatchObject({ status: 'pending', attempts: 1 });
+    expect(batch).toMatchObject({ status: 'submitted', attempts: 1 });
     expect(batch.last_error).toContain('broadcast');
 
-    // Not due yet: nothing is retried.
+    // Not re-signed on the next tick: the first tx might be in flight.
     s = await tick();
     expect(s.sendFailures).toBe(0);
+    expect(batch.status).toBe('submitted');
 
     for (let i = 0; i < 4; i++) {
-      clock = new Date(clock.getTime() + backoffMinutes(6) * 60_000);
+      clock = new Date(clock.getTime() + 11 * 60_000); // seen as dropped
+      await tick();
+      clock = new Date(clock.getTime() + backoffMinutes(6) * 60_000); // backoff elapsed: resend
       await tick();
     }
     expect(batch.attempts).toBe(5);
+    expect((batch.sent_tx_hashes as string[]).length).toBe(5);
     expect(alerts.map((a) => a.kind)).toContain('anchor_failing');
   });
 
@@ -462,6 +468,72 @@ describe('anchor tick', () => {
     chain.mine(5n);
     const s = await tick({ mode: 'per_event', maxSendsPerTick: 1 });
     expect(s.unmatched).toBe(1);
+  });
+
+  it('a replay of one of our own roots from a tx we never signed still alerts', async () => {
+    await tick();
+    chain.mine(0n);
+    const ourRoot = tables.anchor_batches[0].merkle_root as Hex;
+    chain.events.push({ kind: 'RootAnchored', value: ourRoot, txHash: id32(77), logIndex: 0, blockNumber: chain.block });
+    chain.mine(5n);
+    const s = await tick();
+    expect(s.unmatched).toBe(1);
+    expect(alerts.find((a) => a.kind === 'unmatched_event')!.detail).toMatchObject({ reason: 'unknown_tx', value: ourRoot });
+  });
+
+  it('a forged write whose alert cannot be recorded is scanned again (cursor holds)', async () => {
+    await tick();
+    chain.mine(0n);
+    chain.events.push({ kind: 'RootAnchored', value: id32(555), txHash: id32(8), logIndex: 0, blockNumber: chain.block });
+    chain.mine(5n);
+
+    alertRecorded = false;
+    let s = await tick();
+    expect(s.errors.some((e) => e.startsWith('reconcile:alert_not_recorded'))).toBe(true);
+    const held = tables.anchor_chain_state[0]?.last_scanned_block ?? null;
+    expect(held === null || (held as number) < Number(chain.block - 6n)).toBe(true);
+
+    alertRecorded = true;
+    alerts = [];
+    s = await tick();
+    expect(alerts.filter((a) => a.kind === 'unmatched_event')).toHaveLength(1);
+  });
+
+  it('alerts on a registry ownership change, but not on the deploy itself', async () => {
+    const ZERO = ('0x' + '0'.repeat(40)) as Hex;
+    const A = ('0x' + 'aa'.repeat(20)) as Hex;
+    const B = ('0x' + 'bb'.repeat(20)) as Hex;
+    chain.events.push({ kind: 'OwnershipTransferred', previousOwner: ZERO, newOwner: A, txHash: id32(20), logIndex: 0, blockNumber: 1000n });
+    chain.events.push({ kind: 'OwnershipTransferStarted', previousOwner: A, newOwner: B, txHash: id32(21), logIndex: 0, blockNumber: 1001n });
+    chain.block = 1010n;
+    await tick();
+    const owner = alerts.filter((a) => a.kind === 'owner_changed');
+    expect(owner).toHaveLength(1);
+    expect(owner[0].detail).toMatchObject({ event: 'OwnershipTransferStarted', newOwner: B });
+  });
+
+  it('backfills every missed day, oldest first, so no day goes without a root', async () => {
+    tables.anchor_batches.push({
+      id: 'old', mode: 'daily_batch', batch_day: '2026-10-24', merkle_root: id32(9000), chain_id: 84532,
+      registry_address: REGISTRY, status: 'confirmed', tx_hash: id32(9001), sent_tx_hashes: [id32(9001)],
+      attempts: 1, next_attempt_at: '1970-01-01T00:00:00.000Z', created_at: '1970-01-01T00:00:00.000Z',
+    });
+    tables.ownership_proofs = [proof(1, '2026-10-25T10:00:00.000Z'), proof(2, '2026-10-27T10:00:00.000Z')];
+    const s = await tick();
+    expect(s.batchesCreated).toBe(3);
+    const days = tables.anchor_batches.filter((b) => b.id !== 'old').map((b) => [b.batch_day, b.leaf_count]);
+    expect(days).toEqual([['2026-10-25', 1], ['2026-10-26', 0], ['2026-10-27', 1]]);
+  });
+
+  it('one failing receipt lookup does not stop the other batches confirming', async () => {
+    await tick({ mode: 'per_event', maxSendsPerTick: 2 });
+    chain.mine(3n);
+    const bad = tables.anchor_batches[0].tx_hash as Hex;
+    const real = chain.getReceipt;
+    chain.getReceipt = async (hash: Hex) => { if (hash === bad) throw new Error('rpc_flake'); return real(hash); };
+    const s = await tick({ mode: 'per_event', maxSendsPerTick: 2 });
+    expect(s.confirmed).toBe(1);
+    expect(s.errors.some((e) => e.includes('rpc_flake'))).toBe(true);
   });
 
   it('alerts once a day on a low writer balance', async () => {

@@ -35,6 +35,9 @@ const STUCK_AFTER_MS = 60 * 60_000;
 const FAILING_AFTER_ATTEMPTS = 5;
 const MAX_BACKOFF_MINUTES = 360;
 const MAX_PROOFS_PER_ROOT = 10_000;
+/** Missed days (backend down, Supabase paused) are backfilled oldest first, this many per tick. */
+const MAX_BACKFILL_DAYS_PER_TICK = 31;
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 export interface TickDeps {
   readonly supabase: SupabaseClient;
@@ -43,7 +46,8 @@ export interface TickDeps {
   readonly writer: Hex;
   readonly now: () => Date;
   readonly randomLeaf: () => Hex;
-  readonly alert?: (kind: AnchorAlertKind, key: string, detail: AlertDetail) => Promise<void>;
+  /** Resolves true once the alert is durably recorded. */
+  readonly alert?: (kind: AnchorAlertKind, key: string, detail: AlertDetail) => Promise<boolean>;
 }
 
 export interface TickSummary {
@@ -71,9 +75,12 @@ interface BatchRow {
   tx_hash: string | null;
   attempts: number;
   submitted_at: string | null;
+  batch_day: string | null;
+  /** Every tx hash ever signed for this batch (reconciliation matches on these). */
+  sent_tx_hashes: string[] | null;
 }
 
-const BATCH_COLUMNS = 'id, mode, merkle_root, status, tx_hash, attempts, submitted_at';
+const BATCH_COLUMNS = 'id, mode, merkle_root, status, tx_hash, attempts, submitted_at, batch_day, sent_tx_hashes';
 
 export const backoffMinutes = (attempts: number): number =>
   Math.min(2 ** Math.max(0, attempts), MAX_BACKOFF_MINUTES);
@@ -83,6 +90,8 @@ export const utcMidnight = (at: Date): Date =>
   new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
 
 const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+
+const firstRow = <T>(data: unknown): T | undefined => (Array.isArray(data) ? data[0] : data) as T | undefined;
 
 const errCode = (err: unknown): string =>
   err instanceof Error ? err.message.replace(/[^\w:.-]/g, '_').slice(0, 60) : 'unknown';
@@ -152,17 +161,29 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
 
     const latest = await chain.getBlockNumber();
     for (const row of rows) {
+      // One bad row (an RPC hiccup on its receipt) must not hold up the rest.
+      try {
+        await confirmOne(row, latest);
+      } catch (err) {
+        summary.errors.push(`confirm:${row.id}:${errCode(err)}`);
+        log.error('anchor_confirm_row_failed', { batchId: row.id, error: errCode(err) });
+      }
+    }
+  });
+
+  async function confirmOne(row: BatchRow, latest: bigint): Promise<void> {
+    {
       const hash = row.tx_hash as Hex;
       const receipt = await chain.getReceipt(hash);
 
       if (receipt?.status === 'reverted') {
         await alert('anchor_reverted', `reverted:${hash}`, { batchId: row.id, txHash: hash, block: receipt.blockNumber.toString() });
         await backToPending(row, 'reverted');
-        continue;
+        return;
       }
 
       if (receipt) {
-        if (latest - receipt.blockNumber + 1n < BigInt(config.confirmations)) continue;
+        if (latest - receipt.blockNumber + 1n < BigInt(config.confirmations)) return;
         const ts = await chain.getBlockTimestamp(receipt.blockNumber);
         const { data: ok, error: rpcError } = await supabase.rpc('confirm_anchor_batch', {
           p_batch_id: row.id,
@@ -172,7 +193,7 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
         });
         if (rpcError) throw new Error('confirm_rpc_failed');
         if (ok === true) summary.confirmed++;
-        continue;
+        return;
       }
 
       const age = now().getTime() - Date.parse(row.submitted_at ?? '');
@@ -182,7 +203,7 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
         await alert('anchor_stuck', `stuck:${hash}`, { batchId: row.id, txHash: hash });
       }
     }
-  });
+  }
 
   // 3. Batch ─────────────────────────────────────────────────────────────────
   await step('batch', async () => {
@@ -190,39 +211,33 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
       ({ proof_id: p.id, ownership_id: p.ownership_id, merkle_proof: merkleProof });
 
     if (config.mode === 'daily_batch') {
-      const cutoff = utcMidnight(now());
-      const day = isoDay(new Date(cutoff.getTime() - 86_400_000));
+      for (const day of await daysToClose()) {
+        const cutoff = new Date(Date.parse(`${day}T00:00:00.000Z`) + 86_400_000);
+        const { data: proofs, error: proofsError } = await supabase.from('ownership_proofs')
+          .select('id, ownership_id')
+          .is('anchor_batch_id', null)
+          .lt('created_at', cutoff.toISOString())
+          .order('created_at')
+          .limit(MAX_PROOFS_PER_ROOT);
+        if (proofsError) throw new Error('unbatched_read_failed');
+        const rows = (proofs ?? []) as Array<{ id: string; ownership_id: string }>;
+        if (rows.length === MAX_PROOFS_PER_ROOT) log.warn('anchor_root_capped', { day, cap: MAX_PROOFS_PER_ROOT });
 
-      const { data: existing, error: existingError } = await batches()
-        .eq('mode', 'daily_batch').eq('batch_day', day).maybeSingle();
-      if (existingError) throw new Error('daily_read_failed');
-      if (existing) return;
-
-      const { data: proofs, error: proofsError } = await supabase.from('ownership_proofs')
-        .select('id, ownership_id')
-        .is('anchor_batch_id', null)
-        .lt('created_at', cutoff.toISOString())
-        .order('created_at')
-        .limit(MAX_PROOFS_PER_ROOT);
-      if (proofsError) throw new Error('unbatched_read_failed');
-      const rows = (proofs ?? []) as Array<{ id: string; ownership_id: string }>;
-      if (rows.length === MAX_PROOFS_PER_ROOT) log.warn('anchor_root_capped', { day, cap: MAX_PROOFS_PER_ROOT });
-
-      const padding = deps.randomLeaf();
-      const tree = buildDailyTree(rows.map((r) => r.ownership_id), padding);
-      const { data: created, error: rpcError } = await supabase.rpc('record_anchor_batch', {
-        p_mode: 'daily_batch',
-        p_batch_day: day,
-        p_cutoff_at: cutoff.toISOString(),
-        p_merkle_root: tree.root,
-        p_padding_leaf: padding,
-        p_chain_id: config.chainId,
-        p_registry_address: registry,
-        p_leaves: rows.map((r) => leafFor(r, tree.proofs.get(r.ownership_id) ?? [])),
-      });
-      if (rpcError) throw new Error(rpcError.message === 'anchor_batch_conflict' ? 'batch_conflict' : 'record_batch_failed');
-      const first = (Array.isArray(created) ? created[0] : created) as { created?: boolean } | undefined;
-      if (first?.created) summary.batchesCreated++;
+        const padding = deps.randomLeaf();
+        const tree = buildDailyTree(rows.map((r) => r.ownership_id), padding);
+        const { data: created, error: rpcError } = await supabase.rpc('record_anchor_batch', {
+          p_mode: 'daily_batch',
+          p_batch_day: day,
+          p_cutoff_at: cutoff.toISOString(),
+          p_merkle_root: tree.root,
+          p_padding_leaf: padding,
+          p_chain_id: config.chainId,
+          p_registry_address: registry,
+          p_leaves: rows.map((r) => leafFor(r, tree.proofs.get(r.ownership_id) ?? [])),
+        });
+        if (rpcError) throw new Error(rpcError.message === 'anchor_batch_conflict' ? 'batch_conflict' : 'record_batch_failed');
+        if (firstRow<{ created?: boolean }>(created)?.created) summary.batchesCreated++;
+      }
       return;
     }
 
@@ -236,7 +251,7 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
     if (proofsError) throw new Error('unbatched_read_failed');
 
     for (const p of (proofs ?? []) as Array<{ id: string; ownership_id: string }>) {
-      const { error: rpcError } = await supabase.rpc('record_anchor_batch', {
+      const { data: created, error: rpcError } = await supabase.rpc('record_anchor_batch', {
         p_mode: 'per_event',
         p_batch_day: null,
         p_cutoff_at: cutoff.toISOString(),
@@ -247,9 +262,32 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
         p_leaves: [leafFor(p, [])],
       });
       if (rpcError) throw new Error('record_batch_failed');
-      summary.batchesCreated++;
+      if (firstRow<{ created?: boolean }>(created)?.created) summary.batchesCreated++;
     }
   });
+
+  /**
+   * Every UTC day from the day after the last daily root up to yesterday,
+   * oldest first, so a root is published for every day even after an outage.
+   * With no root yet, just yesterday.
+   */
+  async function daysToClose(): Promise<string[]> {
+    const yesterday = new Date(utcMidnight(now()).getTime() - 86_400_000);
+    const { data, error } = await batches()
+      .eq('mode', 'daily_batch')
+      .order('batch_day', { ascending: false })
+      .limit(1);
+    if (error) throw new Error('daily_read_failed');
+    const last = ((data ?? []) as BatchRow[])[0]?.batch_day ?? null;
+
+    let next = last ? new Date(Date.parse(`${last}T00:00:00.000Z`) + 86_400_000) : yesterday;
+    const days: string[] = [];
+    while (next <= yesterday && days.length < MAX_BACKFILL_DAYS_PER_TICK) {
+      days.push(isoDay(next));
+      next = new Date(next.getTime() + 86_400_000);
+    }
+    return days;
+  }
 
   // 4. Send ──────────────────────────────────────────────────────────────────
   await step('send', async () => {
@@ -264,15 +302,19 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
 
     for (const row of (data ?? []) as BatchRow[]) {
       const attempts = row.attempts + 1;
-      const fail = async (reason: string) => {
-        summary.sendFailures++;
-        const next = new Date(now().getTime() + backoffMinutes(attempts) * 60_000);
-        await supabase.from('anchor_batches')
-          .update({ status: 'pending', attempts, last_error: reason, next_attempt_at: next.toISOString() })
-          .eq('id', row.id);
+      const alertIfFailing = async (reason: string) => {
         if (attempts >= FAILING_AFTER_ATTEMPTS) {
           await alert('anchor_failing', `failing:${row.id}`, { batchId: row.id, attempts, lastError: reason });
         }
+      };
+      const fail = async (reason: string) => {
+        summary.sendFailures++;
+        const next = new Date(now().getTime() + backoffMinutes(attempts) * 60_000);
+        const { error: failError } = await supabase.from('anchor_batches')
+          .update({ status: 'pending', attempts, last_error: reason, next_attempt_at: next.toISOString() })
+          .eq('id', row.id).eq('status', 'pending');
+        if (failError) throw new Error('batch_fail_write_failed');
+        await alertIfFailing(reason);
       };
 
       let signed;
@@ -288,6 +330,7 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
       const { data: claimed, error: claimError } = await supabase.from('anchor_batches')
         .update({
           status: 'submitted', tx_hash: signed.hash, tx_nonce: signed.nonce,
+          sent_tx_hashes: [...(row.sent_tx_hashes ?? []), signed.hash],
           submitted_at: now().toISOString(), attempts, last_error: null,
         })
         .eq('id', row.id).eq('status', 'pending')
@@ -299,7 +342,17 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
         await chain.broadcast(signed.raw);
         summary.sent++;
       } catch (err) {
-        await fail(`broadcast:${errCode(err)}`);
+        // A timeout or "already known" can mean the node DID take the tx, so
+        // the row stays 'submitted' under this hash. If the tx really never
+        // went out, the confirm step sees it unknown after 10 minutes and
+        // requeues it; re-signing now could write the same root twice.
+        summary.sendFailures++;
+        const reason = `broadcast:${errCode(err)}`;
+        const { error: noteError } = await supabase.from('anchor_batches')
+          .update({ last_error: reason })
+          .eq('id', row.id).eq('tx_hash', signed.hash);
+        if (noteError) throw new Error('batch_fail_write_failed');
+        await alertIfFailing(reason);
       }
     }
   });
@@ -333,31 +386,63 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
     }
   });
 
+  /**
+   * Every alert raised here must be durably recorded before the scan cursor
+   * moves past its block; otherwise a forged write seen during a database blip
+   * would leave nothing but a log line and never be scanned again.
+   */
   async function checkEvents(events: RegistryEvent[]): Promise<void> {
-    const writes = events.filter((e): e is Extract<RegistryEvent, { value: Hex }> => e.kind !== 'WriterChanged');
+    const mustAlert = async (kind: AnchorAlertKind, key: string, detail: AlertDetail) => {
+      if (!(await alert(kind, key, detail))) throw new Error('alert_not_recorded');
+    };
+
+    const writes = events.filter((e): e is Extract<RegistryEvent, { value: Hex }> =>
+      e.kind === 'RootAnchored' || e.kind === 'OwnershipAnchored');
     const values = [...new Set(writes.map((e) => e.value.toLowerCase()))];
-    const known = new Set<string>();
+    // mode:value -> every tx hash we signed for it. A write matches only if
+    // both its value and its tx are ours, so a replayed root still alerts.
+    const ours = new Map<string, Set<string>>();
 
     if (values.length > 0) {
       const { data, error } = await batches().in('merkle_root', values);
       if (error) throw new Error('reconcile_read_failed');
-      for (const b of (data ?? []) as BatchRow[]) known.add(`${b.mode}:${b.merkle_root}`);
+      for (const b of (data ?? []) as BatchRow[]) {
+        const key = `${b.mode}:${b.merkle_root}`;
+        const set = ours.get(key) ?? new Set<string>();
+        for (const h of b.sent_tx_hashes ?? []) set.add(h.toLowerCase());
+        ours.set(key, set);
+      }
     }
 
     for (const e of events) {
       const detail = { txHash: e.txHash, logIndex: e.logIndex, block: e.blockNumber.toString() };
-      if (e.kind === 'WriterChanged') {
-        if (e.newWriter.toLowerCase() !== writer.toLowerCase()) {
-          await alert('writer_changed', `writer_changed:${e.txHash}:${e.logIndex}`, {
-            ...detail, previousWriter: e.previousWriter.toLowerCase(), newWriter: e.newWriter.toLowerCase(),
-          });
+      switch (e.kind) {
+        case 'WriterChanged':
+          if (e.newWriter.toLowerCase() !== writer.toLowerCase()) {
+            await mustAlert('writer_changed', `writer_changed:${e.txHash}:${e.logIndex}`, {
+              ...detail, previousWriter: e.previousWriter.toLowerCase(), newWriter: e.newWriter.toLowerCase(),
+            });
+          }
+          break;
+        case 'OwnershipTransferStarted':
+        case 'OwnershipTransferred':
+          // The constructor's transfer from the zero address is the deploy itself.
+          if (e.previousOwner.toLowerCase() !== ZERO_ADDRESS) {
+            await mustAlert('owner_changed', `owner_changed:${e.txHash}:${e.logIndex}`, {
+              ...detail, event: e.kind, previousOwner: e.previousOwner.toLowerCase(), newOwner: e.newOwner.toLowerCase(),
+            });
+          }
+          break;
+        default: {
+          const mode = e.kind === 'RootAnchored' ? 'daily_batch' : 'per_event';
+          const sent = ours.get(`${mode}:${e.value.toLowerCase()}`);
+          if (!sent?.has(e.txHash.toLowerCase())) {
+            summary.unmatched++;
+            await mustAlert('unmatched_event', `unmatched:${e.txHash}:${e.logIndex}`, {
+              ...detail, event: e.kind, value: e.value.toLowerCase(), reason: sent ? 'unknown_tx' : 'unknown_value',
+            });
+          }
         }
-        continue;
-      }
-      const mode = e.kind === 'RootAnchored' ? 'daily_batch' : 'per_event';
-      if (!known.has(`${mode}:${e.value.toLowerCase()}`)) {
-        summary.unmatched++;
-        await alert('unmatched_event', `unmatched:${e.txHash}:${e.logIndex}`, { ...detail, event: e.kind, value: e.value.toLowerCase() });
       }
     }
   }

@@ -30,13 +30,17 @@ export const registryAbi = parseAbi([
   'event OwnershipAnchored(bytes32 indexed ownershipId, uint64 timestamp)',
   'event RootAnchored(bytes32 indexed merkleRoot, uint64 timestamp)',
   'event WriterChanged(address indexed previousWriter, address indexed newWriter)',
+  // Watched so an owner-key change alerts (OpenZeppelin Ownable2Step).
+  'event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner)',
+  'event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)',
 ]);
 
 export type AnchorFunction = 'anchor' | 'anchorRoot';
 
 export type RegistryEvent =
   | { kind: 'OwnershipAnchored' | 'RootAnchored'; value: Hex; txHash: Hex; logIndex: number; blockNumber: bigint }
-  | { kind: 'WriterChanged'; previousWriter: Hex; newWriter: Hex; txHash: Hex; logIndex: number; blockNumber: bigint };
+  | { kind: 'WriterChanged'; previousWriter: Hex; newWriter: Hex; txHash: Hex; logIndex: number; blockNumber: bigint }
+  | { kind: 'OwnershipTransferStarted' | 'OwnershipTransferred'; previousOwner: Hex; newOwner: Hex; txHash: Hex; logIndex: number; blockNumber: bigint };
 
 export interface SignedAnchor {
   readonly hash: Hex;
@@ -119,6 +123,9 @@ export const createViemChainPort = (config: AnchorConfig, signer: KmsSigner): Ch
             return [{ kind: 'RootAnchored', value: log.args.merkleRoot, ...base }];
           case 'WriterChanged':
             return [{ kind: 'WriterChanged', previousWriter: log.args.previousWriter, newWriter: log.args.newWriter, ...base }];
+          case 'OwnershipTransferStarted':
+          case 'OwnershipTransferred':
+            return [{ kind: log.eventName, previousOwner: log.args.previousOwner, newOwner: log.args.newOwner, ...base }];
           default:
             return [];
         }

@@ -25,7 +25,7 @@ export const anchorRpc = (tables: Tables) => (fn: string, args: Row) => {
     tables.anchor_batches.push({
       id, mode: args.p_mode, batch_day: args.p_batch_day, cutoff_at: args.p_cutoff_at, merkle_root: args.p_merkle_root,
       padding_leaf: args.p_padding_leaf, leaf_count: leaves.length, chain_id: args.p_chain_id,
-      registry_address: args.p_registry_address, status: 'pending', tx_hash: null, tx_nonce: null, attempts: 0,
+      registry_address: args.p_registry_address, status: 'pending', tx_hash: null, tx_nonce: null, attempts: 0, sent_tx_hashes: [],
       next_attempt_at: '1970-01-01T00:00:00.000Z', last_error: null, submitted_at: null, block_number: null,
       anchored_at: null, created_at: new Date(tables.anchor_batches.length).toISOString(),
     });
