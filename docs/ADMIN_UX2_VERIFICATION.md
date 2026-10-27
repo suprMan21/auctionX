@@ -71,3 +71,10 @@ that Confirm stays disabled until reason + confirmation are valid.
 
 No migration. Backend first (the frontend sends `status=NEEDS_ACTION`, which the old backend refuses with 400), then
 `scripts/deploy-frontend.sh staging`. After the push run `scripts/verify-backend-deploy.sh`.
+
+## Follow-up after Boss click-through (2026-10-27)
+
+- Boss click-through on staging: looks good.
+- Token label was hard to read (`chip_004 · …936980 · sn …0351DE` on one line). New `components/ChipName.tsx`: name on
+  line 1, "Serial … · Hardware ID …" small and grey on line 2; screen readers get one comma-separated phrase. Used on
+  the Tokens list, token page title and re-issue cards (`442c047`, frontend only). Frontend vitest 270, tsc 0, eslint 0.

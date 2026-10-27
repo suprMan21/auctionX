@@ -148,7 +148,8 @@ token sale without admin tooling.
   - [x] **UX-2 ✅ live on staging 2026-10-26** (`81cb95b`, `docs/ADMIN_UX2_VERIFICATION.md`): shared AdminTable,
         search on Enter + out of URL, chip combobox, role radios, price card buttons, re-issues open on Needs action,
         paging, stuck re-issue fee → its request. Security review: no blockers.
-    - [ ] Boss: click through (chip list opens on dialog open; resize; row click; price half-typed date).
+    - [x] Boss click-through done 2026-10-27. Token label two-line fix `442c047` (frontend only):
+          - [ ] Boss: push `dev` + `scripts/deploy-frontend.sh staging`.
   - [ ] **UX-3**: nav sections + Settings page, audit-log links, phone polish, **dashboard growth** (Boss 2026-10-27):
         Tokens added today / active and Accounts new today / active as tiles, each with a chart (Month / Year presets
         + custom range), counts only, by permission.
