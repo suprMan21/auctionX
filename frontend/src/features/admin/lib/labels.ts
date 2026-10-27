@@ -111,6 +111,7 @@ const AUDIT_ACTION: Record<string, string> = {
   delete_window_set: 'Delete waiting time changed',
   role_grant: 'Staff role granted',
   role_change: 'Staff role changed',
+  account_type_change: 'Account type changed',
   role_revoke: 'Staff role removed',
   role_set: 'Staff role changed',
   // Older account actions

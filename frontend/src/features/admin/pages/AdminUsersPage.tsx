@@ -93,7 +93,7 @@ export const AdminUsersPage = () => {
       ),
     },
     { key: 'name', header: 'Display name', cell: (a) => a.display_name ?? NONE },
-    { key: 'type', header: 'Type', cell: (a) => <AccountTypeBadge type={a.account_type} creatorPending={a.creator_pending} /> },
+    { key: 'type', header: 'Type', cell: (a) => <AccountTypeBadge type={a.account_type} creatorPending={a.creator_pending} override={a.creator_override} /> },
     { key: 'role', header: 'Staff role', cell: (a) => (a.staff_role ? (ROLE_LABELS[a.staff_role] ?? a.staff_role) : NONE) },
     { key: 'status', header: 'Status', cell: (a) => <AccountStatusBadge status={a.status} /> },
     { key: 'signin', header: 'Last sign-in', className: 'text-gray-400', cell: (a) => formatDay(a.last_sign_in_at) },

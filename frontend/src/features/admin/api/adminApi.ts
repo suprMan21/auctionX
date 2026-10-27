@@ -178,6 +178,13 @@ export const adminApi = {
     }));
   },
 
+  /** Collector / Creator. `override` makes a creator without an ID check (admin + super admin). */
+  async setAccountType(id: string, type: 'collector' | 'creator', override: boolean, reason: string): Promise<void> {
+    parseEnvelope(actionResultSchema, await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/type`, {
+      method: 'PUT', body: JSON.stringify({ type, override, reason }),
+    }));
+  },
+
   async getAccountSettings(): Promise<AccountSettings> {
     return parseEnvelope(accountSettingsSchema, await adminFetch<unknown>('/account-settings'));
   },

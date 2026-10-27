@@ -49,6 +49,16 @@ export const setRoleBodySchema = z.object({
   reason,
 }).strict();
 
+export const setTypeBodySchema = z.object({
+  type: z.enum(['collector', 'creator']),
+  /** Creator without an identity check. Only with type creator. */
+  override: z.boolean().default(false),
+  reason,
+}).strict().refine((b) => !(b.type === 'collector' && b.override), {
+  message: 'Override only applies when making an account a creator',
+  path: ['override'],
+});
+
 export const setDeleteWindowBodySchema = z.object({
   hours: z.number().int().min(1).max(8760),
   reason,

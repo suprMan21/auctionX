@@ -2814,6 +2814,8 @@ export type Database = {
           billing_country: string | null
           bio: string | null
           created_at: string
+          creator_override_at: string | null
+          creator_override_by: string | null
           creator_requested_at: string | null
           deleted_at: string | null
           display_name: string | null
@@ -2865,6 +2867,8 @@ export type Database = {
           billing_country?: string | null
           bio?: string | null
           created_at?: string
+          creator_override_at?: string | null
+          creator_override_by?: string | null
           creator_requested_at?: string | null
           deleted_at?: string | null
           display_name?: string | null
@@ -2916,6 +2920,8 @@ export type Database = {
           billing_country?: string | null
           bio?: string | null
           created_at?: string
+          creator_override_at?: string | null
+          creator_override_by?: string | null
           creator_requested_at?: string | null
           deleted_at?: string | null
           display_name?: string | null
@@ -3160,6 +3166,10 @@ export type Database = {
         Args: { p_admin: string; p_target: string }
         Returns: Json
       }
+      admin_get_account_base: {
+        Args: { p_admin: string; p_target: string }
+        Returns: Json
+      }
       admin_get_account_tokens: {
         Args: { p_admin: string; p_target: string }
         Returns: Json
@@ -3260,6 +3270,16 @@ export type Database = {
           p_reason: string
           p_role: string
           p_target: string
+        }
+        Returns: Json
+      }
+      admin_set_account_type: {
+        Args: {
+          p_admin: string
+          p_override: boolean
+          p_reason: string
+          p_target: string
+          p_type: string
         }
         Returns: Json
       }
