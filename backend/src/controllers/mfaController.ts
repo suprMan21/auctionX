@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
 import { AppError } from '../lib/errors';
 import { isAdminTwoFactorRequired, isTwoFactorRequired } from '../lib/featureFlags';
-import { callerFrom } from '../middleware/mfaGates';
+import { callerFrom, STEP_UP_HEADER } from '../middleware/mfaGates';
 import * as mfa from '../lib/mfa/mfaService';
 import { getMfaStore } from '../lib/mfa/store';
 
@@ -20,7 +20,8 @@ const credentialBase = {
   rawId: base64url.max(1024),
   type: z.literal('public-key'),
   clientExtensionResults: z.record(z.string(), z.unknown()).default({}),
-  authenticatorAttachment: z.enum(['platform', 'cross-platform']).optional(),
+  // Native toJSON() and some password-manager extensions send null here.
+  authenticatorAttachment: z.enum(['platform', 'cross-platform']).nullish().transform((v) => v ?? undefined),
 };
 
 const registrationResponse = z.object({
@@ -32,7 +33,7 @@ const registrationResponse = z.object({
     publicKey: base64url.optional(),
     publicKeyAlgorithm: z.number().int().optional(),
     authenticatorData: base64url.optional(),
-  }).strict(),
+  }).passthrough(),
 }).strict();
 
 const authenticationResponse = z.object({
@@ -41,25 +42,33 @@ const authenticationResponse = z.object({
     clientDataJSON: base64url,
     authenticatorData: base64url,
     signature: base64url,
-    userHandle: base64url.optional(),
-  }).strict(),
+    userHandle: base64url.nullish().transform((v) => v ?? undefined),
+  }).passthrough(),
 }).strict();
 
 const uuid = z.string().uuid();
 const nickname = z.string().trim().min(1).max(40).regex(/^[^<>\u0000-\u001f]+$/, 'Use letters, numbers and spaces');
 
+const stepUpAction = z.enum([
+  'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen', 'admin_action', 'admin_approve',
+]);
+const targetId = z.string().min(1).max(200).regex(/^[A-Za-z0-9_:.-]+$/);
+const totpCode = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict();
+const backupCode = z.object({ code: z.string().max(32) }).strict();
+
 const schemas = {
   registerVerify: z.object({ challengeId: uuid, nickname, response: registrationResponse }).strict(),
   signIn: z.union([
     z.object({ passkey: z.object({ challengeId: uuid, response: authenticationResponse }).strict() }).strict(),
-    z.object({ totp: z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict() }).strict(),
-    z.object({ recoveryCode: z.object({ code: z.string().max(32) }).strict() }).strict(),
+    z.object({ totp: totpCode }).strict(),
+    z.object({ recoveryCode: backupCode }).strict(),
   ]),
-  stepUpOptions: z.object({
-    action: z.enum(['release', 'transfer_complete', 'price_change', 'factor_remove', 'admin_action', 'admin_approve']),
-    targetId: z.string().min(1).max(200).regex(/^[A-Za-z0-9_:.-]+$/),
-  }).strict(),
-  stepUpVerify: z.object({ challengeId: uuid, response: authenticationResponse }).strict(),
+  stepUpOptions: z.object({ action: stepUpAction, targetId }).strict(),
+  stepUpVerify: z.union([
+    z.object({ challengeId: uuid, response: authenticationResponse }).strict(),
+    z.object({ action: stepUpAction, targetId, totp: totpCode }).strict(),
+    z.object({ action: stepUpAction, targetId, recoveryCode: backupCode }).strict(),
+  ]),
   totpConfirm: z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict(),
   rename: z.object({ nickname }).strict(),
 };
@@ -84,8 +93,10 @@ export const getMfaStatus = async (req: Request, res: Response) => {
   ok(res, await mfa.getStatus(c, isTwoFactorRequired() || staff));
 };
 
+const stepUpHeader = (req: Request): string | undefined => req.get(STEP_UP_HEADER) ?? undefined;
+
 export const postRegisterOptions = async (req: Request, res: Response) => {
-  ok(res, await mfa.passkeyRegisterOptions(caller(req)));
+  ok(res, await mfa.passkeyRegisterOptions(caller(req), stepUpHeader(req)));
 };
 
 export const postRegisterVerify = async (req: Request, res: Response) => {
@@ -112,14 +123,11 @@ export const postStepUpOptions = async (req: Request, res: Response) => {
 
 export const postStepUpVerify = async (req: Request, res: Response) => {
   const body = parse(schemas.stepUpVerify, req.body);
-  ok(res, await mfa.stepUpVerify(caller(req), {
-    challengeId: body.challengeId,
-    response: body.response as unknown as AuthenticationResponseJSON,
-  }));
+  ok(res, await mfa.stepUpVerify(caller(req), body as unknown as mfa.StepUpVerifyInput));
 };
 
 export const postTotpSetup = async (req: Request, res: Response) => {
-  ok(res, await mfa.totpSetup(caller(req)));
+  ok(res, await mfa.totpSetup(caller(req), stepUpHeader(req)));
 };
 
 export const postTotpConfirm = async (req: Request, res: Response) => {
@@ -127,7 +135,7 @@ export const postTotpConfirm = async (req: Request, res: Response) => {
 };
 
 export const postRegenerateCodes = async (req: Request, res: Response) => {
-  ok(res, await mfa.regenerateRecoveryCodes(caller(req)));
+  ok(res, await mfa.regenerateRecoveryCodes(caller(req), stepUpHeader(req)));
 };
 
 export const patchPasskey = async (req: Request, res: Response) => {

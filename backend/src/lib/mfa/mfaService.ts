@@ -40,8 +40,17 @@ import { sendMfaEmail } from './mfaEmails';
 import { getMfaStore, type MfaMethod, type PasskeyRow, type StepUpAction } from './store';
 
 export const STEP_UP_ACTIONS: readonly StepUpAction[] = [
-  'release', 'transfer_complete', 'price_change', 'factor_remove', 'admin_action', 'admin_approve',
+  'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
+  'admin_action', 'admin_approve',
 ];
+
+/**
+ * Changing the sign-in methods themselves may be confirmed with an
+ * authenticator or backup code as well as a passkey: someone who lost their
+ * phone must still be able to add a new passkey and remove the lost one.
+ * Token and admin actions stay passkey only (release decision, Locked 2026-10-03).
+ */
+export const CODE_STEP_UP_ACTIONS: readonly StepUpAction[] = ['factor_add', 'factor_remove', 'recovery_regen'];
 
 export interface Caller {
   userId: string;
@@ -198,9 +207,11 @@ const toBytes = (buf: Buffer): Uint8Array<ArrayBuffer> => {
 
 const userIdBytes = (userId: string): Uint8Array<ArrayBuffer> => toBytes(Buffer.from(userId.replace(/-/g, ''), 'hex'));
 
-export const passkeyRegisterOptions = async (caller: Caller) => {
+export const passkeyRegisterOptions = async (caller: Caller, stepUpToken?: string) => {
   const sessionId = requireSessionId(caller);
-  await assertMayEnrol(caller);
+  const { first } = await assertMayEnrol(caller);
+  // A stolen session must not be able to plant its own passkey.
+  if (!first) await requireFreshCheck(caller, stepUpToken, 'factor_add', 'passkey');
   const cfg = webAuthnConfig();
   const store = getMfaStore();
   const [existing, superAdmin] = await Promise.all([store.listPasskeys(caller.userId), isSuperAdmin(caller.userId)]);
@@ -270,7 +281,7 @@ export const passkeyRegisterVerify = async (
     refuse('invalid_argument', 'This account needs a hardware security key, not a synced passkey.', 'synced_passkey_not_allowed');
   }
 
-  const row = await store.insertPasskey({
+  const inserted = await store.insertPasskey({
     user_id: caller.userId,
     credential_id: info.credential.id,
     public_key: Buffer.from(info.credential.publicKey).toString('base64url'),
@@ -280,10 +291,12 @@ export const passkeyRegisterVerify = async (
     backed_up: info.credentialBackedUp,
     nickname: input.nickname.trim(),
   });
+  if (!inserted) refuse('conflict', 'That passkey is already added', 'already_set_up');
+  const row = inserted!;
 
   const backupCodes = first ? await finishFirstFactor(caller, 'passkey', superAdmin) : null;
   emit(caller, 'enrol', 'passkey', 'ok', superAdmin);
-  sendMfaEmail(caller.email, { kind: 'factor_added', method: 'passkey', nickname: row.nickname });
+  notify(caller, superAdmin, { kind: 'factor_added', method: 'passkey', nickname: row.nickname });
 
   return {
     passkey: { id: row.id, nickname: row.nickname, synced: row.backed_up, createdAt: row.created_at },
@@ -373,26 +386,70 @@ export type SignInInput =
   | { totp: { code: string } }
   | { recoveryCode: { code: string } };
 
-const assertNotLocked = async (caller: Caller, superAdmin: boolean, method: MfaMethod): Promise<void> => {
-  const until = await getMfaStore().lockedUntil(caller.userId, nowIso());
-  if (until) {
-    emit(caller, 'sign_in', method, 'mfa_locked', superAdmin);
-    throw new AppError('resource_exhausted', 'Too many wrong codes. Try again in 15 minutes, or use your passkey.', {
-      reason: 'mfa_locked',
-    });
+type CodeInput = { totp: { code: string } } | { recoveryCode: { code: string } };
+type CodeAction = 'sign_in' | 'step_up_issue' | 'enrol';
+
+const LOCKED_MESSAGE = 'Too many wrong codes. Try again later, or use your passkey.';
+
+/**
+ * Counts the attempt before the code is checked (one locked database call), so
+ * a burst of parallel requests cannot get more than 5 tries per lock window.
+ */
+const startCodeAttempt = async (caller: Caller, method: MfaMethod, superAdmin: boolean, action: CodeAction): Promise<void> => {
+  const { lockedUntil, newlyLocked } = await getMfaStore().beginCodeAttempt(caller.userId);
+  if (!lockedUntil) return;
+  if (newlyLocked) {
+    emit(caller, 'lockout', method, 'mfa_locked', superAdmin);
+    notify(caller, superAdmin, { kind: 'code_entry_locked' });
   }
+  emit(caller, action, method, 'mfa_locked', superAdmin);
+  throw new AppError('resource_exhausted', LOCKED_MESSAGE, { reason: 'mfa_locked' });
 };
 
-const wrongCode = async (caller: Caller, method: MfaMethod, superAdmin: boolean): Promise<never> => {
-  const lockedUntil = await getMfaStore().recordFailure(caller.userId);
-  emit(caller, 'sign_in', method, 'invalid_code', superAdmin);
-  if (lockedUntil) emit(caller, 'lockout', method, 'mfa_locked', superAdmin);
+const wrongCode = (caller: Caller, method: MfaMethod, superAdmin: boolean, action: CodeAction): never => {
+  emit(caller, action, method, 'invalid_code', superAdmin);
   return refuse('invalid_argument', 'That code did not work. Check it and try again.', 'invalid_code');
+};
+
+/**
+ * Checks an authenticator or backup code (spending it). Returns the method and,
+ * for a backup code, how many are left. Wrong codes throw `invalid_code`.
+ */
+const checkCode = async (
+  caller: Caller,
+  input: CodeInput,
+  superAdmin: boolean,
+  action: CodeAction,
+): Promise<{ method: 'totp' | 'recovery_code'; left: number | null }> => {
+  const store = getMfaStore();
+
+  if ('totp' in input) {
+    if (superAdmin) refuse('permission_denied', 'This account signs in with its security key.', 'not_available');
+    await startCodeAttempt(caller, 'totp', superAdmin, action);
+    const totp = await store.getTotp(caller.userId);
+    if (!totp?.verified_at) return wrongCode(caller, 'totp', superAdmin, action);
+    const step = matchTotp(openSecret(totp.secret_enc, caller.userId), input.totp.code.trim(), Date.now());
+    // A matched step at or below the last one used is a replay, and fails the same way.
+    if (step === null || !(await store.useTotpStep(caller.userId, step, false))) {
+      return wrongCode(caller, 'totp', superAdmin, action);
+    }
+    await store.clearFailures(caller.userId);
+    return { method: 'totp', left: null };
+  }
+
+  await startCodeAttempt(caller, 'recovery_code', superAdmin, action);
+  const normalised = normaliseRecoveryCode(input.recoveryCode.code);
+  // Junk that can never be a code still costs an attempt.
+  if (!normalised) return wrongCode(caller, 'recovery_code', superAdmin, action);
+  const left = await store.useRecoveryCode(caller.userId, hashRecoveryCode(caller.userId, normalised));
+  if (left === null) return wrongCode(caller, 'recovery_code', superAdmin, action);
+  await store.clearFailures(caller.userId);
+  notify(caller, superAdmin, { kind: 'recovery_code_used', left });
+  return { method: 'recovery_code', left };
 };
 
 export const signInVerify = async (caller: Caller, input: SignInInput) => {
   requireSessionId(caller);
-  const store = getMfaStore();
   const superAdmin = await isSuperAdmin(caller.userId);
 
   if ('passkey' in input) {
@@ -407,39 +464,30 @@ export const signInVerify = async (caller: Caller, input: SignInInput) => {
     return { method: 'passkey' as const, backupCodesLeft: null };
   }
 
-  if ('totp' in input) {
-    if (superAdmin) refuse('permission_denied', 'This account signs in with its security key.', 'not_available');
-    await assertNotLocked(caller, superAdmin, 'totp');
-    const totp = await store.getTotp(caller.userId);
-    if (!totp?.verified_at) return wrongCode(caller, 'totp', superAdmin);
-    const step = matchTotp(openSecret(totp.secret_enc, caller.userId), input.totp.code.trim(), Date.now());
-    // A matched step at or below the last one used is a replay, and fails the same way.
-    if (step === null || !(await store.useTotpStep(caller.userId, step, false))) {
-      return wrongCode(caller, 'totp', superAdmin);
-    }
-    await store.clearFailures(caller.userId);
-    await markVerified(caller, 'totp', superAdmin);
-    emit(caller, 'sign_in', 'totp', 'ok', superAdmin);
-    return { method: 'totp' as const, backupCodesLeft: null };
-  }
-
-  await assertNotLocked(caller, superAdmin, 'recovery_code');
-  const normalised = normaliseRecoveryCode(input.recoveryCode.code);
-  // Junk that can never be a code still counts: it costs a guess either way.
-  if (!normalised) return wrongCode(caller, 'recovery_code', superAdmin);
-  const left = await store.useRecoveryCode(caller.userId, hashRecoveryCode(caller.userId, normalised));
-  if (left === null) return wrongCode(caller, 'recovery_code', superAdmin);
-  await store.clearFailures(caller.userId);
-  await markVerified(caller, 'recovery_code', superAdmin);
-  emit(caller, 'sign_in', 'recovery_code', 'ok', superAdmin);
-  sendMfaEmail(caller.email, { kind: 'recovery_code_used', left });
+  const { method, left } = await checkCode(caller, input, superAdmin, 'sign_in');
+  await markVerified(caller, method, superAdmin);
+  emit(caller, 'sign_in', method, 'ok', superAdmin);
   if (superAdmin) sendMfaEmail(breakGlassAlertTo(caller), { kind: 'break_glass_sign_in', method: 'recovery_code' });
-  return { method: 'recovery_code' as const, backupCodesLeft: left };
+  return { method, backupCodesLeft: left };
 };
 
 /** Boss's daily inbox when set; otherwise the account's own address. */
 const breakGlassAlertTo = (caller: Caller): string | null =>
   process.env.BREAK_GLASS_ALERT_EMAIL?.trim() || caller.email;
+
+/** The account's own address, plus the alert inbox for the break-glass account. */
+const notify = (caller: Caller, superAdmin: boolean, email: Parameters<typeof sendMfaEmail>[1]): void => {
+  sendMfaEmail(caller.email, email);
+  const alert = superAdmin ? breakGlassAlertTo(caller) : null;
+  if (alert && alert.toLowerCase() !== (caller.email ?? '').toLowerCase()) sendMfaEmail(alert, email);
+};
+
+/** Spends a step-up grant for this action, or refuses with `step_up_required`. */
+const requireFreshCheck = async (caller: Caller, token: string | undefined, action: StepUpAction, targetId: string) => {
+  if (!(await consumeStepUp(caller, token, action, targetId))) {
+    refuse('permission_denied', 'Confirm it is you to continue', 'step_up_required');
+  }
+};
 
 // ── Step-up ─────────────────────────────────────────────────────────────────
 
@@ -448,17 +496,11 @@ export const stepUpOptions = async (caller: Caller, input: { action: StepUpActio
   return assertionOptions(caller, 'step_up', input);
 };
 
-export const stepUpVerify = async (caller: Caller, input: { challengeId: string; response: AuthenticationResponseJSON }) => {
-  const sessionId = requireSessionId(caller);
-  await assertVerifiedSession(caller);
-  const superAdmin = await isSuperAdmin(caller.userId);
-  const ok = await verifyAssertion(caller, 'step_up', input.challengeId, input.response, superAdmin);
-  if (!ok) {
-    emit(caller, 'step_up_issue', 'passkey', 'invalid_code', superAdmin);
-    refuse('invalid_argument', 'That passkey check did not work. Try again.', 'passkey_invalid');
-  }
-  const action = ok!.challenge.action as StepUpAction;
-  const targetId = ok!.challenge.target_id as string;
+export type StepUpVerifyInput =
+  | { challengeId: string; response: AuthenticationResponseJSON }
+  | ({ action: StepUpAction; targetId: string } & CodeInput);
+
+const issueGrant = async (caller: Caller, sessionId: string, action: StepUpAction, targetId: string) => {
   const token = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + STEP_UP_TTL_MS).toISOString();
   await getMfaStore().createGrant({
@@ -469,8 +511,33 @@ export const stepUpVerify = async (caller: Caller, input: { challengeId: string;
     target_id: targetId,
     expires_at: expiresAt,
   });
-  emit(caller, 'step_up_issue', 'passkey', 'ok', superAdmin, action);
   return { stepUpToken: token, expiresAt, action, targetId };
+};
+
+export const stepUpVerify = async (caller: Caller, input: StepUpVerifyInput) => {
+  const sessionId = requireSessionId(caller);
+  await assertVerifiedSession(caller);
+  const superAdmin = await isSuperAdmin(caller.userId);
+
+  if ('challengeId' in input) {
+    const ok = await verifyAssertion(caller, 'step_up', input.challengeId, input.response, superAdmin);
+    if (!ok) {
+      emit(caller, 'step_up_issue', 'passkey', 'invalid_code', superAdmin);
+      refuse('invalid_argument', 'That passkey check did not work. Try again.', 'passkey_invalid');
+    }
+    const action = ok!.challenge.action as StepUpAction;
+    const grant = await issueGrant(caller, sessionId, action, ok!.challenge.target_id as string);
+    emit(caller, 'step_up_issue', 'passkey', 'ok', superAdmin, action);
+    return grant;
+  }
+
+  if (!CODE_STEP_UP_ACTIONS.includes(input.action)) {
+    refuse('invalid_argument', 'Use your passkey to confirm this', 'no_passkey');
+  }
+  const { method } = await checkCode(caller, input, superAdmin, 'step_up_issue');
+  const grant = await issueGrant(caller, sessionId, input.action, input.targetId);
+  emit(caller, 'step_up_issue', method, 'ok', superAdmin, input.action);
+  return grant;
 };
 
 /** Spends a grant. True only for this user, this session, this action and this target, once. */
@@ -493,12 +560,13 @@ export const consumeStepUp = async (
 
 // ── Authenticator app ───────────────────────────────────────────────────────
 
-export const totpSetup = async (caller: Caller) => {
+export const totpSetup = async (caller: Caller, stepUpToken?: string) => {
   requireSessionId(caller);
   if (await isSuperAdmin(caller.userId)) {
     refuse('permission_denied', 'This account signs in with its security key only.', 'not_available');
   }
-  await assertMayEnrol(caller);
+  const { first } = await assertMayEnrol(caller);
+  if (!first) await requireFreshCheck(caller, stepUpToken, 'factor_add', 'totp');
   const secret = generateTotpSecret();
   const started = await getMfaStore().startTotp(caller.userId, sealSecret(secret, caller.userId));
   if (!started) refuse('conflict', 'An authenticator app is already set up', 'already_set_up');
@@ -512,12 +580,12 @@ export const totpConfirm = async (caller: Caller, input: { code: string }) => {
   requireSessionId(caller);
   const { first } = await assertMayEnrol(caller);
   const store = getMfaStore();
-  await assertNotLocked(caller, false, 'totp');
   const totp = await store.getTotp(caller.userId);
   if (!totp || totp.verified_at) refuse('failed_precondition', 'Start the authenticator app setup again', 'not_available');
+  await startCodeAttempt(caller, 'totp', false, 'enrol');
   const step = matchTotp(openSecret(totp!.secret_enc, caller.userId), input.code.trim(), Date.now());
   if (step === null || !(await store.useTotpStep(caller.userId, step, true))) {
-    return wrongCode(caller, 'totp', false);
+    return wrongCode(caller, 'totp', false, 'enrol');
   }
   await store.clearFailures(caller.userId);
   const backupCodes = first ? await finishFirstFactor(caller, 'totp', false) : null;
@@ -528,14 +596,17 @@ export const totpConfirm = async (caller: Caller, input: { code: string }) => {
 
 // ── Backup codes ────────────────────────────────────────────────────────────
 
-export const regenerateRecoveryCodes = async (caller: Caller) => {
+export const regenerateRecoveryCodes = async (caller: Caller, stepUpToken?: string) => {
   await assertVerifiedSession(caller);
   const summary = await factorSummary(caller.userId);
   if (summary.total === 0) refuse('failed_precondition', 'Add a passkey first', 'no_passkey');
+  // A stolen session must not be able to void the owner's codes and take a set.
+  await requireFreshCheck(caller, stepUpToken, 'recovery_regen', 'recovery_codes');
   const codes = generateRecoveryCodes();
   await getMfaStore().replaceRecoveryCodes(caller.userId, codes.map((c) => hashRecoveryCode(caller.userId, c)));
-  emit(caller, 'recovery_regen', 'recovery_code', 'ok', await isSuperAdmin(caller.userId));
-  sendMfaEmail(caller.email, { kind: 'recovery_codes_new' });
+  const superAdmin = await isSuperAdmin(caller.userId);
+  emit(caller, 'recovery_regen', 'recovery_code', 'ok', superAdmin);
+  notify(caller, superAdmin, { kind: 'recovery_codes_new' });
   return { backupCodes: codes };
 };
 
@@ -556,29 +627,27 @@ export const renamePasskey = async (caller: Caller, id: string, nickname: string
  */
 export const removePasskey = async (caller: Caller, id: string) => {
   const store = getMfaStore();
-  const [summary, superAdmin] = await Promise.all([factorSummary(caller.userId), isSuperAdmin(caller.userId)]);
-  const target = summary.passkeys.find((p) => p.id === id);
+  const [passkeys, superAdmin] = await Promise.all([store.listPasskeys(caller.userId), isSuperAdmin(caller.userId)]);
+  const target = passkeys.find((p) => p.id === id);
   if (!target) throw new AppError('not_found', 'Passkey not found');
-  const remainingUsable = superAdmin
-    ? usablePasskeys(summary.passkeys, true).filter((p) => p.id !== id).length
-    : summary.total - 1;
-  if (remainingUsable < 1) {
+  const result = await store.removeFactor(caller.userId, 'passkey', id, superAdmin);
+  if (result === 'not_found') throw new AppError('not_found', 'Passkey not found');
+  if (result === 'last_factor') {
     refuse('failed_precondition', 'Add another passkey before removing this one', 'last_factor');
   }
-  await store.deletePasskey(caller.userId, id);
   emit(caller, 'remove', 'passkey', 'ok', superAdmin);
-  sendMfaEmail(caller.email, { kind: 'factor_removed', method: 'passkey', nickname: target.nickname });
+  notify(caller, superAdmin, { kind: 'factor_removed', method: 'passkey', nickname: target.nickname });
   return { removed: id };
 };
 
 export const removeTotp = async (caller: Caller) => {
-  const summary = await factorSummary(caller.userId);
-  if (!summary.totpConfirmed) throw new AppError('not_found', 'No authenticator app is set up');
-  if (summary.total - 1 < 1) {
+  const superAdmin = await isSuperAdmin(caller.userId);
+  const result = await getMfaStore().removeFactor(caller.userId, 'totp', null, superAdmin);
+  if (result === 'not_found') throw new AppError('not_found', 'No authenticator app is set up');
+  if (result === 'last_factor') {
     refuse('failed_precondition', 'Add a passkey before removing your authenticator app', 'last_factor');
   }
-  await getMfaStore().deleteTotp(caller.userId);
-  emit(caller, 'remove', 'totp', 'ok', false);
-  sendMfaEmail(caller.email, { kind: 'factor_removed', method: 'totp' });
+  emit(caller, 'remove', 'totp', 'ok', superAdmin);
+  notify(caller, superAdmin, { kind: 'factor_removed', method: 'totp' });
   return { removed: 'totp' };
 };

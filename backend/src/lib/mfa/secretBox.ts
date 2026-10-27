@@ -26,7 +26,8 @@ export const openSecret = (envelope: string, userId: string): Buffer => {
   if (version !== VERSION || !ivB64 || !tagB64 || !ctB64) {
     throw new Error('Unrecognised secret envelope');
   }
-  const decipher = createDecipheriv('aes-256-gcm', mfaSecretKey(), Buffer.from(ivB64, 'base64'));
+  // Tag length pinned: a truncated tag must never be accepted.
+  const decipher = createDecipheriv('aes-256-gcm', mfaSecretKey(), Buffer.from(ivB64, 'base64'), { authTagLength: 16 });
   decipher.setAAD(Buffer.from(`am:totp:${userId}`, 'utf8'));
   decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
   return Buffer.concat([decipher.update(Buffer.from(ctB64, 'base64')), decipher.final()]);

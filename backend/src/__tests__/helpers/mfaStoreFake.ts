@@ -23,7 +23,7 @@ export interface MfaFakeState {
   challenges: Array<ChallengeRow & { used_at: string | null }>;
   sessions: Map<string, MfaSessionRow>;
   grants: Array<{ token_hash: string; user_id: string; session_id: string; action: StepUpAction; target_id: string; expires_at: string; used_at: string | null }>;
-  failures: Map<string, { failed: number; locked_until: string | null }>;
+  failures: Map<string, { failed: number; locked_until: string | null; lock_count: number }>;
   staff: Map<string, string>;
   /** Set to make the next call of that method throw like a database error. */
   failNext: Set<keyof MfaStore>;
@@ -59,7 +59,7 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
     },
     async insertPasskey(row: NewPasskey) {
       guard('insertPasskey');
-      if (st.passkeys.some((p) => p.credential_id === row.credential_id)) throw new Error('duplicate credential');
+      if (st.passkeys.some((p) => p.credential_id === row.credential_id)) return null;
       const full: PasskeyRow = { ...row, id: randomUUID(), created_at: new Date().toISOString(), last_used_at: null };
       st.passkeys.push(full);
       return full;
@@ -78,10 +78,23 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
       p.nickname = nickname;
       return true;
     },
-    async deletePasskey(userId, id) {
-      const before = st.passkeys.length;
-      st.passkeys = st.passkeys.filter((x) => !(x.id === id && x.user_id === userId));
-      return st.passkeys.length < before;
+    // Same rules as remove_mfa_factor (the row lock is proven by the live SQL test).
+    async removeFactor(userId, kind, id, breakGlass) {
+      guard('removeFactor');
+      const mine = st.passkeys.filter((p) => p.user_id === userId);
+      const totp = st.totp.get(userId);
+      const total = mine.filter((p) => !breakGlass || !p.backed_up).length + (!breakGlass && totp?.verified_at ? 1 : 0);
+      if (kind === 'passkey') {
+        const target = mine.find((p) => p.id === id);
+        if (!target) return 'not_found';
+        if ((!breakGlass || !target.backed_up) && total <= 1) return 'last_factor';
+        st.passkeys = st.passkeys.filter((p) => p.id !== id);
+        return 'removed';
+      }
+      if (!totp?.verified_at) return 'not_found';
+      if (!breakGlass && total <= 1) return 'last_factor';
+      st.totp.delete(userId);
+      return 'removed';
     },
     async getTotp(userId) {
       return st.totp.get(userId) ?? null;
@@ -99,9 +112,6 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
       cur.last_used_step = step;
       if (confirm) cur.verified_at = new Date().toISOString();
       return true;
-    },
-    async deleteTotp(userId) {
-      return st.totp.delete(userId);
     },
     async replaceRecoveryCodes(userId, hashes) {
       guard('replaceRecoveryCodes');
@@ -159,17 +169,23 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
       const f = st.failures.get(userId);
       return f?.locked_until && f.locked_until > nowIso ? f.locked_until : null;
     },
-    async recordFailure(userId) {
-      const now = new Date();
-      const f = st.failures.get(userId) ?? { failed: 0, locked_until: null };
-      if (f.locked_until && f.locked_until <= now.toISOString()) {
+    // Same rules as begin_mfa_code_attempt.
+    async beginCodeAttempt(userId) {
+      guard('beginCodeAttempt');
+      const now = Date.now();
+      const f = st.failures.get(userId) ?? { failed: 0, locked_until: null, lock_count: 0 };
+      st.failures.set(userId, f);
+      if (f.locked_until && f.locked_until > new Date(now).toISOString()) return { lockedUntil: f.locked_until, newlyLocked: false };
+      if (f.failed >= 5) {
+        const mins = Math.min(15 * 4 ** Math.min(f.lock_count, 4), 24 * 60);
+        f.locked_until = new Date(now + mins * 60 * 1000).toISOString();
         f.failed = 0;
-        f.locked_until = null;
+        f.lock_count += 1;
+        return { lockedUntil: f.locked_until, newlyLocked: true };
       }
       f.failed += 1;
-      if (f.failed >= 5 && !f.locked_until) f.locked_until = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
-      st.failures.set(userId, f);
-      return f.locked_until;
+      f.locked_until = null;
+      return { lockedUntil: null, newlyLocked: false };
     },
     async clearFailures(userId) {
       st.failures.delete(userId);

@@ -1,4 +1,5 @@
--- S-2FA Ph1 — live checks for 20261027000006 (second factors, marker, step-up).
+-- S-2FA Ph1 — live checks for 20261027000006 + 20261027000007 (second factors,
+-- marker, step-up; review fixes: counted-before-checked attempts, locked removal).
 --
 -- Leaves NOTHING behind: one DO block that ends by raising an exception with
 -- the results, so every change (throwaway accounts and their rows) rolls back.
@@ -12,7 +13,7 @@
 -- after the first commits, so it matches nothing. Shown here sequentially.
 --
 -- Run: supabase db query --linked -f supabase/tests/s_2fa_live.sql
--- Expect: ERROR  P0001: RESULTS {"ok": 16, "total": 16, "failures": {}}
+-- Expect: ERROR  P0001: RESULTS {"ok": 19, "total": 19, "failures": {}}
 
 DO $$
 DECLARE
@@ -27,7 +28,7 @@ DECLARE
   v_state TEXT;
   v_n     INTEGER;
   v_id    UUID;
-  v_lock  TIMESTAMPTZ;
+  v_j     JSONB;
   v_arr   TEXT[];
   v_res   JSONB := '{}'::jsonb;
   v_fail  JSONB;
@@ -58,7 +59,8 @@ BEGIN
 
   -- 03. The functions are service_role only.
   v_ok := true;
-  FOREACH v_t IN ARRAY ARRAY['public.replace_recovery_codes(uuid, text[])', 'public.record_mfa_failure(uuid)',
+  FOREACH v_t IN ARRAY ARRAY['public.replace_recovery_codes(uuid, text[])', 'public.begin_mfa_code_attempt(uuid)',
+                             'public.remove_mfa_factor(uuid, text, uuid, boolean)',
                              'public.account_delete_blockers(uuid)'] LOOP
     v_ok := v_ok AND to_regprocedure(v_t) IS NOT NULL
       AND NOT has_function_privilege('anon', v_t, 'EXECUTE')
@@ -96,16 +98,27 @@ BEGIN
   v_state := v_state || '/' || v_n::text;
   v_res := v_res || jsonb_build_object('06_code_used_once', CASE WHEN v_state = '1/0' THEN 'ok' ELSE 'FAIL ' || v_state END);
 
-  -- 07. Lockout: 4 wrong → no lock, 5th → 15-minute lock, an expired lock starts a fresh count.
-  FOR i IN 1..4 LOOP v_lock := record_mfa_failure(v_a); END LOOP;
-  v_state := CASE WHEN v_lock IS NULL THEN 'free4' ELSE 'locked4' END;
-  v_lock := record_mfa_failure(v_a);
-  v_state := v_state || CASE WHEN v_lock BETWEEN now() + interval '14 minutes' AND now() + interval '16 minutes' THEN '+locked5' ELSE '+bad5' END;
+  -- 07. Attempts are counted before the code is checked: 5 go ahead, the 6th
+  --     locks for 15 min; while locked nothing is counted; after it runs out the
+  --     next lock is 1 h; record_mfa_failure is gone.
+  v_state := '';
+  FOR i IN 1..5 LOOP
+    v_j := begin_mfa_code_attempt(v_a);
+    v_state := v_state || CASE WHEN v_j->>'locked_until' IS NULL THEN '.' ELSE 'L' END;
+  END LOOP;
+  v_j := begin_mfa_code_attempt(v_a);
+  v_state := v_state || CASE WHEN (v_j->>'newly_locked')::boolean
+    AND (v_j->>'locked_until')::timestamptz BETWEEN now() + interval '14 minutes' AND now() + interval '16 minutes' THEN '+lock15' ELSE '+bad' END;
+  v_j := begin_mfa_code_attempt(v_a);
+  v_state := v_state || CASE WHEN NOT (v_j->>'newly_locked')::boolean AND v_j->>'locked_until' IS NOT NULL THEN '+held' ELSE '+bad' END;
   UPDATE user_mfa_state SET locked_until = now() - interval '1 second' WHERE user_id = v_a;
-  v_lock := record_mfa_failure(v_a);
-  v_state := v_state || CASE WHEN v_lock IS NULL AND (SELECT failed_attempts FROM user_mfa_state WHERE user_id = v_a) = 1
-                             THEN '+reset' ELSE '+noreset' END;
-  v_res := v_res || jsonb_build_object('07_lockout', CASE WHEN v_state = 'free4+locked5+reset' THEN 'ok' ELSE 'FAIL ' || v_state END);
+  FOR i IN 1..5 LOOP PERFORM begin_mfa_code_attempt(v_a); END LOOP;
+  v_j := begin_mfa_code_attempt(v_a);
+  v_state := v_state || CASE WHEN (v_j->>'locked_until')::timestamptz BETWEEN now() + interval '59 minutes' AND now() + interval '61 minutes'
+    THEN '+lock60' ELSE '+bad' END;
+  v_state := v_state || CASE WHEN to_regprocedure('public.record_mfa_failure(uuid)') IS NULL THEN '+gone' ELSE '+still' END;
+  v_res := v_res || jsonb_build_object('07_attempts_and_lockout',
+    CASE WHEN v_state = '.....+lock15+held+lock60+gone' THEN 'ok' ELSE 'FAIL ' || v_state END);
 
   -- 08. CHECKs refuse NULL and bad values (a CHECK on NULL passes unless coalesced).
   v_state := '';
@@ -130,6 +143,8 @@ BEGIN
   EXCEPTION WHEN check_violation THEN v_state := v_state || 'c'; END;
   BEGIN INSERT INTO user_totp_factors (user_id, secret_enc) VALUES (v_a, 'plaintext');
   EXCEPTION WHEN check_violation THEN v_state := v_state || 't'; END;
+  INSERT INTO step_up_grants (token_hash, user_id, session_id, action, target_id, expires_at)
+  VALUES (repeat('cd', 32), v_a, v_s, 'factor_add', 'passkey', now()), (repeat('ef', 32), v_a, v_s, 'recovery_regen', 'recovery_codes', now());
   v_res := v_res || jsonb_build_object('08_checks_refuse_bad_rows', CASE WHEN v_state = 'psnmghkct' THEN 'ok' ELSE 'FAIL ' || v_state END);
 
   -- 09. A challenge is spent once, and never after it expires.
@@ -172,6 +187,34 @@ BEGIN
   EXCEPTION WHEN unique_violation THEN v_state := v_state || '+totp'; END;
   v_res := v_res || jsonb_build_object('11_unique', CASE WHEN v_state = 'cred+totp' THEN 'ok' ELSE 'FAIL ' || v_state END);
 
+  -- 17. remove_mfa_factor: never the last factor; a passkey goes when a second one exists.
+  --     (v_a now has one passkey CRED… and a confirmed-looking TOTP row, see 11.)
+  UPDATE user_totp_factors SET verified_at = now() WHERE user_id = v_a;
+  v_state := remove_mfa_factor(v_a, 'totp', NULL, false);                                   -- 2 → 1: removed
+  v_state := v_state || '/' || remove_mfa_factor(v_a, 'passkey',
+    (SELECT id FROM user_passkeys WHERE user_id = v_a LIMIT 1), false);                     -- last: refused
+  v_state := v_state || '/' || remove_mfa_factor(v_a, 'passkey', gen_random_uuid(), false); -- not theirs
+  v_res := v_res || jsonb_build_object('17_remove_never_last',
+    CASE WHEN v_state = 'removed/last_factor/not_found' THEN 'ok' ELSE 'FAIL ' || v_state END);
+
+  -- 18. Break-glass: a synced passkey does not count, so the hardware key is the last one.
+  INSERT INTO user_passkeys (user_id, credential_id, public_key, nickname, backed_up)
+  VALUES (v_b, 'HARDHARDHARDHARDHARD', 'k', 'yubikey', false), (v_b, 'SYNCSYNCSYNCSYNCSYNC', 'k', 'phone', true);
+  v_state := remove_mfa_factor(v_b, 'passkey', (SELECT id FROM user_passkeys WHERE credential_id = 'HARDHARDHARDHARDHARD'), true);
+  v_state := v_state || '/' || remove_mfa_factor(v_b, 'passkey', (SELECT id FROM user_passkeys WHERE credential_id = 'SYNCSYNCSYNCSYNCSYNC'), true);
+  v_res := v_res || jsonb_build_object('18_break_glass_keeps_hardware_key',
+    CASE WHEN v_state = 'last_factor/removed' THEN 'ok' ELSE 'FAIL ' || v_state END);
+
+  -- 19. Bad arguments are refused.
+  v_state := '';
+  BEGIN PERFORM remove_mfa_factor(v_b, 'sms', NULL, false);
+  EXCEPTION WHEN check_violation THEN v_state := 'k'; END;
+  BEGIN PERFORM remove_mfa_factor(v_b, 'passkey', NULL, false);
+  EXCEPTION WHEN check_violation THEN v_state := v_state || 'p'; END;
+  BEGIN PERFORM begin_mfa_code_attempt(NULL);
+  EXCEPTION WHEN check_violation THEN v_state := v_state || 'n'; END;
+  v_res := v_res || jsonb_build_object('19_bad_arguments', CASE WHEN v_state = 'kpn' THEN 'ok' ELSE 'FAIL ' || v_state END);
+
   -- 12. Second-factor rows do not block deleting a retired account.
   INSERT INTO mfa_sessions (session_id, user_id, method, expires_at) VALUES (v_s, v_a, 'passkey', now() + interval '1 hour');
   INSERT INTO user_mfa_state (user_id) VALUES (v_a) ON CONFLICT DO NOTHING;
@@ -201,7 +244,7 @@ BEGIN
   -- 16. Sweep: no SECURITY DEFINER function in public is callable by anon (Every-Session lesson).
   SELECT count(*) INTO v_n FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public' AND p.prosecdef AND has_function_privilege('anon', p.oid, 'EXECUTE')
-     AND p.proname IN ('replace_recovery_codes', 'record_mfa_failure', 'account_delete_blockers');
+     AND p.proname IN ('replace_recovery_codes', 'begin_mfa_code_attempt', 'remove_mfa_factor', 'account_delete_blockers');
   v_res := v_res || jsonb_build_object('16_no_anon_definer', CASE WHEN v_n = 0 THEN 'ok' ELSE 'FAIL ' || v_n END);
 
   SELECT jsonb_object_agg(k, v) INTO v_fail FROM jsonb_each_text(v_res) AS e(k, v) WHERE v <> 'ok';

@@ -111,6 +111,18 @@ const signInWithPasskey = async (app: App, key: SoftPasskey, user = USER, sessio
     .send({ passkey: { challengeId: o.body.data.challengeId, response: key.assert(o.body.data.options.challenge) } });
 };
 
+/** Adds another passkey on an already-verified session (needs a factor_add step-up). */
+const addPasskey = async (app: App, key: SoftPasskey, nickname: string, user = USER, session = S1) => {
+  const token = await stepUp(app, key, 'factor_add', 'passkey', user, session);
+  const extra = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN });
+  const o = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(user, session)).set('X-Step-Up', token);
+  expect(o.status).toBe(200);
+  const v = await request(app).post('/auth/mfa/passkeys/register/verify').set('Authorization', auth(user, session))
+    .send({ challengeId: o.body.data.challengeId, nickname, response: extra.register(o.body.data.options.challenge) });
+  expect(v.status).toBe(201);
+  return extra;
+};
+
 const stepUp = async (app: App, key: SoftPasskey, action: string, targetId: string, user = USER, session = S1) => {
   const o = await request(app).post('/auth/mfa/step-up/options').set('Authorization', auth(user, session)).send({ action, targetId });
   expect(o.status).toBe(200);
@@ -365,13 +377,20 @@ describe('backup codes', () => {
     expect(r.status).toBe(400);
   });
 
-  it('a new set voids the old one and needs a verified session', async () => {
+  it('a new set voids the old one and needs a verified session plus a fresh check', async () => {
     const app = await loadApp();
-    const { res } = await enrolFirst(app);
+    const { key, res } = await enrolFirst(app);
+    const mfaKey = () => key;
     const denied = await request(app).post('/auth/mfa/recovery-codes/regenerate').set('Authorization', auth(USER, S2));
     expect(denied.status).toBe(403);
 
-    const fresh = await request(app).post('/auth/mfa/recovery-codes/regenerate').set('Authorization', auth(USER, S1));
+    // A verified session alone is not enough (a stolen session must not take a new set).
+    const noStepUp = await request(app).post('/auth/mfa/recovery-codes/regenerate').set('Authorization', auth(USER, S1));
+    expect(noStepUp.status).toBe(403);
+    expect(noStepUp.body.reason).toBe('step_up_required');
+
+    const token = await stepUp(app, mfaKey(), 'recovery_regen', 'recovery_codes');
+    const fresh = await request(app).post('/auth/mfa/recovery-codes/regenerate').set('Authorization', auth(USER, S1)).set('X-Step-Up', token);
     expect(fresh.status).toBe(200);
     expect(fresh.body.data.backupCodes).toHaveLength(10);
     const old = await request(app).post('/auth/mfa/sign-in/verify').set('Authorization', auth(USER, S2))
@@ -452,7 +471,14 @@ describe('authenticator app', () => {
     const app = await loadApp();
     const setup = await request(app).post('/auth/mfa/totp/setup').set('Authorization', auth(USER, S1));
     await request(app).post('/auth/mfa/totp/confirm').set('Authorization', auth(USER, S1)).send({ code: codeFor(setup.body.data.secret) });
-    const again = await request(app).post('/auth/mfa/totp/setup').set('Authorization', auth(USER, S1));
+    const noStepUp = await request(app).post('/auth/mfa/totp/setup').set('Authorization', auth(USER, S1));
+    expect(noStepUp.status).toBe(403);
+    expect(noStepUp.body.reason).toBe('step_up_required');
+    // Confirm with the app itself (a code step-up is allowed for changing sign-in methods).
+    const grant = await request(app).post('/auth/mfa/step-up/verify').set('Authorization', auth(USER, S1))
+      .send({ action: 'factor_add', targetId: 'totp', totp: { code: codeFor(setup.body.data.secret, 1) } });
+    expect(grant.status).toBe(200);
+    const again = await request(app).post('/auth/mfa/totp/setup').set('Authorization', auth(USER, S1)).set('X-Step-Up', grant.body.data.stepUpToken);
     expect(again.status).toBe(409);
     expect(again.body.reason).toBe('already_set_up');
   });
@@ -551,10 +577,7 @@ describe('removing a sign-in method', () => {
   it('always needs a step-up, even with the flags off', async () => {
     const app = await loadApp();
     const { key } = await enrolFirst(app);
-    const second = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN });
-    const o = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(USER, S1));
-    await request(app).post('/auth/mfa/passkeys/register/verify').set('Authorization', auth(USER, S1))
-      .send({ challengeId: o.body.data.challengeId, nickname: 'Laptop', response: second.register(o.body.data.options.challenge) });
+    await addPasskey(app, key, 'Laptop');
     const target = mfaState.passkeys.find((p) => p.nickname === 'Laptop')!;
 
     const noStepUp = await request(app).delete(`/auth/mfa/passkeys/${target.id}`).set('Authorization', auth(USER, S1));
@@ -589,6 +612,139 @@ describe('removing a sign-in method', () => {
     const res = await request(app).delete(`/auth/mfa/passkeys/${theirs.id}`).set('Authorization', auth(USER, S1)).set('X-Step-Up', token);
     expect(res.status).toBe(404);
     expect(mfaState.passkeys.filter((p) => p.user_id === OTHER)).toHaveLength(1);
+  });
+});
+
+// ── Security review fixes (2026-10-27) ──────────────────────────────────────
+
+describe('a stolen verified session cannot change the sign-in methods', () => {
+  it('adding a passkey or an authenticator app needs a fresh check', async () => {
+    const app = await loadApp();
+    await enrolFirst(app);
+    const passkey = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(USER, S1));
+    expect(passkey.status).toBe(403);
+    expect(passkey.body.reason).toBe('step_up_required');
+    const totp = await request(app).post('/auth/mfa/totp/setup').set('Authorization', auth(USER, S1));
+    expect(totp.status).toBe(403);
+    expect(mfaState.totp.size).toBe(0);
+  });
+
+  it('a grant for adding a passkey cannot be used to make new backup codes', async () => {
+    const app = await loadApp();
+    const { key } = await enrolFirst(app);
+    const token = await stepUp(app, key, 'factor_add', 'passkey');
+    const res = await request(app).post('/auth/mfa/recovery-codes/regenerate').set('Authorization', auth(USER, S1)).set('X-Step-Up', token);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('lost phone: recover with a backup code', () => {
+  it('signs in with a code, adds a new passkey and removes the lost one, each confirmed with a code', async () => {
+    const app = await loadApp();
+    const { res } = await enrolFirst(app);
+    const codes: string[] = res.body.data.backupCodes;
+    const lost = mfaState.passkeys[0];
+
+    expect((await request(app).post('/auth/mfa/sign-in/verify').set('Authorization', auth(USER, S2)).send({ recoveryCode: { code: codes[0] } })).status).toBe(200);
+
+    const add = await request(app).post('/auth/mfa/step-up/verify').set('Authorization', auth(USER, S2))
+      .send({ action: 'factor_add', targetId: 'passkey', recoveryCode: { code: codes[1] } });
+    expect(add.status).toBe(200);
+    const newKey = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN });
+    const o = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(USER, S2)).set('X-Step-Up', add.body.data.stepUpToken);
+    const v = await request(app).post('/auth/mfa/passkeys/register/verify').set('Authorization', auth(USER, S2))
+      .send({ challengeId: o.body.data.challengeId, nickname: 'New phone', response: newKey.register(o.body.data.options.challenge) });
+    expect(v.status).toBe(201);
+
+    const rm = await request(app).post('/auth/mfa/step-up/verify').set('Authorization', auth(USER, S2))
+      .send({ action: 'factor_remove', targetId: `passkey:${lost.id}`, recoveryCode: { code: codes[2] } });
+    const del = await request(app).delete(`/auth/mfa/passkeys/${lost.id}`).set('Authorization', auth(USER, S2)).set('X-Step-Up', rm.body.data.stepUpToken);
+    expect(del.status).toBe(200);
+    expect(mfaState.passkeys.map((p) => p.nickname)).toEqual(['New phone']);
+  });
+
+  it('a code can never confirm a release, a transfer or a price change', async () => {
+    const app = await loadApp();
+    const { res } = await enrolFirst(app);
+    for (const action of ['release', 'transfer_complete', 'price_change', 'admin_approve']) {
+      const r = await request(app).post('/auth/mfa/step-up/verify').set('Authorization', auth(USER, S1))
+        .send({ action, targetId: 'x', recoveryCode: { code: res.body.data.backupCodes[0] } });
+      expect(r.status).toBe(400);
+      expect(r.body.reason).toBe('no_passkey');
+    }
+    // ...and refusing did not spend the code.
+    expect(mfaState.codes.filter((c) => c.used_at)).toHaveLength(0);
+  });
+});
+
+describe('lockout', () => {
+  it('repeat locks grow and the owner is emailed', async () => {
+    const app = await loadApp();
+    await enrolFirst(app);
+    sent.length = 0;
+    const guess = () => request(app).post('/auth/mfa/sign-in/verify').set('Authorization', auth(USER, S2)).send({ recoveryCode: { code: 'ZZZZZ-ZZZZZ' } });
+    for (let i = 0; i < 5; i++) expect((await guess()).status).toBe(400);
+    expect((await guess()).status).toBe(429);
+    await flush();
+    const first = new Date(mfaState.failures.get(USER)!.locked_until!).getTime() - Date.now();
+    expect(first).toBeGreaterThan(14 * 60 * 1000);
+    expect(first).toBeLessThanOrEqual(15 * 60 * 1000);
+    expect(sent.map((m) => m.subject)).toContain('Code entry on your account is paused');
+
+    mfaState.failures.get(USER)!.locked_until = new Date(Date.now() - 1).toISOString();
+    // A fresh app: the per-account rate limit (10/min, in memory) would otherwise answer 429 first.
+    vi.resetModules();
+    const app2 = await loadApp();
+    const guess2 = () => request(app2).post('/auth/mfa/sign-in/verify').set('Authorization', auth(USER, S2)).send({ recoveryCode: { code: 'ZZZZZ-ZZZZZ' } });
+    for (let i = 0; i < 5; i++) expect((await guess2()).status).toBe(400);
+    const locked = await guess2();
+    expect(locked.status).toBe(429);
+    expect(locked.body.reason).toBe('mfa_locked');
+    const second = new Date(mfaState.failures.get(USER)!.locked_until!).getTime() - Date.now();
+    expect(second).toBeGreaterThan(59 * 60 * 1000);
+  });
+
+  it('a right code resets the count and the escalation', async () => {
+    const app = await loadApp();
+    const { res } = await enrolFirst(app);
+    const guess = () => request(app).post('/auth/mfa/sign-in/verify').set('Authorization', auth(USER, S2)).send({ recoveryCode: { code: 'ZZZZZ-ZZZZZ' } });
+    for (let i = 0; i < 4; i++) await guess();
+    expect((await request(app).post('/auth/mfa/sign-in/verify').set('Authorization', auth(USER, S2)).send({ recoveryCode: { code: res.body.data.backupCodes[0] } })).status).toBe(200);
+    expect(mfaState.failures.has(USER)).toBe(false);
+  });
+});
+
+describe('browser quirks and errors', () => {
+  it('accepts null authenticatorAttachment and userHandle, and extra response fields', async () => {
+    const app = await loadApp();
+    const { key } = await enrolFirst(app);
+    const o = await request(app).post('/auth/mfa/sign-in/options').set('Authorization', auth(USER, S2));
+    const response = key.assert(o.body.data.options.challenge) as Record<string, unknown> & { response: Record<string, unknown> };
+    response.authenticatorAttachment = null;
+    response.response.userHandle = null;
+    response.response.someExtensionField = 'x';
+    const res = await request(app).post('/auth/mfa/sign-in/verify').set('Authorization', auth(USER, S2))
+      .send({ passkey: { challengeId: o.body.data.challengeId, response } });
+    expect(res.status).toBe(200);
+  });
+
+  it('adding a passkey that is already registered says so (409, not 503)', async () => {
+    const app = await loadApp();
+    const { key } = await enrolFirst(app);
+    const token = await stepUp(app, key, 'factor_add', 'passkey');
+    const o = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(USER, S1)).set('X-Step-Up', token);
+    // Re-register the same credential (excludeCredentials normally stops the browser doing this).
+    const res = await request(app).post('/auth/mfa/passkeys/register/verify').set('Authorization', auth(USER, S1))
+      .send({ challengeId: o.body.data.challengeId, nickname: 'Again', response: key.register(o.body.data.options.challenge) });
+    expect(res.status).toBe(409);
+    expect(res.body.reason).toBe('already_set_up');
+  });
+
+  it('super_admin factor changes also alert the break-glass inbox', async () => {
+    const app = await loadApp();
+    await enrolFirst(app, ROOT, S1);
+    await flush();
+    expect(sent.some((m) => m.to === 'boss@example.com' && m.subject === 'A new sign-in method was added to your account')).toBe(true);
   });
 });
 

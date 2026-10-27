@@ -3069,18 +3069,21 @@ export type Database = {
       user_mfa_state: {
         Row: {
           failed_attempts: number
+          lock_count: number
           locked_until: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           failed_attempts?: number
+          lock_count?: number
           locked_until?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           failed_attempts?: number
+          lock_count?: number
           locked_until?: string | null
           updated_at?: string
           user_id?: string
@@ -3747,6 +3750,7 @@ export type Database = {
         Returns: Json
       }
       available_transfer_vouchers: { Args: { p_user: string }; Returns: number }
+      begin_mfa_code_attempt: { Args: { p_user: string }; Returns: Json }
       calculate_platform_fee_percent: {
         Args: { tier: Database["public"]["Enums"]["tier_level"] }
         Returns: number
@@ -3823,7 +3827,6 @@ export type Database = {
           created: boolean
         }[]
       }
-      record_mfa_failure: { Args: { p_user: string }; Returns: string }
       record_payment_incident: {
         Args: {
           p_amount: number
@@ -3846,6 +3849,15 @@ export type Database = {
           p_transfer: string
         }
         Returns: Json
+      }
+      remove_mfa_factor: {
+        Args: {
+          p_break_glass: boolean
+          p_id: string
+          p_kind: string
+          p_user: string
+        }
+        Returns: string
       }
       replace_recovery_codes: {
         Args: { p_hashes: string[]; p_user: string }

@@ -1,6 +1,6 @@
 /* Live check of the Supabase MfaStore against staging (S-2FA Ph1). Throwaway account, deleted at the end (cascade).
  * Run (Boss, needs the staging secret key): op run --env-file .env.op -- npx tsx scripts/mfa-store-smoke.ts
- * Expect: {"cleanup":"ok","leftoverCodes":0} then {"ok":29,"total":29,"failed":[]} */
+ * Expect: {"cleanup":"ok","leftoverCodes":0} then {"ok":30,"total":30,"failed":[]} */
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import { createSupabaseMfaStore } from '../src/lib/mfa/store';
@@ -18,7 +18,7 @@ const hex = (c: string) => c.repeat(64).slice(0, 64);
   if (ue) throw new Error('setup: ' + ue.message);
   try {
     const now = () => new Date().toISOString();
-    const pk = await store.insertPasskey({ user_id: U, credential_id: 'SMOKESMOKESMOKESMOKE', public_key: 'pk', sign_count: 3, transports: ['usb'], aaguid: null, backed_up: false, nickname: 'Key' });
+    const pk = (await store.insertPasskey({ user_id: U, credential_id: 'SMOKESMOKESMOKESMOKE', public_key: 'pk', sign_count: 3, transports: ['usb'], aaguid: null, backed_up: false, nickname: 'Key' }))!;
     check('passkey insert+list', (await store.listPasskeys(U)).length === 1);
     check('passkey by credential', (await store.getPasskeyByCredentialId('SMOKESMOKESMOKESMOKE'))?.id === pk.id);
     await store.recordPasskeyUse(pk.id, 2); // lower count: no change
@@ -55,17 +55,18 @@ const hex = (c: string) => c.repeat(64).slice(0, 64);
     check('grant consume', await store.consumeGrant(hex('f'), U, S, 'release', 't1', now()));
     check('grant reuse', !(await store.consumeGrant(hex('f'), U, S, 'release', 't1', now())));
 
-    let lock: string | null = null;
-    for (let i = 0; i < 5; i++) lock = await store.recordFailure(U);
-    check('lock after 5', Boolean(lock) && (await store.lockedUntil(U, now())) !== null);
+    for (let i = 0; i < 5; i++) await store.beginCodeAttempt(U);
+    const sixth = await store.beginCodeAttempt(U);
+    check('lock on the 6th attempt', sixth.newlyLocked && (await store.lockedUntil(U, now())) !== null);
     await store.clearFailures(U);
     check('clear failures', (await store.lockedUntil(U, now())) === null);
 
     check('staff role (not staff)', (await store.staffRole(U)) === null);
     check('staff role (super_admin)', (await store.staffRole('2b3f1532-9345-4720-8fac-55d07517c78b')) === 'super_admin');
 
-    check('delete totp', await store.deleteTotp(U));
-    check('delete passkey', await store.deletePasskey(U, pk.id));
+    check('duplicate credential → null', (await store.insertPasskey({ user_id: U, credential_id: 'SMOKESMOKESMOKESMOKE', public_key: 'pk', sign_count: 0, transports: [], aaguid: null, backed_up: false, nickname: 'Dup' })) === null);
+    check('remove totp (2 → 1)', (await store.removeFactor(U, 'totp', null, false)) === 'removed');
+    check('remove last passkey refused', (await store.removeFactor(U, 'passkey', pk.id, false)) === 'last_factor');
   } finally {
     const { error } = await db.from('users').delete().eq('id', U);
     const { count } = await db.from('user_recovery_codes').select('id', { count: 'exact', head: true }).eq('user_id', U);

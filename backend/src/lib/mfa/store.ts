@@ -19,6 +19,8 @@ export type StepUpAction =
   | 'transfer_complete'
   | 'price_change'
   | 'factor_remove'
+  | 'factor_add'
+  | 'recovery_regen'
   | 'admin_action'
   | 'admin_approve';
 
@@ -75,18 +77,19 @@ export interface NewPasskey {
 export interface MfaStore {
   listPasskeys(userId: string): Promise<PasskeyRow[]>;
   getPasskeyByCredentialId(credentialId: string): Promise<PasskeyRow | null>;
-  insertPasskey(row: NewPasskey): Promise<PasskeyRow>;
+  /** null when that credential is already registered (to any account). */
+  insertPasskey(row: NewPasskey): Promise<PasskeyRow | null>;
   /** Conditional on the stored counter so a racing older assertion cannot roll it back. */
   recordPasskeyUse(id: string, newCount: number): Promise<void>;
   renamePasskey(userId: string, id: string, nickname: string): Promise<boolean>;
-  deletePasskey(userId: string, id: string): Promise<boolean>;
+  /** Removes a factor under one row lock; never the last one (remove_mfa_factor). */
+  removeFactor(userId: string, kind: 'passkey' | 'totp', id: string | null, breakGlass: boolean): Promise<'removed' | 'not_found' | 'last_factor'>;
 
   getTotp(userId: string): Promise<TotpRow | null>;
   /** Replaces any unconfirmed setup; refuses (returns false) when a confirmed one exists. */
   startTotp(userId: string, secretEnc: string): Promise<boolean>;
   /** Spends `step` only if it is newer than the last one used; optionally confirms setup. */
   useTotpStep(userId: string, step: number, confirm: boolean): Promise<boolean>;
-  deleteTotp(userId: string): Promise<boolean>;
 
   replaceRecoveryCodes(userId: string, hashes: string[]): Promise<void>;
   /** Spends one code; returns how many are left, or null when it was not a live code. */
@@ -104,7 +107,11 @@ export interface MfaStore {
 
   /** null = not locked, otherwise the lock end. */
   lockedUntil(userId: string, nowIso: string): Promise<string | null>;
-  recordFailure(userId: string): Promise<string | null>;
+  /**
+   * Counts an attempt BEFORE the code is checked (one locked statement), or
+   * refuses it while locked. A right code then calls clearFailures.
+   */
+  beginCodeAttempt(userId: string): Promise<{ lockedUntil: string | null; newlyLocked: boolean }>;
   clearFailures(userId: string): Promise<void>;
 
   /** Active staff role name, or null for a non-staff account. */
@@ -135,6 +142,7 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
 
   async insertPasskey(row) {
     const { data, error } = await db.from('user_passkeys').insert(row).select(PASSKEY_COLS).single();
+    if ((error as { code?: string } | null)?.code === '23505') return null;
     if (error || !data) fail('insertPasskey', error);
     return data as PasskeyRow;
   },
@@ -154,10 +162,13 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
     return Boolean(data);
   },
 
-  async deletePasskey(userId, id) {
-    const { data, error } = await db.from('user_passkeys').delete().eq('id', id).eq('user_id', userId).select('id').maybeSingle();
-    if (error) fail('deletePasskey', error);
-    return Boolean(data);
+  async removeFactor(userId, kind, id, breakGlass) {
+    const { data, error } = await db.rpc('remove_mfa_factor', {
+      p_user: userId, p_kind: kind, p_id: id, p_break_glass: breakGlass,
+    });
+    if (error) fail('removeFactor', error);
+    if (data !== 'removed' && data !== 'not_found' && data !== 'last_factor') fail('removeFactor', null);
+    return data as 'removed' | 'not_found' | 'last_factor';
   },
 
   async getTotp(userId) {
@@ -186,12 +197,6 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
     q = confirm ? q.is('verified_at', null) : q.not('verified_at', 'is', null);
     const { data, error } = await q.select('user_id').maybeSingle();
     if (error) fail('useTotpStep', error);
-    return Boolean(data);
-  },
-
-  async deleteTotp(userId) {
-    const { data, error } = await db.from('user_totp_factors').delete().eq('user_id', userId).select('user_id').maybeSingle();
-    if (error) fail('deleteTotp', error);
     return Boolean(data);
   },
 
@@ -292,14 +297,18 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
     return until && until > nowIso ? until : null;
   },
 
-  async recordFailure(userId) {
-    const { data, error } = await db.rpc('record_mfa_failure', { p_user: userId });
-    if (error) fail('recordFailure', error);
-    return (data as string | null) ?? null;
+  async beginCodeAttempt(userId) {
+    const { data, error } = await db.rpc('begin_mfa_code_attempt', { p_user: userId });
+    if (error || !data) fail('beginCodeAttempt', error);
+    const out = data as { locked_until: string | null; newly_locked: boolean };
+    return { lockedUntil: out.locked_until ?? null, newlyLocked: Boolean(out.newly_locked) };
   },
 
   async clearFailures(userId) {
-    const { error } = await db.from('user_mfa_state').update({ failed_attempts: 0, locked_until: null }).eq('user_id', userId);
+    const { error } = await db
+      .from('user_mfa_state')
+      .update({ failed_attempts: 0, locked_until: null, lock_count: 0 })
+      .eq('user_id', userId);
     if (error) fail('clearFailures', error);
   },
 

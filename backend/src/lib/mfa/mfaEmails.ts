@@ -17,7 +17,8 @@ export type MfaEmail =
   | { kind: 'factor_removed'; method: 'passkey' | 'totp'; nickname?: string }
   | { kind: 'recovery_code_used'; left: number }
   | { kind: 'recovery_codes_new' }
-  | { kind: 'break_glass_sign_in'; method: 'passkey' | 'recovery_code' };
+  | { kind: 'break_glass_sign_in'; method: 'passkey' | 'recovery_code' }
+  | { kind: 'code_entry_locked' };
 
 const FOOTER = "You're receiving this because it's about how your Authentic Materials account signs in. These emails can't be turned off.";
 
@@ -64,6 +65,14 @@ export const mfaEmailContent = (email: MfaEmail): { subject: string; lines: stri
           "If this wasn't you, sign in and check Security settings, then change your password.",
         ],
       };
+    case 'code_entry_locked':
+      return {
+        subject: 'Code entry on your account is paused',
+        lines: [
+          'Someone entered too many wrong codes while signing in to your account, so code entry is paused for a while. Your passkey still works.',
+          "If this wasn't you, someone may know your password. Sign in with your passkey and change your password now.",
+        ],
+      };
     case 'break_glass_sign_in':
       return {
         subject: 'The super admin account was just used',
@@ -82,7 +91,7 @@ export const sendMfaEmail = (to: string | null | undefined, email: MfaEmail): vo
   const securityUrl = `${frontendBaseUrl()}/settings/security`;
   const html = shell({
     title: subject,
-    preheader: lines[0],
+    preheader: escapeHtml(lines[0]),
     footer: FOOTER,
     body: `
       ${heading(`${escapeHtml(subject)}.`)}

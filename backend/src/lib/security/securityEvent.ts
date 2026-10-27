@@ -255,7 +255,8 @@ const mfaSchema = envelopeSchema.extend({
   action: z.enum(['enrol', 'remove', 'sign_in', 'step_up_issue', 'step_up_use', 'recovery_regen', 'lockout']),
   method: z.enum(['passkey', 'totp', 'recovery_code']).nullable(),
   step_up_action: z.enum([
-    'release', 'transfer_complete', 'price_change', 'factor_remove', 'admin_action', 'admin_approve',
+    'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
+    'admin_action', 'admin_approve',
   ]).nullable(),
   break_glass: z.boolean(),
 }).strict();

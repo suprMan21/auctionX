@@ -24,7 +24,7 @@ export const generateRecoveryCodes = (): string[] => {
 /**
  * Accepts what people actually type: any case, spaces, missing or extra dashes.
  * Returns null when it cannot be a code (wrong length or a character that is
- * never issued), so obvious junk never reaches the lockout counter as a "guess".
+ * never issued). The caller still counts it as an attempt.
  */
 export const normaliseRecoveryCode = (input: string): string | null => {
   const compact = input.toUpperCase().replace(/[\s-]/g, '');
