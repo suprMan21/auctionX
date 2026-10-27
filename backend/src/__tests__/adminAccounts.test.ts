@@ -82,6 +82,7 @@ beforeEach(() => {
       admin_reactivate_account: { data: { status: 'active' } },
       admin_delete_account: { data: { status: 'deleted' } },
       admin_set_account_role: { data: { role: 'admin', previous_role: null } },
+      admin_set_account_type: { data: { account_type: 'creator', previous_type: 'collector', creator_pending: false, override: true } },
       admin_set_delete_window: { data: { delete_window_hours: 48 } },
       admin_audit_log_facets: { data: { actions: ['account_suspend'], entity_types: ['user'], actors: [] } },
     }),
@@ -107,14 +108,15 @@ describe('permission gates', () => {
     reactivate: ['manage_users', 'post', `/admin/users/${TARGET}/reactivate`, { reason: REASON }],
     delete: ['manage_admins', 'post', `/admin/users/${TARGET}/delete`, { confirm: 'a', reason: REASON }],
     role: ['manage_admins', 'put', `/admin/users/${TARGET}/role`, { role: 'admin', reason: REASON }],
+    type: ['manage_creator_ids', 'put', `/admin/users/${TARGET}/type`, { type: 'creator', override: true, reason: REASON }],
     window: ['manage_admins', 'put', '/admin/account-settings', { hours: 48, reason: REASON }],
     audit: ['view_audit_logs', 'get', '/admin/audit-logs', undefined],
   };
 
   const expected: Record<string, Record<string, number>> = {
-    super_admin: { search: 200, detail: 200, tokens: 200, suspend: 200, unsuspend: 200, retire: 200, reactivate: 200, delete: 200, role: 200, window: 200, audit: 200 },
-    admin:       { search: 200, detail: 200, tokens: 200, suspend: 200, unsuspend: 200, retire: 200, reactivate: 200, delete: 403, role: 403, window: 403, audit: 200 },
-    support:     { search: 200, detail: 200, tokens: 403, suspend: 403, unsuspend: 403, retire: 403, reactivate: 403, delete: 403, role: 403, window: 403, audit: 403 },
+    super_admin: { search: 200, detail: 200, tokens: 200, suspend: 200, unsuspend: 200, retire: 200, reactivate: 200, delete: 200, role: 200, type: 200, window: 200, audit: 200 },
+    admin:       { search: 200, detail: 200, tokens: 200, suspend: 200, unsuspend: 200, retire: 200, reactivate: 200, delete: 403, role: 403, type: 200, window: 403, audit: 200 },
+    support:     { search: 200, detail: 200, tokens: 403, suspend: 403, unsuspend: 403, retire: 403, reactivate: 403, delete: 403, role: 403, type: 403, window: 403, audit: 403 },
   };
 
   for (const [role, byRoute] of Object.entries(expected)) {
@@ -171,6 +173,32 @@ describe('validation', () => {
     expect(res.status).toBe(200);
     expect(rpcCalls[0].args).toEqual({ p_admin: ADMIN, p_query: 'a%b', p_status: 'suspended', p_limit: 10, p_offset: 20, p_type: 'all' });
     expect(res.body.data.pagination).toEqual({ page: 3, limit: 10, total: 1, pages: 1 });
+  });
+
+  it('type change passes type, override and reason through', async () => {
+    const app = await appWith('admin');
+    const res = await request(app).put(`/admin/users/${TARGET}/type`).send({ type: 'creator', override: true, reason: REASON });
+    expect(res.status).toBe(200);
+    expect(rpcCalls[0]).toEqual({
+      fn: 'admin_set_account_type',
+      args: { p_admin: ADMIN, p_target: TARGET, p_type: 'creator', p_override: true, p_reason: REASON },
+    });
+  });
+
+  it('type change: override defaults to false; collector + override and unknown types are refused before the database', async () => {
+    const app = await appWith('super_admin');
+    await request(app).put(`/admin/users/${TARGET}/type`).send({ type: 'creator', reason: REASON });
+    expect(rpcCalls[0].args).toMatchObject({ p_override: false });
+    rpcCalls = [];
+    for (const body of [
+      { type: 'collector', override: true, reason: REASON },
+      { type: 'staff', reason: REASON },
+      { type: 'creator', reason: 'short' },
+    ]) {
+      const res = await request(app).put(`/admin/users/${TARGET}/type`).send(body);
+      expect(res.status).toBe(400);
+    }
+    expect(rpcCalls).toHaveLength(0);
   });
 
   it('search passes the account type filter', async () => {

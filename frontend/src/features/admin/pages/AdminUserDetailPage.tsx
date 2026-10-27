@@ -28,6 +28,7 @@ const DONE_TEXT: Record<AccountAction, string> = {
   reactivate: 'Account reactivated.',
   delete: 'Account deleted.',
   role: 'Staff role saved.',
+  type: 'Account type saved.',
 };
 
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -154,6 +155,7 @@ export const AdminUserDetailPage = () => {
   }
 
   const canManage = hasPermission(access, PERMISSIONS.manageUsers);
+  const canChangeType = hasPermission(access, PERMISSIONS.manageCreatorIds);
   const isSuperAdmin = hasPermission(access, PERMISSIONS.manageAdmins);
   // Acting on a staff account needs manage_admins; nobody acts on their own account.
   const mayAct = !account.is_self && (account.staff_role === null || isSuperAdmin);
@@ -171,6 +173,7 @@ export const AdminUserDetailPage = () => {
         <AccountTypeBadge
           type={account.account_type}
           creatorPending={account.account_type === 'collector' && account.creator_requested_at !== null}
+          override={Boolean(account.creator_override_at)}
         />
         {account.staff_role && (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-500/10 text-primary-300">
@@ -188,6 +191,11 @@ export const AdminUserDetailPage = () => {
           <Field label="Age verified">{account.age_verified ? 'Yes' : 'No'}</Field>
           <Field label="Creator request">{account.creator_requested_at ? when(account.creator_requested_at) : 'Not requested'}</Field>
           <Field label="Creator ID check">{idCheckStatusLabel(account.creator_check_status)}</Field>
+          {account.creator_override_at && (
+            <Field label="ID check skipped by">
+              {account.creator_override_by_email ?? 'Staff'} on {when(account.creator_override_at)}
+            </Field>
+          )}
           <Field label="Created">{when(account.created_at)}</Field>
           <Field label="Last sign-in">{when(account.last_sign_in_at)}</Field>
           <Field label="Active sessions">{account.active_sessions}</Field>
@@ -231,7 +239,7 @@ export const AdminUserDetailPage = () => {
         </section>
       )}
 
-      {(canManage || isSuperAdmin) && (
+      {(canManage || isSuperAdmin || canChangeType) && (
         <section className="glass rounded-2xl p-5" aria-labelledby="actions-heading">
           <h2 id="actions-heading" className="text-base font-semibold text-white mb-3">Actions</h2>
           {account.is_self ? (
@@ -252,6 +260,7 @@ export const AdminUserDetailPage = () => {
               {isSuperAdmin && (status === 'active' || account.staff_role !== null) && (
                 <ActionButton onClick={() => setDialog('role')}>{status === 'active' ? 'Change staff role…' : 'Remove staff role…'}</ActionButton>
               )}
+              {canChangeType && <ActionButton onClick={() => setDialog('type')}>Change account type…</ActionButton>}
               {isSuperAdmin && status === 'retired' && account.delete?.blockers.length === 0 && (
                 <ActionButton tone="danger" onClick={() => setDialog('delete')}>Delete account…</ActionButton>
               )}

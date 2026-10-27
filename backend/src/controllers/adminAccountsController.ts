@@ -11,6 +11,7 @@
  *   POST /api/v1/admin/users/:id/reactivate       { reason }               manage_users
  *   POST /api/v1/admin/users/:id/delete           { confirm, reason }      manage_admins
  *   PUT  /api/v1/admin/users/:id/role             { role|null, reason }    manage_admins
+ *   PUT  /api/v1/admin/users/:id/type             { type, override, reason } manage_creator_ids
  *   GET  /api/v1/admin/account-settings           delete window            view_users
  *   PUT  /api/v1/admin/account-settings           { hours, reason }        manage_admins
  *   GET  /api/v1/admin/audit-logs                 filter by actor, action, entity type, target
@@ -33,6 +34,7 @@ import {
   searchAccountsQuerySchema,
   setDeleteWindowBodySchema,
   setRoleBodySchema,
+  setTypeBodySchema,
   suspendBodySchema,
 } from '../lib/admin/accountAdmin';
 
@@ -104,7 +106,7 @@ export const accountRpcError = (error: { message?: string } | null): AppError =>
     case 'not_suspended':
       return new AppError('conflict', 'This account is not suspended.');
     case 'no_change':
-      return new AppError('conflict', 'Nothing changed. Pick a different role.');
+      return new AppError('conflict', 'Nothing changed. The account already has that setting.');
     case 'confirm_mismatch':
       return new AppError('invalid_argument', 'That does not match the part of the email before the @.');
     case 'delete_blocked': {
@@ -218,6 +220,22 @@ export const setAccountRole = async (req: AdminRequest, res: Response) => {
     p_admin: adminId, p_target: target, p_role: body.role, p_reason: body.reason,
   });
   logAction(req, 'role_set', target);
+  return ok(res, data);
+};
+
+/**
+ * Collector / Creator. Creator needs a passed identity check unless `override`
+ * (admin + super_admin, via manage_creator_ids). The database function checks
+ * the permission again, refuses self, and writes the audit row.
+ */
+export const setAccountType = async (req: AdminRequest, res: Response) => {
+  const adminId = requireAdminId(req);
+  const target = accountId(req);
+  const body = parse(setTypeBodySchema, req.body);
+  const data = await callRpc<unknown>('admin_set_account_type', {
+    p_admin: adminId, p_target: target, p_type: body.type, p_override: body.override, p_reason: body.reason,
+  });
+  logAction(req, 'account_type_set', target);
   return ok(res, data);
 };
 

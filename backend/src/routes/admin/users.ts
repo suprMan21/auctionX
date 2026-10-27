@@ -10,6 +10,7 @@ import {
   retireAccount,
   searchAccounts,
   setAccountRole,
+  setAccountType,
   suspendAccount,
   unsuspendAccount,
 } from '../../controllers/adminAccountsController';
@@ -33,5 +34,6 @@ router.post('/:id/reactivate', requirePermission(PERMISSIONS.manageUsers), handl
 
 router.post('/:id/delete', requirePermission(PERMISSIONS.manageAdmins), handle(deleteAccount));
 router.put('/:id/role', requirePermission(PERMISSIONS.manageAdmins), handle(setAccountRole));
+router.put('/:id/type', requirePermission(PERMISSIONS.manageCreatorIds), handle(setAccountType));
 
 export default router;

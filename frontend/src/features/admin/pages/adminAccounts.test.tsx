@@ -19,6 +19,7 @@ const api = vi.hoisted(() => ({
   accountAction: vi.fn(),
   deleteAccount: vi.fn(),
   setAccountRole: vi.fn(),
+  setAccountType: vi.fn(),
   getAccountSettings: vi.fn(),
   setDeleteWindow: vi.fn(),
 }));
@@ -276,9 +277,10 @@ describe('users list', () => {
 
   it('shows role and status, and searches on Enter only, not while typing', async () => {
     api.searchAccounts.mockResolvedValue(page([
-      { id: ID, email: 'fan@example.com', display_name: 'Fan', created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'suspended', staff_role: null, account_type: 'creator', creator_pending: false },
-      { id: 'b', email: 'staff@example.com', display_name: null, created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'active', staff_role: 'support', account_type: 'collector', creator_pending: false },
-      { id: 'c', email: 'new@example.com', display_name: null, created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'active', staff_role: null, account_type: 'collector', creator_pending: true },
+      { id: ID, email: 'fan@example.com', display_name: 'Fan', created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'suspended', staff_role: null, account_type: 'creator', creator_pending: false, creator_override: false },
+      { id: 'b', email: 'staff@example.com', display_name: null, created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'active', staff_role: 'support', account_type: 'collector', creator_pending: false, creator_override: false },
+      { id: 'c', email: 'new@example.com', display_name: null, created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'active', staff_role: null, account_type: 'collector', creator_pending: true, creator_override: false },
+      { id: 'd', email: 'vip@example.com', display_name: null, created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'active', staff_role: null, account_type: 'creator', creator_pending: false, creator_override: true },
     ]));
     const user = userEvent.setup();
     render(
@@ -290,7 +292,7 @@ describe('users list', () => {
     const table = screen.getByRole('table');
     expect(within(table).getByText('Suspended')).toBeInTheDocument();
     expect(within(table).getByText('Support')).toBeInTheDocument();
-    expect(within(table).getAllByTestId('account-type-badge').map((b) => b.textContent)).toEqual(['Creator', 'Collector', 'Creator (verifying)']);
+    expect(within(table).getAllByTestId('account-type-badge').map((b) => b.textContent)).toEqual(['Creator', 'Collector', 'Creator (verifying)', 'Creator (set by staff)']);
     expect(screen.queryByRole('button', { name: 'Change waiting time…' })).not.toBeInTheDocument(); // window edit: super admin only
 
     const box = screen.getByRole('searchbox', { name: 'Search accounts' });
@@ -488,5 +490,73 @@ describe('admin route guard (GET /admin/me)', () => {
 describe('profile save landing (AC 11)', () => {
   it('lands on My Tokens while the marketplace is parked', () => {
     expect(afterProfileLanding()).toBe('/tokens');
+  });
+});
+
+describe('change account type (admin + super admin)', () => {
+  const typeOptions = () =>
+    within(screen.getByRole('group', { name: 'Account type' })).getAllByRole('radio').map((o) => o.closest('label')?.querySelector('span > span')?.textContent);
+
+  it('support cannot see the button', async () => {
+    api.getAccount.mockResolvedValue(account());
+    renderDetail('support');
+    await screen.findByTestId('account-type-badge');
+    expect(screen.queryByRole('button', { name: 'Change account type…' })).not.toBeInTheDocument();
+  });
+
+  it('admin skips the ID check for an unverified collector (3 clicks + reason)', async () => {
+    api.getAccount.mockResolvedValue(account());
+    api.setAccountType.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderDetail('admin');
+    await user.click(await screen.findByRole('button', { name: 'Change account type…' }));
+    expect(typeOptions()).toEqual(['Collector (current)', 'Creator', 'Creator now, skip the ID check']);
+    const dialog = screen.getByRole('dialog');
+    const save = within(dialog).getByRole('button', { name: 'Save account type' });
+    await user.type(within(dialog).getByLabelText(/Reason/), REASON);
+    expect(save).toBeDisabled(); // nothing changed yet
+    await user.click(within(dialog).getByRole('radio', { name: /skip the ID check/ }));
+    await user.click(save);
+    expect(api.setAccountType).toHaveBeenCalledWith(ID, 'creator', true, REASON);
+    expect(await screen.findByText('Account type saved.')).toBeInTheDocument();
+  });
+
+  it('plain Creator keeps the ID check requirement', async () => {
+    api.getAccount.mockResolvedValue(account());
+    api.setAccountType.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderDetail('super_admin');
+    await user.click(await screen.findByRole('button', { name: 'Change account type…' }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('radio', { name: /^Creator Shows as Creator \(verifying\)/ }));
+    await user.type(within(dialog).getByLabelText(/Reason/), REASON);
+    await user.click(within(dialog).getByRole('button', { name: 'Save account type' }));
+    expect(api.setAccountType).toHaveBeenCalledWith(ID, 'creator', false, REASON);
+  });
+
+  it('a verified account is offered no override; an overridden one can only go back to Collector', async () => {
+    api.getAccount.mockResolvedValue(account({ creator_check_status: 'VERIFIED' }));
+    const user = userEvent.setup();
+    const { unmount } = renderDetail('admin');
+    await user.click(await screen.findByRole('button', { name: 'Change account type…' }));
+    expect(typeOptions()).toEqual(['Collector (current)', 'Creator']);
+    unmount();
+
+    api.getAccount.mockResolvedValue(account({
+      account_type: 'creator', creator_requested_at: '2026-10-27T00:00:00Z',
+      creator_override_at: '2026-10-27T00:00:00Z', creator_override_by_email: 'boss@example.com',
+    }));
+    renderDetail('admin');
+    expect(await screen.findByTestId('account-type-badge')).toHaveTextContent('Creator (set by staff)');
+    expect(screen.getByText(/boss@example.com on/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Change account type…' }));
+    expect(typeOptions()).toEqual(['Collector', 'Creator now, skip the ID check (current)']);
+  });
+
+  it('not offered on your own account', async () => {
+    api.getAccount.mockResolvedValue(account({ is_self: true }));
+    renderDetail('super_admin');
+    await screen.findByTestId('account-type-badge');
+    expect(screen.queryByRole('button', { name: 'Change account type…' })).not.toBeInTheDocument();
   });
 });

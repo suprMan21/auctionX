@@ -13,7 +13,18 @@ import { ErrorLine, REASON_MIN, ReasonField } from './AdminTagDialogs';
 import { deleteConfirmationOf } from '../lib/accountActions';
 import { ACTION_FAILED, errorMessage } from '../lib/display';
 
-export type AccountAction = 'suspend' | 'unsuspend' | 'retire' | 'reactivate' | 'delete' | 'role';
+export type AccountAction = 'suspend' | 'unsuspend' | 'retire' | 'reactivate' | 'delete' | 'role' | 'type';
+
+/** Account type choices in the dialog. creator_override = Creator without an ID check. */
+type TypeChoice = 'collector' | 'creator' | 'creator_override';
+
+const CHECK_PASSED = new Set(['VERIFIED', 'APPROVED']);
+
+export const currentTypeChoice = (a: AccountDetail): TypeChoice => {
+  if (a.creator_override_at) return 'creator_override';
+  if (a.account_type === 'creator' || a.creator_requested_at) return 'creator';
+  return 'collector';
+};
 
 const SUSPEND_OPTIONS = [
   { hours: 1, label: '1 hour' },
@@ -24,7 +35,7 @@ const SUSPEND_OPTIONS = [
 ] as const;
 
 
-const COPY: Record<Exclude<AccountAction, 'role'>, { title: string; button: string; busy: string; danger: boolean; body: string }> = {
+const COPY: Record<Exclude<AccountAction, 'role' | 'type'>, { title: string; button: string; busy: string; danger: boolean; body: string }> = {
   suspend: {
     title: 'Suspend account',
     button: 'Suspend account',
@@ -75,12 +86,14 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
   const [hours, setHours] = useState<number>(24);
   const [confirm, setConfirm] = useState('');
   const [role, setRole] = useState<GrantableRole | ''>('');
+  const [typeChoice, setTypeChoice] = useState<TypeChoice>('collector');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hoursId = useId();
   const confirmId = useId();
   const confirmHintId = useId();
   const roleName = useId();
+  const typeName = useId();
 
   useEffect(() => {
     if (open) {
@@ -88,9 +101,10 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
       setHours(24);
       setConfirm('');
       setRole(account.status === 'active' ? ((account.staff_role as GrantableRole | null) ?? '') : '');
+      setTypeChoice(currentTypeChoice(account));
       setError(null);
     }
-  }, [open, account.staff_role, account.status]);
+  }, [open, account]);
 
   if (!action) return null;
 
@@ -102,7 +116,8 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
     reasonOk &&
     !busy &&
     (action !== 'delete' || (expectedConfirm !== '' && confirm.trim().toLowerCase() === expectedConfirm.toLowerCase())) &&
-    (action !== 'role' || roleChanged);
+    (action !== 'role' || roleChanged) &&
+    (action !== 'type' || typeChoice !== currentTypeChoice(account));
 
   const submit = async () => {
     setBusy(true);
@@ -112,6 +127,9 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
       if (action === 'suspend') await adminApi.suspendAccount(account.id, hours, r);
       else if (action === 'delete') await adminApi.deleteAccount(account.id, confirm.trim(), r);
       else if (action === 'role') await adminApi.setAccountRole(account.id, newRole, r);
+      else if (action === 'type') {
+        await adminApi.setAccountType(account.id, typeChoice === 'collector' ? 'collector' : 'creator', typeChoice === 'creator_override', r);
+      }
       else await adminApi.accountAction(account.id, action, r);
       onDone(action);
     } catch (err) {
@@ -122,8 +140,27 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
   };
 
   const who = account.email ?? account.id;
+  const checkPassed = CHECK_PASSED.has(account.creator_check_status);
+  const current = currentTypeChoice(account);
+  // An override is removed by going back to Collector, so the plain Creator
+  // option is not offered while one is in place.
+  const typeOptions: ReadonlyArray<{ value: TypeChoice; label: string; hint: string }> = [
+    { value: 'collector', label: 'Collector', hint: 'Clears any creator request.' },
+    ...(current === 'creator_override' ? [] : [{
+      value: 'creator' as const,
+      label: 'Creator',
+      hint: checkPassed ? 'ID check passed: creator straight away.' : 'Shows as Creator (verifying) until their ID check passes.',
+    }]),
+    ...(checkPassed && current !== 'creator_override' ? [] : [{
+      value: 'creator_override' as const,
+      label: 'Creator now, skip the ID check',
+      hint: 'Override. Recorded with your name in the audit log.',
+    }]),
+  ];
   const copy = action === 'role'
     ? { title: 'Change staff role', button: 'Save staff role', busy: 'Saving…', danger: false, body: 'Only a super admin can do this. The change takes effect straight away. Changing or removing a role also signs the account out.' }
+    : action === 'type'
+    ? { title: 'Change account type', button: 'Save account type', busy: 'Saving…', danger: false, body: 'A creator normally needs a passed ID check. Admins and super admins can skip it.' }
     : COPY[action];
 
   return (
@@ -163,6 +200,35 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
               />
               {r === '' ? 'No staff role' : ROLE_LABELS[r]}
               {r === (account.staff_role ?? '') && <span className="text-xs text-gray-400"> (current)</span>}
+            </label>
+          ))}
+        </fieldset>
+      )}
+
+      {action === 'type' && (
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-gray-200">Account type</legend>
+          {typeOptions.map((o) => (
+            <label
+              key={o.value}
+              className="flex min-h-[44px] items-start gap-3 rounded-xl px-3 py-2 text-sm text-gray-200 cursor-pointer hover:bg-dark-700
+                has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary-500"
+            >
+              <input
+                type="radio"
+                name={typeName}
+                value={o.value}
+                checked={typeChoice === o.value}
+                onChange={() => setTypeChoice(o.value)}
+                className="mt-0.5 h-4 w-4 accent-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <span>
+                <span className="block">
+                  {o.label}
+                  {o.value === current && <span className="text-xs text-gray-400"> (current)</span>}
+                </span>
+                <span className="block text-xs text-gray-400">{o.hint}</span>
+              </span>
             </label>
           ))}
         </fieldset>

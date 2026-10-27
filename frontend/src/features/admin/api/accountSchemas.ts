@@ -50,6 +50,8 @@ export const accountSummarySchema = z.object({
   account_type: z.enum(ACCOUNT_TYPES),
   /** Asked to be a creator; identity check not passed yet. */
   creator_pending: z.boolean(),
+  /** Made a creator by staff without an identity check. */
+  creator_override: z.boolean().default(false),
 });
 export type AccountSummary = z.infer<typeof accountSummarySchema>;
 
@@ -71,6 +73,8 @@ export const accountDetailSchema = z.object({
   creator_requested_at: z.string().nullable(),
   /** Identity check status word (never a Yoti id). */
   creator_check_status: z.string(),
+  creator_override_at: z.string().nullish(),
+  creator_override_by_email: z.string().nullish(),
   suspended_at: z.string().nullable(),
   suspended_until: z.string().nullable(),
   suspension_reason: z.string().nullable(),
