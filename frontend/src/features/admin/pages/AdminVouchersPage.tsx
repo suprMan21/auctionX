@@ -28,7 +28,9 @@ const STATUS_COPY: Record<AdminVoucherGrant['status'], { label: string; classNam
 
 type OpenDialog = { kind: 'none' } | { kind: 'grant' } | { kind: 'revoke'; grant: AdminVoucherGrant };
 
-export const AdminVouchersPage = () => {
+/** `embedded`: shown inside Settings, so its title is a section heading. */
+export const AdminVouchersPage = ({ embedded = false }: { embedded?: boolean }) => {
+  const Heading = embedded ? 'h2' : 'h1';
   const [searchParams, setSearchParams] = useSearchParams();
   // The email filter is page state, not a URL parameter: the address bar would
   // keep the email in browser history.
@@ -64,7 +66,12 @@ export const AdminVouchersPage = () => {
   const goTo = (next: { email?: string; page?: number }) => {
     if (next.email !== undefined) setEmail(next.email);
     const p = next.page ?? 1;
-    setSearchParams(p > 1 ? { page: String(p) } : {});
+    // Keep the other parameters (the Settings tab).
+    setSearchParams((prev) => {
+      const nextParams = new URLSearchParams(prev);
+      if (p > 1) nextParams.set('page', String(p)); else nextParams.delete('page');
+      return nextParams;
+    });
   };
 
   // An email-filtered list is an audited lookup: after a grant or revoke, update
@@ -162,7 +169,7 @@ export const AdminVouchersPage = () => {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Free transfers</h1>
+          <Heading className={embedded ? 'text-xl font-semibold text-white' : 'text-2xl font-bold text-white'}>Free transfers</Heading>
           <p className="text-gray-400 text-sm mt-1 max-w-2xl">
             Free transfers granted to an account. The account uses one automatically each time it pays a transfer fee,
             so it is not charged. Revoke cancels the ones not yet used.

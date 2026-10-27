@@ -5,6 +5,7 @@
  * @module Module 10 — Admin Dashboard
  */
 
+import { growthSchema, type GrowthBucket, type GrowthKind, type GrowthSeries } from './growthSchemas';
 import { supabase } from '@/lib/supabase';
 import type {
   ModerationQueueResponse,
@@ -584,6 +585,12 @@ export const adminApi = {
         body: JSON.stringify({ reason }),
       }),
     );
+  },
+
+  /** GET /admin/stats/growth — UX-3 dashboard counts; from/to are the viewer's local days (inclusive). */
+  async getGrowth(params: { series: GrowthKind; from: string; to: string; bucket: GrowthBucket; tz: string }): Promise<GrowthSeries> {
+    const qs = new URLSearchParams(params);
+    return parseEnvelope(growthSchema, await adminFetch<unknown>(`/stats/growth?${qs.toString()}`));
   },
 
   /** GET /admin/vouchers — email is an exact account email; the server audit-logs the lookup. */

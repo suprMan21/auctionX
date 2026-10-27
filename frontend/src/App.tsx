@@ -46,8 +46,7 @@ import { AdminTagsPage } from '@/features/admin/pages/AdminTagsPage';
 import { AdminTagDetailPage } from '@/features/admin/pages/AdminTagDetailPage';
 import { AdminReissuePage } from '@/features/admin/pages/AdminReissuePage';
 import { AdminStuckPaymentsPage } from '@/features/admin/pages/AdminStuckPaymentsPage';
-import { AdminPricingPage } from '@/features/admin/pages/AdminPricingPage';
-import { AdminVouchersPage } from '@/features/admin/pages/AdminVouchersPage';
+import { AdminSettingsPage } from '@/features/admin/pages/AdminSettingsPage';
 import { AdminPermissionGate } from '@/features/admin/components/AdminPermissionGate';
 import { PERMISSIONS } from '@/features/admin/lib/adminRole';
 import { NotificationsPage } from './features/notifications/pages/NotificationsPage';
@@ -420,8 +419,10 @@ function App() {
               <Route path="tags/:tagId" element={<AdminPermissionGate permission={PERMISSIONS.manageNfc}><AdminTagDetailPage /></AdminPermissionGate>} />
               <Route path="reissue-requests" element={<AdminPermissionGate permission={PERMISSIONS.manageNfc}><AdminReissuePage /></AdminPermissionGate>} />
               <Route path="stuck-payments" element={<AdminPermissionGate permission={PERMISSIONS.reapplyPayments}><AdminStuckPaymentsPage /></AdminPermissionGate>} />
-              <Route path="pricing" element={<AdminPermissionGate permission={PERMISSIONS.managePricing}><AdminPricingPage /></AdminPermissionGate>} />
-              <Route path="vouchers" element={<AdminPermissionGate permission={PERMISSIONS.managePricing}><AdminVouchersPage /></AdminPermissionGate>} />
+              {/* UX-3: Pricing, Free transfers and the delete waiting time live on Settings; old links redirect. */}
+              <Route path="settings" element={<AdminSettingsPage />} />
+              <Route path="pricing" element={<Navigate to="/admin/settings?tab=pricing" replace />} />
+              <Route path="vouchers" element={<Navigate to="/admin/settings?tab=free-transfers" replace />} />
               <Route path="audit-logs" element={<AdminPermissionGate permission={PERMISSIONS.viewAuditLogs}><AdminAuditLogPage /></AdminPermissionGate>} />
               <Route path="health" element={<AdminHealthPage />} />
             </Route>

@@ -30,9 +30,11 @@ interface GrantDialogProps {
   open: boolean;
   onClose: () => void;
   onDone: (granted: GrantedVouchers) => void;
+  /** UX-3: opened from an account page, the email is filled in. */
+  presetEmail?: string;
 }
 
-export const AdminGrantVouchersDialog = ({ open, onClose, onDone }: GrantDialogProps) => {
+export const AdminGrantVouchersDialog = ({ open, onClose, onDone, presetEmail }: GrantDialogProps) => {
   const [email, setEmail] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [expiry, setExpiry] = useState('');
@@ -46,8 +48,8 @@ export const AdminGrantVouchersDialog = ({ open, onClose, onDone }: GrantDialogP
   const expiryHintId = useId();
 
   useEffect(() => {
-    if (open) { setEmail(''); setQuantity('1'); setExpiry(''); setReason(''); setError(null); }
-  }, [open]);
+    if (open) { setEmail(presetEmail ?? ''); setQuantity('1'); setExpiry(''); setReason(''); setError(null); }
+  }, [open, presetEmail]);
 
   const normalisedEmail = email.trim().toLowerCase();
   const emailOk = emailSchema.safeParse(normalisedEmail).success;

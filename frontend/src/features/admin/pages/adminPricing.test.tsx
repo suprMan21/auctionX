@@ -429,10 +429,10 @@ describe('Pricing and free transfers are admin and super_admin only', () => {
 
   const nav = () => screen.getAllByRole('navigation', { name: 'Admin navigation' })[0];
 
-  it.each(['admin', 'super_admin'])('shows the nav items to %s', (role) => {
+  it.each(['admin', 'super_admin'])('shows Settings (Pricing and Free transfers live there since UX-3) to %s', (role) => {
     renderLayout(role);
-    expect(within(nav()).getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', '/admin/pricing');
-    expect(within(nav()).getByRole('link', { name: 'Free transfers' })).toHaveAttribute('href', '/admin/vouchers');
+    expect(within(nav()).getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/admin/settings');
+    expect(within(nav()).queryByRole('link', { name: 'Pricing' })).not.toBeInTheDocument();
   });
 
   it.each(['support', null])('hides the nav items from %s', (role) => {

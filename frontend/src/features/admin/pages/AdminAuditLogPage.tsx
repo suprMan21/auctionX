@@ -7,7 +7,9 @@
 
 import { isTimeRange, TIME_RANGES, timeRangeOf, type TimeRangeValue } from '../lib/timeRange';
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useAdminRole } from '../lib/adminRole';
+import { recordLinkFor } from '../lib/recordLinks';
 import { adminApi } from '../api/adminApi';
 import type { AuditFacets, AuditLogEntry, AuditLogList } from '../api/accountSchemas';
 import { errorMessage, formatWhen, loadFailed, shortId } from '../lib/display';
@@ -38,6 +40,7 @@ export const AdminAuditLogPage = () => {
   const [loaded, setLoaded] = useState<{ key: string; data: AuditLogList | null; error: string | null } | null>(null);
   const [facets, setFacets] = useState<AuditFacets | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const access = useAdminRole();
   const toggle = (id: string) => setExpanded((prev) => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -87,7 +90,14 @@ export const AdminAuditLogPage = () => {
     { key: 'staff', header: 'Staff member', width: 220, className: 'text-white', cell: (log) => <Wrap text={log.admin_email} /> },
     { key: 'action', header: 'Action', className: 'text-primary-300', cell: (log) => <span title={log.action}>{auditActionLabel(log.action)}</span> },
     { key: 'type', header: 'Type', className: 'text-xs text-gray-400', cell: (log) => <span title={log.entity_type}>{auditEntityLabel(log.entity_type)}</span> },
-    { key: 'target', header: 'Target', className: 'text-xs text-gray-400 font-mono', cell: (log) => shortId(log.entity_id) },
+    { key: 'target', header: 'Target', className: 'text-xs text-gray-400 font-mono', cell: (log) => {
+      const to = recordLinkFor(log, access);
+      return to ? (
+        <Link to={to} className="text-primary-300 hover:text-primary-200 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded">
+          {auditEntityLabel(log.entity_type)} {shortId(log.entity_id)}<span className="sr-only"> (open)</span>
+        </Link>
+      ) : shortId(log.entity_id);
+    } },
     {
       key: 'details', header: 'Details', hideHeader: true, width: 100,
       cell: (log) => (

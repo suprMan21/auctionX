@@ -1,6 +1,7 @@
 /**
  * Admin Dashboard landing page.
- * Shows what needs attention (re-issue and stuck-payment queues), account count,
+ * Shows what needs attention (re-issue and stuck-payment queues), token and
+ * account growth (UX-3),
  * recent audit entries and system health, each only for staff who may open it.
  * @module Module 10 — Admin Dashboard
  */
@@ -16,12 +17,13 @@ import { isMarketplaceEnabledOnClient } from '@/lib/featureFlags';
 import { formatWhen } from '../lib/display';
 import { auditActionLabel, auditEntityLabel } from '../lib/labels';
 import { useWorkQueues } from '../lib/workQueues';
+import { recordLinkFor } from '../lib/recordLinks';
+import { GrowthPanel } from '../components/GrowthPanel';
 
 /** Settles to null instead of throwing, so one failed panel does not blank the dashboard. */
 const orNull = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
 
 interface DashboardStats {
-  totalUsers: number | null;
   pendingModeration: number | null;
   activeListings: number | null;
   activeAuctions: number | null;
@@ -66,20 +68,34 @@ const StatCard = ({
   </Link>
 );
 
-/** A single row in the recent audit log list. */
-const AuditRow = ({ log }: { log: AuditLogEntry }) => (
-  <div className="flex items-start justify-between gap-4 py-3 border-b border-white/5 last:border-0">
-    <div className="min-w-0">
-      <p className="text-sm text-white font-medium truncate" title={log.action}>{auditActionLabel(log.action)}</p>
-      <p className="text-xs text-gray-400 truncate">
-        {log.admin_email} · {auditEntityLabel(log.entity_type)}
-      </p>
-    </div>
-    <time className="text-xs text-gray-400 flex-shrink-0">
-      {formatWhen(log.created_at)}
-    </time>
-  </div>
-);
+/** A single row in the recent audit log list; opens its record when there is a page for it (UX-3). */
+const AuditRow = ({ log, to }: { log: AuditLogEntry; to: string | null }) => {
+  const body = (
+    <>
+      <div className="min-w-0">
+        <p className="text-sm text-white font-medium truncate" title={log.action}>{auditActionLabel(log.action)}</p>
+        <p className="text-xs text-gray-400 truncate">
+          {log.admin_email} · {auditEntityLabel(log.entity_type)}
+        </p>
+      </div>
+      <time className="text-xs text-gray-400 flex-shrink-0">
+        {formatWhen(log.created_at)}
+      </time>
+    </>
+  );
+  const row = 'flex items-start justify-between gap-4 py-3';
+  return (
+    <li className="border-b border-white/5 last:border-0">
+      {to ? (
+        <Link to={to} className={`${row} -mx-2 px-2 rounded-xl hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500`}>
+          {body}
+        </Link>
+      ) : (
+        <div className={row}>{body}</div>
+      )}
+    </li>
+  );
+};
 
 /** Health indicator chip shown in the dashboard footer. */
 const HealthChip = ({ health }: { health: HealthStatus | null | 'error' }) => {
@@ -136,6 +152,8 @@ export const AdminDashboardPage = () => {
 
   const canViewUsers = hasPermission(access, PERMISSIONS.viewUsers);
   const canReissue = hasPermission(access, PERMISSIONS.manageNfc);
+  // Tokens are a manage_nfc page (the Tokens nav item and API use the same permission).
+  const canViewTokens = canReissue;
   const canStuck = hasPermission(access, PERMISSIONS.reapplyPayments);
   const queues = useWorkQueues();
   const canViewAudit = hasPermission(access, PERMISSIONS.viewAuditLogs);
@@ -150,14 +168,13 @@ export const AdminDashboardPage = () => {
         .then((r) => (r.error ? null : r.count ?? 0));
 
     void Promise.all([
-      canViewUsers ? orNull(adminApi.searchAccounts({ limit: 1 }).then((r) => r.pagination.total)) : null,
       marketplace ? orNull(adminApi.getModerationQueue({ status: 'pending' }).then((r) => r.stats.pendingCount)) : null,
       marketplace ? orNull(count('listings')) : null,
       marketplace ? orNull(count('auctions')) : null,
       canViewAudit ? orNull(adminApi.getAuditLogs({ limit: 10 }).then((r) => r.logs)) : null,
-    ]).then(([totalUsers, pendingModeration, activeListings, activeAuctions, logs]) => {
+    ]).then(([pendingModeration, activeListings, activeAuctions, logs]) => {
       if (cancelled) return;
-      setStats({ totalUsers, pendingModeration, activeListings, activeAuctions });
+      setStats({ pendingModeration, activeListings, activeAuctions });
       setRecentLogs(logs);
     });
 
@@ -165,7 +182,7 @@ export const AdminDashboardPage = () => {
       .then((h) => { if (!cancelled) setHealth(h); })
       .catch(() => { if (!cancelled) setHealth('error'); });
     return () => { cancelled = true; };
-  }, [access.status, canViewUsers, canViewAudit, marketplace]);
+  }, [access.status, canViewAudit, marketplace]);
 
   if (!stats) {
     return (
@@ -210,13 +227,20 @@ export const AdminDashboardPage = () => {
         </section>
       )}
 
-      {/* Stat cards: only the ones this admin may open ("Unavailable" when a count could not be loaded) */}
-      {(canViewUsers || marketplace) && (
+      {/* UX-3 growth: tiles and charts, each only for staff who may open that list. */}
+      {(canViewTokens || canViewUsers) && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {canViewTokens && <GrowthPanel kind="tokens" />}
+          {canViewUsers && <GrowthPanel kind="accounts" />}
+        </div>
+      )}
+
+      {/* Parked marketplace counts (shown only when the marketplace is on). */}
+      {marketplace && (
         <div data-testid="stats-cards" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {canViewUsers && <StatCard label="Accounts" value={shown(stats.totalUsers)} to="/admin/users" />}
-          {marketplace && <StatCard label="Pending moderation" value={shown(stats.pendingModeration)} to="/admin/moderation" />}
-          {marketplace && <StatCard label="Active listings" value={shown(stats.activeListings)} to="/admin/moderation" />}
-          {marketplace && <StatCard label="Active auctions" value={shown(stats.activeAuctions)} to="/admin/auctions" />}
+          <StatCard label="Pending moderation" value={shown(stats.pendingModeration)} to="/admin/moderation" />
+          <StatCard label="Active listings" value={shown(stats.activeListings)} to="/admin/moderation" />
+          <StatCard label="Active auctions" value={shown(stats.activeAuctions)} to="/admin/auctions" />
         </div>
       )}
 
@@ -238,11 +262,11 @@ export const AdminDashboardPage = () => {
         ) : recentLogs.length === 0 ? (
           <p className="text-gray-400 text-sm">No recent activity.</p>
         ) : (
-          <div>
+          <ul>
             {recentLogs.map((log) => (
-              <AuditRow key={log.log_id} log={log} />
+              <AuditRow key={log.log_id} log={log} to={recordLinkFor(log, access)} />
             ))}
-          </div>
+          </ul>
         )}
       </div>
       )}

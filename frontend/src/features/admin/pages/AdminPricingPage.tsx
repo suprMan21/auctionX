@@ -24,7 +24,9 @@ const STATUS_COPY: Record<AdminPriceChange['status'], { label: string; className
 
 type OpenDialog = { kind: 'none' } | { kind: 'set'; price: PriceKind } | { kind: 'cancel'; change: AdminPriceChange };
 
-export const AdminPricingPage = () => {
+/** `embedded`: shown inside Settings, so its title is a section heading. */
+export const AdminPricingPage = ({ embedded = false }: { embedded?: boolean }) => {
+  const Heading = embedded ? 'h2' : 'h1';
   const [reloadKey, setReloadKey] = useState(0);
   const [result, setResult] = useState<{ key: number; data: AdminPricing } | null>(null);
   const [failure, setFailure] = useState<{ key: number; message: string } | null>(null);
@@ -61,7 +63,7 @@ export const AdminPricingPage = () => {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Pricing</h1>
+          <Heading className={embedded ? 'text-xl font-semibold text-white' : 'text-2xl font-bold text-white'}>Pricing</Heading>
           <p className="text-gray-400 text-sm mt-1 max-w-2xl">
             What a transfer, a re-issue and a new token cost, in US dollars. A change applies only to transfers started,
             and re-issue requests made, after it takes effect. Transfers already started keep the price they started with.

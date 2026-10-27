@@ -9,8 +9,6 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { adminApi } from '../api/adminApi';
 import { ROLE_LABELS, type AccountSearch, type AccountStatus } from '../api/accountSchemas';
-import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
-import { DeleteWindowCard } from '../components/DeleteWindowCard';
 import { NONE, errorMessage, formatDay, loadFailed } from '../lib/display';
 import { AdminTable, type AdminColumn } from '../components/AdminTable';
 import { AdminPagination, AdminSearchBox, FilterPills, ListState } from '../components/AdminListParts';
@@ -39,7 +37,6 @@ export const AccountStatusBadge = ({ status }: { status: AccountStatus }) => (
 
 export const AdminUsersPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const access = useAdminRole();
   const [loaded, setLoaded] = useState<{ key: string; data: AccountSearch | null; error: string | null } | null>(null);
   // The search term stays out of the URL (it is often an email; the address
   // bar would keep it in browser history). Status and page are in the URL.
@@ -137,7 +134,6 @@ export const AdminUsersPage = () => {
         )}
       </ListState>
 
-      <DeleteWindowCard canEdit={hasPermission(access, PERMISSIONS.manageAdmins)} />
     </div>
   );
 };

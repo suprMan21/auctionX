@@ -20,6 +20,9 @@ const api = vi.hoisted(() => ({
   getHealth: vi.fn(),
   listVoucherGrants: vi.fn(),
   revokeVoucherGrant: vi.fn(),
+  getGrowth: vi.fn(async (q: { series: string; bucket: string; from: string; to: string; tz: string }) => ({
+    ...q, addedToday: 0, active: 0, totalBefore: 0, points: [],
+  })),
 }));
 
 vi.mock('../api/adminApi', async () => {

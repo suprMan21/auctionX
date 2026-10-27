@@ -87,7 +87,8 @@ export const AdminSearchBox = ({
         if (!problem) onSearch(term);
       }}
     >
-      <div className="flex-1 sm:flex-none">
+      {/* Phone (UX-3): the box takes the whole row and the buttons go under it, so nothing runs off a 375px screen. */}
+      <div className="basis-full min-w-0 sm:basis-auto sm:flex-none">
         <label htmlFor={inputId} className="sr-only">{label}</label>
         <input
           id={inputId}
