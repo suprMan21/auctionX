@@ -285,7 +285,13 @@ const decide = async (adminId: string, id: string, decision: 'approved' | 'rejec
   const { data, error } = await getServiceClient().rpc('admin_decide_approval', {
     p_admin: adminId, p_id: id, p_decision: decision, p_note: note,
   });
-  if (error) throw approvalRpcError(error);
+  if (error) {
+    const mapped = approvalRpcError(error);
+    if (mapped.code === 'internal') {
+      withLogContext({ route: '/api/v1/admin/approvals' }).error('approval_decide_failed', { approvalId: id, decision, error: (error.message ?? '').slice(0, 200) });
+    }
+    throw mapped;
+  }
   return data as Decided;
 };
 

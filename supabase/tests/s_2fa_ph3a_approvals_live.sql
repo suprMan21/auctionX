@@ -40,7 +40,7 @@ BEGIN
   v_ok := true;
   FOREACH v_fn IN ARRAY v_fns LOOP
     v_ok := v_ok AND to_regprocedure(v_fn) IS NOT NULL
-      AND coalesce((SELECT p.prosecdef AND 'search_path=public' = ANY(p.proconfig) FROM pg_proc p WHERE p.oid = to_regprocedure(v_fn)), false);
+      AND coalesce((SELECT p.prosecdef AND 'search_path=public, pg_temp' = ANY(p.proconfig) FROM pg_proc p WHERE p.oid = to_regprocedure(v_fn)), false);
   END LOOP;
   v_res := v_res || jsonb_build_object('01_definer_search_path', CASE WHEN v_ok THEN 'ok' ELSE 'FAIL' END);
 

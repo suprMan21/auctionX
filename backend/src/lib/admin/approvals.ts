@@ -47,6 +47,11 @@ export const canonicalJson = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
+/**
+ * Integrity check only (accidental corruption, a code path that rewrites the
+ * payload). It is not tamper-proof against someone who can write the row, who
+ * could rewrite the hash too; the table is service_role only.
+ */
 export const payloadHash = (payload: unknown): string =>
   createHash('sha256').update(canonicalJson(payload)).digest('hex');
 
@@ -82,4 +87,6 @@ export const APPROVAL_ERRORS: Record<string, [code: 'conflict' | 'not_found' | '
   requester_inactive: ['conflict', 'The admin who asked no longer has access, so this request cannot run.'],
   reason_required: ['invalid_argument', 'Give a reason of at least 10 characters.'],
   admin_forbidden: ['permission_denied', 'Your staff role cannot do this.'],
+  invalid_action: ['invalid_argument', 'Some details are missing or not valid. Check the form and try again.'],
+  invalid_argument: ['invalid_argument', 'Some details are missing or not valid. Check the form and try again.'],
 };

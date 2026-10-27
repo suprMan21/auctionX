@@ -63,7 +63,7 @@ CREATE OR REPLACE FUNCTION admin_approval_permission(p_action TEXT)
 RETURNS TEXT
 LANGUAGE sql
 IMMUTABLE
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
   SELECT CASE p_action
            WHEN 'tag_reset'       THEN 'manage_nfc'
@@ -79,7 +79,7 @@ CREATE OR REPLACE FUNCTION admin_expire_approvals()
 RETURNS INTEGER
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_n INTEGER;
@@ -104,7 +104,7 @@ CREATE OR REPLACE FUNCTION admin_request_approval(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_perm   TEXT := admin_approval_permission(p_action);
@@ -159,7 +159,7 @@ CREATE OR REPLACE FUNCTION admin_decide_approval(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_row   admin_action_approvals;
@@ -249,7 +249,7 @@ CREATE OR REPLACE FUNCTION admin_record_approval_result(p_id UUID, p_result JSON
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   UPDATE admin_action_approvals
