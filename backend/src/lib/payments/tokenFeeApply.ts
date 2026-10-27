@@ -16,6 +16,7 @@
  * `apply_reissue_fee`), so an apply either lands whole or not at all.
  */
 
+import { notifyTransferCompleted } from '../notifications/tokenActivityEmails';
 import type Stripe from 'stripe';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitSecurityEvent } from '../security/securityEvent';
@@ -173,6 +174,8 @@ export const applyTransferFee = async (
         ip: ctx.ip,
         route: ctx.route,
       });
+      // S-2FA Ph3a: tell both parties. Fire and forget; never blocks the apply.
+      void notifyTransferCompleted(supabase, fee.transferId);
     }
     return { outcome, tagId };
   } catch (err) {
@@ -282,6 +285,7 @@ export const redeemTransferVoucher = async (
           ip: ctx.ip,
           route: ctx.route,
         });
+        void notifyTransferCompleted(supabase, transferId);
         return { outcome: 'applied', grantId: row.grant_id ?? null, payerId: row.payer_id ?? null };
       case 'no_voucher':
       case 'not_found':

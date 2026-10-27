@@ -29,6 +29,8 @@ export const adminMeSchema = z.object({
   email: z.string(),
   role: z.string(),
   permissions: z.array(z.string()),
+  /** S-2FA Ph3a: this admin's suspend / reset / retire wait for a second admin. */
+  approvalRequired: z.boolean().optional().default(false),
 });
 export type AdminMe = z.infer<typeof adminMeSchema>;
 

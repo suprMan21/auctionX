@@ -2,16 +2,15 @@ import { Router } from 'express';
 import { requirePermission } from '../../middleware/adminAuth';
 import { PERMISSIONS } from '../../lib/admin/permissions';
 import { handle } from '../tagManagement';
+import { approvalGated } from '../../controllers/adminApprovalsController';
 import {
   deleteAccount,
   getAccount,
   getAccountTokens,
   reactivateAccount,
-  retireAccount,
   searchAccounts,
   setAccountRole,
   setAccountType,
-  suspendAccount,
   unsuspendAccount,
 } from '../../controllers/adminAccountsController';
 
@@ -27,9 +26,10 @@ router.get('/', requirePermission(PERMISSIONS.viewUsers), handle(searchAccounts)
 router.get('/:id', requirePermission(PERMISSIONS.viewUsers), handle(getAccount));
 router.get('/:id/tokens', requirePermission(PERMISSIONS.manageNfc), handle(getAccountTokens));
 
-router.post('/:id/suspend', requirePermission(PERMISSIONS.manageUsers), handle(suspendAccount));
+// S-2FA Ph3a: suspend and retire wait for a second admin unless the caller may act alone.
+router.post('/:id/suspend', requirePermission(PERMISSIONS.manageUsers), handle(approvalGated('account_suspend')));
 router.post('/:id/unsuspend', requirePermission(PERMISSIONS.manageUsers), handle(unsuspendAccount));
-router.post('/:id/retire', requirePermission(PERMISSIONS.manageUsers), handle(retireAccount));
+router.post('/:id/retire', requirePermission(PERMISSIONS.manageUsers), handle(approvalGated('account_retire')));
 router.post('/:id/reactivate', requirePermission(PERMISSIONS.manageUsers), handle(reactivateAccount));
 
 router.post('/:id/delete', requirePermission(PERMISSIONS.manageAdmins), handle(deleteAccount));

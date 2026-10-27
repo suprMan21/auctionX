@@ -59,6 +59,15 @@ const ALL_NAV_ITEMS: NavItem[] = [
     section: 'Queues',
   },
   {
+    to: '/admin/approvals',
+    label: 'Approvals',
+    // S-2FA Ph3a: suspend / reset / retire requests waiting for a second admin.
+    anyPermission: [PERMISSIONS.manageNfc, PERMISSIONS.manageUsers],
+    // badge-check: a second admin signs off
+    icon: 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z',
+    section: 'Queues',
+  },
+  {
     to: '/admin/verifications',
     label: 'Creator ID checks',
     permission: PERMISSIONS.viewCreatorIds,
@@ -158,6 +167,7 @@ const badgeFor = (to: string, q: WorkQueueCounts): number | null | undefined => 
     return (q.reissuesToReview ?? 0) + (q.reissuesReady ?? 0);
   }
   if (to === '/admin/stuck-payments') return q.stuckPayments;
+  if (to === '/admin/approvals') return q.approvalsWaiting;
   return null;
 };
 

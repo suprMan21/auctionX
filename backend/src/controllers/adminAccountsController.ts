@@ -25,6 +25,7 @@
 import type { Request, Response } from 'express';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '../lib/errors';
+import { approvalRequired } from '../lib/admin/approvals';
 import { withLogContext } from '../lib/logger';
 import {
   accountIdParamSchema,
@@ -142,6 +143,8 @@ export const getMe = async (req: AdminRequest, res: Response) => {
     email: admin.email,
     role: admin.role,
     permissions: [...admin.permissions].sort(),
+    // S-2FA Ph3a: token reset / suspend and account suspend / retire wait for a second admin.
+    approvalRequired: approvalRequired(admin),
   });
 };
 
@@ -177,15 +180,35 @@ export const getAccountTokens = async (req: AdminRequest, res: Response) => {
   return ok(res, data);
 };
 
-export const suspendAccount = async (req: AdminRequest, res: Response) => {
+export type SuspendAccountBody = { hours: number; reason: string };
+export type ReasonBody = { reason: string };
+
+/** The account id from the route (`:id`). */
+export const accountIdFrom = (req: AdminRequest): string => accountId(req);
+export const parseSuspendAccountBody = (raw: unknown): SuspendAccountBody => parse(suspendBodySchema, raw);
+export const parseReasonBody = (raw: unknown): ReasonBody => parse(reasonBodySchema, raw);
+
+/** Runs an account suspend as `req.admin` (the approver, when it runs from an approval). */
+export const runSuspendAccount = async (req: AdminRequest, target: string, body: SuspendAccountBody) => {
   const adminId = requireAdminId(req);
-  const target = accountId(req);
-  const body = parse(suspendBodySchema, req.body);
   const data = await callRpc<unknown>('admin_suspend_account', {
     p_admin: adminId, p_target: target, p_hours: body.hours, p_reason: body.reason,
   });
   logAction(req, 'account_suspend', target);
-  return ok(res, data);
+  return data;
+};
+
+/** Runs an account retire as `req.admin` (the approver, when it runs from an approval). */
+export const runRetireAccount = async (req: AdminRequest, target: string, body: ReasonBody) => {
+  const adminId = requireAdminId(req);
+  const data = await callRpc<unknown>('admin_retire_account', { p_admin: adminId, p_target: target, p_reason: body.reason });
+  logAction(req, 'account_retire', target);
+  return data;
+};
+
+export const suspendAccount = async (req: AdminRequest, res: Response) => {
+  const target = accountId(req);
+  return ok(res, await runSuspendAccount(req, target, parseSuspendAccountBody(req.body)));
 };
 
 const reasonAction = (fn: string, action: string) => async (req: AdminRequest, res: Response) => {
@@ -198,7 +221,10 @@ const reasonAction = (fn: string, action: string) => async (req: AdminRequest, r
 };
 
 export const unsuspendAccount = reasonAction('admin_unsuspend_account', 'account_unsuspend');
-export const retireAccount = reasonAction('admin_retire_account', 'account_retire');
+export const retireAccount = async (req: AdminRequest, res: Response) => {
+  const target = accountId(req);
+  return ok(res, await runRetireAccount(req, target, parseReasonBody(req.body)));
+};
 export const reactivateAccount = reasonAction('admin_reactivate_account', 'account_reactivate');
 
 export const deleteAccount = async (req: AdminRequest, res: Response) => {

@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { adminApi } from '../api/adminApi';
-import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
+import { canOpenApprovals, hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { EMPTY_WORK_QUEUES, WORK_QUEUE_REFRESH_MS, WorkQueueContext, type WorkQueueCounts } from '../lib/workQueues';
 
 const countOrNull = (load: () => Promise<number>): Promise<number | null> =>
@@ -15,12 +15,13 @@ export const WorkQueueProvider = ({ children }: { children: ReactNode }) => {
   const access = useAdminRole();
   const canReissue = hasPermission(access, PERMISSIONS.manageNfc);
   const canStuck = hasPermission(access, PERMISSIONS.reapplyPayments);
+  const canApprovals = canOpenApprovals(access);
   const [counts, setCounts] = useState<Omit<WorkQueueCounts, 'refresh'>>(EMPTY_WORK_QUEUES);
   const [tick, setTick] = useState(0);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   useEffect(() => {
-    if (!canReissue && !canStuck) return;
+    if (!canReissue && !canStuck && !canApprovals) return;
     let cancelled = false;
     const load = () => {
       // A console left open in a background tab does not keep polling.
@@ -29,8 +30,9 @@ export const WorkQueueProvider = ({ children }: { children: ReactNode }) => {
         canReissue ? countOrNull(() => adminApi.listReissueRequests({ status: 'PENDING', limit: 1 }).then((r) => r.data.pagination.total)) : null,
         canReissue ? countOrNull(() => adminApi.listReissueRequests({ status: 'READY', limit: 1 }).then((r) => r.data.pagination.total)) : null,
         canStuck ? countOrNull(() => adminApi.listStuckPayments({ status: 'OPEN', limit: 1 }).then((r) => r.data.total)) : null,
-      ]).then(([reissuesToReview, reissuesReady, stuckPayments]) => {
-        if (!cancelled) setCounts({ reissuesToReview, reissuesReady, stuckPayments });
+        canApprovals ? countOrNull(() => adminApi.listApprovals({ status: 'waiting_for_me', limit: 1 }).then((r) => r.pagination.total)) : null,
+      ]).then(([reissuesToReview, reissuesReady, stuckPayments, approvalsWaiting]) => {
+        if (!cancelled) setCounts({ reissuesToReview, reissuesReady, stuckPayments, approvalsWaiting });
       });
     };
     load();
@@ -42,7 +44,7 @@ export const WorkQueueProvider = ({ children }: { children: ReactNode }) => {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [canReissue, canStuck, tick]);
+  }, [canReissue, canStuck, canApprovals, tick]);
 
   const value = useMemo(() => ({ ...counts, refresh }), [counts, refresh]);
   return <WorkQueueContext.Provider value={value}>{children}</WorkQueueContext.Provider>;

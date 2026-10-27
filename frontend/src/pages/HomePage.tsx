@@ -18,16 +18,16 @@ const mailto = (subject: string) => `mailto:${CONTACT_EMAIL}?subject=${encodeURI
 
 const STEPS = [
   {
-    title: 'LOOK FOR IT.',
-    body: 'A small AM seal, applied to the piece at the source.',
+    title: 'THE STORY STARTS AT THE SOURCE.',
+    body: 'A small AM seal goes on the piece where it was made.',
   },
   {
-    title: 'TAP IT.',
+    title: 'ONE TAP TELLS IT.',
     body: 'Hold your phone to the seal. See where it came from and that it is the real one. No app. No login.',
   },
   {
-    title: 'KEEP IT.',
-    body: 'When the piece changes hands, its record goes with it to the next owner.',
+    title: 'THE STORY GOES WITH IT.',
+    body: 'When the piece changes hands, its story moves to the next owner.',
   },
 ] as const;
 
@@ -72,11 +72,11 @@ export const HomePage = () => (
         </div>
       </section>
 
-      {/* ── Look for it. Tap it. Keep it. ── */}
+      {/* ── How the seal tells its story ── */}
       <section aria-labelledby="how-heading" className="px-4 py-24 border-t border-white/10">
         <div className="max-w-6xl mx-auto">
           <h2 id="how-heading" className="text-3xl md:text-5xl font-bold tracking-[0.04em] uppercase text-center text-white">
-            Look for it. Tap it. Keep it.
+            Every seal tells a story.
           </h2>
           <ol className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
             {STEPS.map((step) => (

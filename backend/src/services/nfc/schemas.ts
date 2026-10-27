@@ -34,12 +34,7 @@ export const transferSchema = z.object({
   transactionId: z.string().uuid().optional(),
 });
 
-export const mintSchema = z.object({
-  tagId: z.string().uuid(),
-});
-
 export type RegisterTagInput = z.infer<typeof registerTagSchema>;
 export type ScanTagInput = z.infer<typeof scanTagSchema>;
 export type UploadProofInput = z.infer<typeof uploadProofSchema>;
 export type TransferInput = z.infer<typeof transferSchema>;
-export type MintInput = z.infer<typeof mintSchema>;

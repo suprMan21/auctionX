@@ -86,6 +86,58 @@ export const reissueStageLabel = (status: string, paymentStatus: string | null, 
   return reissueStatusLabel(status);
 };
 
+// ─── Two-admin approval (S-2FA Ph3a) ────────────────────────────────────────
+
+const APPROVAL_ACTION: Record<string, string> = {
+  tag_reset: 'Move token to a new chip',
+  tag_suspend: 'Suspend token',
+  account_suspend: 'Suspend account',
+  account_retire: 'Retire account',
+};
+
+/** What an approval request asks to do. */
+export const approvalActionLabel = (action: string | null | undefined): string => lookup(APPROVAL_ACTION, action, 'Unknown');
+
+const APPROVAL_STATUS: Record<string, string> = {
+  pending: 'Waiting for approval',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+  expired: 'Expired',
+};
+
+/** Approval request status. */
+export const approvalStatusLabel = (status: string | null | undefined): string => lookup(APPROVAL_STATUS, status, 'Unknown');
+
+/** Shown on the buttons and in the helper text when an action waits for a second admin. */
+export const APPROVAL_COPY = {
+  button: 'Send for approval',
+  busy: 'Sending…',
+  helper: 'Another admin approves this before it happens. Nothing changes until then.',
+  sentTitle: 'Sent for approval',
+  sent: 'Another admin must approve this within 24 hours. Nothing has changed yet.',
+  openRequest: 'Open the request',
+} as const;
+
+/** One line for where a request got to, e.g. "Approved by admin2@… · Done". */
+export const approvalOutcomeLabel = (a: {
+  status: string;
+  decidedBy: { email: string | null } | null;
+  outcome: { ok: boolean; message: string | null } | null;
+}): string => {
+  const by = a.decidedBy?.email ? ` by ${a.decidedBy.email}` : '';
+  switch (a.status) {
+    case 'pending': return 'Waiting for another admin';
+    case 'approved':
+      if (a.outcome && !a.outcome.ok) return `Approved, but it did not run: ${a.outcome.message ?? 'no reason given'}`;
+      return a.outcome?.ok ? `Approved${by} · Done` : `Approved${by}`;
+    case 'rejected': return `Rejected${by}`;
+    case 'cancelled': return 'Cancelled by the admin who asked';
+    case 'expired': return 'Expired: nobody approved it within 24 hours';
+    default: return approvalStatusLabel(a.status);
+  }
+};
+
 // ─── Stuck payments ──────────────────────────────────────────────────────────
 
 const STUCK_STATUS: Record<string, string> = { OPEN: 'Open', RESOLVED: 'Resolved', REFUNDED: 'Refunded' };
@@ -150,6 +202,11 @@ const AUDIT_ACTION: Record<string, string> = {
   voucher_revoke: 'Free transfers revoked',
   // Creator ID checks
   override: 'Status changed by staff',
+  // Two-admin approval
+  approval_request: 'Sent for approval',
+  approval_approve: 'Request approved',
+  approval_reject: 'Request rejected',
+  approval_cancel: 'Request cancelled',
 };
 
 /** An audit log action. */
@@ -167,6 +224,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   token_price: 'Price',
   transfer_voucher_grant: 'Free transfers',
   account_settings: 'Account settings',
+  admin_approval: 'Approval request',
 };
 
 /** What an audit log entry is about. */

@@ -50,6 +50,16 @@ import {
   type GrantableRole,
 } from './accountSchemas';
 
+import {
+  approvalListSchema,
+  approveResultSchema,
+  decisionResultSchema,
+  pendingApprovalOf,
+  type ApprovalFilter,
+  type ApprovalList,
+  type ApprovalPending,
+} from './approvalSchemas';
+
 const ADMIN_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1'}/admin`;
 
 // ─── Auth Helper ─────────────────────────────────────────────────────────────
@@ -125,6 +135,14 @@ async function adminFetch<T>(
   return response.json() as Promise<T>;
 }
 
+/** An account action's answer: null when it ran, the request when it waits for approval. */
+const doneOrPending = (body: unknown): ApprovalPending | null => {
+  const pending = pendingApprovalOf(body);
+  if (pending) return pending;
+  parseEnvelope(actionResultSchema, body);
+  return null;
+};
+
 // ─── User Endpoints ───────────────────────────────────────────────────────────
 
 export const adminApi = {
@@ -156,14 +174,16 @@ export const adminApi = {
     return parseEnvelope(accountTokensSchema, await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/tokens`));
   },
 
-  async suspendAccount(id: string, hours: number, reason: string): Promise<void> {
-    parseEnvelope(actionResultSchema, await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/suspend`, {
+  /** null = done. S-2FA Ph3a: a request sent for a second admin's approval (202) instead. */
+  async suspendAccount(id: string, hours: number, reason: string): Promise<ApprovalPending | null> {
+    return doneOrPending(await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/suspend`, {
       method: 'POST', body: JSON.stringify({ hours, reason }),
     }));
   },
 
-  async accountAction(id: string, action: 'unsuspend' | 'retire' | 'reactivate', reason: string): Promise<void> {
-    parseEnvelope(actionResultSchema, await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/${action}`, {
+  /** null = done. Retire may come back as a request sent for approval (202). */
+  async accountAction(id: string, action: 'unsuspend' | 'retire' | 'reactivate', reason: string): Promise<ApprovalPending | null> {
+    return doneOrPending(await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/${action}`, {
       method: 'POST', body: JSON.stringify({ reason }),
     }));
   },
@@ -481,8 +501,8 @@ export const adminApi = {
   },
 
   /** POST /admin/tags/:tagId/suspend | /unsuspend — typed reason required. */
-  setTagSuspension(tagId: string, suspend: boolean, reason: string): Promise<AdminTagSuspensionResponse> {
-    return adminFetch<AdminTagSuspensionResponse>(
+  setTagSuspension(tagId: string, suspend: boolean, reason: string): Promise<AdminTagSuspensionResponse | AdminApprovalPendingResponse> {
+    return adminFetch<AdminTagSuspensionResponse | AdminApprovalPendingResponse>(
       `/tags/${encodeURIComponent(tagId)}/${suspend ? 'suspend' : 'unsuspend'}`,
       { method: 'POST', body: JSON.stringify({ reason }) },
     );
@@ -492,10 +512,49 @@ export const adminApi = {
   resetTag(
     tagId: string,
     body: { newTagId: string; reason: string; confirmSuffix: string },
-  ): Promise<AdminTagResetResponse> {
-    return adminFetch<AdminTagResetResponse>(
+  ): Promise<AdminTagResetResponse | AdminApprovalPendingResponse> {
+    return adminFetch<AdminTagResetResponse | AdminApprovalPendingResponse>(
       `/tags/${encodeURIComponent(tagId)}/reset`,
       { method: 'POST', body: JSON.stringify(body) },
+    );
+  },
+
+  // ─── Two-admin approval (S-2FA Ph3a) ────────────────────────────────────────
+  // manage_nfc or manage_users; the server shows only the actions this admin may approve.
+
+  /** GET /admin/approvals — waiting_for_me = pending requests by someone else. */
+  async listApprovals(params: { status?: ApprovalFilter; id?: string; page?: number; limit?: number } = {}): Promise<ApprovalList> {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) qs.set(key, String(value));
+    }
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    return parseEnvelope(approvalListSchema, await adminFetch<unknown>(`/approvals${query}`));
+  },
+
+  /** Always needs a fresh passkey check (step-up action admin_approve, target = the request id). */
+  async approveApproval(id: string, stepUpToken?: string) {
+    return parseEnvelope(
+      approveResultSchema,
+      await adminFetch<unknown>(`/approvals/${encodeURIComponent(id)}/approve`, {
+        method: 'POST', body: '{}', headers: stepUpHeaders(stepUpToken),
+      }),
+    );
+  },
+
+  /** reason: 10–500 characters. */
+  async rejectApproval(id: string, reason: string) {
+    return parseEnvelope(
+      decisionResultSchema,
+      await adminFetch<unknown>(`/approvals/${encodeURIComponent(id)}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    );
+  },
+
+  /** The requester withdraws their own request. */
+  async cancelApproval(id: string) {
+    return parseEnvelope(
+      decisionResultSchema,
+      await adminFetch<unknown>(`/approvals/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: '{}' }),
     );
   },
 
@@ -908,6 +967,12 @@ export interface AdminTagDetailResponse {
     taps: AdminTagTapRow[];
     audit: AdminTagAuditRow[];
   };
+}
+
+/** S-2FA Ph3a: HTTP 202, the action waits for a second admin. */
+export interface AdminApprovalPendingResponse {
+  success: true;
+  data: ApprovalPending;
 }
 
 export interface AdminTagSuspensionResponse {

@@ -22,6 +22,8 @@
  *
  * S-ANCHOR1: `.upsert(row, { onConflict })`.
  *
+ * S-2FA Ph3a: `.neq()`, and `or()` terms `col.not.is.null` and `col.lte.v` (approval queue).
+ *
  * S-NFC3.5: `.lt()` (the conditional counter burn) and an optional
  * `beforeUpdate` hook, so a test can play a concurrent request that wins the
  * race between our read and our conditional write.
@@ -39,7 +41,7 @@ export type Tables = Record<string, Row[]>;
 
 interface Filter {
   column: string;
-  op: 'eq' | 'lt' | 'gt' | 'gte' | 'lte' | 'in' | 'is' | 'ilike' | 'or' | 'notnull';
+  op: 'eq' | 'neq' | 'lt' | 'gt' | 'gte' | 'lte' | 'in' | 'is' | 'ilike' | 'or' | 'notnull';
   value: unknown;
 }
 
@@ -49,6 +51,8 @@ const matches = (row: Row, filters: Filter[]): boolean =>
     switch (f.op) {
       case 'eq':
         return cell === f.value;
+      case 'neq':
+        return cell !== f.value;
       case 'or':
         return (f.value as Filter[]).some((term) => matches(row, [term]));
       case 'is':
@@ -213,7 +217,9 @@ class QueryBuilder {
     }
     raw.push(current);
     const terms: Filter[] = raw.map((term) => {
-      const m = /^([a-z0-9_]+)\.(eq|ilike|in)\.(.+)$/.exec(term);
+      const notNull = /^([a-z0-9_]+)\.not\.is\.null$/.exec(term);
+      if (notNull) return { column: notNull[1], op: 'notnull', value: null };
+      const m = /^([a-z0-9_]+)\.(eq|ilike|in|lte)\.(.+)$/.exec(term);
       if (!m) throw new Error(`supabaseMock: unsupported or() term ${term}`);
       const [, column, op, value] = m;
       if (op === 'in') {
@@ -221,9 +227,14 @@ class QueryBuilder {
         if (!list) throw new Error(`supabaseMock: unsupported or() in-list ${value}`);
         return { column, op: 'in', value: list[1] === '' ? [] : list[1].split(',') };
       }
-      return { column, op: op as 'eq' | 'ilike', value };
+      return { column, op: op as 'eq' | 'ilike' | 'lte', value };
     });
     this.filters.push({ column: '', op: 'or', value: terms });
+    return this;
+  }
+
+  neq(column: string, value: unknown): this {
+    this.filters.push({ column, op: 'neq', value });
     return this;
   }
 

@@ -30,14 +30,23 @@ export interface WebAuthnConfig {
   origins: string[];
 }
 
-export const webAuthnConfig = (): WebAuthnConfig => ({
-  rpId: required('WEBAUTHN_RP_ID'),
-  rpName: process.env.WEBAUTHN_RP_NAME?.trim() || 'Authentic Materials',
-  origins: required('WEBAUTHN_ORIGINS')
+/**
+ * WEBAUTHN_ORIGINS is optional: unset, the only allowed origin is
+ * `https://<WEBAUTHN_RP_ID>` (frees an App Runner env slot, Ph3a). Set it only
+ * when a second origin (a subdomain) must be allowed.
+ */
+export const webAuthnConfig = (): WebAuthnConfig => {
+  const rpId = required('WEBAUTHN_RP_ID');
+  const listed = (process.env.WEBAUTHN_ORIGINS ?? '')
     .split(',')
     .map((o) => o.trim())
-    .filter(Boolean),
-});
+    .filter(Boolean);
+  return {
+    rpId,
+    rpName: process.env.WEBAUTHN_RP_NAME?.trim() || 'Authentic Materials',
+    origins: listed.length > 0 ? listed : [`https://${rpId}`],
+  };
+};
 
 /** How long a passkey challenge stays usable. */
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;

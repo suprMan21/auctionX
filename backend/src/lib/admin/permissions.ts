@@ -19,6 +19,8 @@ export const PERMISSIONS = {
   /** Creator ID checks (Yoti): open the list and detail / change a status (2026-10-26). */
   viewCreatorIds: 'view_creator_ids',
   manageCreatorIds: 'manage_creator_ids',
+  /** S-2FA Ph3a: acts without a second admin's approval (super_admin, break-glass). */
+  actWithoutApproval: 'act_without_approval',
   /** Parked marketplace seller approvals only (super_admin). */
   reviewSellers: 'review_sellers',
   // Parked marketplace (routes mounted only when the marketplace flag is on).

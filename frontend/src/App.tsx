@@ -50,6 +50,7 @@ import { AdminHealthPage } from '@/features/admin/pages/AdminHealthPage';
 import { AdminTagsPage } from '@/features/admin/pages/AdminTagsPage';
 import { AdminTagDetailPage } from '@/features/admin/pages/AdminTagDetailPage';
 import { AdminReissuePage } from '@/features/admin/pages/AdminReissuePage';
+import { AdminApprovalsPage } from '@/features/admin/pages/AdminApprovalsPage';
 import { AdminStuckPaymentsPage } from '@/features/admin/pages/AdminStuckPaymentsPage';
 import { AdminSettingsPage } from '@/features/admin/pages/AdminSettingsPage';
 import { AdminPermissionGate } from '@/features/admin/components/AdminPermissionGate';
@@ -449,6 +450,8 @@ function App() {
               <Route path="tags" element={<AdminPermissionGate permission={PERMISSIONS.manageNfc}><AdminTagsPage /></AdminPermissionGate>} />
               <Route path="tags/:tagId" element={<AdminPermissionGate permission={PERMISSIONS.manageNfc}><AdminTagDetailPage /></AdminPermissionGate>} />
               <Route path="reissue-requests" element={<AdminPermissionGate permission={PERMISSIONS.manageNfc}><AdminReissuePage /></AdminPermissionGate>} />
+              {/* S-2FA Ph3a: two-admin approval queue (manage_nfc or manage_users). */}
+              <Route path="approvals" element={<AdminPermissionGate permission={[PERMISSIONS.manageNfc, PERMISSIONS.manageUsers]}><AdminApprovalsPage /></AdminPermissionGate>} />
               <Route path="stuck-payments" element={<AdminPermissionGate permission={PERMISSIONS.reapplyPayments}><AdminStuckPaymentsPage /></AdminPermissionGate>} />
               {/* UX-3: Pricing, Free transfers and the delete waiting time live on Settings; old links redirect. */}
               <Route path="settings" element={<AdminSettingsPage />} />

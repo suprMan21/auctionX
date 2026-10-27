@@ -7,7 +7,8 @@
 import type { ReactNode } from 'react';
 import { hasPermission, useAdminRole } from '../lib/adminRole';
 
-export const AdminPermissionGate = ({ permission, children }: { permission: string; children: ReactNode }) => {
+/** `permission` may be a list: holding any one of them is enough. */
+export const AdminPermissionGate = ({ permission, children }: { permission: string | readonly string[]; children: ReactNode }) => {
   const access = useAdminRole();
   if (access.status === 'loading') {
     return (
@@ -16,7 +17,8 @@ export const AdminPermissionGate = ({ permission, children }: { permission: stri
       </div>
     );
   }
-  if (!hasPermission(access, permission)) {
+  const needed: readonly string[] = typeof permission === 'string' ? [permission] : permission;
+  if (!needed.some((p) => hasPermission(access, p))) {
     return (
       <div className="glass rounded-2xl p-6">
         <h1 className="text-xl font-semibold text-white mb-2">Not available for your staff role</h1>
