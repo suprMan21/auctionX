@@ -70,6 +70,14 @@ Not fixed: a stuck (underpriced) tx only alerts, no fee bump (fine on Sepolia; r
 Ph2/counsel: a Receipt's sibling hashes let its holder test whether another *publicly known* Ownership ID was
 anchored the same day.
 
+## Setup record
+
+| Item | Value |
+|---|---|
+| Writer KMS key | `alias/am-anchor-writer-staging` → key id `0a451741-79d7-4064-91db-35db22b348da` (ECC_SECG_P256K1, us-east-2), created by Boss 2026-10-27 via CloudShell as `chris-admin` |
+| Writer address | `0x704BD2499738c0dBc84C2F84ffD17b587a64A70b` (derived from the KMS public key) |
+| No-human-sign check | `chris-admin`: AccessDenied (script). `claude-ro`: AccessDenied, "explicit deny in a resource-based policy", i.e. the key policy's own Deny |
+
 ## Boss runbook (testnet setup)
 
 1. **Hardware wallet address.** Any EVM address on it; Base Sepolia uses the same address. This is `REGISTRY_OWNER`.
