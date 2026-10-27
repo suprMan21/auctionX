@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-26 (S-ADMIN2 Ph1 live + verified; admin console UX-1)
+**Last updated:** 2026-10-27 (account types live on staging; next S-ANCHOR1 Ph1)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -14,6 +14,15 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ---
 
 ## 🔴 BOSS ACTION
+
+### Account types (2026-10-27)
+- [ ] `scripts/deploy-frontend.sh staging`, then click through: sign up a throwaway as **A creator** (lands on
+      Account type); Admin → Accounts → Type filter; test2@ → **Change account type…** → Creator now, skip the ID
+      check (badge "Creator (set by staff)"), then back to Collector. `docs/ACCOUNT_TYPES_VERIFICATION.md`.
+
+### S-ANCHOR1 Ph1 (next session)
+- [ ] Have the **hardware wallet** at hand (contract owner, testnet too) and be ready to run the AWS script that
+      creates the KMS secp256k1 writer key (Claude's AWS access is read-only).
 
 ### Verified Creator OAuth (DR-3, 2026-10-26)
 Source: Notion "OAuth Platform Approval Matrix v1.0" (https://app.notion.com/p/4053baf696648120be1af1894ffbe9b5).
