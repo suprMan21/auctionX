@@ -296,3 +296,24 @@ describe('free transfers on an account page', () => {
     expect(within(dialog).getByDisplayValue('fan@example.com')).toBeInTheDocument();
   });
 });
+
+describe('chart side scroll', () => {
+  it('keeps a minimum column width: a narrow card scrolls the plot instead of squeezing it', async () => {
+    // jsdom has no layout, so the chart uses its 560px fallback; 60 days need 60 × 16 + 18 = 978px.
+    const { GrowthChart } = await import('../components/GrowthChart');
+    const points = Array.from({ length: 60 }, (_, i) => ({ start: `2026-0${i < 30 ? 8 : 9}-${String((i % 30) + 1).padStart(2, '0')}`, value: i }));
+    render(<GrowthChart points={points} bucket="day" mode="new" label="Tokens added per day" />);
+    const strip = screen.getByRole('group', { name: 'Tokens added per day, scroll sideways for earlier dates' });
+    expect(strip).toHaveAttribute('tabindex', '0');
+    expect(within(strip).getByRole('img').getAttribute('width')).toBe('978');
+    expect(screen.getByText('← Swipe or scroll for earlier dates')).toBeInTheDocument();
+  });
+
+  it('a chart that fits does not scroll and shows no hint', async () => {
+    const { GrowthChart } = await import('../components/GrowthChart');
+    render(<GrowthChart points={[{ start: '2026-10-01', value: 1 }]} bucket="day" mode="new" label="Tokens added per day" />);
+    expect(screen.queryByRole('group', { name: /scroll sideways/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('img').getAttribute('width')).toBe('560');
+    expect(screen.queryByText(/scroll for earlier dates/)).not.toBeInTheDocument();
+  });
+});
