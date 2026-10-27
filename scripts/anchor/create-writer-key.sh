@@ -26,7 +26,6 @@ set -euo pipefail
 REGION=us-east-2
 ACCOUNT=904183418667
 ALIAS=alias/am-anchor-writer-staging
-ROLE_ARN="arn:aws:iam::${ACCOUNT}:role/am-backend-staging-instance"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BACKEND="$HERE/../../backend"
 
@@ -40,8 +39,10 @@ caller=$(aws_ sts get-caller-identity --query Arn --output text)
 echo "Running as: $caller"
 [[ "$caller" == *":${ACCOUNT}:"* ]] || { echo "Wrong account." >&2; exit 1; }
 
-aws_ iam get-role --role-name am-backend-staging-instance --query Role.Arn --output text >/dev/null \
+# Use the role's real ARN (with any IAM path), so the Deny can never block the backend itself.
+ROLE_ARN=$(aws_ iam get-role --role-name am-backend-staging-instance --query Role.Arn --output text) \
   || { echo "Instance role am-backend-staging-instance not found." >&2; exit 1; }
+echo "Backend role: $ROLE_ARN"
 
 if key_id=$(aws_ kms describe-key --key-id "$ALIAS" --query KeyMetadata.KeyId --output text 2>/dev/null); then
   echo "Key already exists: $key_id (skipping creation)"
