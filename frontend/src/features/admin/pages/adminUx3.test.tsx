@@ -216,27 +216,31 @@ describe('audit targets open their record', () => {
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 describe('Settings page', () => {
-  it('admin sees Pricing, Free transfers and Account deletion; support only Account deletion', async () => {
+  it('admin sees all three sections on one page; support only Account deletion', async () => {
     api.getAccountSettings.mockResolvedValue({ deleteWindowHours: 24 });
     api.getPricing.mockReturnValue(new Promise(() => {}));
+    api.listVoucherGrants.mockReturnValue(new Promise(() => {}));
     const { unmount } = withRole('admin', <AdminSettingsPage />, '/admin/settings');
-    const tabs = screen.getByRole('navigation', { name: 'Settings sections' });
-    expect(within(tabs).getAllByRole('link').map((l) => l.textContent)).toEqual(['Pricing', 'Free transfers', 'Account deletion']);
-    expect(within(tabs).getByRole('link', { name: 'Pricing' })).toHaveAttribute('aria-current', 'page');
+    const jump = screen.getByRole('navigation', { name: 'Settings sections' });
+    expect(within(jump).getAllByRole('link').map((l) => l.getAttribute('href'))).toEqual(['#settings-pricing', '#settings-free-transfers', '#settings-account-deletion']);
+    for (const name of ['Pricing', 'Free transfers', 'Account deletion']) expect(screen.getByRole('region', { name })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Pricing' })).toBeInTheDocument();
     unmount();
     api.getPricing.mockClear();
+    api.listVoucherGrants.mockClear();
 
     withRole('support', <AdminSettingsPage />, '/admin/settings?tab=pricing');
-    const supportTabs = screen.getByRole('navigation', { name: 'Settings sections' });
-    expect(within(supportTabs).getAllByRole('link').map((l) => l.textContent)).toEqual(['Account deletion']);
-    // A tab the role cannot open falls back to one it can.
-    expect(within(supportTabs).getByRole('link', { name: 'Account deletion' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('region', { name: 'Account deletion' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Pricing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
     expect(api.getPricing).not.toHaveBeenCalled();
+    expect(api.listVoucherGrants).not.toHaveBeenCalled();
   });
 
   it('old Pricing links land on the Settings tab', async () => {
     api.getPricing.mockReturnValue(new Promise(() => {}));
+    api.listVoucherGrants.mockReturnValue(new Promise(() => {}));
+    api.getAccountSettings.mockReturnValue(new Promise(() => {}));
     withRole('admin', <AdminSettingsPage />, '/admin/pricing');
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/admin/settings?tab=pricing'));
   });
