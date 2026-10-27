@@ -77,9 +77,9 @@ blocks an account delete.
 
 ## Not yet verified
 
-- **The Supabase store against staging** (`backend/scripts/mfa-store-smoke.ts`, 30 checks, throwaway account
-  deleted at the end). Needs the staging secret key, which Claude may not read. Boss:
-  `cd backend && op run --env-file .env.op -- npx tsx scripts/mfa-store-smoke.ts` (expect `30/30`, `cleanup ok`).
+- ✅ **The Supabase store against staging**: `backend/scripts/mfa-store-smoke.ts` run by Boss 2026-10-27:
+  **30/30**, cleanup ok, 0 leftover rows. (Run with only `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` as `op://`
+  env vars: the full `.env.op` fails on the missing optional `Security` item.)
 - Real browsers (iOS Safari, Android Chrome, YubiKey): Ph4.
 
 ## Before deploy (Boss)
