@@ -30,6 +30,10 @@ Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live o
       Fix was a leading space in the `WEBAUTHN_RP_ID` name. `admin2@`: passkey (no wait) + 10 backup codes.
 - [ ] Ph3 tidy-up: why App Runner has `AWS_ACCESS_KEY_ID` (should be the instance role); confirm NFT vars are gone;
       delete the dead NFT mint code (`services/nfc/nftMinting.ts`, `pinataService.ts`, `/nfc/mint`).
+- [ ] Ph4: **Creators must enrol at next login** (Boss 2026-10-27, Decisions DB): new `FEATURE_REQUIRE_CREATOR_2FA`;
+      `secondFactorRequired` = global OR staff (admin flag) OR `users.account_type = 'creator'`. Collectors: at first
+      claim / transfer / release. super_admin YubiKeys enrolled by Boss on staging 2026-10-27 (likely re-register for
+      attestation + AAGUID allowlist).
 - [ ] Ph4: phones (iOS Safari, Android Chrome), then flags in order: `FEATURE_REQUIRE_2FA` → `FEATURE_REQUIRE_ADMIN_2FA` → `FEATURE_REQUIRE_STEP_UP`.
 
 ### Account types (2026-10-27)
