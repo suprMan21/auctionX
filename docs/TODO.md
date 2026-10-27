@@ -26,6 +26,10 @@ Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live o
 - [ ] **App Runner env var cap** (2 slots left, 2026-10-27): Boss deletes vars equal to defaults (`WEBAUTHN_RP_NAME`,
       `MFA_SESSION_TTL_HOURS`, every `FEATURE_*=false`). Ph3: `WEBAUTHN_ORIGINS` defaults to `https://<WEBAUTHN_RP_ID>`;
       move secrets into one Secrets Manager JSON secret read at boot by `am-backend-staging-instance` (one env var).
+- [x] 2026-10-27: `admin@` has authenticator app + passkey "adminkey1" (synced; waits until 2026-10-28 18:46 EDT).
+      Fix was a leading space in the `WEBAUTHN_RP_ID` name. `admin2@` still to enrol.
+- [ ] Ph3 tidy-up: why App Runner has `AWS_ACCESS_KEY_ID` (should be the instance role); confirm NFT vars are gone;
+      delete the dead NFT mint code (`services/nfc/nftMinting.ts`, `pinataService.ts`, `/nfc/mint`).
 - [ ] Ph4: phones (iOS Safari, Android Chrome), then flags in order: `FEATURE_REQUIRE_2FA` → `FEATURE_REQUIRE_ADMIN_2FA` → `FEATURE_REQUIRE_STEP_UP`.
 
 ### Account types (2026-10-27)
