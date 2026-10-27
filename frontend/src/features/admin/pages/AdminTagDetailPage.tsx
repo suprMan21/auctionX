@@ -8,8 +8,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { AccountLink } from '../components/AccountLink';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { adminApi, chipLabel, type AdminTagDetailResponse } from '../api/adminApi';
+import { adminApi, type AdminTagDetailResponse } from '../api/adminApi';
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
+import { ChipName } from '../components/ChipName';
 import { AdminResetDialog, AdminSuspendDialog } from '../components/AdminTagDialogs';
 import { ADMIN_BUTTON_CLASS } from '../components/AdminDialog';
 import { NONE, errorMessage, formatAmount, formatWhen as fmt, loadFailed } from '../lib/display';
@@ -83,7 +84,8 @@ export const AdminTagDetailPage = () => {
         <div className="space-y-2">
           <Link to="/admin/tags" className="text-primary-300 text-sm hover:underline">← Tokens</Link>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <span className="font-mono">Token {chipLabel(tag)}</span>
+            <span className="sr-only">Token </span>
+            <ChipName tag={tag} />
             <AdminLifecycleBadge status={tag.lifecycleStatus} />
           </h1>
         </div>

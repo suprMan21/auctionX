@@ -84,9 +84,9 @@ describe('AdminTagsPage', () => {
 
     render(<MemoryRouter initialEntries={['/admin/tags']}><AdminTagsPage /></MemoryRouter>);
 
-    const link = await screen.findByRole('link', { name: '…936980' });
+    const link = await screen.findByRole('link', { name: 'Hardware ID …936980' });
     expect(link).toHaveAttribute('href', `/admin/tags/${OLD_ID}`);
-    expect(screen.getByRole('link', { name: '…ACC040' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Hardware ID …ACC040' })).toBeInTheDocument();
     expect(screen.getByText('2 tokens')).toBeInTheDocument();
   });
 
@@ -98,8 +98,8 @@ describe('AdminTagsPage', () => {
 
     render(<MemoryRouter initialEntries={['/admin/tags']}><AdminTagsPage /></MemoryRouter>);
 
-    expect(await screen.findByRole('link', { name: 'chip_004 · …936980 · sn …0351DE' })).toHaveAttribute('href', `/admin/tags/${OLD_ID}`);
-    expect(screen.getByRole('link', { name: '…ACC040' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'chip_004, Serial …0351DE, Hardware ID …936980' })).toHaveAttribute('href', `/admin/tags/${OLD_ID}`);
+    expect(screen.getByRole('link', { name: 'Hardware ID …ACC040' })).toBeInTheDocument();
   });
 
   it('filters by status through the API', async () => {

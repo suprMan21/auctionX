@@ -84,7 +84,7 @@ describe('AdminReissuePage', () => {
     api.listReissueRequests.mockResolvedValue(list([request()]));
     renderQueue();
 
-    expect(await screen.findByRole('link', { name: '…936980 · sn …AE6CA9' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Serial …AE6CA9, Hardware ID …936980' })).toBeInTheDocument();
     expect(api.listReissueRequests).toHaveBeenCalledWith({ status: 'NEEDS_ACTION', page: 1, limit: 25 });
     expect(screen.getByRole('button', { name: 'Needs action' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getAllByRole('img', { name: /of the chip on the item/ })).toHaveLength(2);

@@ -14,8 +14,9 @@ import { useWorkQueues } from '../lib/workQueues';
 import { useEffect, useState } from 'react';
 import { AccountLink } from '../components/AccountLink';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { adminApi, chipLabel, type AdminReissueFilter, type AdminReissueRequest } from '../api/adminApi';
+import { adminApi, type AdminReissueFilter, type AdminReissueRequest } from '../api/adminApi';
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
+import { ChipName } from '../components/ChipName';
 import {
   AdminReissueFulfilDialog,
   AdminReissueReviewDialog,
@@ -130,9 +131,9 @@ export const AdminReissuePage = () => {
                     <h2 className="text-white font-semibold">
                       <Link
                         to={`/admin/tags/${r.tagId}`}
-                        className="font-mono text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
-                        {r.tag ? chipLabel(r.tag) : shortId(r.tagId)}
+                        {r.tag ? <ChipName tag={r.tag} /> : shortId(r.tagId)}
                       </Link>
                     </h2>
                     <p className="text-sm text-gray-400">{stageOf(r)}</p>

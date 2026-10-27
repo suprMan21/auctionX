@@ -12,8 +12,9 @@
 import { useEffect, useState } from 'react';
 import { AccountLink } from '../components/AccountLink';
 import { Link, useSearchParams } from 'react-router-dom';
-import { adminApi, chipLabel, type AdminTag, type AdminTagLifecycleStatus } from '../api/adminApi';
+import { adminApi, type AdminTag, type AdminTagLifecycleStatus } from '../api/adminApi';
 import { AdminLifecycleBadge } from '../components/AdminLifecycleBadge';
+import { ChipName } from '../components/ChipName';
 import { NONE, errorMessage, formatWhen as fmt, loadFailed } from '../lib/display';
 import { AdminTable, type AdminColumn } from '../components/AdminTable';
 import { AdminPagination, AdminSearchBox, FilterPills, ListState } from '../components/AdminListParts';
@@ -87,9 +88,9 @@ export const AdminTagsPage = () => {
       cell: (row) => (
         <Link
           to={`/admin/tags/${row.id}`}
-          className="font-mono text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="text-primary-300 hover:underline rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
-          {chipLabel(row)}
+          <ChipName tag={row} />
         </Link>
       ),
     },
