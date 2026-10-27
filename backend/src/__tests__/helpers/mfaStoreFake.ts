@@ -7,6 +7,7 @@
 
 import { randomUUID } from 'crypto';
 import type {
+  AccountChangeKind,
   ChallengeRow,
   MfaMethod,
   MfaSessionRow,
@@ -31,6 +32,8 @@ export interface MfaFakeState {
   endedSessions: Array<{ userId: string; keep: string }>;
   /** Every staff audit row written. */
   audits: StaffMfaAudit[];
+  /** Every auth_change_permits row written. */
+  permits: Array<{ user_id: string; kind: AccountChangeKind; expires_at: string; used_at: string | null }>;
   /** Set to make the next call of that method throw like a database error. */
   failNext: Set<keyof MfaStore>;
 }
@@ -46,6 +49,7 @@ export const createMfaFakeState = (): MfaFakeState => ({
   staff: new Map(),
   endedSessions: [],
   audits: [],
+  permits: [],
   failNext: new Set(),
 });
 
@@ -219,6 +223,10 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
     async writeStaffAudit(row) {
       guard('writeStaffAudit');
       st.audits.push({ ...row });
+    },
+    async createAuthChangePermit(userId, kind, expiresAt) {
+      guard('createAuthChangePermit');
+      st.permits.push({ user_id: userId, kind, expires_at: expiresAt, used_at: null });
     },
   };
 };

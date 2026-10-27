@@ -31,7 +31,9 @@ export type StepUpAction =
   | 'factor_add'
   | 'recovery_regen'
   | 'admin_action'
-  | 'admin_approve';
+  | 'admin_approve'
+  /** Password or email change (target 'password' / 'email'). */
+  | 'account_change';
 
 export class MfaApiError extends Error {
   constructor(
@@ -117,6 +119,8 @@ const totpConfirmSchema = z.object({ authenticatorApp: z.literal(true), backupCo
 const codesSchema = z.object({ backupCodes: z.array(z.string()), ...ended });
 const renameSchema = z.object({ id: z.string(), nickname: z.string() });
 const removedSchema = z.object({ removed: z.string(), ...ended });
+
+const permitSchema = z.object({ kind: z.enum(['password', 'email']), expiresAt: z.string() });
 
 export type StepUpGrant = z.infer<typeof grantSchema>;
 
@@ -207,6 +211,10 @@ export const mfaApi = {
   totpConfirm: (code: string) => request('/totp/confirm', totpConfirmSchema, { method: 'POST', body: { code } }),
 
   removeTotp: (stepUpToken: string) => request('/totp', removedSchema, { method: 'DELETE', stepUpToken }),
+
+  /** A one-time, 2-minute permit the database checks before a password or email change. */
+  accountChangePermit: (kind: 'password' | 'email', stepUpToken: string) =>
+    request('/account-change', permitSchema, { method: 'POST', body: { kind }, stepUpToken }),
 
   regenerateBackupCodes: (stepUpToken: string) =>
     request('/recovery-codes/regenerate', codesSchema, { method: 'POST', body: {}, stepUpToken }),

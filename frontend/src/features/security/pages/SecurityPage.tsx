@@ -15,6 +15,7 @@ import { useStepUpDialog } from '../components/StepUpDialog';
 import { AddPasskeyFlow } from '../components/AddPasskeyFlow';
 import { AuthenticatorAppSetup } from '../components/AuthenticatorAppSetup';
 import { BackupCodesPanel } from '../components/BackupCodesPanel';
+import { ChangePasswordForm } from '../components/ChangePasswordForm';
 import { mfaErrorCopy } from '../lib/copy';
 import { isWaiting, secondFactorPathFor } from '../lib/stepUp';
 
@@ -228,6 +229,12 @@ export const SecurityPage = () => {
           )}
         </section>
       )}
+
+      {/* Password: needs the second factor and a one-time permit (S-2FA, review follow-up) */}
+      <section aria-labelledby="password-heading" className="glass rounded-2xl p-6 space-y-4">
+        <h2 id="password-heading" className="text-lg font-semibold text-white">Password</h2>
+        <ChangePasswordForm submitLabel="Change password" onDone={() => toast.success('Password changed.')} />
+      </section>
 
       {dialog}
     </main>

@@ -14,6 +14,7 @@
  *         backup code; staff accounts passkey only (Boss, 2026-10-27; this
  *         replaces the passkey-only release decision of 2026-10-03 for
  *         non-staff accounts);
+ *       account_change (Ph2b: password or email change): same as release;
  *       price_change / admin_action / admin_approve: passkey only.
  *   - Adding or removing a sign-in method, or making new backup codes, ends
  *     every other session of the account (Ph2). The change is committed first;
@@ -48,6 +49,7 @@ import { AppError } from '../errors';
 import { emitSecurityEvent } from '../security/securityEvent';
 import type { SecurityLogContext } from '../ownership/ownershipProof';
 import {
+  ACCOUNT_CHANGE_PERMIT_TTL_MS,
   CHALLENGE_TTL_MS,
   NEW_METHOD_COOL_OFF_MS,
   STEP_UP_TTL_MS,
@@ -62,6 +64,7 @@ import { sendMfaEmail } from './mfaEmails';
 import { log } from '../logger';
 import {
   getMfaStore,
+  type AccountChangeKind,
   type ConsumedGrant,
   type MfaMethod,
   type PasskeyRow,
@@ -71,7 +74,7 @@ import {
 
 export const STEP_UP_ACTIONS: readonly StepUpAction[] = [
   'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
-  'admin_action', 'admin_approve',
+  'admin_action', 'admin_approve', 'account_change',
 ];
 
 /**
@@ -86,7 +89,7 @@ export const CODE_STEP_UP_ACTIONS: readonly StepUpAction[] = ['factor_add', 'fac
  * (Boss, 2026-10-27). Never with a backup code, and never for staff: staff
  * confirm these with a passkey. Every other action is passkey only.
  */
-export const TOTP_STEP_UP_ACTIONS: readonly StepUpAction[] = ['release', 'transfer_complete'];
+export const TOTP_STEP_UP_ACTIONS: readonly StepUpAction[] = ['release', 'transfer_complete', 'account_change'];
 
 export interface Caller {
   userId: string;
@@ -133,7 +136,7 @@ const isSuperAdmin = async (userId: string): Promise<boolean> =>
 
 const emit = (
   caller: Caller,
-  action: 'enrol' | 'remove' | 'sign_in' | 'step_up_issue' | 'step_up_use' | 'recovery_regen' | 'lockout',
+  action: 'enrol' | 'remove' | 'sign_in' | 'step_up_issue' | 'step_up_use' | 'recovery_regen' | 'lockout' | 'account_change_permit',
   method: MfaMethod | null,
   result: 'ok' | 'invalid_code' | 'mfa_locked' | 'step_up_required' | 'forbidden',
   breakGlass: boolean,
@@ -168,6 +171,7 @@ const auditIfStaff = async (
   action: StaffMfaAuditAction,
   method: MfaMethod | null,
   coolOff = false,
+  kind?: AccountChangeKind,
 ): Promise<void> => {
   try {
     if (!(await getMfaStore().staffRole(caller.userId))) return;
@@ -182,6 +186,7 @@ const auditIfStaff = async (
       method,
       ip: caller.log.ip === 'unknown' ? null : caller.log.ip,
       ...(coolOff ? { coolOff: true } : {}),
+      ...(kind ? { kind } : {}),
     });
   } catch (err) {
     log.error('mfa_staff_audit_failed', { requestId: caller.log.requestId, action, error: errText(err) });
@@ -845,3 +850,27 @@ export const removeTotp = async (caller: Caller) => {
   const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_remove', 'totp');
   return { removed: 'totp', otherSessionsEnded };
 };
+
+// ── Password / email change (Ph2b) ──────────────────────────────────────────
+
+/**
+ * Issues one permit for a password change or an email-change request. GoTrue
+ * refuses either for an account with a second factor unless a live permit
+ * exists: the auth.users trigger guard_auth_change spends it (migration
+ * 20261027000010). The `account_change` step-up for this kind is spent by the
+ * route before this runs; the route also checks the session's marker before
+ * spending it. Checked again here so the rule holds wherever this is called.
+ */
+export const startAccountChange = async (caller: Caller, kind: AccountChangeKind) => {
+  await assertVerifiedSession(caller);
+  const expiresAt = new Date(Date.now() + ACCOUNT_CHANGE_PERMIT_TTL_MS).toISOString();
+  await getMfaStore().createAuthChangePermit(caller.userId, kind, expiresAt);
+  const superAdmin = await isSuperAdmin(caller.userId);
+  emit(caller, 'account_change_permit', null, 'ok', superAdmin, 'account_change');
+  notify(caller, superAdmin, { kind: 'account_change_started', change: kind });
+  await auditIfStaff(caller, 'mfa_account_change_permit', null, false, kind);
+  return { kind, expiresAt };
+};
+
+/** Express-free check used by the route before the step-up is spent. */
+export const assertSecondFactorDone = (caller: Caller): Promise<void> => assertVerifiedSession(caller);

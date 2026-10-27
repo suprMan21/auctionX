@@ -19,7 +19,9 @@ export type MfaEmail =
   | { kind: 'recovery_code_used'; left: number }
   | { kind: 'recovery_codes_new' }
   | { kind: 'break_glass_sign_in'; method: 'passkey' | 'recovery_code' }
-  | { kind: 'code_entry_locked' };
+  | { kind: 'code_entry_locked' }
+  /** Ph2b: a permit for a password change or an email change was issued. */
+  | { kind: 'account_change_started'; change: 'password' | 'email' };
 
 const FOOTER = "You're receiving this because it's about how your Authentic Materials account signs in. These emails can't be turned off.";
 
@@ -90,6 +92,22 @@ export const mfaEmailContent = (email: MfaEmail): { subject: string; lines: stri
           "If this wasn't you, someone may know your password. Sign in with your passkey and change your password now.",
         ],
       };
+    case 'account_change_started':
+      return email.change === 'password'
+        ? {
+            subject: 'A password change was started on your account',
+            lines: [
+              'Someone confirmed it is you with a passkey or authenticator app and started changing the password on your account.',
+              "If this wasn't you, sign in now, change your password and check Security settings.",
+            ],
+          }
+        : {
+            subject: 'An email change was started on your account',
+            lines: [
+              'Someone confirmed it is you with a passkey or authenticator app and started changing the email address on your account. The change finishes only when the link sent to the new address is opened.',
+              "If this wasn't you, sign in now, change your password and check Security settings.",
+            ],
+          };
     case 'break_glass_sign_in':
       return {
         subject: 'The super admin account was just used',

@@ -23,7 +23,12 @@ export type StepUpAction =
   | 'factor_add'
   | 'recovery_regen'
   | 'admin_action'
-  | 'admin_approve';
+  | 'admin_approve'
+  /** Ph2b: a password change or email-change request (target = the kind). */
+  | 'account_change';
+
+/** What an auth_change_permits row allows (guard_auth_change on auth.users). */
+export type AccountChangeKind = 'password' | 'email';
 
 export interface PasskeyRow {
   id: string;
@@ -151,9 +156,20 @@ export interface MfaStore {
    * secret, code or nickname.
    */
   writeStaffAudit(row: StaffMfaAudit): Promise<void>;
+
+  /**
+   * One single-use permit for a password change or email-change request.
+   * The auth.users trigger guard_auth_change spends it (20261027000010).
+   */
+  createAuthChangePermit(userId: string, kind: AccountChangeKind, expiresAt: string): Promise<void>;
 }
 
-export type StaffMfaAuditAction = 'mfa_factor_add' | 'mfa_factor_remove' | 'mfa_recovery_regen' | 'mfa_lockout';
+export type StaffMfaAuditAction =
+  | 'mfa_factor_add'
+  | 'mfa_factor_remove'
+  | 'mfa_recovery_regen'
+  | 'mfa_lockout'
+  | 'mfa_account_change_permit';
 
 export interface StaffMfaAudit {
   adminId: string;
@@ -163,6 +179,8 @@ export interface StaffMfaAudit {
   ip: string | null;
   /** true when the added method waits 24 h before it can confirm a step-up. Omitted otherwise. */
   coolOff?: boolean;
+  /** mfa_account_change_permit only: which change was permitted. Then `changes` is `{ kind }`. */
+  kind?: AccountChangeKind;
 }
 
 // ── Supabase implementation ─────────────────────────────────────────────────
@@ -398,12 +416,19 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
       // console links the row to the account page.
       entity_type: 'user',
       entity_id: row.adminId,
-      changes: row.coolOff ? { method: row.method, coolOff: true } : { method: row.method },
+      changes: row.kind
+        ? { kind: row.kind }
+        : row.coolOff ? { method: row.method, coolOff: true } : { method: row.method },
       reason: null,
       ip_address: row.ip && isIP(row.ip) ? row.ip : null,
       brand,
     });
     if (error) fail('writeStaffAudit', error);
+  },
+
+  async createAuthChangePermit(userId, kind, expiresAt) {
+    const { error } = await db.from('auth_change_permits').insert({ user_id: userId, kind, expires_at: expiresAt });
+    if (error) fail('createAuthChangePermit', error);
   },
 });
 

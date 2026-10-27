@@ -9,7 +9,7 @@
  * express-rate-limit 8's default key groups IPv6 addresses by /56.
  */
 
-import { Router, type Request } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/auth';
 import { requireStepUp } from '../middleware/mfaGates';
@@ -19,6 +19,7 @@ import {
   deleteTotp,
   getMfaStatus,
   patchPasskey,
+  postAccountChange,
   postRegenerateCodes,
   postRegisterOptions,
   postRegisterVerify,
@@ -28,6 +29,7 @@ import {
   postStepUpVerify,
   postTotpConfirm,
   postTotpSetup,
+  preAccountChange,
 } from '../controllers/mfaController';
 
 const byAccount = (max: number) =>
@@ -57,6 +59,23 @@ const codeCheckIpLimit = rateLimit({
 
 const verifyLimit = byAccount(10);
 const generalLimit = byAccount(30);
+
+/**
+ * A pre-check that may refuse (house envelope + reason, via `handle`) or pass
+ * on to the next middleware.
+ */
+const handleThen =
+  (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    let passed = false;
+    await handle(async (r: never, s: Response) => {
+      await fn(r, s, () => {
+        passed = true;
+      });
+    })(req, res, next);
+    // Called outside `handle`, so a later middleware's failure is never answered twice.
+    if (passed && !res.headersSent) next();
+  };
 
 const router = Router();
 
@@ -90,6 +109,22 @@ router.delete(
   verifyLimit,
   requireStepUp('factor_remove', () => 'totp', { always: true }),
   handle(deleteTotp),
+);
+
+/**
+ * Ph2b: a single-use, 2-minute permit for a password change or an email-change
+ * request, which GoTrue otherwise refuses for an account with a second factor
+ * (auth.users trigger guard_auth_change). Needs this session's marker and a
+ * fresh `account_change` step-up whose target is the kind, flag or not.
+ */
+router.post(
+  '/account-change',
+  codeCheckIpLimit,
+  requireAuth,
+  verifyLimit,
+  handleThen(preAccountChange),
+  requireStepUp('account_change', (req) => (req.body as { kind?: unknown } | undefined)?.kind, { always: true }),
+  handle(postAccountChange),
 );
 
 router.post('/recovery-codes/regenerate', codeCheckIpLimit, requireAuth, verifyLimit, handle(postRegenerateCodes));
