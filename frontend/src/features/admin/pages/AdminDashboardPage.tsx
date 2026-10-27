@@ -12,7 +12,7 @@ import { adminApi } from '../api/adminApi';
 import { supabase } from '@/lib/supabase';
 import type { HealthStatus } from '../types/admin';
 import type { AuditLogEntry } from '../api/accountSchemas';
-import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
+import { canOpenApprovals, hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { isMarketplaceEnabledOnClient } from '@/lib/featureFlags';
 import { formatWhen } from '../lib/display';
 import { auditActionLabel, auditEntityLabel } from '../lib/labels';
@@ -155,6 +155,7 @@ export const AdminDashboardPage = () => {
   // Tokens are a manage_nfc page (the Tokens nav item and API use the same permission).
   const canViewTokens = canReissue;
   const canStuck = hasPermission(access, PERMISSIONS.reapplyPayments);
+  const canApprovals = canOpenApprovals(access);
   const queues = useWorkQueues();
   const canViewAudit = hasPermission(access, PERMISSIONS.viewAuditLogs);
   // The marketplace is parked: its endpoints are not mounted, so do not call them.
@@ -210,7 +211,7 @@ export const AdminDashboardPage = () => {
         )}
       </div>
 
-      {(canReissue || canStuck) && (
+      {(canReissue || canStuck || canApprovals) && (
         <section aria-labelledby="attention-heading" className="space-y-3">
           <h2 id="attention-heading" className="text-lg font-semibold text-white">Needs attention</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -219,6 +220,9 @@ export const AdminDashboardPage = () => {
             )}
             {canReissue && (
               <QueueCard count={queues.reissuesReady} label="Re-issues ready for a new chip" to="/admin/reissue-requests?status=READY" action="Move to new chip" />
+            )}
+            {canApprovals && (
+              <QueueCard count={queues.approvalsWaiting} label="Requests waiting for your approval" to="/admin/approvals" action="Review" />
             )}
             {canStuck && (
               <QueueCard count={queues.stuckPayments} label="Stuck payments" to="/admin/stuck-payments?status=OPEN" action="Resolve" />

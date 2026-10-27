@@ -21,6 +21,7 @@
  *   6. No NFT, IPFS or chain call anywhere in this module.
  */
 
+import { sendTokenActivityEmail, tokenLabel } from '../lib/notifications/tokenActivityEmails';
 import { Response } from 'express';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { RequestWithId } from '../middleware/requestId';
@@ -1241,6 +1242,12 @@ export const releaseTag = async (req: TagRequest, res: Response) => {
     .eq('status', 'current');
 
   emitRelease('ok');
+  // S-2FA Ph3a: the owner always hears about a release (fire and forget).
+  sendTokenActivityEmail(req.user?.email, {
+    kind: 'token_released',
+    token: tokenLabel(tag as { chip_name?: string | null; chip_serial?: string | null }),
+    at: new Date().toISOString(),
+  });
 
   return ok(res, { tagId: tag.id, lifecycleStatus: 'RELEASED', irreversible: true });
 };

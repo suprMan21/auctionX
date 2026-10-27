@@ -18,6 +18,7 @@ import pricingRouter from './pricing';
 import vouchersRouter from './vouchers';
 import accountSettingsRouter from './accountSettings';
 import statsRouter from './stats';
+import approvalsRouter from './approvals';
 import { handle } from '../tagManagement';
 import { getMe } from '../../controllers/adminAccountsController';
 
@@ -49,6 +50,7 @@ router.use('/reissue-requests', reissueRouter); // S-ADMIN1 Ph2 re-issue queue: 
 router.use('/stuck-payments', stuckPaymentsRouter); // S-ADMIN1 Ph3a: paid-but-unapplied token fees: Re-apply, refund, sweep
 router.use('/pricing', pricingRouter);        // S-ADMIN1 Ph3b: admin-set token prices (effective-dated)
 router.use('/vouchers', vouchersRouter);      // S-ADMIN1 Ph3b: free-transfer vouchers granted to accounts
+router.use('/approvals', approvalsRouter);    // S-2FA Ph3a: two-admin approval queue
 router.use('/stats', statsRouter);            // UX-3 AC 6: dashboard growth counts (tokens: manage_nfc, accounts: view_users)
 
 // ── Parked: marketplace admin. Nothing deleted; see docs/PARKED_MARKETPLACE.md

@@ -27,12 +27,12 @@ type Checked = { userId: string; state: Exclude<CheckState, 'loading' | 'unauthe
 
 const RECHECK_MS = 60_000;
 
-const accessOf = (me: { role: string; permissions: string[]; adminId: string }): AdminAccessState =>
-  ({ status: 'known', role: me.role, permissions: me.permissions, adminId: me.adminId });
+const accessOf = (me: { role: string; permissions: string[]; adminId: string; approvalRequired?: boolean }): AdminAccessState =>
+  ({ status: 'known', role: me.role, permissions: me.permissions, adminId: me.adminId, approvalRequired: me.approvalRequired === true });
 
 const sameAccess = (a: AdminAccessState, b: AdminAccessState) =>
   a.status === 'known' && b.status === 'known' && a.role === b.role && a.adminId === b.adminId
-  && a.permissions.join(',') === b.permissions.join(',');
+  && a.permissions.join(',') === b.permissions.join(',') && a.approvalRequired === b.approvalRequired;
 
 export const AdminProtectedRoute = () => {
   const { session, loading: authLoading, initialized, signOut } = useAuth();

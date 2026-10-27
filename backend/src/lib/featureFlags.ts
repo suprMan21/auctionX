@@ -49,3 +49,11 @@ export const isAdminTwoFactorRequired = (): boolean => truthy(process.env.FEATUR
  * send it. Removing a sign-in method always needs one, flag or not.
  */
 export const isStepUpRequired = (): boolean => truthy(process.env.FEATURE_REQUIRE_STEP_UP);
+
+/**
+ * S-2FA Ph3a — two-admin approval. DEFAULT OFF until Ph4. When on, token
+ * reset / suspend and account suspend / retire by a role without
+ * `act_without_approval` (everyone but super_admin) are stored as a request a
+ * second admin approves at /admin/approvals.
+ */
+export const isAdminTwoPersonRequired = (): boolean => truthy(process.env.FEATURE_ADMIN_TWO_PERSON);

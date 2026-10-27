@@ -365,7 +365,7 @@ describe('nav by permission', () => {
 
   it('super admin: every page, in order, under the plain names', () => {
     expect(navLinks('super_admin')).toEqual([
-      'Dashboard', 'Re-issues', 'Stuck payments', 'Creator ID checks', 'Tokens', 'Accounts', 'Audit log',
+      'Dashboard', 'Re-issues', 'Stuck payments', 'Approvals', 'Creator ID checks', 'Tokens', 'Accounts', 'Audit log',
       'Settings', 'System health',
     ]);
   });
@@ -375,7 +375,7 @@ describe('nav by permission', () => {
     const nav = screen.getAllByRole('navigation')[0];
     const group = (name: string) => within(within(nav).getByRole('list', { name })).getAllByRole('link').map((l) => l.textContent?.trim());
     expect(within(nav).getAllByRole('heading').map((h) => h.textContent)).toEqual(['Queues', 'Records', 'Settings', 'System']);
-    expect(group('Queues')).toEqual(['Re-issues', 'Stuck payments', 'Creator ID checks']);
+    expect(group('Queues')).toEqual(['Re-issues', 'Stuck payments', 'Approvals', 'Creator ID checks']);
     expect(group('Records')).toEqual(['Tokens', 'Accounts', 'Audit log']);
     expect(group('Settings')).toEqual(['Settings']);
     expect(group('System')).toEqual(['System health']);

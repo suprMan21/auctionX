@@ -5,10 +5,9 @@ import { handle } from '../tagManagement';
 import {
   listTags,
   getTag,
-  suspendTag,
   unsuspendTag,
-  resetTag,
 } from '../../controllers/adminTagController';
+import { approvalGated } from '../../controllers/adminApprovalsController';
 
 /**
  * S-ADMIN1 token admin console. The admin index has already run verifyAdminAuth
@@ -21,8 +20,9 @@ router.use(requirePermission(MANAGE_NFC));
 
 router.get('/', handle(listTags));
 router.get('/:tagId', handle(getTag));
-router.post('/:tagId/suspend', handle(suspendTag));
+// S-2FA Ph3a: suspend and reset wait for a second admin unless the caller may act alone.
+router.post('/:tagId/suspend', handle(approvalGated('tag_suspend')));
 router.post('/:tagId/unsuspend', handle(unsuspendTag));
-router.post('/:tagId/reset', handle(resetTag));
+router.post('/:tagId/reset', handle(approvalGated('tag_reset')));
 
 export default router;

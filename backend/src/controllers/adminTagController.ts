@@ -422,25 +422,37 @@ export const getTag = async (req: AdminRequest, res: Response) => {
 
 // ── POST /api/v1/admin/tags/:tagId/suspend | /unsuspend ─────────────────────
 
-const setSuspension = (suspend: boolean) => async (req: AdminRequest, res: Response) => {
-  const route = `/api/v1/admin/tags/:tagId/${suspend ? 'suspend' : 'unsuspend'}`;
+export type SuspensionBody = { reason: string };
+export type ResetBody = { newTagId: string; reason: string; confirmSuffix: string };
+
+const suspensionRoute = (suspend: boolean) => `/api/v1/admin/tags/:tagId/${suspend ? 'suspend' : 'unsuspend'}`;
+
+/** Parses a suspend / unsuspend body (also used to re-check a stored approval payload). */
+export const parseSuspensionBody = (req: AdminRequest, tagId: string, raw: unknown, suspend = true): SuspensionBody => {
+  const parsed = suspensionBodySchema.safeParse(raw);
+  if (!parsed.success) {
+    emitAdminAction(adminContext(req, suspensionRoute(suspend)), suspend ? 'suspend' : 'unsuspend', tagId, 'invalid_argument');
+    throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
+  }
+  return parsed.data;
+};
+
+/**
+ * Runs a suspend / unsuspend as `req.admin`. Called by the route, and by the
+ * approve route with the approver as the acting admin (S-2FA Ph3a).
+ */
+export const runTagSuspension = async (req: AdminRequest, tagId: string, body: SuspensionBody, suspend: boolean) => {
+  const route = suspensionRoute(suspend);
   const action = suspend ? 'suspend' : 'unsuspend';
   const ctx = adminContext(req, route);
   const logger = withLogContext({ requestId: req.requestId, route });
   const adminId = requireAdminId(req);
-  const tagId = parseTagId(req);
-
-  const parsed = suspensionBodySchema.safeParse(req.body);
-  if (!parsed.success) {
-    emitAdminAction(ctx, action, tagId, 'invalid_argument');
-    throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
-  }
 
   const { data, error } = await getServiceClient().rpc('admin_set_tag_suspension', {
     p_tag: tagId,
     p_suspend: suspend,
     p_admin: adminId,
-    p_reason: parsed.data.reason,
+    p_reason: body.reason,
   });
 
   if (error) {
@@ -451,7 +463,17 @@ const setSuspension = (suspend: boolean) => async (req: AdminRequest, res: Respo
   }
 
   emitAdminAction(ctx, action, tagId, 'ok');
-  return ok(res, { tagId, lifecycleStatus: data as string });
+  return { tagId, lifecycleStatus: data as string };
+};
+
+/** The tag id from the route (`:tagId`). */
+export const tagIdFrom = (req: AdminRequest): string => parseTagId(req);
+
+const setSuspension = (suspend: boolean) => async (req: AdminRequest, res: Response) => {
+  requireAdminId(req);
+  const tagId = parseTagId(req);
+  const body = parseSuspensionBody(req, tagId, req.body, suspend);
+  return ok(res, await runTagSuspension(req, tagId, body, suspend));
 };
 
 export const suspendTag = setSuspension(true);
@@ -459,30 +481,26 @@ export const unsuspendTag = setSuspension(false);
 
 // ── POST /api/v1/admin/tags/:tagId/reset ────────────────────────────────────
 
-/**
- * The token reset (master replace). The old chip is retired forever and marked
- * for destruction; ownership, item link, disclosure and history move to the new
- * ENROLLED chip; the Ownership ID rotates. One transaction (admin_reset_token).
- *
- * The proof is minted here BEFORE the database is touched: minting needs the
- * salt envelope key, and a missing key must fail while nothing has changed.
- */
-export const resetTag = async (req: AdminRequest, res: Response) => {
-  const route = '/api/v1/admin/tags/:tagId/reset';
-  const ctx = adminContext(req, route);
-  const logger = withLogContext({ requestId: req.requestId, route });
-  const adminId = requireAdminId(req);
-  const oldTagId = parseTagId(req);
+const RESET_ROUTE = '/api/v1/admin/tags/:tagId/reset';
 
-  const parsed = resetBodySchema.safeParse(req.body);
+export const parseResetBody = (req: AdminRequest, oldTagId: string, raw: unknown): ResetBody => {
+  const parsed = resetBodySchema.safeParse(raw);
   if (!parsed.success) {
-    emitAdminAction(ctx, 'reset', oldTagId, 'invalid_argument');
+    emitAdminAction(adminContext(req, RESET_ROUTE), 'reset', oldTagId, 'invalid_argument');
     throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   }
-  const { newTagId, reason, confirmSuffix } = parsed.data;
+  return parsed.data;
+};
 
-  const supabase = getServiceClient();
-  const { data: oldTag, error: loadError } = await supabase
+/**
+ * Loads the chip being retired and checks the typed confirmation: the admin
+ * must read the suffix off that chip (serial for v2 chips, UID for v1). Runs
+ * before an approval request is stored, and again when it runs.
+ */
+export const checkResetConfirmation = async (req: AdminRequest, oldTagId: string, body: ResetBody): Promise<void> => {
+  const ctx = adminContext(req, RESET_ROUTE);
+  const logger = withLogContext({ requestId: req.requestId, route: RESET_ROUTE });
+  const { data: oldTag, error: loadError } = await getServiceClient()
     .from('nfc_tags')
     .select('id, tag_uid, chip_serial')
     .eq('id', oldTagId)
@@ -493,16 +511,31 @@ export const resetTag = async (req: AdminRequest, res: Response) => {
     throw new AppError('unavailable', 'This token could not be loaded. Try again.');
   }
   if (!oldTag) {
-    emitAdminAction(ctx, 'reset', oldTagId, 'not_found', newTagId);
+    emitAdminAction(ctx, 'reset', oldTagId, 'not_found', body.newTagId);
     throw new AppError('not_found', 'Token not found.');
   }
-
-  // Typed confirmation: the admin must read the suffix off the chip being retired
-  // (serial for v2 chips, UID for v1).
-  if (confirmationSuffix(oldTag as { tag_uid: string; chip_serial: string | null }) !== confirmSuffix.toUpperCase()) {
-    emitAdminAction(ctx, 'reset', oldTagId, 'invalid_argument', newTagId);
+  if (confirmationSuffix(oldTag as { tag_uid: string; chip_serial: string | null }) !== body.confirmSuffix.toUpperCase()) {
+    emitAdminAction(ctx, 'reset', oldTagId, 'invalid_argument', body.newTagId);
     throw new AppError('invalid_argument', 'That does not match. Type the characters shown in the dialog.');
   }
+};
+
+/**
+ * The token reset (master replace). The old chip is retired forever and marked
+ * for destruction; ownership, item link, disclosure and history move to the new
+ * ENROLLED chip; the Ownership ID rotates. One transaction (admin_reset_token).
+ *
+ * The proof is minted here BEFORE the database is touched: minting needs the
+ * salt envelope key, and a missing key must fail while nothing has changed.
+ * Runs as `req.admin` (the approver, when it runs from an approval).
+ */
+export const runTagReset = async (req: AdminRequest, oldTagId: string, body: ResetBody) => {
+  const ctx = adminContext(req, RESET_ROUTE);
+  const logger = withLogContext({ requestId: req.requestId, route: RESET_ROUTE });
+  const adminId = requireAdminId(req);
+  const { newTagId, reason } = body;
+
+  await checkResetConfirmation(req, oldTagId, body);
 
   const custodyRecordId = randomUUID();
   const minted = mintOwnershipProof(
@@ -510,7 +543,7 @@ export const resetTag = async (req: AdminRequest, res: Response) => {
     ctx,
   );
 
-  const { error } = await supabase.rpc('admin_reset_token', {
+  const { error } = await getServiceClient().rpc('admin_reset_token', {
     p_old_tag: oldTagId,
     p_new_tag: newTagId,
     p_admin: adminId,
@@ -529,11 +562,18 @@ export const resetTag = async (req: AdminRequest, res: Response) => {
   }
 
   emitAdminAction(ctx, 'reset', oldTagId, 'ok', newTagId);
-  return ok(res, {
+  return {
     oldTagId,
     newTagId,
     oldLifecycleStatus: 'RETIRED',
     newLifecycleStatus: 'ACTIVE',
     destructionStatus: 'PENDING',
-  });
+  };
+};
+
+export const resetTag = async (req: AdminRequest, res: Response) => {
+  requireAdminId(req);
+  const oldTagId = parseTagId(req);
+  const body = parseResetBody(req, oldTagId, req.body);
+  return ok(res, await runTagReset(req, oldTagId, body));
 };

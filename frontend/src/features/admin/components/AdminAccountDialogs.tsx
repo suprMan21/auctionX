@@ -12,6 +12,11 @@ import { AdminDialog, ADMIN_BUTTON_CLASS, ADMIN_FIELD_CLASS } from './AdminDialo
 import { ErrorLine, REASON_MIN, ReasonField } from './AdminTagDialogs';
 import { deleteConfirmationOf } from '../lib/accountActions';
 import { ACTION_FAILED, errorMessage } from '../lib/display';
+import { type ApprovalPending } from '../api/approvalSchemas';
+import { ApprovalHelper, ApprovalSentPanel } from './ApprovalSent';
+import { needsApproval, useAdminRole } from '../lib/adminRole';
+import { useWorkQueues } from '../lib/workQueues';
+import { APPROVAL_COPY } from '../lib/labels';
 
 export type AccountAction = 'suspend' | 'unsuspend' | 'retire' | 'reactivate' | 'delete' | 'role' | 'type';
 
@@ -89,6 +94,9 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
   const [typeChoice, setTypeChoice] = useState<TypeChoice>('collector');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<ApprovalPending | null>(null);
+  const approverNeeded = needsApproval(useAdminRole());
+  const { refresh: refreshQueues } = useWorkQueues();
   const hoursId = useId();
   const confirmId = useId();
   const confirmHintId = useId();
@@ -103,10 +111,13 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
       setRole(account.status === 'active' ? ((account.staff_role as GrantableRole | null) ?? '') : '');
       setTypeChoice(currentTypeChoice(account));
       setError(null);
+      setSent(null);
     }
   }, [open, account]);
 
   if (!action) return null;
+  // S-2FA Ph3a: suspend and retire wait for a second admin when /admin/me says so.
+  const approval = approverNeeded && (action === 'suspend' || action === 'retire');
 
   const expectedConfirm = deleteConfirmationOf(account.email);
   const reasonOk = reason.trim().length >= REASON_MIN;
@@ -124,13 +135,16 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
     setError(null);
     try {
       const r = reason.trim();
-      if (action === 'suspend') await adminApi.suspendAccount(account.id, hours, r);
+      let pending: ApprovalPending | null | undefined = null;
+      if (action === 'suspend') pending = await adminApi.suspendAccount(account.id, hours, r);
+      else if (action === 'retire') pending = await adminApi.accountAction(account.id, action, r);
       else if (action === 'delete') await adminApi.deleteAccount(account.id, confirm.trim(), r);
       else if (action === 'role') await adminApi.setAccountRole(account.id, newRole, r);
       else if (action === 'type') {
         await adminApi.setAccountType(account.id, typeChoice === 'collector' ? 'collector' : 'creator', typeChoice === 'creator_override', r);
       }
       else await adminApi.accountAction(account.id, action, r);
+      if (pending) { setSent(pending); refreshQueues(); return; }
       onDone(action);
     } catch (err) {
       setError(errorMessage(err, ACTION_FAILED));
@@ -171,6 +185,7 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
       title={`${copy.title}: ${who}`}
       description={copy.body}
     >
+      {sent ? <ApprovalSentPanel approval={sent} onClose={onClose} /> : (<>
       {action === 'suspend' && (
         <div className="space-y-1">
           <label htmlFor={hoursId} className="block text-sm font-medium text-gray-200">Length</label>
@@ -252,6 +267,7 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
       )}
 
       <ReasonField value={reason} onChange={setReason} />
+      {approval && <ApprovalHelper />}
       <ErrorLine message={error} />
       <div className="flex justify-end gap-3">
         <button type="button" onClick={onClose} className={`${ADMIN_BUTTON_CLASS} bg-dark-700 text-gray-200 hover:bg-dark-600`}>
@@ -263,9 +279,10 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
           disabled={!canSubmit}
           className={`${ADMIN_BUTTON_CLASS} ${copy.danger ? 'bg-red-600 hover:bg-red-500' : action === 'suspend' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-primary-600 hover:bg-primary-500'} text-white`}
         >
-          {busy ? copy.busy : copy.button}
+          {approval ? (busy ? APPROVAL_COPY.busy : APPROVAL_COPY.button) : busy ? copy.busy : copy.button}
         </button>
       </div>
+      </>)}
     </AdminDialog>
   );
 };

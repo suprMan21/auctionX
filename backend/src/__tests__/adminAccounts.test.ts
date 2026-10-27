@@ -251,6 +251,7 @@ describe('reads', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({
       adminId: ADMIN, email: 'admin@example.com', role: 'admin', permissions: [...permissionsFor('admin')].sort(),
+      approvalRequired: false,
     });
   });
 

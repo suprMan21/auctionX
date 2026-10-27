@@ -4,7 +4,7 @@
  * would only lead to "You do not have access").
  */
 
-import { hasPermission, PERMISSIONS, type AdminAccessState } from './adminRole';
+import { canOpenApprovals, hasPermission, PERMISSIONS, type AdminAccessState } from './adminRole';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -29,6 +29,8 @@ export const recordLinkFor = (log: Target, access: AdminAccessState): string | n
       return UUID.test(id) && can(PERMISSIONS.manageNfc) ? `/admin/tags/${enc}` : null;
     case 'reissue_request':
       return UUID.test(id) && can(PERMISSIONS.manageNfc) ? `/admin/reissue-requests?request=${enc}` : null;
+    case 'admin_approval':
+      return UUID.test(id) && canOpenApprovals(access) ? `/admin/approvals?request=${enc}` : null;
     case 'payment_incident':
       // The stuck-payments page has no per-payment view yet: open the list.
       return can(PERMISSIONS.reapplyPayments) ? '/admin/stuck-payments' : null;

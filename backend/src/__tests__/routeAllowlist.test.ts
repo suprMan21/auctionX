@@ -49,7 +49,6 @@ const PARKED = [
   // Route-level parking inside the KEPT nfc router.
   { method: 'post', path: '/api/v1/nfc/register' },
   { method: 'post', path: '/api/v1/nfc/transfer' },
-  { method: 'post', path: '/api/v1/nfc/mint' },
 ] as const;
 
 /** Token surfaces — must NOT 404 when the flag is off. */
@@ -149,6 +148,12 @@ describe('S-ISO1 route allowlist — FEATURE_MARKETPLACE on (reversibility)', ()
     const app = await loadApp();
     const res = await send(app, method, path);
     expect(isUnmounted(res)).toBe(false);
+  });
+
+  // S-2FA Ph3a deleted the NFT mint ("No NFTs, ever", Locked 2026-09-18): gone even with the marketplace on.
+  it('never mounts POST /api/v1/nfc/mint', async () => {
+    const app = await loadApp();
+    expect(isUnmounted(await send(app, 'post', '/api/v1/nfc/mint'))).toBe(true);
   });
 
   it.each(KEPT_ADMIN)('keeps admin %s reachable either way', async (path) => {
