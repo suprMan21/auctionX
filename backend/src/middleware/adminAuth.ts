@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getAccountStatus } from '../lib/security/accountStatus';
-import { readAalClaim } from '../lib/security/twoFactorGate';
+import { sessionHasSecondFactor } from '../lib/security/twoFactorGate';
 import { isAdminTwoFactorRequired } from '../lib/featureFlags';
 import type { AdminPermission } from '../lib/admin/permissions';
 
@@ -119,9 +119,10 @@ export const verifyAdminAuth = async (
       return;
     }
 
-    // 5. S-ADMIN2 AC 5: admin routes need a second factor (AAL2) once
-    //    FEATURE_REQUIRE_ADMIN_2FA is on. Off until S-2FA ships enrolment.
-    if (isAdminTwoFactorRequired() && readAalClaim(authHeader) !== 'aal2') {
+    // 5. S-ADMIN2 AC 5: admin routes need this session to have passed its
+    //    second factor (S-2FA marker) once FEATURE_REQUIRE_ADMIN_2FA is on.
+    //    Off until every admin has a passkey (S-2FA Ph4). Fails closed.
+    if (isAdminTwoFactorRequired() && !(await sessionHasSecondFactor(authHeader, user.id))) {
       res.status(403).json({
         success: false,
         data: null,

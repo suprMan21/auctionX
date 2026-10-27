@@ -50,6 +50,8 @@ const TARGET_FILES = [
   'lib/payments/tokenFeeSweep.ts',
   'lib/payments/paymentIncidents.ts',
   'controllers/adminStuckPaymentsController.ts',
+  // S-2FA
+  'lib/mfa/store.ts',
 ];
 
 /**

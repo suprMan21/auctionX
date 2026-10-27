@@ -1,0 +1,100 @@
+/**
+ * S-2FA security emails. Transactional (not preference-gated): a change to how
+ * an account signs in must always reach its owner. Delivery never blocks or
+ * fails the request; logs carry a hashed address, never the address.
+ *
+ * Copy follows the Brand Voice Guide: plain words ("passkey", "authenticator
+ * app", "backup codes"), no jargon, no em dashes.
+ */
+
+import { sendEmail } from '../notifications/emailSender';
+import { frontendBaseUrl, heading, para, shell, btn } from '../notifications/transferEmails';
+import { hashEmailForLog } from '../security/securityEvent';
+import { log } from '../logger';
+
+export type MfaEmail =
+  | { kind: 'factor_added'; method: 'passkey' | 'totp'; nickname?: string }
+  | { kind: 'factor_removed'; method: 'passkey' | 'totp'; nickname?: string }
+  | { kind: 'recovery_code_used'; left: number }
+  | { kind: 'recovery_codes_new' }
+  | { kind: 'break_glass_sign_in'; method: 'passkey' | 'recovery_code' };
+
+const FOOTER = "You're receiving this because it's about how your Authentic Materials account signs in. These emails can't be turned off.";
+
+const escapeHtml = (s: string): string =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+
+const methodName = (method: 'passkey' | 'totp', nickname?: string): string =>
+  method === 'passkey' ? `a passkey${nickname ? ` ("${nickname}")` : ''}` : 'an authenticator app';
+
+export const mfaEmailContent = (email: MfaEmail): { subject: string; lines: string[] } => {
+  switch (email.kind) {
+    case 'factor_added':
+      return {
+        subject: 'A new sign-in method was added to your account',
+        lines: [
+          `${methodName(email.method, email.nickname)[0].toUpperCase()}${methodName(email.method, email.nickname).slice(1)} can now be used to sign in to your account.`,
+          "If this wasn't you, sign in and remove it from Security settings, then change your password.",
+        ],
+      };
+    case 'factor_removed':
+      return {
+        subject: 'A sign-in method was removed from your account',
+        lines: [
+          `${methodName(email.method, email.nickname)[0].toUpperCase()}${methodName(email.method, email.nickname).slice(1)} was removed and can no longer be used to sign in.`,
+          "If this wasn't you, sign in and check Security settings, then change your password.",
+        ],
+      };
+    case 'recovery_code_used':
+      return {
+        subject: 'A backup code was used to sign in',
+        lines: [
+          `Someone signed in to your account with one of your backup codes. You have ${email.left} left.`,
+          email.left <= 3
+            ? 'You are running low. Make a new set in Security settings, and add a passkey if you lost your device.'
+            : 'If you lost your device, add a new passkey in Security settings.',
+          "If this wasn't you, make a new set of backup codes now and change your password.",
+        ],
+      };
+    case 'recovery_codes_new':
+      return {
+        subject: 'You have a new set of backup codes',
+        lines: [
+          'A new set of backup codes was made for your account. Your old codes no longer work.',
+          "If this wasn't you, sign in and check Security settings, then change your password.",
+        ],
+      };
+    case 'break_glass_sign_in':
+      return {
+        subject: 'The super admin account was just used',
+        lines: [
+          `The super admin account signed in with ${email.method === 'passkey' ? 'its security key' : 'a backup code'}.`,
+          'This account is for emergencies only. If you did not expect this, act now: suspend the session from AWS and rotate the account password.',
+        ],
+      };
+  }
+};
+
+/** Fire and forget. Never throws. */
+export const sendMfaEmail = (to: string | null | undefined, email: MfaEmail): void => {
+  if (!to) return;
+  const { subject, lines } = mfaEmailContent(email);
+  const securityUrl = `${frontendBaseUrl()}/settings/security`;
+  const html = shell({
+    title: subject,
+    preheader: lines[0],
+    footer: FOOTER,
+    body: `
+      ${heading(`${escapeHtml(subject)}.`)}
+      ${lines.map((l, i) => para(escapeHtml(l), i === lines.length - 1)).join('')}
+      ${btn(securityUrl, 'Open Security settings')}
+    `,
+  });
+  const text = [`${subject}.`, '', ...lines, '', `Security settings: ${securityUrl}`].join('\n');
+
+  void sendEmail({ to, subject, html, text })
+    .then((ok) => {
+      if (!ok) log.warn('mfa_email_not_sent', { kind: email.kind, to_hash: hashEmailForLog(to) });
+    })
+    .catch(() => log.warn('mfa_email_failed', { kind: email.kind, to_hash: hashEmailForLog(to) }));
+};

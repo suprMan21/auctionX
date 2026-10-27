@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import express, { type NextFunction, type Request, type Response } from 'express';
+import { createMfaFakeState, createMfaStoreFake, type MfaFakeState } from './helpers/mfaStoreFake';
 
 /**
  * S-ADMIN2 Ph1 — the admin guard itself (adminAccounts.test.ts stubs it out).
@@ -9,7 +10,8 @@ import express, { type NextFunction, type Request, type Response } from 'express
  *   - verifyAdminAuth asks the database for the CALLER's status by name
  *     (account_status_of, p_user) and refuses suspended / retired admins (403),
  *     fails closed when the status is unreadable (503)
- *   - FEATURE_REQUIRE_ADMIN_2FA demands an aal2 token (ADMIN_2FA_REQUIRED)
+ *   - FEATURE_REQUIRE_ADMIN_2FA demands a live S-2FA second-factor marker for
+ *     the token's session (ADMIN_2FA_REQUIRED); Supabase `aal2` alone is not enough
  *   - destructive admin actions share one rate-limit bucket per admin, so the
  *     target id in the path does not give each account its own allowance
  *   - an audit-log page past the end is an empty page, not a 503
@@ -51,7 +53,12 @@ const fakeClient = () => {
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => fakeClient() }));
 
+let mfaState: MfaFakeState;
+const SESSION = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
+
 const guardedApp = async () => {
+  const { __setMfaStore } = await import('../lib/mfa/store');
+  __setMfaStore(createMfaStoreFake(mfaState));
   const { verifyAdminAuth } = await import('../middleware/adminAuth');
   const app = express();
   app.get('/x', verifyAdminAuth as never, (req: Request, res: Response) => {
@@ -68,6 +75,7 @@ beforeEach(() => {
   rpcCalls = [];
   statusAnswer = { data: 'active', error: null };
   fromOverride = null;
+  mfaState = createMfaFakeState();
 });
 
 afterEach(() => {
@@ -97,20 +105,59 @@ describe('verifyAdminAuth account status (AC 2)', () => {
 });
 
 describe('admin two-factor flag (AC 5)', () => {
-  it('flag off: aal1 passes', async () => {
-    const res = await request(await guardedApp()).get('/x').set('Authorization', `Bearer ${jwt({ aal: 'aal1' })}`);
+  const marked = (expiresInMs = 60_000) =>
+    mfaState.sessions.set(SESSION, {
+      session_id: SESSION, user_id: ADMIN, method: 'passkey',
+      expires_at: new Date(Date.now() + expiresInMs).toISOString(),
+    });
+
+  it('flag off: a session without a second factor passes', async () => {
+    const res = await request(await guardedApp()).get('/x').set('Authorization', `Bearer ${jwt({ sub: ADMIN, session_id: SESSION })}`);
     expect(res.status).toBe(200);
   });
-  it('flag on: aal1 → 403 ADMIN_2FA_REQUIRED', async () => {
+  it('flag on: no marker → 403 ADMIN_2FA_REQUIRED', async () => {
     process.env.FEATURE_REQUIRE_ADMIN_2FA = 'true';
-    const res = await request(await guardedApp()).get('/x').set('Authorization', `Bearer ${jwt({ aal: 'aal1' })}`);
+    const res = await request(await guardedApp()).get('/x').set('Authorization', `Bearer ${jwt({ sub: ADMIN, session_id: SESSION })}`);
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('ADMIN_2FA_REQUIRED');
   });
-  it('flag on: aal2 passes', async () => {
+  it('flag on: Supabase aal2 without our marker is refused', async () => {
     process.env.FEATURE_REQUIRE_ADMIN_2FA = 'true';
-    const res = await request(await guardedApp()).get('/x').set('Authorization', `Bearer ${jwt({ aal: 'aal2' })}`);
+    const res = await request(await guardedApp()).get('/x').set('Authorization', `Bearer ${jwt({ sub: ADMIN, session_id: SESSION, aal: 'aal2' })}`);
+    expect(res.status).toBe(403);
+  });
+  it('flag on: a live marker for this session passes', async () => {
+    process.env.FEATURE_REQUIRE_ADMIN_2FA = 'true';
+    marked();
+    const res = await request(await guardedApp()).get('/x').set('Authorization', `Bearer ${jwt({ sub: ADMIN, session_id: SESSION })}`);
     expect(res.status).toBe(200);
+  });
+  it('flag on: an expired marker is refused', async () => {
+    process.env.FEATURE_REQUIRE_ADMIN_2FA = 'true';
+    marked(-1);
+    const res = await request(await guardedApp()).get('/x').set('Authorization', `Bearer ${jwt({ sub: ADMIN, session_id: SESSION })}`);
+    expect(res.status).toBe(403);
+  });
+  it('flag on: a marker for another session is refused', async () => {
+    process.env.FEATURE_REQUIRE_ADMIN_2FA = 'true';
+    marked();
+    const other = '1f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
+    const res = await request(await guardedApp()).get('/x').set('Authorization', `Bearer ${jwt({ sub: ADMIN, session_id: other })}`);
+    expect(res.status).toBe(403);
+  });
+  it('flag on: a token whose subject is not the verified user is refused', async () => {
+    process.env.FEATURE_REQUIRE_ADMIN_2FA = 'true';
+    marked();
+    const res = await request(await guardedApp()).get('/x')
+      .set('Authorization', `Bearer ${jwt({ sub: '99999999-9999-4999-8999-999999999999', session_id: SESSION })}`);
+    expect(res.status).toBe(403);
+  });
+  it('flag on: a database error fails closed', async () => {
+    process.env.FEATURE_REQUIRE_ADMIN_2FA = 'true';
+    marked();
+    mfaState.failNext.add('getSession');
+    const res = await request(await guardedApp()).get('/x').set('Authorization', `Bearer ${jwt({ sub: ADMIN, session_id: SESSION })}`);
+    expect(res.status).toBe(403);
   });
 });
 

@@ -954,6 +954,85 @@ export type Database = {
           },
         ]
       }
+      mfa_challenges: {
+        Row: {
+          action: string | null
+          challenge: string
+          created_at: string
+          expires_at: string
+          id: string
+          purpose: string
+          session_id: string
+          target_id: string | null
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          action?: string | null
+          challenge: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          purpose: string
+          session_id: string
+          target_id?: string | null
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string | null
+          challenge?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          purpose?: string
+          session_id?: string
+          target_id?: string | null
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mfa_challenges_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mfa_sessions: {
+        Row: {
+          expires_at: string
+          method: string
+          session_id: string
+          user_id: string
+          verified_at: string
+        }
+        Insert: {
+          expires_at: string
+          method: string
+          session_id: string
+          user_id: string
+          verified_at?: string
+        }
+        Update: {
+          expires_at?: string
+          method?: string
+          session_id?: string
+          user_id?: string
+          verified_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mfa_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       moderation_queue: {
         Row: {
           action_taken: Database["public"]["Enums"]["moderation_action"] | null
@@ -2679,6 +2758,50 @@ export type Database = {
           },
         ]
       }
+      step_up_grants: {
+        Row: {
+          action: string
+          created_at: string
+          expires_at: string
+          id: string
+          session_id: string
+          target_id: string
+          token_hash: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          session_id: string
+          target_id: string
+          token_hash: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          session_id?: string
+          target_id?: string
+          token_hash?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "step_up_grants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       token_prices: {
         Row: {
           amount_usd_cents: number
@@ -2938,6 +3061,149 @@ export type Database = {
             foreignKeyName: "transfer_voucher_redemptions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_mfa_state: {
+        Row: {
+          failed_attempts: number
+          locked_until: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          failed_attempts?: number
+          locked_until?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          failed_attempts?: number
+          locked_until?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_mfa_state_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_passkeys: {
+        Row: {
+          aaguid: string | null
+          backed_up: boolean
+          created_at: string
+          credential_id: string
+          id: string
+          last_used_at: string | null
+          nickname: string
+          public_key: string
+          sign_count: number
+          transports: string[]
+          user_id: string
+        }
+        Insert: {
+          aaguid?: string | null
+          backed_up?: boolean
+          created_at?: string
+          credential_id: string
+          id?: string
+          last_used_at?: string | null
+          nickname: string
+          public_key: string
+          sign_count?: number
+          transports?: string[]
+          user_id: string
+        }
+        Update: {
+          aaguid?: string | null
+          backed_up?: boolean
+          created_at?: string
+          credential_id?: string
+          id?: string
+          last_used_at?: string | null
+          nickname?: string
+          public_key?: string
+          sign_count?: number
+          transports?: string[]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_passkeys_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_recovery_codes: {
+        Row: {
+          code_hash: string
+          created_at: string
+          id: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          code_hash: string
+          created_at?: string
+          id?: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          code_hash?: string
+          created_at?: string
+          id?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_recovery_codes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_totp_factors: {
+        Row: {
+          created_at: string
+          last_used_step: number
+          secret_enc: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          last_used_step?: number
+          secret_enc: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          last_used_step?: number
+          secret_enc?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_totp_factors_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -3557,6 +3823,7 @@ export type Database = {
           created: boolean
         }[]
       }
+      record_mfa_failure: { Args: { p_user: string }; Returns: string }
       record_payment_incident: {
         Args: {
           p_amount: number
@@ -3579,6 +3846,10 @@ export type Database = {
           p_transfer: string
         }
         Returns: Json
+      }
+      replace_recovery_codes: {
+        Args: { p_hashes: string[]; p_user: string }
+        Returns: number
       }
       request_creator_account: { Args: { p_user: string }; Returns: Json }
       reserve_chip_name: {

@@ -1,54 +1,37 @@
 /**
- * 2FA gate for origin claim and transfer completion — S-NFC3.
+ * 2FA gate for origin claim and transfer completion — S-NFC3, rewired in S-2FA.
  *
- * The locked lifecycle decision: "Verified email plus a passkey or TOTP 2FA is
- * required before the first claim or transfer completion. No exceptions."
+ * The locked lifecycle decision: "every account needs 2FA". Enforcement is
+ * behind `FEATURE_REQUIRE_2FA` (lib/featureFlags.ts, the only reader), default
+ * off until S-2FA Ph4 turns it on with the enrolment screens live.
  *
- * ENFORCEMENT IS BEHIND `FEATURE_REQUIRE_2FA`, DEFAULT OFF, and must stay off
- * in production until S-2FA ships. There is currently NO MFA enrollment path
- * anywhere in the product — zero hits for mfa/aal/totp across backend/src,
- * frontend/src and every migration — so switching this on today would make
- * /claim and /transfer/:id/complete unreachable for every user rather than
- * secure. Turning it on before enrollment exists is a self-inflicted outage.
- *
- * Supabase encodes assurance level as the `aal` claim on the access token:
- * `aal1` = password/OTP only, `aal2` = a second factor was verified this
- * session. The claim is read from the token the caller already presented; it is
- * not re-verified here because `requireAuth` has already validated the token's
- * signature via GoTrue.
+ * S-2FA: the check is our own per-session marker (`mfa_sessions`, keyed on the
+ * JWT `session_id` claim), written when the caller passes a passkey, an
+ * authenticator code or a backup code. It is NOT Supabase's `aal2`: we do not
+ * use Supabase's MFA factors (Boss, 2026-10-27).
  */
 
 import type { Request } from 'express';
 import { emitSecurityEvent } from './securityEvent';
 import type { SecurityLogContext } from '../ownership/ownershipProof';
-
-const truthy = (raw: string | undefined): boolean => raw === 'true' || raw === '1';
-
-export const isTwoFactorRequired = (): boolean => truthy(process.env.FEATURE_REQUIRE_2FA);
+import { isTwoFactorRequired } from '../featureFlags';
+import { readVerifiedClaims } from '../mfa/jwtClaims';
+import { hasSecondFactor } from '../mfa/mfaService';
 
 export type TwoFactorGate = 'claim' | 'transfer_complete';
 
 /**
- * Reads the `aal` claim from a bearer token without verifying its signature.
- *
- * Safe ONLY because this runs after `requireAuth`, which has already validated
- * the same token against GoTrue. Never call this on an unauthenticated path.
+ * True when this request's session has a live second-factor marker. Fails
+ * closed: a database error reads as "not verified".
  */
-export const readAalClaim = (authHeader: string | undefined): string | null => {
-  const token = authHeader?.replace(/^Bearer\s+/i, '').trim();
-  if (!token) return null;
-
-  const payload = token.split('.')[1];
-  if (!payload) return null;
-
+export const sessionHasSecondFactor = async (authHeader: string | undefined, userId: string | null): Promise<boolean> => {
+  if (!userId) return false;
+  const { sessionId, sub } = readVerifiedClaims(authHeader);
+  if (!sessionId || sub !== userId) return false;
   try {
-    const decoded = JSON.parse(
-      Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'),
-    ) as { aal?: unknown };
-
-    return typeof decoded.aal === 'string' ? decoded.aal : null;
+    return await hasSecondFactor(userId, sessionId);
   } catch {
-    return null;
+    return false;
   }
 };
 
@@ -59,19 +42,20 @@ export const readAalClaim = (authHeader: string | undefined): string | null => {
  * to see that the gate was evaluated, and the `passed` volume with the flag off
  * is what will show how many claims would break if it were switched on early.
  */
-export const passesTwoFactor = (
+export const passesTwoFactor = async (
   req: Request,
   gate: TwoFactorGate,
   ctx: SecurityLogContext,
-): boolean => {
+): Promise<boolean> => {
   const required = isTwoFactorRequired();
-  const aal = readAalClaim(req.headers.authorization);
-  const satisfied = !required || aal === 'aal2';
+  const { sessionId } = readVerifiedClaims(req.headers.authorization);
+  const verified = required ? await sessionHasSecondFactor(req.headers.authorization, ctx.actorId) : false;
+  const satisfied = !required || verified;
 
   emitSecurityEvent({
     event: 'auth.2fa_gate',
     gate,
-    outcome: satisfied ? 'passed' : aal === null ? 'missing' : 'failed',
+    outcome: satisfied ? 'passed' : sessionId === null ? 'missing' : 'failed',
     result: satisfied ? 'ok' : '2fa_required',
     request_id: ctx.requestId,
     actor_id: ctx.actorId,
