@@ -133,10 +133,11 @@ export const adminApi = {
   },
 
   /** GET /admin/users — search by email, display name or id. A non-empty search is audit-logged. */
-  async searchAccounts(params: { q?: string; status?: string; page?: number; limit?: number } = {}): Promise<AccountSearch> {
+  async searchAccounts(params: { q?: string; status?: string; type?: string; page?: number; limit?: number } = {}): Promise<AccountSearch> {
     const qs = new URLSearchParams();
     if (params.q) qs.set('q', params.q);
     if (params.status) qs.set('status', params.status);
+    if (params.type && params.type !== 'all') qs.set('type', params.type);
     if (params.page) qs.set('page', String(params.page));
     if (params.limit) qs.set('limit', String(params.limit));
     const query = qs.toString() ? `?${qs}` : '';

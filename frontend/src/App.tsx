@@ -5,6 +5,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from './features/auth/hooks/useAuth';
 import { LoginPage } from './features/auth/pages/LoginPage';
 import { SignupPage } from './features/auth/pages/SignupPage';
+import { AccountTypePage } from './features/profile/pages/AccountTypePage';
 import { ForgotPasswordPage } from './features/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './features/auth/pages/ResetPasswordPage';
 import { ProfilePage } from './features/profile/pages/ProfilePage';
@@ -374,6 +375,14 @@ function App() {
             }
           />
 
+          <Route
+            path="/settings/account-type"
+            element={
+              <ProtectedRoute>
+                <AccountTypePage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/settings/notifications"
             element={

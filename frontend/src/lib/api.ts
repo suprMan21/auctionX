@@ -693,6 +693,20 @@ export const api = {
     },
 
     /** Read the current user's verification facts + latest yoti_sessions row. */
+    /** Records that the signed-in user wants to be a Creator (idempotent). */
+    async requestCreator(): Promise<void> {
+      const headers = await getAuthHeader();
+      const response = await fetch(`${API_URL}/verification/creator-request`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) {
+        const json = await response.json().catch(() => ({}));
+        const error = (json as { error?: { message?: string } }).error;
+        throw new Error(error?.message || 'Could not save your creator request');
+      }
+    },
+
     async getStatus(): Promise<YotiStatus> {
       const headers = await getAuthHeader();
       const response = await fetch(`${API_URL}/verification/status`, { headers });
@@ -755,6 +769,9 @@ export type YotiSellerStatus =
 
 export interface YotiStatus {
   seller_verification_status: YotiSellerStatus;
+  /** Set only by the database: creator = asked to be one AND identity check passed. */
+  account_type?: 'collector' | 'creator';
+  creator_requested_at?: string | null;
   submitted_at: string | null;
   reviewed_at: string | null;
   rejection_reason: string | null;

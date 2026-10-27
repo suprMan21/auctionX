@@ -63,6 +63,9 @@ const account = (overrides: Partial<AccountDetail> = {}): AccountDetail => ({
   retire_reason: null,
   retired_by_email: null,
   staff_role: null,
+  account_type: 'collector',
+  creator_requested_at: null,
+  creator_check_status: 'NONE',
   age_verified: false,
   active_sessions: 1,
   pending_transfers: 0,
@@ -273,8 +276,9 @@ describe('users list', () => {
 
   it('shows role and status, and searches on Enter only, not while typing', async () => {
     api.searchAccounts.mockResolvedValue(page([
-      { id: ID, email: 'fan@example.com', display_name: 'Fan', created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'suspended', staff_role: null },
-      { id: 'b', email: 'staff@example.com', display_name: null, created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'active', staff_role: 'support' },
+      { id: ID, email: 'fan@example.com', display_name: 'Fan', created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'suspended', staff_role: null, account_type: 'creator', creator_pending: false },
+      { id: 'b', email: 'staff@example.com', display_name: null, created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'active', staff_role: 'support', account_type: 'collector', creator_pending: false },
+      { id: 'c', email: 'new@example.com', display_name: null, created_at: '2026-10-01T00:00:00Z', last_sign_in_at: null, status: 'active', staff_role: null, account_type: 'collector', creator_pending: true },
     ]));
     const user = userEvent.setup();
     render(
@@ -286,13 +290,51 @@ describe('users list', () => {
     const table = screen.getByRole('table');
     expect(within(table).getByText('Suspended')).toBeInTheDocument();
     expect(within(table).getByText('Support')).toBeInTheDocument();
+    expect(within(table).getAllByTestId('account-type-badge').map((b) => b.textContent)).toEqual(['Creator', 'Collector', 'Creator (verifying)']);
     expect(screen.queryByRole('button', { name: 'Change waiting time…' })).not.toBeInTheDocument(); // window edit: super admin only
 
     const box = screen.getByRole('searchbox', { name: 'Search accounts' });
     await user.type(box, 'staff');
     expect(api.searchAccounts).not.toHaveBeenCalledWith(expect.objectContaining({ q: 'staff' }));
     await user.type(box, '{Enter}');
-    await waitFor(() => expect(api.searchAccounts).toHaveBeenLastCalledWith({ q: 'staff', status: 'all', page: 1, limit: 25 }));
+    await waitFor(() => expect(api.searchAccounts).toHaveBeenLastCalledWith({ q: 'staff', status: 'all', type: 'all', page: 1, limit: 25 }));
+  });
+
+  it('filters by account type from the pills and from ?type=', async () => {
+    api.searchAccounts.mockResolvedValue(page([]));
+    const user = userEvent.setup();
+    render(
+      <AdminRoleContext.Provider value={accessFor('support')}>
+        <MemoryRouter initialEntries={['/admin/users?type=creator']}><AdminUsersPage /></MemoryRouter>
+      </AdminRoleContext.Provider>,
+    );
+    await waitFor(() => expect(api.searchAccounts).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'creator' })));
+    await user.click(screen.getByRole('button', { name: 'Creator (verifying)' }));
+    await waitFor(() => expect(api.searchAccounts).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'creator_pending', page: 1 })));
+  });
+
+  it('an unknown ?type= falls back to all types', async () => {
+    api.searchAccounts.mockResolvedValue(page([]));
+    render(
+      <AdminRoleContext.Provider value={accessFor('support')}>
+        <MemoryRouter initialEntries={['/admin/users?type=staff']}><AdminUsersPage /></MemoryRouter>
+      </AdminRoleContext.Provider>,
+    );
+    await waitFor(() => expect(api.searchAccounts).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'all' })));
+  });
+});
+
+describe('account type on the account page', () => {
+  it.each([
+    [{ account_type: 'creator' as const, creator_requested_at: '2026-10-02T00:00:00Z', creator_check_status: 'VERIFIED' }, 'Creator', 'Verified'],
+    [{ account_type: 'collector' as const, creator_requested_at: '2026-10-02T00:00:00Z', creator_check_status: 'PENDING' }, 'Creator (verifying)', null],
+    [{}, 'Collector', null],
+  ])('%o → %s', async (overrides, badge, check) => {
+    api.getAccount.mockResolvedValue(account(overrides));
+    renderDetail('support');
+    expect(await screen.findByTestId('account-type-badge')).toHaveTextContent(badge);
+    if (check) expect(screen.getByText(check)).toBeInTheDocument();
+    if (!('creator_requested_at' in overrides)) expect(screen.getByText('Not requested')).toBeInTheDocument();
   });
 });
 

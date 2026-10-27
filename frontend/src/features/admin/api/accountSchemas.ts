@@ -15,6 +15,13 @@ export const ROLE_LABELS: Record<string, string> = {
 };
 
 export const ACCOUNT_STATUSES = ['active', 'suspended', 'retired'] as const;
+
+/**
+ * Account type (2026-10-27). Set only by the database: Creator = asked to be a
+ * creator AND passed the identity check. Staff is the staff role, not a type.
+ */
+export const ACCOUNT_TYPES = ['collector', 'creator'] as const;
+export type AccountType = (typeof ACCOUNT_TYPES)[number];
 export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
 
 export const adminMeSchema = z.object({
@@ -40,6 +47,9 @@ export const accountSummarySchema = z.object({
   last_sign_in_at: z.string().nullable(),
   status: z.enum(ACCOUNT_STATUSES),
   staff_role: z.string().nullable(),
+  account_type: z.enum(ACCOUNT_TYPES),
+  /** Asked to be a creator; identity check not passed yet. */
+  creator_pending: z.boolean(),
 });
 export type AccountSummary = z.infer<typeof accountSummarySchema>;
 
@@ -57,6 +67,10 @@ export const accountDetailSchema = z.object({
   created_at: z.string(),
   last_sign_in_at: z.string().nullable(),
   status: z.enum(ACCOUNT_STATUSES),
+  account_type: z.enum(ACCOUNT_TYPES),
+  creator_requested_at: z.string().nullable(),
+  /** Identity check status word (never a Yoti id). */
+  creator_check_status: z.string(),
   suspended_at: z.string().nullable(),
   suspended_until: z.string().nullable(),
   suspension_reason: z.string().nullable(),

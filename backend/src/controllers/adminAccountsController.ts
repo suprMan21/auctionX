@@ -86,6 +86,7 @@ export const accountRpcError = (error: { message?: string } | null): AppError =>
     case 'invalid_window':
     case 'invalid_role':
     case 'invalid_status':
+    case 'invalid_type':
     case 'query_too_long':
       return new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.');
     case 'account_not_found':
@@ -153,6 +154,7 @@ export const searchAccounts = async (req: AdminRequest, res: Response) => {
     p_status: q.status,
     p_limit: q.limit,
     p_offset: (q.page - 1) * q.limit,
+    p_type: q.type,
   });
   const total = Number(data?.total ?? 0);
   return ok(res, {

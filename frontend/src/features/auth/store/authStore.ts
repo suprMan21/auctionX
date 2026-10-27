@@ -10,7 +10,8 @@ interface AuthState {
   initialized: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  /** accountIntent 'creator' records a creator request; Creator still needs the identity check. */
+  signUp: (email: string, password: string, accountIntent?: AccountIntent) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   checkProfileComplete: (userId: string) => Promise<boolean>;
@@ -19,6 +20,8 @@ interface AuthState {
   clearError: () => void;
   initialize: () => Promise<void>;
 }
+
+export type AccountIntent = 'collector' | 'creator';
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
@@ -84,12 +87,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  signUp: async (email: string, password: string) => {
+  signUp: async (email: string, password: string, accountIntent: AccountIntent = 'collector') => {
     set({ loading: true, error: null });
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        // Read once by the handle_new_user trigger. User-controlled by design:
+        // it only records the request, never makes the account a Creator.
+        options: { data: { account_intent: accountIntent } },
       });
       if (error) throw error;
       set({ user: data.user, session: data.session });
