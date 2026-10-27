@@ -77,11 +77,11 @@ anchored the same day.
 | Writer KMS key | `alias/am-anchor-writer-staging` → key id `0a451741-79d7-4064-91db-35db22b348da` (ECC_SECG_P256K1, us-east-2), created by Boss 2026-10-27 via CloudShell as `chris-admin` |
 | Writer address | `0x704BD2499738c0dBc84C2F84ffD17b587a64A70b` (derived from the KMS public key) |
 | No-human-sign check | `chris-admin`: AccessDenied (script). `claude-ro`: AccessDenied, "explicit deny in a resource-based policy", i.e. the key policy's own Deny |
-| Owner (interim) | `0x6Cd01c0F55ce9E0Bf78f5E90f72b4345b16d515d`: Boss's software (hot) wallet, **not** a hardware wallet. Boss has no hardware wallet yet (2026-10-27). Deviation from the brief (owner = hardware wallet on testnet too), accepted for testnet only. Follow-up: buy a hardware wallet, then `transferOwnership(<hw>)` from this wallet and `acceptOwnership()` from the device. Required before mainnet |
-| Registry (Base Sepolia) | `0xC74C99F15bE59781869D2BF7baB8C5EEC20C913d`, deploy block `50979710`, tx [`0x71dacb…04bc`](https://sepolia.basescan.org/tx/0x71dacbdbccfccdfe77fe828005c0f247630f1f16c7a262f0bbc5f030bd7904bc), 2026-10-27. On-chain read: owner and writer as above, no pending owner |
-| Deploy cost | 398,868 gas at 0.0051 gwei = 0.000002 ETH. Throwaway deployer `0xdB82…9B9C` key deleted after deploy |
-| Funding | Writer and deployer 0.0001 Sepolia ETH each (CDP faucet). A daily root is ~30k gas, so the writer lasts well over a year at current prices; set `ANCHOR_LOW_BALANCE_WEI=20000000000000` (0.00002 ETH) or the default 0.002 ETH alert fires at once |
-| Source verification | Not yet (no Etherscan key): `npx hardhat verify --network baseSepolia 0xC74C99F15bE59781869D2BF7baB8C5EEC20C913d 0x6Cd01c0F55ce9E0Bf78f5E90f72b4345b16d515d 0x704BD2499738c0dBc84C2F84ffD17b587a64A70b` |
+| **Status** | **On hold (Boss, 2026-10-27) until his hardware wallet arrives (expected 2026-10-28).** Do not set the App Runner `ANCHOR_*` settings or the Vault secret before the redeploy |
+| Abandoned deploy | `0xC74C99F15bE59781869D2BF7baB8C5EEC20C913d` (block `50979710`, tx `0x71dacb…04bc`). **Do not use.** Its owner `0x6Cd0…515d` is the Coinbase CDP faucet's sending wallet (5.7 M txs), copied from Basescan's "From" by mistake, so nobody at AM can rotate its writer. Lesson: the owner address must come from the wallet's own Receive screen |
+| Writer funding | 0.0001 Sepolia ETH (CDP faucet), still there; reused for the redeploy |
+| Deploy cost | 398,868 gas at 0.0051 gwei = 0.000002 ETH. A daily root is ~30k gas, so 0.0001 ETH lasts over a year; set `ANCHOR_LOW_BALANCE_WEI=20000000000000` |
+| Redeploy (next) | Boss reads the hardware wallet's address from its own app's Receive screen (confirmed on the device). Claude makes a new throwaway deployer, Boss faucets it, Claude deploys with `REGISTRY_OWNER=<hw>`, checks owner/writer on-chain, deletes the key, records it here |
 
 ## Boss runbook (testnet setup)
 
@@ -112,7 +112,7 @@ anchored the same day.
 
 | Criterion | Status |
 |---|---|
-| Contract deployed + source-verified on Base Sepolia | ✅ Deployed 2026-10-27 (`0xC74C…913d`); source verification waits on an Etherscan key |
+| Contract deployed + source-verified on Base Sepolia | On hold: first deploy abandoned (wrong owner); redeploy when the hardware wallet arrives |
 | Only the anchoring address can write; others revert | ✅ Hardhat tests + chain e2e |
 | Writer rotation by owner works; old writer reverts | ✅ Hardhat + chain e2e; **real drill with the hardware wallet pending (runbook 9)** |
 | No human principal can `kms:Sign` | Key policy has an explicit Deny for every principal but the instance role; script proves it for the caller. Claude to repeat with `claude-ro` after creation |
@@ -127,7 +127,6 @@ anchored the same day.
 
 ## Not in Ph1 / follow-ups
 
-- **Hand registry ownership to a hardware wallet** (interim owner is a hot wallet; see Setup record). Two-step on Basescan; the tick raises `owner_changed` alerts for both steps, which is expected.
 
 - **CloudTrail tripwires** (review item 7 above). Required before mainnet; Ph2 or S-SEC1.
 - The 7 existing staging proofs all go into the first daily root (they predate anchoring).
