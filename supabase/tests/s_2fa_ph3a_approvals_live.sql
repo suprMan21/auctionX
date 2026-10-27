@@ -10,7 +10,7 @@
 -- requester-still-active rule and the table CHECKs.
 --
 -- Run: supabase db query --linked -f supabase/tests/s_2fa_ph3a_approvals_live.sql
--- Expect: ERROR  P0001: RESULTS {"ok": 20, "total": 20, "failures": {}}
+-- Expect: ERROR  P0001: RESULTS {"ok": 22, "total": 22, "failures": {}}
 
 DO $$
 DECLARE
@@ -224,6 +224,23 @@ BEGIN
             WHEN OTHERS THEN v_state := SQLERRM;
   END;
   v_res := v_res || jsonb_build_object('20_check_not_self', CASE WHEN v_state = 'check_violation' THEN 'ok' ELSE 'FAIL: ' || v_state END);
+
+  -- 21. Re-issue fulfil: an admin may ask (manage_nfc), support may not.
+  BEGIN
+    PERFORM admin_request_approval(v_s, 'reissue_fulfil', gen_random_uuid(), jsonb_build_object('reason', v_reason), v_hash, v_reason);
+    v_state := 'no error';
+  EXCEPTION WHEN OTHERS THEN v_state := SQLERRM;
+  END;
+  v_id2 := (admin_request_approval(v_a, 'reissue_fulfil', gen_random_uuid(), jsonb_build_object('reason', v_reason), v_hash, v_reason)->>'id')::uuid;
+  v_res := v_res || jsonb_build_object('21_reissue_fulfil', CASE WHEN v_state LIKE 'admin_forbidden%' AND v_id2 IS NOT NULL THEN 'ok' ELSE 'FAIL: ' || v_state END);
+
+  -- 22. Lifting a hold on your own account is refused (all account_* actions).
+  BEGIN
+    PERFORM admin_request_approval(v_a, 'account_reactivate', v_a, jsonb_build_object('reason', v_reason), v_hash, v_reason);
+    v_state := 'no error';
+  EXCEPTION WHEN OTHERS THEN v_state := SQLERRM;
+  END;
+  v_res := v_res || jsonb_build_object('22_lift_self_refused', CASE WHEN v_state LIKE 'self_action%' THEN 'ok' ELSE 'FAIL: ' || v_state END);
 
   SELECT jsonb_object_agg(k, v) INTO v_fail FROM jsonb_each_text(v_res) AS e(k, v) WHERE v <> 'ok';
   RAISE EXCEPTION 'RESULTS %', jsonb_build_object(

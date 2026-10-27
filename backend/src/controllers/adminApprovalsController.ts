@@ -22,6 +22,7 @@ import { withLogContext } from '../lib/logger';
 import {
   APPROVAL_ERRORS,
   APPROVAL_PERMISSION,
+  HOLD_SET_BY_ACTION,
   approvalIdParamSchema,
   approvalRequired,
   emptyBodySchema,
@@ -45,9 +46,13 @@ import {
   accountIdFrom,
   parseReasonBody,
   parseSuspendAccountBody,
+  runReactivateAccount,
   runRetireAccount,
   runSuspendAccount,
+  runUnsuspendAccount,
 } from './adminAccountsController';
+import { checkFulfil, parseFulfilBody, reissueIdFrom, runFulfil } from './adminReissueController';
+import { evidenceViewUrl } from '../lib/reissueEvidence';
 
 type AdminRequest = Request & { requestId?: string };
 
@@ -87,7 +92,36 @@ interface ActionSpec<B> {
   precheck?: (req: AdminRequest, target: string, body: B) => Promise<void>;
   run: (req: AdminRequest, target: string, body: B) => Promise<unknown>;
   reason: (body: B) => string;
+  /** Lifting a hold: false when the caller set the hold themselves (runs at once). Default: always wait. */
+  needsApproval?: (req: AdminRequest, target: string) => Promise<boolean>;
 }
+
+type HoldInfo = { setBy: string | null; setByEmail: string | null; setAt: string | null; reason: string | null };
+
+/** Who placed the hold an action would lift: the latest audit row of the action that set it. */
+const holdSetBy = async (action: ApprovalAction, target: string): Promise<HoldInfo | null> => {
+  const source = HOLD_SET_BY_ACTION[action];
+  if (!source) return null;
+  const { data, error } = await getServiceClient()
+    .from('audit_logs')
+    .select('admin_id, admin_email, created_at, reason')
+    .eq('entity_id', target)
+    .eq('entity_type', source.entityType)
+    .eq('action', source.audit)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw new AppError('unavailable', 'Who set this hold could not be checked, so nothing was changed. Try again.');
+  const row = ((data ?? []) as { admin_id: string; admin_email: string | null; created_at: string; reason: string | null }[])[0];
+  return row
+    ? { setBy: row.admin_id, setByEmail: row.admin_email, setAt: row.created_at, reason: row.reason }
+    : { setBy: null, setByEmail: null, setAt: null, reason: null };
+};
+
+/** A hold set by the caller may be lifted at once; one set by anyone else (or unknown) waits. */
+const liftNeedsApproval = (action: ApprovalAction) => async (req: AdminRequest, target: string): Promise<boolean> => {
+  const hold = await holdSetBy(action, target);
+  return !hold?.setBy || hold.setBy !== req.admin?.admin_id;
+};
 
 type AnySpec = ActionSpec<Record<string, unknown>>;
 /** Erases the body type so the four specs fit one table (each spec parses its own body). */
@@ -119,6 +153,35 @@ const SPECS: Record<ApprovalAction, AnySpec> = {
     run: runRetireAccount,
     reason: (b) => b.reason,
   }),
+  // Every chip swap from a re-issue waits for a second admin (Boss 2026-10-27).
+  reissue_fulfil: spec({
+    target: reissueIdFrom,
+    parse: parseFulfilBody,
+    precheck: async (req, target, body) => { await checkFulfil(req, target, body); },
+    run: runFulfil,
+    reason: (b) => b.reason,
+  }),
+  tag_unsuspend: spec({
+    target: tagIdFrom,
+    parse: (req, target, raw) => parseSuspensionBody(req, target, raw, false),
+    run: (req, target, body) => runTagSuspension(req, target, body, false),
+    reason: (b) => b.reason,
+    needsApproval: liftNeedsApproval('tag_unsuspend'),
+  }),
+  account_unsuspend: spec({
+    target: accountIdFrom,
+    parse: (_req, _target, raw) => parseReasonBody(raw),
+    run: runUnsuspendAccount,
+    reason: (b) => b.reason,
+    needsApproval: liftNeedsApproval('account_unsuspend'),
+  }),
+  account_reactivate: spec({
+    target: accountIdFrom,
+    parse: (_req, _target, raw) => parseReasonBody(raw),
+    run: runReactivateAccount,
+    reason: (b) => b.reason,
+    needsApproval: liftNeedsApproval('account_reactivate'),
+  }),
 };
 
 const specFor = (action: ApprovalAction): AnySpec => SPECS[action];
@@ -134,7 +197,9 @@ export const approvalGated = (action: ApprovalAction) => async (req: AdminReques
   const target = gated.target(req);
   const body = gated.parse(req, target, req.body);
 
-  if (!approvalRequired(req.admin)) return ok(res, await gated.run(req, target, body));
+  if (!approvalRequired(req.admin) || (gated.needsApproval && !(await gated.needsApproval(req, target)))) {
+    return ok(res, await gated.run(req, target, body));
+  }
 
   await gated.precheck?.(req, target, body);
   const { data, error } = await getServiceClient().rpc('admin_request_approval', {
@@ -180,6 +245,28 @@ type ApprovalRow = {
 const APPROVAL_COLUMNS =
   'id, action, target_id, payload, reason, requested_by, requested_at, expires_at, decided_by, decided_at, decision, decision_note, executed_at, result';
 
+type ReissueTicketRow = {
+  id: string;
+  tag_id: string;
+  requester_id: string;
+  status: string;
+  payment_status: string | null;
+  photo_keys: string[] | null;
+  list_amount_usd_cents: number | null;
+  charged_amount: number | null;
+  charged_currency: string | null;
+  review_reason: string | null;
+  waive_reason: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+};
+
+// One literal on purpose: schemaColumnDrift.test.ts reads `*COLUMNS` constants.
+const REISSUE_TICKET_COLUMNS =
+  'id, tag_id, requester_id, status, payment_status, photo_keys, list_amount_usd_cents, charged_amount, charged_currency, review_reason, waive_reason, reviewed_by, reviewed_at, paid_at, created_at';
+
 type ChipLabel = { chipName: string | null; serialSuffix: string | null };
 
 const loadChipLabels = async (supabase: SupabaseClient, ids: string[]): Promise<Map<string, ChipLabel>> => {
@@ -221,31 +308,83 @@ export const listApprovals = async (req: AdminRequest, res: Response) => {
   if (error) throw new AppError('unavailable', 'Approval requests could not be loaded. Try again.');
   const rows = (data ?? []) as unknown as ApprovalRow[];
 
-  const tagIds = rows.flatMap((r) =>
-    r.action === 'tag_reset' ? [r.target_id, String(r.payload.newTagId ?? '')] : r.action === 'tag_suspend' ? [r.target_id] : [],
-  ).filter(Boolean);
-  const [emails, chips] = await Promise.all([
-    loadEmailsByIds(supabase, rows.flatMap((r) => [r.requested_by, r.decided_by, r.action.startsWith('account_') ? r.target_id : null])),
+  // Re-issue tickets carry the whole request so the approver never has to leave it.
+  const reissueIds = [...new Set(rows.filter((r) => r.action === 'reissue_fulfil').map((r) => r.target_id))];
+  let reissues = new Map<string, ReissueTicketRow>();
+  if (reissueIds.length > 0) {
+    const { data: rr, error: rrError } = await supabase.from('reissue_requests').select(REISSUE_TICKET_COLUMNS).in('id', reissueIds);
+    if (rrError) throw new AppError('unavailable', 'Approval requests could not be loaded. Try again.');
+    reissues = new Map(((rr ?? []) as unknown as ReissueTicketRow[]).map((x) => [x.id, x]));
+  }
+
+  const tagIds = rows.flatMap((r) => {
+    if (r.action === 'tag_reset') return [r.target_id, String(r.payload.newTagId ?? '')];
+    if (r.action === 'reissue_fulfil') return [reissues.get(r.target_id)?.tag_id ?? '', String(r.payload.newTagId ?? '')];
+    return r.action.startsWith('tag_') ? [r.target_id] : [];
+  }).filter(Boolean);
+  const [emails, chips, holds, photos] = await Promise.all([
+    loadEmailsByIds(supabase, rows.flatMap((r) => [
+      r.requested_by, r.decided_by, r.action.startsWith('account_') ? r.target_id : null,
+    ]).concat([...reissues.values()].flatMap((x) => [x.requester_id, x.reviewed_by]))),
     loadChipLabels(supabase, tagIds),
+    Promise.all(rows.map(async (r) => [r.id, HOLD_SET_BY_ACTION[r.action] ? await holdSetBy(r.action, r.target_id) : null] as const))
+      .then((pairs) => new Map(pairs)),
+    Promise.all([...reissues.values()].map(async (x) => {
+      // 5-minute presigned GETs, as on the re-issue page; a failure shows "could not be loaded".
+      try { return [x.id, await Promise.all((x.photo_keys ?? []).map(evidenceViewUrl))] as const; } catch { return [x.id, [] as string[]] as const; }
+    })).then((pairs) => new Map(pairs)),
   ]);
 
   const now = Date.now();
+  const chipOf = (id: unknown) => chips.get(String(id ?? '')) ?? null;
   const approvals = rows.map((r) => {
     const status = statusOf(r, now);
-    const isTag = r.action.startsWith('tag_');
+    const reissue = r.action === 'reissue_fulfil' ? reissues.get(r.target_id) ?? null : null;
+    const hold = holds.get(r.id) ?? null;
+    let target;
+    if (r.action === 'reissue_fulfil') {
+      const tokenId = reissue?.tag_id ?? null;
+      target = { kind: 'reissue' as const, id: r.target_id, tokenId, ...(chipOf(tokenId) ?? { chipName: null, serialSuffix: null }) };
+    } else if (r.action.startsWith('tag_')) {
+      target = { kind: 'token' as const, id: r.target_id, ...(chipOf(r.target_id) ?? { chipName: null, serialSuffix: null }) };
+    } else {
+      target = { kind: 'account' as const, id: r.target_id, email: emails.get(r.target_id) ?? null };
+    }
+    let details: Record<string, unknown> = {};
+    if (r.action === 'tag_reset') details = { newTagId: r.payload.newTagId ?? null, newChip: chipOf(r.payload.newTagId) };
+    else if (r.action === 'account_suspend') details = { hours: r.payload.hours ?? null };
+    else if (r.action === 'reissue_fulfil') {
+      details = {
+        newTagId: r.payload.newTagId ?? null,
+        newChip: chipOf(r.payload.newTagId),
+        reissue: reissue && {
+          id: reissue.id,
+          status: reissue.status,
+          paymentStatus: reissue.payment_status,
+          listAmountUsdCents: reissue.list_amount_usd_cents,
+          chargedAmount: reissue.charged_amount,
+          chargedCurrency: reissue.charged_currency,
+          waiveReason: reissue.waive_reason,
+          reviewReason: reissue.review_reason,
+          reviewedBy: reissue.reviewed_by ? { id: reissue.reviewed_by, email: emails.get(reissue.reviewed_by) ?? null } : null,
+          reviewedAt: reissue.reviewed_at,
+          requestedAt: reissue.created_at,
+          paidAt: reissue.paid_at,
+          owner: { id: reissue.requester_id, email: emails.get(reissue.requester_id) ?? null },
+          photoCount: reissue.photo_keys?.length ?? 0,
+          photoUrls: photos.get(reissue.id) ?? [],
+        },
+      };
+    } else if (hold) {
+      details = { hold: { setBy: hold.setBy ? { id: hold.setBy, email: hold.setByEmail } : null, setAt: hold.setAt, reason: hold.reason } };
+    }
     return {
       id: r.id,
       action: r.action,
       status,
-      target: isTag
-        ? { kind: 'token' as const, id: r.target_id, ...(chips.get(r.target_id) ?? { chipName: null, serialSuffix: null }) }
-        : { kind: 'account' as const, id: r.target_id, email: emails.get(r.target_id) ?? null },
+      target,
       // Only what the approver needs to decide; never the typed confirmation.
-      details: r.action === 'tag_reset'
-        ? { newTagId: r.payload.newTagId ?? null, newChip: chips.get(String(r.payload.newTagId ?? '')) ?? null }
-        : r.action === 'account_suspend'
-          ? { hours: r.payload.hours ?? null }
-          : {},
+      details,
       reason: r.reason,
       requestedBy: { id: r.requested_by, email: emails.get(r.requested_by) ?? null },
       requestedAt: r.requested_at,

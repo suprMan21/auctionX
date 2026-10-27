@@ -7,11 +7,9 @@ import {
   deleteAccount,
   getAccount,
   getAccountTokens,
-  reactivateAccount,
   searchAccounts,
   setAccountRole,
   setAccountType,
-  unsuspendAccount,
 } from '../../controllers/adminAccountsController';
 
 /**
@@ -28,9 +26,9 @@ router.get('/:id/tokens', requirePermission(PERMISSIONS.manageNfc), handle(getAc
 
 // S-2FA Ph3a: suspend and retire wait for a second admin unless the caller may act alone.
 router.post('/:id/suspend', requirePermission(PERMISSIONS.manageUsers), handle(approvalGated('account_suspend')));
-router.post('/:id/unsuspend', requirePermission(PERMISSIONS.manageUsers), handle(unsuspendAccount));
+router.post('/:id/unsuspend', requirePermission(PERMISSIONS.manageUsers), handle(approvalGated('account_unsuspend')));
 router.post('/:id/retire', requirePermission(PERMISSIONS.manageUsers), handle(approvalGated('account_retire')));
-router.post('/:id/reactivate', requirePermission(PERMISSIONS.manageUsers), handle(reactivateAccount));
+router.post('/:id/reactivate', requirePermission(PERMISSIONS.manageUsers), handle(approvalGated('account_reactivate')));
 
 router.post('/:id/delete', requirePermission(PERMISSIONS.manageAdmins), handle(deleteAccount));
 router.put('/:id/role', requirePermission(PERMISSIONS.manageAdmins), handle(setAccountRole));

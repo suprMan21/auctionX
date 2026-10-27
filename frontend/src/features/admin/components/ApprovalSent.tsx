@@ -1,6 +1,6 @@
 /**
- * S-2FA Ph3a: what a suspend / reset / retire dialog shows when the server
- * answered 202. Nothing has happened yet; another admin approves it first.
+ * S-2FA Ph3a: what a suspend / reset / retire / re-issue / lift-hold dialog shows
+ * when the server answered 202. Nothing has happened yet; another admin approves it first.
  */
 
 import { Link } from 'react-router-dom';
@@ -33,4 +33,9 @@ export const ApprovalSentPanel = ({ approval, onClose }: { approval: ApprovalPen
 /** Helper line shown above the buttons when the action will wait for a second admin. */
 export const ApprovalHelper = () => (
   <p className="text-sm text-amber-200">{APPROVAL_COPY.helper}</p>
+);
+
+/** Lifting a hold: waits for a second admin only when someone else set it (the server decides). */
+export const HoldHelper = () => (
+  <p className="text-sm text-amber-200">{APPROVAL_COPY.holdHelper}</p>
 );

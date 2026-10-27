@@ -5,7 +5,6 @@ import { handle } from '../tagManagement';
 import {
   listTags,
   getTag,
-  unsuspendTag,
 } from '../../controllers/adminTagController';
 import { approvalGated } from '../../controllers/adminApprovalsController';
 
@@ -22,7 +21,8 @@ router.get('/', handle(listTags));
 router.get('/:tagId', handle(getTag));
 // S-2FA Ph3a: suspend and reset wait for a second admin unless the caller may act alone.
 router.post('/:tagId/suspend', handle(approvalGated('tag_suspend')));
-router.post('/:tagId/unsuspend', handle(unsuspendTag));
+// Lifting a hold another admin set waits for a second admin.
+router.post('/:tagId/unsuspend', handle(approvalGated('tag_unsuspend')));
 router.post('/:tagId/reset', handle(approvalGated('tag_reset')));
 
 export default router;

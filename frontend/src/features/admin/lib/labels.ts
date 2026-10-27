@@ -93,6 +93,10 @@ const APPROVAL_ACTION: Record<string, string> = {
   tag_suspend: 'Suspend token',
   account_suspend: 'Suspend account',
   account_retire: 'Retire account',
+  reissue_fulfil: 'Move token to a new chip (re-issue)',
+  tag_unsuspend: 'Lift token suspension',
+  account_unsuspend: 'Lift account suspension',
+  account_reactivate: 'Reactivate account',
 };
 
 /** What an approval request asks to do. */
@@ -117,6 +121,10 @@ export const APPROVAL_COPY = {
   sentTitle: 'Sent for approval',
   sent: 'Another admin must approve this within 24 hours. Nothing has changed yet.',
   openRequest: 'Open the request',
+  /** Re-issue fulfil always waits for a second admin (except super_admin). */
+  fulfilHelper: 'Another admin approves this before the token moves. Nothing changes until then.',
+  /** Lifting a hold waits only when someone else placed it; the dialog cannot tell in advance. */
+  holdHelper: 'If another admin set this hold, a second admin approves lifting it.',
 } as const;
 
 /** One line for where a request got to, e.g. "Approved by admin2@… · Done". */

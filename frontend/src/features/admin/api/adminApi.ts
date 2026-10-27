@@ -181,7 +181,7 @@ export const adminApi = {
     }));
   },
 
-  /** null = done. Retire may come back as a request sent for approval (202). */
+  /** null = done. Retire, and lifting a hold another admin set, may come back as a request sent for approval (202). */
   async accountAction(id: string, action: 'unsuspend' | 'retire' | 'reactivate', reason: string): Promise<ApprovalPending | null> {
     return doneOrPending(await adminFetch<unknown>(`/users/${encodeURIComponent(id)}/${action}`, {
       method: 'POST', body: JSON.stringify({ reason }),
@@ -584,12 +584,15 @@ export const adminApi = {
     );
   },
 
-  /** POST /admin/reissue-requests/:id/fulfil — only once PAID or WAIVED. */
+  /**
+   * POST /admin/reissue-requests/:id/fulfil — only once PAID or WAIVED.
+   * S-2FA Ph3a2: 202 (sent for a second admin's approval) whenever /admin/me says approvalRequired.
+   */
   fulfilReissue(
     requestId: string,
     body: { newTagId: string; reason: string; confirmSuffix: string },
-  ): Promise<AdminTagResetResponse> {
-    return adminFetch<AdminTagResetResponse>(
+  ): Promise<AdminTagResetResponse | AdminApprovalPendingResponse> {
+    return adminFetch<AdminTagResetResponse | AdminApprovalPendingResponse>(
       `/reissue-requests/${encodeURIComponent(requestId)}/fulfil`,
       { method: 'POST', body: JSON.stringify(body) },
     );
