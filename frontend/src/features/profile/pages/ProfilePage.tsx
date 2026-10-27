@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -233,6 +233,21 @@ export function ProfilePage() {
                     />
                   </div>
                 </div>
+              </section>
+
+              <section aria-labelledby="type-heading">
+                <h2 id="type-heading" className="text-xl font-semibold text-white mb-2">
+                  Account type
+                </h2>
+                <p className="text-gray-400 text-sm">
+                  Collector or creator.{' '}
+                  <Link
+                    to="/settings/account-type"
+                    className="text-accent-500 hover:text-accent-400 underline font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
+                  >
+                    View or change your account type
+                  </Link>
+                </p>
               </section>
 
               <div className="flex gap-4">

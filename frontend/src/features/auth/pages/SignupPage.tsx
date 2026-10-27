@@ -5,12 +5,20 @@ import { Input } from '@/components/common/Input';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '../hooks/useAuth';
 import { BRAND_LABEL } from '@/constants/branding';
+import { afterProfileLanding } from '@/features/profile/lib/landing';
+import type { AccountIntent } from '../store/authStore';
+
+const ACCOUNT_CHOICES: ReadonlyArray<{ value: AccountIntent; label: string; hint: string }> = [
+  { value: 'collector', label: 'A collector', hint: 'Verify seals and keep a record of the items you own.' },
+  { value: 'creator', label: 'A creator', hint: "Seal your own items. We'll ask you to verify your identity next." },
+];
 
 export function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState('');
+  const [accountIntent, setAccountIntent] = useState<AccountIntent>('collector');
   const { signUp, loading, error, clearError, user, initialized } = useAuth();
   const navigate = useNavigate();
 
@@ -18,7 +26,7 @@ export function SignupPage() {
   // authenticated landing instead.
   useEffect(() => {
     if (initialized && user) {
-      navigate('/my-listings', { replace: true });
+      navigate(afterProfileLanding(), { replace: true });
     }
   }, [initialized, user, navigate]);
 
@@ -38,8 +46,9 @@ export function SignupPage() {
     }
 
     try {
-      await signUp(email, password);
-      navigate('/profile');
+      await signUp(email, password, accountIntent);
+      // A creator goes straight to the identity check; a collector to their profile.
+      navigate(accountIntent === 'creator' ? '/settings/account-type' : '/profile');
     } catch (err) {
       console.error('Signup error:', err);
     }
@@ -64,10 +73,37 @@ export function SignupPage() {
             Create your account
           </h1>
           <p className="text-gray-400 mb-8">
-            Join {BRAND_LABEL.AUCTIONX} and start bidding on exclusive items.
+            Join {BRAND_LABEL.AUCTIONX}.
           </p>
 
           <form onSubmit={handleSubmit} aria-label="Signup form" className="space-y-6">
+            <fieldset>
+              <legend className="block text-sm font-medium text-gray-300 mb-2">I'm joining as</legend>
+              <div className="grid gap-3">
+                {ACCOUNT_CHOICES.map((c) => (
+                  <label
+                    key={c.value}
+                    className={`flex gap-3 items-start rounded-xl border p-3 cursor-pointer focus-within:ring-2 focus-within:ring-primary-500 ${
+                      accountIntent === c.value ? 'border-primary-500 bg-primary-500/10' : 'border-white/10'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="account-intent"
+                      value={c.value}
+                      checked={accountIntent === c.value}
+                      onChange={() => setAccountIntent(c.value)}
+                      className="mt-1 accent-primary-500"
+                    />
+                    <span>
+                      <span className="block text-white font-medium">{c.label}</span>
+                      <span className="block text-sm text-gray-400">{c.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
             <div>
               <h2 className="sr-only">Account Information</h2>
               
