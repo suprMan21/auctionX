@@ -76,6 +76,9 @@ const CLIENT_REASONS = new Set([
   // never confirms a token action.
   'passkey_required',
   'backup_code_not_allowed',
+  // S-2FA review M1: a method added with a code waits 24 h before it can
+  // confirm a step-up.
+  'new_method_waiting',
 ]);
 
 const sunReason = (details: unknown): string | null => {

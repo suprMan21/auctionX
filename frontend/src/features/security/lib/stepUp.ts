@@ -2,7 +2,7 @@
  * Which ways of confirming are offered for each action (Boss, 2026-10-27):
  *   - Changing sign-in methods: passkey, authenticator code or backup code
  *     (someone who lost their phone must still be able to fix their account).
- *   - Release and transfer complete: passkey or authenticator code. Staff
+ *   - Release, transfer complete and password / email change: passkey or authenticator code. Staff
  *     accounts: passkey only.
  *   - Price changes and other admin actions: passkey only.
  * The server enforces the same rules; this only decides what the screen shows.
@@ -13,7 +13,7 @@ import type { StepUpAction } from '../api/mfaApi';
 export type StepUpMethod = 'passkey' | 'totp' | 'recovery_code';
 
 const FACTOR_ACTIONS: readonly StepUpAction[] = ['factor_add', 'factor_remove', 'recovery_regen'];
-const TOKEN_ACTIONS: readonly StepUpAction[] = ['release', 'transfer_complete'];
+const TOKEN_ACTIONS: readonly StepUpAction[] = ['release', 'transfer_complete', 'account_change'];
 
 export const allowedStepUpMethods = (action: StepUpAction, isStaff: boolean): StepUpMethod[] => {
   if (FACTOR_ACTIONS.includes(action)) return ['passkey', 'totp', 'recovery_code'];
@@ -42,3 +42,7 @@ const reasonOf = (err: unknown): string | null => {
 /** `/sign-in/verify?next=…` for the current page. */
 export const secondFactorPathFor = (next: string): string =>
   `/sign-in/verify?next=${encodeURIComponent(next)}`;
+
+/** True while a method added with a code is still in its 24-hour wait. */
+export const isWaiting = (usableFrom: string | null | undefined, now: number = Date.now()): boolean =>
+  Boolean(usableFrom) && new Date(usableFrom as string).getTime() > now;

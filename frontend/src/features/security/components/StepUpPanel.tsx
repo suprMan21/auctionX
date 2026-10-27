@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { mfaApi, type StepUpAction } from '../api/mfaApi';
 import { useMfaStore } from '../store/mfaStore';
-import { allowedStepUpMethods, secondFactorPathFor, type StepUpMethod } from '../lib/stepUp';
+import { allowedStepUpMethods, isWaiting, secondFactorPathFor, type StepUpMethod } from '../lib/stepUp';
 import { getPasskeyAssertion } from '../lib/webauthn';
 import { isCancelled, mfaErrorCopy } from '../lib/copy';
 import { MfaApiError } from '../api/mfaApi';
@@ -39,9 +39,12 @@ export const StepUpPanel = ({ action, targetId, purpose, onConfirmed, onCancel }
   }, [status, refresh]);
 
   const allowed = allowedStepUpMethods(action, status?.isStaff ?? true);
-  const usablePasskeys = (status?.passkeys ?? []).filter((p) => !(status?.breakGlass && p.synced));
+  // A method added with a code waits 24 h before it can confirm anything (review M1).
+  const usablePasskeys = (status?.passkeys ?? []).filter((p) => !(status?.breakGlass && p.synced) && !isWaiting(p.usableFrom));
+  const waitingPasskeys = (status?.passkeys ?? []).filter((p) => isWaiting(p.usableFrom));
   const canPasskey = allowed.includes('passkey') && usablePasskeys.length > 0;
-  const canTotp = allowed.includes('totp') && Boolean(status?.authenticatorApp) && !status?.breakGlass;
+  const canTotp = allowed.includes('totp') && Boolean(status?.authenticatorApp) && !status?.breakGlass
+    && !isWaiting(status?.authenticatorAppUsableFrom);
   const canBackup = allowed.includes('recovery_code') && (status?.backupCodesLeft ?? 0) > 0;
   const nothingUsable = status !== null && !canPasskey && !canTotp && !canBackup;
 
@@ -103,7 +106,9 @@ export const StepUpPanel = ({ action, targetId, purpose, onConfirmed, onCancel }
           {allowed.length === 1
             ? 'This needs a passkey. '
             : 'This needs a passkey or authenticator app. '}
-          <Link to="/settings/security" className="underline text-primary-300">Add one in Security settings</Link>, then try again.
+          {waitingPasskeys.length > 0
+            ? 'Your new passkey can approve this 24 hours after it was added.'
+            : <><Link to="/settings/security" className="underline text-primary-300">Add one in Security settings</Link>, then try again.</>}
         </p>
       )}
 

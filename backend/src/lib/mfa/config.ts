@@ -45,6 +45,12 @@ export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 /** How long a step-up grant stays usable. */
 export const STEP_UP_TTL_MS = 2 * 60 * 1000;
 
+/**
+ * How long a password / email change permit stays usable (Ph2b). Long enough
+ * for the browser to call GoTrue right after; spent by the auth.users trigger.
+ */
+export const ACCOUNT_CHANGE_PERMIT_TTL_MS = 2 * 60 * 1000;
+
 /** Second-factor marker lifetime for everyone except super_admin. */
 export const mfaSessionTtlMs = (): number =>
   positiveInt(process.env.MFA_SESSION_TTL_HOURS, 12) * 60 * 60 * 1000;
@@ -53,6 +59,13 @@ export const mfaSessionTtlMs = (): number =>
 export const SUPER_ADMIN_SESSION_TTL_MS = 60 * 60 * 1000;
 
 export const RECOVERY_CODE_COUNT = 10;
+
+/**
+ * A sign-in method added with a step-up that a code (authenticator or backup
+ * code) confirmed waits this long before it can confirm any step-up. It may
+ * still sign in. (Boss, 2026-10-27, S-2FA review M1.)
+ */
+export const NEW_METHOD_COOL_OFF_MS = 24 * 60 * 60 * 1000;
 
 /** 32-byte key, base64. Encrypts TOTP secrets. */
 export const mfaSecretKey = (): Buffer => {

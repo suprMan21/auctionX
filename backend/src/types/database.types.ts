@@ -958,6 +958,7 @@ export type Database = {
         Row: {
           action: string | null
           challenge: string
+          code_confirmed: boolean
           created_at: string
           expires_at: string
           id: string
@@ -970,6 +971,7 @@ export type Database = {
         Insert: {
           action?: string | null
           challenge: string
+          code_confirmed?: boolean
           created_at?: string
           expires_at: string
           id?: string
@@ -982,6 +984,7 @@ export type Database = {
         Update: {
           action?: string | null
           challenge?: string
+          code_confirmed?: boolean
           created_at?: string
           expires_at?: string
           id?: string
@@ -2764,6 +2767,7 @@ export type Database = {
           created_at: string
           expires_at: string
           id: string
+          method: string | null
           session_id: string
           target_id: string
           token_hash: string
@@ -2775,6 +2779,7 @@ export type Database = {
           created_at?: string
           expires_at: string
           id?: string
+          method?: string | null
           session_id: string
           target_id: string
           token_hash: string
@@ -2786,6 +2791,7 @@ export type Database = {
           created_at?: string
           expires_at?: string
           id?: string
+          method?: string | null
           session_id?: string
           target_id?: string
           token_hash?: string
@@ -3110,6 +3116,7 @@ export type Database = {
           public_key: string
           sign_count: number
           transports: string[]
+          usable_from: string | null
           user_id: string
         }
         Insert: {
@@ -3123,6 +3130,7 @@ export type Database = {
           public_key: string
           sign_count?: number
           transports?: string[]
+          usable_from?: string | null
           user_id: string
         }
         Update: {
@@ -3136,6 +3144,7 @@ export type Database = {
           public_key?: string
           sign_count?: number
           transports?: string[]
+          usable_from?: string | null
           user_id?: string
         }
         Relationships: [
@@ -3185,6 +3194,7 @@ export type Database = {
           created_at: string
           last_used_step: number
           secret_enc: string
+          usable_from: string | null
           user_id: string
           verified_at: string | null
         }
@@ -3192,6 +3202,7 @@ export type Database = {
           created_at?: string
           last_used_step?: number
           secret_enc: string
+          usable_from?: string | null
           user_id: string
           verified_at?: string | null
         }
@@ -3199,6 +3210,7 @@ export type Database = {
           created_at?: string
           last_used_step?: number
           secret_enc?: string
+          usable_from?: string | null
           user_id?: string
           verified_at?: string | null
         }

@@ -112,6 +112,12 @@ const AUDIT_ACTION: Record<string, string> = {
   role_grant: 'Staff role granted',
   role_change: 'Staff role changed',
   account_type_change: 'Account type changed',
+  // S-2FA: a staff account's own sign-in methods.
+  mfa_factor_add: 'Sign-in method added',
+  mfa_factor_remove: 'Sign-in method removed',
+  mfa_recovery_regen: 'New backup codes made',
+  mfa_lockout: 'Code entry locked',
+  mfa_account_change_permit: 'Password or email change started',
   role_revoke: 'Staff role removed',
   role_set: 'Staff role changed',
   // Older account actions

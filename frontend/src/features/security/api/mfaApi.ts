@@ -31,7 +31,9 @@ export type StepUpAction =
   | 'factor_add'
   | 'recovery_regen'
   | 'admin_action'
-  | 'admin_approve';
+  | 'admin_approve'
+  /** Password or email change (target 'password' / 'email'). */
+  | 'account_change';
 
 export class MfaApiError extends Error {
   constructor(
@@ -60,11 +62,14 @@ const passkeySchema = z.object({
   synced: z.boolean(),
   createdAt: z.string(),
   lastUsedAt: z.string().nullable().optional(),
+  /** Set while a passkey added with a code waits 24 h before it can confirm anything. */
+  usableFrom: z.string().nullable().optional().default(null),
 });
 
 export const mfaStatusSchema = z.object({
   passkeys: z.array(passkeySchema),
   authenticatorApp: z.boolean(),
+  authenticatorAppUsableFrom: z.string().nullable().optional().default(null),
   backupCodesLeft: z.number().int(),
   hasFactor: z.boolean(),
   sessionVerified: z.boolean(),
@@ -92,7 +97,7 @@ const assertionOptionsSchema = optionsSchema<PublicKeyCredentialRequestOptionsJS
 const ended = { otherSessionsEnded: z.boolean().optional() };
 
 const registerResultSchema = z.object({
-  passkey: passkeySchema.omit({ lastUsedAt: true }),
+  passkey: passkeySchema.omit({ lastUsedAt: true, usableFrom: true }).extend({ usableFrom: z.string().nullable().optional() }),
   backupCodes: z.array(z.string()).nullable(),
   ...ended,
 });
@@ -114,6 +119,8 @@ const totpConfirmSchema = z.object({ authenticatorApp: z.literal(true), backupCo
 const codesSchema = z.object({ backupCodes: z.array(z.string()), ...ended });
 const renameSchema = z.object({ id: z.string(), nickname: z.string() });
 const removedSchema = z.object({ removed: z.string(), ...ended });
+
+const permitSchema = z.object({ kind: z.enum(['password', 'email']), expiresAt: z.string() });
 
 export type StepUpGrant = z.infer<typeof grantSchema>;
 
@@ -204,6 +211,10 @@ export const mfaApi = {
   totpConfirm: (code: string) => request('/totp/confirm', totpConfirmSchema, { method: 'POST', body: { code } }),
 
   removeTotp: (stepUpToken: string) => request('/totp', removedSchema, { method: 'DELETE', stepUpToken }),
+
+  /** A one-time, 2-minute permit the database checks before a password or email change. */
+  accountChangePermit: (kind: 'password' | 'email', stepUpToken: string) =>
+    request('/account-change', permitSchema, { method: 'POST', body: { kind }, stepUpToken }),
 
   regenerateBackupCodes: (stepUpToken: string) =>
     request('/recovery-codes/regenerate', codesSchema, { method: 'POST', body: {}, stepUpToken }),

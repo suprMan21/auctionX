@@ -252,11 +252,15 @@ const twoFactorGateSchema = envelopeSchema.extend({
  */
 const mfaSchema = envelopeSchema.extend({
   event: z.literal('auth.mfa'),
-  action: z.enum(['enrol', 'remove', 'sign_in', 'step_up_issue', 'step_up_use', 'recovery_regen', 'lockout']),
+  action: z.enum([
+    'enrol', 'remove', 'sign_in', 'step_up_issue', 'step_up_use', 'recovery_regen', 'lockout',
+    // Ph2b: a permit for a password / email change was issued (never the kind's value beyond this).
+    'account_change_permit',
+  ]),
   method: z.enum(['passkey', 'totp', 'recovery_code']).nullable(),
   step_up_action: z.enum([
     'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
-    'admin_action', 'admin_approve',
+    'admin_action', 'admin_approve', 'account_change',
   ]).nullable(),
   break_glass: z.boolean(),
 }).strict();

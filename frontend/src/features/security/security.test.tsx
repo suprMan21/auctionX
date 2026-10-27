@@ -12,6 +12,7 @@ const mfa = vi.hoisted(() => ({
   stepUpOptions: vi.fn(),
   stepUpVerifyPasskey: vi.fn(),
   stepUpVerifyCode: vi.fn(),
+  accountChangePermit: vi.fn(),
 }));
 vi.mock('./api/mfaApi', async () => {
   const actual = await vi.importActual<typeof import('./api/mfaApi')>('./api/mfaApi');
@@ -23,6 +24,10 @@ vi.mock('@/features/tokens/api/tokenApi', async () => {
   const actual = await vi.importActual<typeof import('@/features/tokens/api/tokenApi')>('@/features/tokens/api/tokenApi');
   return { ...actual, tokenApi: tokens };
 });
+const sb = vi.hoisted(() => ({ updateUser: vi.fn(), reauthenticate: vi.fn() }));
+vi.mock('@/lib/supabase', () => ({
+  supabase: { auth: { ...sb, getSession: async () => ({ data: { session: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }) } },
+}));
 vi.mock('@/lib/stripe', () => ({ stripePromise: Promise.resolve(null), stripeAppearance: {}, isStripeConfigured: true, isStripeTestMode: false }));
 
 import { allowedStepUpMethods, isSecondFactorRefusal, isStepUpRefusal } from './lib/stepUp';
@@ -34,10 +39,12 @@ import { MfaApiError } from './api/mfaApi';
 import { TokenApiError } from '@/features/tokens/api/tokenApi';
 import { ReleaseTokenDialog } from '@/features/tokens/components/ReleaseTokenDialog';
 import { TransferCompleteFlow } from '@/features/tokens/components/TransferCompleteFlow';
+import { ChangePasswordForm } from './components/ChangePasswordForm';
 
 const baseStatus = (over: Partial<MfaStatus> = {}): MfaStatus => ({
   passkeys: [],
   authenticatorApp: false,
+  authenticatorAppUsableFrom: null,
   backupCodesLeft: 10,
   hasFactor: true,
   sessionVerified: true,
@@ -49,7 +56,8 @@ const baseStatus = (over: Partial<MfaStatus> = {}): MfaStatus => ({
   ...over,
 });
 
-const passkey = { id: 'pk-1', nickname: 'My iPhone', synced: true, createdAt: '2026-10-27T12:00:00Z', lastUsedAt: null };
+const passkey = { id: 'pk-1', nickname: 'My iPhone', synced: true, createdAt: '2026-10-27T12:00:00Z', lastUsedAt: null, usableFrom: null };
+const tomorrow = () => new Date(Date.now() + 24 * 3600 * 1000).toISOString();
 
 const seed = (status: MfaStatus | null) =>
   useMfaStore.setState({ sessionKey: 'k', status, state: status ? 'ready' : 'idle' });
@@ -135,6 +143,20 @@ describe('StepUpPanel', () => {
     renderPanel('factor_remove');
     expect(screen.getByRole('button', { name: 'Use passkey' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Use a backup code' })).toBeInTheDocument();
+  });
+
+  it('does not offer a passkey or app added with a code until its 24 hours are up', () => {
+    seed(baseStatus({ passkeys: [{ ...passkey, usableFrom: tomorrow() }], authenticatorApp: true, authenticatorAppUsableFrom: tomorrow() }));
+    renderPanel();
+    expect(screen.queryByRole('button', { name: 'Use passkey' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Use authenticator app code' })).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent('24 hours after it was added');
+  });
+
+  it('offers them again once the wait is over', () => {
+    seed(baseStatus({ passkeys: [{ ...passkey, usableFrom: new Date(Date.now() - 1000).toISOString() }] }));
+    renderPanel();
+    expect(screen.getByRole('button', { name: 'Use passkey' })).toBeInTheDocument();
   });
 
   it('shows the server reason in plain words and keeps the person on the panel', async () => {
@@ -262,5 +284,84 @@ describe('SecondFactorGate', () => {
     renderGate();
     await waitFor(() => expect(useMfaStore.getState().state).toBe('error'));
     expect(screen.getByText('My tokens')).toBeInTheDocument();
+  });
+});
+
+// ── Password change ─────────────────────────────────────────────────────────
+
+describe('ChangePasswordForm', () => {
+  const renderForm = () => {
+    const onDone = vi.fn();
+    render(<MemoryRouter><ChangePasswordForm onDone={onDone} /></MemoryRouter>);
+    return { onDone };
+  };
+  const fill = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.type(screen.getByLabelText('New password'), 'correct horse battery');
+    await user.type(screen.getByLabelText('Confirm new password'), 'correct horse battery');
+    await user.click(screen.getByRole('button', { name: 'Set new password' }));
+  };
+
+  it('changes it straight away for an account with no second factor', async () => {
+    seed(baseStatus({ hasFactor: false, sessionVerified: false }));
+    sb.updateUser.mockResolvedValue({ error: null });
+    const { onDone } = renderForm();
+    await fill(userEvent.setup());
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(mfa.accountChangePermit).not.toHaveBeenCalled();
+  });
+
+  it('asks a two-step account to confirm its sign-in first', () => {
+    seed(baseStatus({ authenticatorApp: true, sessionVerified: false }));
+    renderForm();
+    expect(screen.getByRole('link', { name: 'Confirm now' })).toHaveAttribute('href', expect.stringContaining('/sign-in/verify'));
+  });
+
+  it('gets a permit after Confirm it is you, then saves', async () => {
+    seed(baseStatus({ authenticatorApp: true }));
+    mfa.stepUpVerifyCode.mockResolvedValue({ stepUpToken: 'g', expiresAt: 'x', action: 'account_change', targetId: 'password' });
+    mfa.accountChangePermit.mockResolvedValue({ kind: 'password', expiresAt: 'x' });
+    sb.updateUser.mockResolvedValue({ error: null });
+    const user = userEvent.setup();
+    const { onDone } = renderForm();
+    await fill(user);
+    await user.click(await screen.findByRole('button', { name: 'Use authenticator app code' }));
+    await user.type(screen.getByLabelText('Code from your authenticator app'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(mfa.stepUpVerifyCode).toHaveBeenCalledWith('account_change', 'password', { totp: '123456' });
+    expect(mfa.accountChangePermit).toHaveBeenCalledWith('password', 'g');
+    expect(mfa.accountChangePermit.mock.invocationCallOrder[0]).toBeLessThan(sb.updateUser.mock.invocationCallOrder[0]);
+  });
+
+  it('asks for the emailed code when Supabase wants it, then confirms again before retrying', async () => {
+    seed(baseStatus({ authenticatorApp: true }));
+    mfa.stepUpVerifyCode.mockResolvedValue({ stepUpToken: 'g', expiresAt: 'x', action: 'account_change', targetId: 'password' });
+    mfa.accountChangePermit.mockResolvedValue({ kind: 'password', expiresAt: 'x' });
+    sb.updateUser
+      .mockResolvedValueOnce({ error: { code: 'reauthentication_needed', message: 'reauth' } })
+      .mockResolvedValueOnce({ error: null });
+    sb.reauthenticate.mockResolvedValue({ error: null });
+    const user = userEvent.setup();
+    const { onDone } = renderForm();
+    await fill(user);
+    await user.click(await screen.findByRole('button', { name: 'Use authenticator app code' }));
+    await user.type(screen.getByLabelText('Code from your authenticator app'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    await user.type(await screen.findByLabelText(/We emailed you a code/), '987654');
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    await user.click(await screen.findByRole('button', { name: 'Use authenticator app code' }));
+    await user.type(screen.getByLabelText('Code from your authenticator app'), '654321');
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(sb.updateUser).toHaveBeenLastCalledWith({ password: 'correct horse battery', nonce: '987654' });
+    expect(mfa.accountChangePermit).toHaveBeenCalledTimes(2);
+  });
+
+  it('explains a database refusal (no valid permit)', async () => {
+    seed(baseStatus({ hasFactor: false, sessionVerified: false }));
+    sb.updateUser.mockResolvedValue({ error: { message: 'Database error updating user' } });
+    renderForm();
+    await fill(userEvent.setup());
+    expect(await screen.findByRole('alert')).toHaveTextContent('Confirm it’s you again');
   });
 });

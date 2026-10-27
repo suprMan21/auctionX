@@ -13,12 +13,15 @@ import { hashEmailForLog } from '../security/securityEvent';
 import { log } from '../logger';
 
 export type MfaEmail =
-  | { kind: 'factor_added'; method: 'passkey' | 'totp'; nickname?: string }
+  /** `waitUntil` (ISO): the method was added with a code and cannot confirm a step-up before then. */
+  | { kind: 'factor_added'; method: 'passkey' | 'totp'; nickname?: string; waitUntil?: string }
   | { kind: 'factor_removed'; method: 'passkey' | 'totp'; nickname?: string }
   | { kind: 'recovery_code_used'; left: number }
   | { kind: 'recovery_codes_new' }
   | { kind: 'break_glass_sign_in'; method: 'passkey' | 'recovery_code' }
-  | { kind: 'code_entry_locked' };
+  | { kind: 'code_entry_locked' }
+  /** Ph2b: a permit for a password change or an email change was issued. */
+  | { kind: 'account_change_started'; change: 'password' | 'email' };
 
 const FOOTER = "You're receiving this because it's about how your Authentic Materials account signs in. These emails can't be turned off.";
 
@@ -28,16 +31,32 @@ const escapeHtml = (s: string): string =>
 const methodName = (method: 'passkey' | 'totp', nickname?: string): string =>
   method === 'passkey' ? `a passkey${nickname ? ` ("${nickname}")` : ''}` : 'an authenticator app';
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "28 October 2026, 14:05 UTC". Null for an unreadable time. */
+export const formatUtc = (iso: string): string | null => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+};
+
 export const mfaEmailContent = (email: MfaEmail): { subject: string; lines: string[] } => {
   switch (email.kind) {
-    case 'factor_added':
+    case 'factor_added': {
+      const added = `${methodName(email.method, email.nickname)[0].toUpperCase()}${methodName(email.method, email.nickname).slice(1)} can now be used to sign in to your account.`;
+      const until = email.waitUntil ? formatUtc(email.waitUntil) : null;
       return {
         subject: 'A new sign-in method was added to your account',
-        lines: [
-          `${methodName(email.method, email.nickname)[0].toUpperCase()}${methodName(email.method, email.nickname).slice(1)} can now be used to sign in to your account.`,
-          "If this wasn't you, sign in and remove it from Security settings, then change your password.",
-        ],
+        lines: until
+          ? [
+              added,
+              `Because it was confirmed with a code rather than a passkey, it can't approve releases, transfers or account changes until ${until}.`,
+              "If this wasn't you, sign in and remove it now, then change your password.",
+            ]
+          : [added, "If this wasn't you, sign in and remove it from Security settings, then change your password."],
       };
+    }
     case 'factor_removed':
       return {
         subject: 'A sign-in method was removed from your account',
@@ -73,6 +92,22 @@ export const mfaEmailContent = (email: MfaEmail): { subject: string; lines: stri
           "If this wasn't you, someone may know your password. Sign in with your passkey and change your password now.",
         ],
       };
+    case 'account_change_started':
+      return email.change === 'password'
+        ? {
+            subject: 'A password change was started on your account',
+            lines: [
+              'Someone confirmed it is you with a passkey or authenticator app and started changing the password on your account.',
+              "If this wasn't you, sign in now, change your password and check Security settings.",
+            ],
+          }
+        : {
+            subject: 'An email change was started on your account',
+            lines: [
+              'Someone confirmed it is you with a passkey or authenticator app and started changing the email address on your account. The change finishes only when the link sent to the new address is opened.',
+              "If this wasn't you, sign in now, change your password and check Security settings.",
+            ],
+          };
     case 'break_glass_sign_in':
       return {
         subject: 'The super admin account was just used',

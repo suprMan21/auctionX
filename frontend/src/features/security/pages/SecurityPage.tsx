@@ -15,13 +15,16 @@ import { useStepUpDialog } from '../components/StepUpDialog';
 import { AddPasskeyFlow } from '../components/AddPasskeyFlow';
 import { AuthenticatorAppSetup } from '../components/AuthenticatorAppSetup';
 import { BackupCodesPanel } from '../components/BackupCodesPanel';
+import { ChangePasswordForm } from '../components/ChangePasswordForm';
 import { mfaErrorCopy } from '../lib/copy';
-import { secondFactorPathFor } from '../lib/stepUp';
+import { isWaiting, secondFactorPathFor } from '../lib/stepUp';
 
 type Open = null | 'add_passkey' | 'totp' | { codes: string[] };
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 const signedOut = (ended: boolean | undefined) => (ended ? ' Your other devices were signed out.' : '');
+const timeFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const fmtTime = (iso: string | null | undefined) => (iso ? timeFmt.format(new Date(iso)) : '');
 const fmt = (iso: string | null | undefined) => (iso ? dateFmt.format(new Date(iso)) : null);
 
 export const SecurityPage = () => {
@@ -171,7 +174,14 @@ export const SecurityPage = () => {
           <h2 id="totp-heading" className="text-lg font-semibold text-white">Authenticator app</h2>
           {status.authenticatorApp ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-gray-300">On</p>
+              <p className="text-sm text-gray-300">
+                On
+                {isWaiting(status.authenticatorAppUsableFrom) && (
+                  <span className="block text-xs text-amber-200">
+                    Added with a code: approves releases and transfers from {fmtTime(status.authenticatorAppUsableFrom)}.
+                  </span>
+                )}
+              </p>
               <Button
                 variant="secondary"
                 onClick={() => void removeTotp()}
@@ -219,6 +229,12 @@ export const SecurityPage = () => {
           )}
         </section>
       )}
+
+      {/* Password: needs the second factor and a one-time permit (S-2FA, review follow-up) */}
+      <section aria-labelledby="password-heading" className="glass rounded-2xl p-6 space-y-4">
+        <h2 id="password-heading" className="text-lg font-semibold text-white">Password</h2>
+        <ChangePasswordForm submitLabel="Change password" onDone={() => toast.success('Password changed.')} />
+      </section>
 
       {dialog}
     </main>
@@ -282,6 +298,11 @@ const PasskeyRow = ({ passkey, disabled, canRemove, onRemove, onRenamed }: Passk
             {added && ` · Added ${added}`}
             {used && ` · Last used ${used}`}
           </p>
+          {isWaiting(passkey.usableFrom) && (
+            <p className="text-xs text-amber-200">
+              Added with a code: it can sign you in now, and approve releases, transfers and changes from {fmtTime(passkey.usableFrom)}.
+            </p>
+          )}
         </div>
       )}
       {!editing && (

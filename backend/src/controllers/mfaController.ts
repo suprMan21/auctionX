@@ -3,7 +3,7 @@
  * lib/mfa/mfaService.ts. No logic lives here.
  */
 
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
 import { AppError } from '../lib/errors';
@@ -51,6 +51,7 @@ const nickname = z.string().trim().min(1).max(40).regex(/^[^<>\u0000-\u001f]+$/,
 
 const stepUpAction = z.enum([
   'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen', 'admin_action', 'admin_approve',
+  'account_change',
 ]);
 const targetId = z.string().min(1).max(200).regex(/^[A-Za-z0-9_:.-]+$/);
 const totpCode = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict();
@@ -71,6 +72,7 @@ const schemas = {
   ]),
   totpConfirm: z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict(),
   rename: z.object({ nickname }).strict(),
+  accountChange: z.object({ kind: z.enum(['password', 'email']) }).strict(),
 };
 
 const parse = <T>(schema: z.ZodType<T>, body: unknown): T => {
@@ -149,4 +151,20 @@ export const deletePasskey = async (req: Request, res: Response) => {
 
 export const deleteTotp = async (req: Request, res: Response) => {
   ok(res, await mfa.removeTotp(caller(req)));
+};
+
+/**
+ * Runs before the `account_change` step-up is spent (routes/mfa.ts): the body
+ * must be valid and this session must already have passed its second factor,
+ * so a refused request never burns the caller's step-up.
+ */
+export const preAccountChange = async (req: Request, _res: Response, next: NextFunction) => {
+  parse(schemas.accountChange, req.body);
+  await mfa.assertSecondFactorDone(caller(req));
+  next();
+};
+
+export const postAccountChange = async (req: Request, res: Response) => {
+  const { kind } = parse(schemas.accountChange, req.body);
+  ok(res, await mfa.startAccountChange(caller(req), kind));
 };

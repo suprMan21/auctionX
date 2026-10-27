@@ -17,6 +17,7 @@ const REASON_COPY: Record<string, string> = {
   no_passkey: 'Use your passkey to confirm this.',
   passkey_required: 'Staff accounts confirm this with a passkey or security key.',
   backup_code_not_allowed: 'Backup codes can’t confirm this. Use your passkey or authenticator app.',
+  new_method_waiting: 'A sign-in method added in the last 24 hours with a code can’t approve this yet. Use one you had before.',
   not_available: 'That option is not available for this account.',
   second_factor_required: 'Confirm it is you with your passkey or code first.',
   step_up_required: 'Confirm it is you to continue.',
