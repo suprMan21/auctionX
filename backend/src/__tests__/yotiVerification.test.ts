@@ -80,8 +80,18 @@ const buildChain = (table: string) => {
   return chain;
 };
 
+type RpcHook = (fn: string, args: unknown) => { data: unknown; error: unknown };
+let rpcHook: RpcHook = (fn) => { throw new Error(`unexpected rpc ${fn}`); };
+const rpcCalls: { fn: string; args: unknown }[] = [];
+
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({ from: (table: string) => buildChain(table) }),
+  createClient: () => ({
+    from: (table: string) => buildChain(table),
+    rpc: async (fn: string, args: unknown) => {
+      rpcCalls.push({ fn, args });
+      return rpcHook(fn, args);
+    },
+  }),
 }));
 
 // ── Yoti SDK mock (used by LiveYotiClient specs) ──────────────────────────────
@@ -194,6 +204,7 @@ process.env['NODE_ENV'] = 'test';
 import {
   startYotiSession,
   getMyVerificationStatus,
+  requestCreatorAccount,
   applyYotiWebhookEnvelope,
   yotiWebhook,
 } from '../controllers/yotiVerificationController';
@@ -497,6 +508,60 @@ describe('getMyVerificationStatus', () => {
     if (!res._json.success) throw new Error(`status diag: ${JSON.stringify(res._json)}`);
     expect(res._json.data.seller_verification_status).toBe('PENDING');
     expect(res._json.data.last_session).toMatchObject({ status: 'created' });
+  });
+
+  it('includes the account type and creator request time', async () => {
+    enqueue('users', () => ({
+      data: {
+        id: 'user-1',
+        seller_verification_status: 'NONE',
+        yoti_session_id: null,
+        account_type: 'collector',
+        creator_requested_at: '2026-10-27T12:00:00Z',
+      },
+      error: null,
+    }));
+    const res = makeRes();
+    await getMyVerificationStatus(makeReq() as any, res);
+    expect(res._json.data).toMatchObject({ account_type: 'collector', creator_requested_at: '2026-10-27T12:00:00Z' });
+  });
+});
+
+// ── requestCreatorAccount ─────────────────────────────────────────────────────
+describe('requestCreatorAccount', () => {
+  beforeEach(() => {
+    rpcCalls.length = 0;
+    rpcHook = (fn) => { throw new Error(`unexpected rpc ${fn}`); };
+  });
+
+  it('records the request for the signed-in user only and returns the type state', async () => {
+    rpcHook = () => ({
+      data: { account_type: 'collector', creator_requested_at: '2026-10-27T12:00:00Z', verification_status: 'NONE' },
+      error: null,
+    });
+    const res = makeRes();
+    await requestCreatorAccount(makeReq({ body: { p_user: 'someone-else' } } as any) as any, res);
+    expect(rpcCalls).toEqual([{ fn: 'request_creator_account', args: { p_user: 'user-1' } }]);
+    expect(res._json).toEqual({
+      success: true,
+      data: { account_type: 'collector', creator_requested_at: '2026-10-27T12:00:00Z', seller_verification_status: 'NONE' },
+      error: null,
+    });
+  });
+
+  it('a database error is a safe 500, never the raw message', async () => {
+    rpcHook = () => ({ data: null, error: { message: 'relation users secret detail' } });
+    const res = makeRes();
+    await requestCreatorAccount(makeReq() as any, res);
+    expect(res._status).toBe(500);
+    expect(JSON.stringify(res._json)).not.toContain('secret detail');
+  });
+
+  it('no user → 401 and no database call', async () => {
+    const res = makeRes();
+    await requestCreatorAccount(makeReq({ user: undefined } as any) as any, res);
+    expect(res._status).toBe(401);
+    expect(rpcCalls).toHaveLength(0);
   });
 });
 

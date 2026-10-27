@@ -14,9 +14,10 @@ import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { AccountActionDialog, type AccountAction } from '../components/AdminAccountDialogs';
 import { ADMIN_BUTTON_CLASS } from '../components/AdminDialog';
 import { AccountStatusBadge } from './AdminUsersPage';
+import { AccountTypeBadge } from '../components/AccountTypeBadge';
 import { AccountFreeTransfers } from '../components/AccountFreeTransfers';
 import { NONE, errorMessage, formatWhen as when, loadFailed } from '../lib/display';
-import { lifecycleLabel, reissueStageLabel } from '../lib/labels';
+import { idCheckStatusLabel, lifecycleLabel, reissueStageLabel } from '../lib/labels';
 
 const NOT_FOUND = 'Account not found. Check the link or search again.';
 
@@ -167,6 +168,10 @@ export const AdminUserDetailPage = () => {
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold text-white break-all">{account.email ?? account.id}</h1>
         <AccountStatusBadge status={status} />
+        <AccountTypeBadge
+          type={account.account_type}
+          creatorPending={account.account_type === 'collector' && account.creator_requested_at !== null}
+        />
         {account.staff_role && (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-500/10 text-primary-300">
             {ROLE_LABELS[account.staff_role] ?? account.staff_role}
@@ -181,6 +186,8 @@ export const AdminUserDetailPage = () => {
           <Field label="Display name">{account.display_name ?? NONE}</Field>
           <Field label="Email confirmed">{account.email_confirmed ? 'Yes' : 'No'}</Field>
           <Field label="Age verified">{account.age_verified ? 'Yes' : 'No'}</Field>
+          <Field label="Creator request">{account.creator_requested_at ? when(account.creator_requested_at) : 'Not requested'}</Field>
+          <Field label="Creator ID check">{idCheckStatusLabel(account.creator_check_status)}</Field>
           <Field label="Created">{when(account.created_at)}</Field>
           <Field label="Last sign-in">{when(account.last_sign_in_at)}</Field>
           <Field label="Active sessions">{account.active_sessions}</Field>

@@ -197,7 +197,7 @@ export const getMyVerificationStatus = async (req: AuthRequest & RequestWithId, 
     const { data: user, error: userErr } = await supabase
       .from('users')
       .select(
-        'id, seller_verification_status, seller_verification_submitted_at, seller_verification_reviewed_at, seller_verification_rejection_reason, age_verified, age_verified_at, age_verification_provider, yoti_session_id'
+        'id, seller_verification_status, seller_verification_submitted_at, seller_verification_reviewed_at, seller_verification_rejection_reason, age_verified, age_verified_at, age_verification_provider, yoti_session_id, account_type, creator_requested_at'
       )
       .eq('id', req.user.id)
       .single();
@@ -233,10 +233,44 @@ export const getMyVerificationStatus = async (req: AuthRequest & RequestWithId, 
         age_verification_provider: user.age_verification_provider,
         last_session: lastSession,
         feature_enabled: isYotiFeatureEnabled(),
+        account_type: user.account_type,
+        creator_requested_at: user.creator_requested_at,
       },
     });
   } catch (error) {
     return formatError(res, error, 'Failed to read verification status', req.requestId);
+  }
+};
+
+/**
+ * POST /api/v1/verification/creator-request
+ * Records that the caller wants to be a Creator. Idempotent (keeps the first
+ * request time). This alone never makes the account a Creator: the database
+ * trigger flips account_type only once the identity check has passed. The
+ * frontend starts the Yoti check (purpose seller_kyc) right after this call.
+ */
+export const requestCreatorAccount = async (req: AuthRequest & RequestWithId, res: Response) => {
+  const logger = withLogContext({ requestId: req.requestId, route: '/api/v1/verification/creator-request' });
+  try {
+    if (!req.user) throw new AppError('unauthenticated', 'Authentication required');
+    const { data, error } = await getServiceClient().rpc('request_creator_account', { p_user: req.user.id });
+    if (error || !data) {
+      logger.error('creator_request_failed', { err: error?.message ?? 'no data' });
+      throw new AppError('internal', 'Could not record the creator request');
+    }
+    const out = data as { account_type: string; creator_requested_at: string; verification_status: string };
+    logger.info('creator_requested', { userId: req.user.id, accountType: out.account_type });
+    return res.json({
+      success: true,
+      data: {
+        account_type: out.account_type,
+        creator_requested_at: out.creator_requested_at,
+        seller_verification_status: out.verification_status,
+      },
+      error: null,
+    });
+  } catch (error) {
+    return formatError(res, error, 'Failed to record the creator request', req.requestId);
   }
 };
 

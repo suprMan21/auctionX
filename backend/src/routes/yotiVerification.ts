@@ -12,6 +12,7 @@ import { requireAuth } from '../middleware/auth';
 import {
   startYotiSession,
   getMyVerificationStatus,
+  requestCreatorAccount,
 } from '../controllers/yotiVerificationController';
 
 const router = Router();
@@ -30,6 +31,13 @@ router.post(
   requireAuth as unknown as RequestHandler,
   startLimit as unknown as RequestHandler,
   startYotiSession as unknown as RequestHandler,
+);
+
+router.post(
+  '/creator-request',
+  requireAuth as unknown as RequestHandler,
+  startLimit as unknown as RequestHandler,
+  requestCreatorAccount as unknown as RequestHandler,
 );
 
 router.get(

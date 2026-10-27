@@ -169,8 +169,22 @@ describe('validation', () => {
     const app = await appWith('support');
     const res = await request(app).get('/admin/users?q=a%25b&status=suspended&page=3&limit=10');
     expect(res.status).toBe(200);
-    expect(rpcCalls[0].args).toEqual({ p_admin: ADMIN, p_query: 'a%b', p_status: 'suspended', p_limit: 10, p_offset: 20 });
+    expect(rpcCalls[0].args).toEqual({ p_admin: ADMIN, p_query: 'a%b', p_status: 'suspended', p_limit: 10, p_offset: 20, p_type: 'all' });
     expect(res.body.data.pagination).toEqual({ page: 3, limit: 10, total: 1, pages: 1 });
+  });
+
+  it('search passes the account type filter', async () => {
+    const app = await appWith('support');
+    const res = await request(app).get('/admin/users?type=creator_pending');
+    expect(res.status).toBe(200);
+    expect(rpcCalls[0].args).toMatchObject({ p_type: 'creator_pending', p_status: 'all' });
+  });
+
+  it('search refuses an unknown account type before the database', async () => {
+    const app = await appWith('support');
+    const res = await request(app).get('/admin/users?type=staff');
+    expect(res.status).toBe(400);
+    expect(rpcCalls).toHaveLength(0);
   });
 });
 

@@ -1,6 +1,7 @@
 /**
  * Admin accounts list (S-ADMIN2 Ph1).
- * Search by email, display name or account id; filter by status or staff.
+ * Search by email, display name or account id; filter by status or staff,
+ * and by account type (Collector / Creator / Creator verifying).
  * A non-empty search is audit-logged by the server before it runs.
  * @module Module 10 — Admin Dashboard
  */
@@ -12,6 +13,7 @@ import { ROLE_LABELS, type AccountSearch, type AccountStatus } from '../api/acco
 import { NONE, errorMessage, formatDay, loadFailed } from '../lib/display';
 import { AdminTable, type AdminColumn } from '../components/AdminTable';
 import { AdminPagination, AdminSearchBox, FilterPills, ListState } from '../components/AdminListParts';
+import { AccountTypeBadge } from '../components/AccountTypeBadge';
 
 const STATUS_FILTERS = [
   { value: 'all', label: 'All accounts' },
@@ -21,6 +23,14 @@ const STATUS_FILTERS = [
   { value: 'staff', label: 'Staff' },
 ] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number]['value'];
+
+const TYPE_FILTERS = [
+  { value: 'all', label: 'All types' },
+  { value: 'collector', label: 'Collectors' },
+  { value: 'creator', label: 'Creators' },
+  { value: 'creator_pending', label: 'Creator (verifying)' },
+] as const;
+type TypeFilter = (typeof TYPE_FILTERS)[number]['value'];
 type AccountRow = AccountSearch['accounts'][number];
 
 const STATUS_STYLE: Record<AccountStatus, string> = {
@@ -45,19 +55,21 @@ export const AdminUsersPage = () => {
   const rawStatus = searchParams.get('status') ?? 'all';
   // An unknown ?status= falls back to all rather than a 400 from the API.
   const status: StatusFilter = STATUS_FILTERS.some((f) => f.value === rawStatus) ? (rawStatus as StatusFilter) : 'all';
+  const rawType = searchParams.get('type') ?? 'all';
+  const type: TypeFilter = TYPE_FILTERS.some((f) => f.value === rawType) ? (rawType as TypeFilter) : 'all';
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
 
-  const queryKey = `${q}|${status}|${page}`;
+  const queryKey = `${q}|${status}|${type}|${page}`;
   useEffect(() => {
     let cancelled = false;
     adminApi
-      .searchAccounts({ q: q || undefined, status, page, limit: 25 })
+      .searchAccounts({ q: q || undefined, status, type, page, limit: 25 })
       .then((data) => { if (!cancelled) setLoaded({ key: queryKey, data, error: null }); })
       .catch((err: unknown) => {
         if (!cancelled) setLoaded({ key: queryKey, data: null, error: errorMessage(err, loadFailed('Accounts')) });
       });
     return () => { cancelled = true; };
-  }, [q, status, page, queryKey]);
+  }, [q, status, type, page, queryKey]);
   const loading = loaded?.key !== queryKey;
   const result = loading ? null : loaded?.data ?? null;
   const error = loading ? null : loaded?.error ?? null;
@@ -81,6 +93,7 @@ export const AdminUsersPage = () => {
       ),
     },
     { key: 'name', header: 'Display name', cell: (a) => a.display_name ?? NONE },
+    { key: 'type', header: 'Type', cell: (a) => <AccountTypeBadge type={a.account_type} creatorPending={a.creator_pending} /> },
     { key: 'role', header: 'Staff role', cell: (a) => (a.staff_role ? (ROLE_LABELS[a.staff_role] ?? a.staff_role) : NONE) },
     { key: 'status', header: 'Status', cell: (a) => <AccountStatusBadge status={a.status} /> },
     { key: 'signin', header: 'Last sign-in', className: 'text-gray-400', cell: (a) => formatDay(a.last_sign_in_at) },
@@ -103,6 +116,12 @@ export const AdminUsersPage = () => {
           value={status}
           onChange={(v) => update({ status: v === 'all' ? null : v, page: null })}
         />
+        <FilterPills
+          label="Filter by account type"
+          options={TYPE_FILTERS}
+          value={type}
+          onChange={(v) => update({ type: v === 'all' ? null : v, page: null })}
+        />
         <AdminSearchBox
           label="Search accounts"
           placeholder="Email, display name or account ID…"
@@ -115,7 +134,7 @@ export const AdminUsersPage = () => {
         loading={loading}
         error={error}
         empty={!result || result.accounts.length === 0}
-        emptyText="No accounts match. Try another search or status."
+        emptyText="No accounts match. Try another search or filter."
         what="accounts"
       >
         {result && (

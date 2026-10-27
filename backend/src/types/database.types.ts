@@ -2803,6 +2803,7 @@ export type Database = {
       }
       users: {
         Row: {
+          account_type: string
           age_verification_provider: string | null
           age_verified: boolean
           age_verified_at: string | null
@@ -2813,6 +2814,7 @@ export type Database = {
           billing_country: string | null
           bio: string | null
           created_at: string
+          creator_requested_at: string | null
           deleted_at: string | null
           display_name: string | null
           email: string
@@ -2852,6 +2854,7 @@ export type Database = {
           yoti_session_id: string | null
         }
         Insert: {
+          account_type?: string
           age_verification_provider?: string | null
           age_verified?: boolean
           age_verified_at?: string | null
@@ -2862,6 +2865,7 @@ export type Database = {
           billing_country?: string | null
           bio?: string | null
           created_at?: string
+          creator_requested_at?: string | null
           deleted_at?: string | null
           display_name?: string | null
           email: string
@@ -2901,6 +2905,7 @@ export type Database = {
           yoti_session_id?: string | null
         }
         Update: {
+          account_type?: string
           age_verification_provider?: string | null
           age_verified?: boolean
           age_verified_at?: string | null
@@ -2911,6 +2916,7 @@ export type Database = {
           billing_country?: string | null
           bio?: string | null
           created_at?: string
+          creator_requested_at?: string | null
           deleted_at?: string | null
           display_name?: string | null
           email?: string
@@ -3168,6 +3174,17 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_growth_series: {
+        Args: {
+          p_admin: string
+          p_bucket: string
+          p_from: string
+          p_series: string
+          p_to: string
+          p_tz: string
+        }
+        Returns: Json
+      }
       admin_lock_changes: { Args: never; Returns: boolean }
       admin_nfc_actor_email: { Args: { p_admin: string }; Returns: string }
       admin_reactivate_account: {
@@ -3233,6 +3250,7 @@ export type Database = {
           p_offset: number
           p_query: string
           p_status: string
+          p_type?: string
         }
         Returns: Json
       }
@@ -3367,6 +3385,7 @@ export type Database = {
         }
         Returns: Json
       }
+      request_creator_account: { Args: { p_user: string }; Returns: Json }
       reserve_chip_name: {
         Args: { p_actor?: string; p_name?: string; p_sig_sha256: string }
         Returns: string
@@ -3391,6 +3410,8 @@ export type Database = {
         | "reapply_payments"
         | "refund_token_fees"
         | "manage_pricing"
+        | "view_creator_ids"
+        | "manage_creator_ids"
       auction_status:
         | "DRAFT"
         | "SCHEDULED"
@@ -3645,6 +3666,8 @@ export const Constants = {
         "reapply_payments",
         "refund_token_fees",
         "manage_pricing",
+        "view_creator_ids",
+        "manage_creator_ids",
       ],
       auction_status: [
         "DRAFT",

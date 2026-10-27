@@ -14,9 +14,13 @@ const reason = z.string().trim().min(REASON_MIN, `Reason must be at least ${REAS
 
 export const ACCOUNT_STATUS_FILTERS = ['all', 'active', 'suspended', 'retired', 'staff'] as const;
 
+/** Account type filter. `creator_pending` = asked to be a creator, identity check not passed yet. */
+export const ACCOUNT_TYPE_FILTERS = ['all', 'collector', 'creator', 'creator_pending'] as const;
+
 export const searchAccountsQuerySchema = z.object({
   q: z.string().trim().max(254).optional().default(''),
   status: z.enum(ACCOUNT_STATUS_FILTERS).default('all'),
+  type: z.enum(ACCOUNT_TYPE_FILTERS).default('all'),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
 }).strict();
