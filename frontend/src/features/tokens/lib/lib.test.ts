@@ -73,6 +73,10 @@ describe('safeNextPath', () => {
   it.each([
     'https://evil.example/',
     '//evil.example/path',
+    '/.//evil.example',
+    '/%2e//evil.example',
+    '/a/..//evil.example',
+    '/./%2e/..//evil.example',
     '/\\evil.example',
     'javascript:alert(1)',
     'tokens',

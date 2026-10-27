@@ -177,7 +177,7 @@ describe('AdminPricingPage', () => {
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     await user.click(submit);
 
-    expect(api.cancelPrice).toHaveBeenCalledWith(SCHEDULED.id, REASON);
+    expect(api.cancelPrice).toHaveBeenCalledWith(SCHEDULED.id, REASON, undefined);
     expect(api.getPricing).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -225,7 +225,7 @@ describe('AdminPricingPage', () => {
     await user.type(within(dialog).getByLabelText(/Reason/), REASON);
     await user.click(submit);
 
-    expect(api.setPrice).toHaveBeenCalledWith({ kind: 'transfer', amountUsdCents: 300, effectiveFrom: null, reason: REASON });
+    expect(api.setPrice).toHaveBeenCalledWith({ kind: 'transfer', amountUsdCents: 300, effectiveFrom: null, reason: REASON }, undefined);
     expect(api.getPricing).toHaveBeenCalledTimes(2);
   });
 

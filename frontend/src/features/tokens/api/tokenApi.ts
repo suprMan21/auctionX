@@ -59,7 +59,9 @@ export type TokenErrorReason =
   | 'token_retired'
   | 'token_suspended'
   | 'transfer_pending'
-  | '2fa_required';
+  | '2fa_required'
+  // S-2FA: the action needs a fresh "Confirm it's you" (sent back as X-Step-Up).
+  | 'step_up_required';
 
 export class TokenApiError extends Error {
   constructor(
@@ -94,11 +96,12 @@ const authHeader = async (required: boolean): Promise<Record<string, string>> =>
 const request = async <T>(
   path: string,
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-  init: { method?: string; body?: unknown; auth: 'required' | 'optional' },
+  init: { method?: string; body?: unknown; auth: 'required' | 'optional'; stepUpToken?: string },
 ): Promise<T> => {
   const headers: Record<string, string> = {
     ...(await authHeader(init.auth === 'required')),
     ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    ...(init.stepUpToken ? { 'X-Step-Up': init.stepUpToken } : {}),
   };
 
   let res: Response;
@@ -186,11 +189,12 @@ export const tokenApi = {
     });
   },
 
-  completeTransfer(transferId: string, tapSession: string): Promise<TransferCompleteResult> {
+  completeTransfer(transferId: string, tapSession: string, stepUpToken?: string): Promise<TransferCompleteResult> {
     return request(`/nfc/transfer/${encodeURIComponent(transferId)}/complete`, transferCompleteResultSchema, {
       method: 'POST',
       body: { tapSession },
       auth: 'required',
+      stepUpToken,
     });
   },
 
@@ -215,11 +219,12 @@ export const tokenApi = {
     return request(`/nfc/transfer/${encodeURIComponent(transferId)}`, transferStatusSchema, { auth: 'required' });
   },
 
-  release(tagId: string): Promise<ReleaseResult> {
+  release(tagId: string, stepUpToken?: string): Promise<ReleaseResult> {
     return request('/nfc/release', releaseResultSchema, {
       method: 'POST',
       body: { tagId, confirm: true, confirmPhrase: 'RELEASE' },
       auth: 'required',
+      stepUpToken,
     });
   },
 

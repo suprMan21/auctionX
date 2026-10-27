@@ -9,6 +9,7 @@
  * (Every-Session lesson): a failed write fails the request, it never passes.
  */
 
+import { isIP } from 'net';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '../errors';
 
@@ -116,6 +117,30 @@ export interface MfaStore {
 
   /** Active staff role name, or null for a non-staff account. */
   staffRole(userId: string): Promise<string | null>;
+
+  /**
+   * Ends every other Supabase session of the account (and its refresh tokens,
+   * markers, unused grants and challenges), keeping `keepSessionId`
+   * (mfa_end_other_sessions). Returns how many sessions were ended.
+   */
+  endOtherSessions(userId: string, keepSessionId: string): Promise<number>;
+
+  /**
+   * One audit_logs row for a staff account's own sign-in method change.
+   * `changes` carries the method only: never a credential id, public key,
+   * secret, code or nickname.
+   */
+  writeStaffAudit(row: StaffMfaAudit): Promise<void>;
+}
+
+export type StaffMfaAuditAction = 'mfa_factor_add' | 'mfa_factor_remove' | 'mfa_recovery_regen' | 'mfa_lockout';
+
+export interface StaffMfaAudit {
+  adminId: string;
+  adminEmail: string;
+  action: StaffMfaAuditAction;
+  method: MfaMethod | null;
+  ip: string | null;
 }
 
 // ── Supabase implementation ─────────────────────────────────────────────────
@@ -325,6 +350,36 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
     const { data: role, error: roleError } = await db.from('admin_roles').select('role_name').eq('role_id', roleId).maybeSingle();
     if (roleError) fail('staffRole.role', roleError);
     return (role as { role_name?: string } | null)?.role_name ?? null;
+  },
+
+  async endOtherSessions(userId, keepSessionId) {
+    const { data, error } = await db.rpc('mfa_end_other_sessions', { p_user: userId, p_keep_session: keepSessionId });
+    if (error) fail('endOtherSessions', error);
+    return typeof data === 'number' ? data : 0;
+  },
+
+  async writeStaffAudit(row) {
+    const { data: staff, error: staffError } = await db
+      .from('admin_users')
+      .select('brand')
+      .eq('admin_id', row.adminId)
+      .maybeSingle();
+    if (staffError || !staff) fail('writeStaffAudit.staff', staffError);
+    const brand = (staff as { brand?: string }).brand === 'unmentionables' ? 'unmentionables' : 'auctionx';
+    const { error } = await db.from('audit_logs').insert({
+      admin_id: row.adminId,
+      admin_email: row.adminEmail,
+      action: row.action,
+      // 'user' matches the existing account actions (account_suspend …) so the
+      // console links the row to the account page.
+      entity_type: 'user',
+      entity_id: row.adminId,
+      changes: { method: row.method },
+      reason: null,
+      ip_address: row.ip && isIP(row.ip) ? row.ip : null,
+      brand,
+    });
+    if (error) fail('writeStaffAudit', error);
   },
 });
 

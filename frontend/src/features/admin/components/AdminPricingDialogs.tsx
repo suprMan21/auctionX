@@ -20,6 +20,8 @@ import {
   usd,
 } from '../lib/pricing';
 import { errorMessage } from '../lib/display';
+import { StepUpPanel } from '@/features/security/components/StepUpPanel';
+import { isStepUpRefusal } from '@/features/security/lib/stepUp';
 
 interface SetPriceDialogProps {
   open: boolean;
@@ -46,6 +48,7 @@ export const AdminSetPriceDialog = ({ open, kind, current, onClose, onDone }: Se
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stepUp, setStepUp] = useState(false);
   const amountId = useId();
   const amountHintId = useId();
   const startsId = useId();
@@ -53,7 +56,7 @@ export const AdminSetPriceDialog = ({ open, kind, current, onClose, onDone }: Se
 
   useEffect(() => {
     if (open) {
-      setAmount(''); setStartsAt(''); setStartsIncomplete(false); setReason(''); setError(null);
+      setAmount(''); setStartsAt(''); setStartsIncomplete(false); setReason(''); setError(null); setStepUp(false);
     }
   }, [open, kind]);
 
@@ -83,6 +86,13 @@ export const AdminSetPriceDialog = ({ open, kind, current, onClose, onDone }: Se
       setStartsIncomplete(true);
       return;
     }
+    await send();
+  };
+
+  // S-2FA: a price change needs a fresh passkey check when the server asks for one.
+  const send = async (stepUpToken?: string) => {
+    if (cents === null) return;
+    setStepUp(false);
     setBusy(true);
     setError(null);
     try {
@@ -91,9 +101,10 @@ export const AdminSetPriceDialog = ({ open, kind, current, onClose, onDone }: Se
         amountUsdCents: cents,
         effectiveFrom: scheduled && start ? toIsoWithOffset(start) : null,
         reason: reason.trim(),
-      });
+      }, stepUpToken);
       onDone();
     } catch (err) {
+      if (isStepUpRefusal(err)) { setStepUp(true); return; }
       setError(errorMessage(err, 'The price could not be saved. Try again.'));
     } finally {
       setBusy(false);
@@ -107,6 +118,15 @@ export const AdminSetPriceDialog = ({ open, kind, current, onClose, onDone }: Se
       title={`Change ${label.toLowerCase()}`}
       description={`Now ${usd(current[kind])}. Prices are in US dollars. A change applies only to transfers started, and re-issue requests made, after it takes effect.`}
     >
+      {stepUp ? (
+        <StepUpPanel
+          action="price_change"
+          targetId="token_prices"
+          purpose={`change the ${label.toLowerCase()}`}
+          onConfirmed={(token) => void send(token)}
+          onCancel={() => setStepUp(false)}
+        />
+      ) : (<>
       <div className="space-y-1">
         <label htmlFor={amountId} className="block text-sm font-medium text-gray-200">New price (USD)</label>
         <input
@@ -188,6 +208,7 @@ export const AdminSetPriceDialog = ({ open, kind, current, onClose, onDone }: Se
           {busy ? 'Saving…' : scheduled ? 'Schedule price' : 'Set price'}
         </button>
       </div>
+      </>)}
     </AdminDialog>
   );
 };
@@ -206,16 +227,20 @@ export const AdminCancelPriceDialog = ({ open, change, currentCents, onClose, on
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) { setReason(''); setError(null); }
+    if (open) { setReason(''); setError(null); setStepUp(false); }
   }, [open]);
 
-  const submit = async () => {
+  const [stepUp, setStepUp] = useState(false);
+
+  const submit = async (stepUpToken?: string) => {
+    setStepUp(false);
     setBusy(true);
     setError(null);
     try {
-      await adminApi.cancelPrice(change.id, reason.trim());
+      await adminApi.cancelPrice(change.id, reason.trim(), stepUpToken);
       onDone();
     } catch (err) {
+      if (isStepUpRefusal(err)) { setStepUp(true); return; }
       setError(errorMessage(err, 'The change could not be cancelled. Try again.'));
     } finally {
       setBusy(false);
@@ -232,6 +257,15 @@ export const AdminCancelPriceDialog = ({ open, change, currentCents, onClose, on
         `It stays at ${usd(currentCents)} unless another change is scheduled.`
       }
     >
+      {stepUp ? (
+        <StepUpPanel
+          action="price_change"
+          targetId={`price:${change.id}`}
+          purpose="cancel this scheduled change"
+          onConfirmed={(token) => void submit(token)}
+          onCancel={() => setStepUp(false)}
+        />
+      ) : (<>
       <ReasonField value={reason} onChange={setReason} />
       <ErrorLine message={error} />
       <div className="flex justify-end gap-3">
@@ -240,13 +274,14 @@ export const AdminCancelPriceDialog = ({ open, change, currentCents, onClose, on
         </button>
         <button
           type="button"
-          onClick={submit}
+          onClick={() => void submit()}
           disabled={busy || reason.trim().length < REASON_MIN}
           className={`${ADMIN_BUTTON_CLASS} bg-red-600 hover:bg-red-500 text-white`}
         >
           {busy ? 'Cancelling…' : 'Cancel change'}
         </button>
       </div>
+      </>)}
     </AdminDialog>
   );
 };

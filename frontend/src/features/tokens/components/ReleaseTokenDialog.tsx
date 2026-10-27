@@ -4,6 +4,8 @@ import { Button } from '@/components/common/Button';
 import { tokenApi, TokenApiError } from '../api/tokenApi';
 import type { ReleaseResult } from '../api/schemas';
 import { releaseErrorCopy } from '../lib/copy';
+import { StepUpPanel } from '@/features/security/components/StepUpPanel';
+import { isStepUpRefusal } from '@/features/security/lib/stepUp';
 
 export const RELEASE_PHRASE = 'RELEASE';
 
@@ -18,12 +20,15 @@ type Step =
   | { kind: 'warning' }
   | { kind: 'confirm' }
   | { kind: 'submitting' }
+  | { kind: 'step-up' }
   | { kind: 'error'; message: string };
 
 /**
  * Release is terminal: the token dies and nobody can claim it again. Three
  * deliberate acts: read the warning, continue, type RELEASE. The phrase is
- * re-checked on submit, so Enter in the field cannot skip it.
+ * re-checked on submit, so Enter in the field cannot skip it. When the
+ * server asks for it (S-2FA step-up), a fourth: confirm with a passkey or
+ * authenticator code, then the release is sent again with that one-time grant.
  */
 export const ReleaseTokenDialog = ({ isOpen, tagId, onClose, onReleased }: ReleaseTokenDialogProps) => {
   const [step, setStep] = useState<Step>({ kind: 'warning' });
@@ -41,22 +46,30 @@ export const ReleaseTokenDialog = ({ isOpen, tagId, onClose, onReleased }: Relea
     onClose();
   };
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (submitting || !phraseMatches) return;
+  const send = async (stepUpToken?: string) => {
     setStep({ kind: 'submitting' });
     try {
-      const result = await tokenApi.release(tagId);
+      const result = await tokenApi.release(tagId, stepUpToken);
       setPhrase('');
       setStep({ kind: 'warning' });
       onReleased(result);
     } catch (err) {
+      if (isStepUpRefusal(err)) {
+        setStep({ kind: 'step-up' });
+        return;
+      }
       const apiError = err instanceof TokenApiError ? err : null;
       setStep({
         kind: 'error',
         message: releaseErrorCopy(apiError?.reason ?? null, apiError?.message ?? 'Something went wrong. Please try again.'),
       });
     }
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting || !phraseMatches) return;
+    await send();
   };
 
   return (
@@ -78,7 +91,17 @@ export const ReleaseTokenDialog = ({ isOpen, tagId, onClose, onReleased }: Relea
         </div>
       )}
 
-      {step.kind !== 'warning' && (
+      {step.kind === 'step-up' && (
+        <StepUpPanel
+          action="release"
+          targetId={tagId}
+          purpose="release this token"
+          onConfirmed={(token) => void send(token)}
+          onCancel={close}
+        />
+      )}
+
+      {step.kind !== 'warning' && step.kind !== 'step-up' && (
         <form onSubmit={submit} className="space-y-4">
           <label htmlFor={phraseId} className="block text-sm text-gray-300">
             Type <span className="font-mono text-white">{RELEASE_PHRASE}</span> to release this token forever.

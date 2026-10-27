@@ -72,6 +72,10 @@ const CLIENT_REASONS = new Set([
   'already_set_up',
   'no_passkey',
   'not_available',
+  // S-2FA Ph2: staff confirm token actions with a passkey only; a backup code
+  // never confirms a token action.
+  'passkey_required',
+  'backup_code_not_allowed',
 ]);
 
 const sunReason = (details: unknown): string | null => {

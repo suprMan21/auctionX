@@ -177,7 +177,7 @@ describe('TokenVerifyPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Claim token' }));
     await user.click(screen.getByRole('button', { name: 'Confirm claim' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/two-factor authentication/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/two-step sign-in/i);
   });
 
   it('does not call a chip unregistered when the API route itself is missing', async () => {

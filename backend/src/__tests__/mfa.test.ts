@@ -663,14 +663,20 @@ describe('lost phone: recover with a backup code', () => {
     expect(mfaState.passkeys.map((p) => p.nickname)).toEqual(['New phone']);
   });
 
-  it('a code can never confirm a release, a transfer or a price change', async () => {
+  it('a backup code can never confirm a release, a transfer or a price change', async () => {
     const app = await loadApp();
     const { res } = await enrolFirst(app);
-    for (const action of ['release', 'transfer_complete', 'price_change', 'admin_approve']) {
+    const expected: Record<string, string> = {
+      release: 'backup_code_not_allowed',
+      transfer_complete: 'backup_code_not_allowed',
+      price_change: 'no_passkey',
+      admin_approve: 'no_passkey',
+    };
+    for (const [action, reason] of Object.entries(expected)) {
       const r = await request(app).post('/auth/mfa/step-up/verify').set('Authorization', auth(USER, S1))
         .send({ action, targetId: 'x', recoveryCode: { code: res.body.data.backupCodes[0] } });
       expect(r.status).toBe(400);
-      expect(r.body.reason).toBe('no_passkey');
+      expect(r.body.reason).toBe(reason);
     }
     // ...and refusing did not spend the code.
     expect(mfaState.codes.filter((c) => c.used_at)).toHaveLength(0);
