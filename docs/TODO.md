@@ -150,7 +150,9 @@ token sale without admin tooling.
         paging, stuck re-issue fee → its request. Security review: no blockers.
     - [ ] Boss: push `dev` (backend FIRST: new `NEEDS_ACTION` filter), `scripts/verify-backend-deploy.sh`, then
           `scripts/deploy-frontend.sh staging`; click through (chip list opens on dialog open; resize; row click).
-  - [ ] **UX-3**: nav sections + Settings page, audit-log links, phone polish.
+  - [ ] **UX-3**: nav sections + Settings page, audit-log links, phone polish, **dashboard growth** (Boss 2026-10-27):
+        Tokens added today / active and Accounts new today / active as tiles, each with a chart (Month / Year presets
+        + custom range), counts only, by permission.
   - [ ] **Support tickets (S29 + S30), in-house** (Decision 2026-10-26): customer tickets in the console, email from
         hello@, linked to account/token; GitHub stays engineering-only, support sees only issues escalated from
         their tickets.
