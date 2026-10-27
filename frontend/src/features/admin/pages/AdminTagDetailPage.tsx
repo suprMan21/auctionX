@@ -14,6 +14,7 @@ import { ChipName } from '../components/ChipName';
 import { AdminResetDialog, AdminSuspendDialog } from '../components/AdminTagDialogs';
 import { ADMIN_BUTTON_CLASS } from '../components/AdminDialog';
 import { NONE, errorMessage, formatAmount, formatWhen as fmt, loadFailed } from '../lib/display';
+import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { auditActionLabel, destructionLabel, transferStatusLabel, transferTypeLabel } from '../lib/labels';
 
 type Detail = AdminTagDetailResponse['data'];
@@ -43,6 +44,7 @@ export const AdminTagDetailPage = () => {
   const [failure, setFailure] = useState<{ tagId: string; message: string } | null>(null);
   const [dialog, setDialog] = useState<OpenDialog>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const canViewAudit = hasPermission(useAdminRole(), PERMISSIONS.viewAuditLogs);
 
   const load = useCallback(() => {
     adminApi
@@ -83,14 +85,14 @@ export const AdminTagDetailPage = () => {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
           <Link to="/admin/tags" className="text-primary-300 text-sm hover:underline">← Tokens</Link>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-white flex flex-wrap items-center gap-3">
             <span className="sr-only">Token </span>
             <ChipName tag={tag} />
             <AdminLifecycleBadge status={tag.lifecycleStatus} />
           </h1>
         </div>
         {(canSuspend || canUnsuspend || canReset) && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {canSuspend && (
               <button type="button" onClick={() => setDialog('suspend')} className={`${ADMIN_BUTTON_CLASS} bg-amber-600 hover:bg-amber-500 text-white`}>
                 Suspend token…
@@ -209,6 +211,14 @@ export const AdminTagDetailPage = () => {
       </Section>
 
       <Section title="Staff actions">
+        {canViewAudit && (
+          <Link
+            to={`/admin/audit-logs?target=${encodeURIComponent(tag.id)}`}
+            className="inline-block text-sm text-primary-300 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+          >
+            Full audit history for this token →
+          </Link>
+        )}
         {detail.audit.length === 0 ? (
           <p className="text-sm text-gray-400">No staff actions on this token yet.</p>
         ) : (

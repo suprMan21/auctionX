@@ -8,7 +8,7 @@
 import { ConsoleSearch } from './components/ConsoleSearch';
 import { WorkQueueProvider } from './components/WorkQueueProvider';
 import { useWorkQueues, type WorkQueueCounts } from './lib/workQueues';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { cn } from '@/lib/cn';
@@ -26,7 +26,15 @@ interface NavItem {
   marketplace?: boolean;
   /** S-ADMIN2: only admins holding this permission see the item (the API enforces it too). */
   permission?: string;
+  /** UX-3: shown to admins holding any of these (Settings holds pages with different permissions). */
+  anyPermission?: readonly string[];
+  /** UX-3: nav group; the Dashboard has none and sits on top. */
+  section?: NavSection;
 }
+
+/** UX-3 nav groups, in display order. */
+export const NAV_SECTIONS = ['Queues', 'Records', 'Settings', 'System'] as const;
+type NavSection = (typeof NAV_SECTIONS)[number];
 
 const ALL_NAV_ITEMS: NavItem[] = [
   {
@@ -35,23 +43,12 @@ const ALL_NAV_ITEMS: NavItem[] = [
     icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
   },
   {
-    to: '/admin/users',
-    label: 'Accounts',
-    permission: PERMISSIONS.viewUsers,
-    icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
-  },
-  {
-    to: '/admin/tags',
-    label: 'Tokens',
-    permission: PERMISSIONS.manageNfc,
-    icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z',
-  },
-  {
     to: '/admin/reissue-requests',
     label: 'Re-issues',
     permission: PERMISSIONS.manageNfc,
     // arrows-circle (refresh): one chip swapped for another
     icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+    section: 'Queues',
   },
   {
     to: '/admin/stuck-payments',
@@ -59,55 +56,70 @@ const ALL_NAV_ITEMS: NavItem[] = [
     permission: PERMISSIONS.reapplyPayments,
     // exclamation-circle: paid, not delivered
     icon: 'M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-  },
-  {
-    to: '/admin/pricing',
-    label: 'Pricing',
-    permission: PERMISSIONS.managePricing,
-    // cash
-    icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z',
-  },
-  {
-    to: '/admin/vouchers',
-    label: 'Free transfers',
-    permission: PERMISSIONS.managePricing,
-    // ticket
-    icon: 'M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z',
+    section: 'Queues',
   },
   {
     to: '/admin/verifications',
     label: 'Creator ID checks',
     permission: PERMISSIONS.viewCreatorIds,
     icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+    section: 'Queues',
   },
   {
-    to: '/admin/moderation',
-    marketplace: true,
-    label: 'Moderation',
-    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+    to: '/admin/tags',
+    label: 'Tokens',
+    permission: PERMISSIONS.manageNfc,
+    icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z',
+    section: 'Records',
   },
   {
-    to: '/admin/auctions',
-    marketplace: true,
-    label: 'Auctions',
-    icon: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3',
-  },
-  {
-    to: '/admin/escrow',
-    marketplace: true,
-    label: 'Escrow',
-    icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+    to: '/admin/users',
+    label: 'Accounts',
+    permission: PERMISSIONS.viewUsers,
+    icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
+    section: 'Records',
   },
   {
     to: '/admin/audit-logs',
     label: 'Audit log',
     permission: PERMISSIONS.viewAuditLogs,
     icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+    section: 'Records',
+  },
+  {
+    to: '/admin/moderation',
+    marketplace: true,
+    label: 'Moderation',
+    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+    section: 'Records',
+  },
+  {
+    to: '/admin/auctions',
+    marketplace: true,
+    label: 'Auctions',
+    icon: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3',
+    section: 'Records',
+  },
+  {
+    to: '/admin/escrow',
+    marketplace: true,
+    label: 'Escrow',
+    icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+    section: 'Records',
+  },
+  {
+    to: '/admin/settings',
+    label: 'Settings',
+    // Pricing and Free transfers need manage_pricing; the delete waiting time, view_users.
+    anyPermission: [PERMISSIONS.managePricing, PERMISSIONS.viewUsers],
+    icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z',
+    section: 'Settings',
   },
   {
     to: '/admin/health',
     label: 'System health',
     icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+    section: 'System',
   },
 ];
 
@@ -160,7 +172,43 @@ const AdminShell = () => {
   const { session, signOut } = useAuth();
   const navigate = useNavigate();
   const access = useAdminRole();
-  const navItems = NAV_ITEMS.filter((item) => !item.permission || hasPermission(access, item.permission));
+  const navItems = NAV_ITEMS.filter(
+    (item) =>
+      (!item.permission || hasPermission(access, item.permission)) &&
+      (!item.anyPermission || item.anyPermission.some((p) => hasPermission(access, p))),
+  );
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Phone menu: focus moves into it, Tab stays inside, Escape closes it and
+  // returns focus to the menu button.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const overlay = overlayRef.current;
+    const focusables = () =>
+      Array.from(overlay?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? []);
+    focusables()[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSidebarOpen(false);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKey);
+    const button = menuButtonRef.current;
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      button?.focus();
+    };
+  }, [sidebarOpen]);
   const queues = useWorkQueues();
 
   const handleLogout = async () => {
@@ -186,27 +234,44 @@ const AdminShell = () => {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-4 space-y-1" aria-label="Admin navigation">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/admin'}
-            className={navLinkClass}
-            onClick={() => setSidebarOpen(false)}
-          >
-            <NavIcon path={item.icon} />
-            <span className="flex-1">{item.label}</span>
-            {(() => {
-              const n = badgeFor(item.to, queues);
-              return n ? (
-                <span className="min-w-[1.5rem] px-1.5 py-0.5 rounded-full bg-warning-500/20 text-warning-500 text-xs font-semibold text-center">
-                  {n}<span className="sr-only"> waiting</span>
-                </span>
-              ) : null;
-            })()}
-          </NavLink>
-        ))}
+      <nav className="flex-1 p-4 space-y-4 overflow-y-auto" aria-label="Admin navigation">
+        {[undefined, ...NAV_SECTIONS].map((section) => {
+          const items = navItems.filter((item) => item.section === section);
+          if (items.length === 0) return null;
+          return (
+            <div key={section ?? 'top'} className="space-y-1">
+              {section && (
+                <h2 className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  {section}
+                </h2>
+              )}
+              {/* aria-label, not an id: the sidebar is rendered twice (desktop + phone menu). */}
+              <ul className="space-y-1" aria-label={section ?? 'Overview'}>
+                {items.map((item) => (
+                  <li key={item.to}>
+                    <NavLink
+                      to={item.to}
+                      end={item.to === '/admin'}
+                      className={navLinkClass}
+                      onClick={() => setSidebarOpen(false)}
+                    >
+                      <NavIcon path={item.icon} />
+                      <span className="flex-1">{item.label}</span>
+                      {(() => {
+                        const n = badgeFor(item.to, queues);
+                        return n ? (
+                          <span className="min-w-[1.5rem] px-1.5 py-0.5 rounded-full bg-warning-500/20 text-warning-500 text-xs font-semibold text-center">
+                            {n}<span className="sr-only"> waiting</span>
+                          </span>
+                        ) : null;
+                      })()}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
       </nav>
 
       {/* Admin info + logout */}
@@ -238,7 +303,13 @@ const AdminShell = () => {
 
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div
+          ref={overlayRef}
+          className="fixed inset-0 z-40 lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Admin menu"
+        >
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setSidebarOpen(false)}
@@ -255,8 +326,10 @@ const AdminShell = () => {
         {/* Mobile header */}
         <header className="lg:hidden flex items-center gap-4 p-4 bg-dark-700 border-b border-white/10">
           <button
+            ref={menuButtonRef}
             onClick={() => setSidebarOpen(true)}
             aria-label="Open navigation menu"
+            aria-expanded={sidebarOpen}
             className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors
                        focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-700"
           >

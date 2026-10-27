@@ -14,6 +14,7 @@ import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { AccountActionDialog, type AccountAction } from '../components/AdminAccountDialogs';
 import { ADMIN_BUTTON_CLASS } from '../components/AdminDialog';
 import { AccountStatusBadge } from './AdminUsersPage';
+import { AccountFreeTransfers } from '../components/AccountFreeTransfers';
 import { NONE, errorMessage, formatWhen as when, loadFailed } from '../lib/display';
 import { lifecycleLabel, reissueStageLabel } from '../lib/labels';
 
@@ -298,6 +299,10 @@ export const AdminUserDetailPage = () => {
             </div>
           )}
         </section>
+      )}
+
+      {hasPermission(access, PERMISSIONS.managePricing) && account.email && (
+        <AccountFreeTransfers email={account.email} />
       )}
 
       {hasPermission(access, PERMISSIONS.viewAuditLogs) && (

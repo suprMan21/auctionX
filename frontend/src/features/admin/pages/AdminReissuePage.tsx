@@ -7,7 +7,8 @@
  * website) or approve without fee → Ready for a chip → Move token to new chip
  * (the API calls this step "fulfil"). Nothing is completed unpaid.
  *
- * Photos are 5-minute signed links; reloading the page refreshes them.
+ * Photos are 5-minute signed links; "Refresh photos" (UX-3) fetches new ones
+ * without reloading the page.
  */
 
 import { useWorkQueues } from '../lib/workQueues';
@@ -85,6 +86,23 @@ export const AdminReissuePage = () => {
   const rows = result?.key === queryKey ? result.rows : [];
   const pages = Math.max(Math.ceil((result?.total ?? 0) / PAGE_SIZE), 1);
 
+  // UX-3: new 5-minute photo links for the same list, with no loading spinner.
+  const [photosBusy, setPhotosBusy] = useState(false);
+  const [photosNote, setPhotosNote] = useState<string | null>(null);
+  const refreshPhotos = () => {
+    const key = queryKey;
+    setPhotosBusy(true);
+    setPhotosNote(null);
+    adminApi
+      .listReissueRequests(requestId ? { id: requestId } : { status: filter, page, limit: PAGE_SIZE })
+      .then((res) => {
+        setResult((prev) => (prev?.key === key ? { key, rows: res.data.requests, total: res.data.pagination.total } : prev));
+        setPhotosNote('Photos refreshed. The links work for 5 minutes.');
+      })
+      .catch((err) => setPhotosNote(errorMessage(err, loadFailed('Photos'))))
+      .finally(() => setPhotosBusy(false));
+  };
+
   const closeAndReload = () => {
     setDialog({ kind: 'none' });
     setReloadKey((k) => k + 1);
@@ -99,6 +117,8 @@ export const AdminReissuePage = () => {
           to the item.
         </p>
       </div>
+
+      {photosNote && <p role="status" className="text-sm text-gray-300">{photosNote}</p>}
 
       {requestId ? (
         <div role="status" className="flex flex-wrap items-center gap-3 text-sm text-gray-300">
@@ -179,7 +199,21 @@ export const AdminReissuePage = () => {
                       </a>
                     ))}
                   </div>
-                ) : r.photoCount > 0 ? (
+                ) : null}
+                {r.photoCount > 0 && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={refreshPhotos}
+                      disabled={photosBusy}
+                      className="min-h-[44px] px-4 rounded-xl text-sm bg-dark-700 text-gray-200 hover:bg-dark-600 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                    >
+                      {photosBusy ? 'Refreshing photos…' : 'Refresh photos'}
+                    </button>
+                    <span className="text-xs text-gray-400">Photo links stop working after 5 minutes.</span>
+                  </div>
+                )}
+                {r.photoUrls.length > 0 ? null : r.photoCount > 0 ? (
                   <p className="text-xs text-gray-500">{r.photoCount} photo{r.photoCount === 1 ? '' : 's'} on file.</p>
                 ) : null}
 

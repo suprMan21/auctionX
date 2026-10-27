@@ -216,3 +216,29 @@ describe('AdminReissuePage', () => {
     expect(within(dialog).queryByText(/deadlock/)).not.toBeInTheDocument();
   });
 });
+
+describe('UX-3: Refresh photos', () => {
+  it('fetches new photo links without a loading spinner or losing the list', async () => {
+    api.listReissueRequests
+      .mockResolvedValueOnce(list([request()]))
+      .mockResolvedValueOnce(list([request({ photoUrls: ['https://s3.example/p1-new', 'https://s3.example/p2-new'] })]));
+    renderQueue();
+    const img = await screen.findByAltText('Photo 1 of 2 of the chip on the item');
+    expect(img).toHaveAttribute('src', 'https://s3.example/p1');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+    await waitFor(() => expect(screen.getByAltText('Photo 1 of 2 of the chip on the item')).toHaveAttribute('src', 'https://s3.example/p1-new'));
+    expect(screen.getByRole('status')).toHaveTextContent('Photos refreshed. The links work for 5 minutes.');
+    expect(screen.queryByRole('status', { name: /Loading/ })).not.toBeInTheDocument();
+    expect(api.listReissueRequests).toHaveBeenCalledTimes(2);
+  });
+
+  it('says so when the refresh fails, and keeps the old photos', async () => {
+    api.listReissueRequests.mockResolvedValueOnce(list([request()])).mockRejectedValueOnce(new Error('boom'));
+    renderQueue();
+    await screen.findByAltText('Photo 1 of 2 of the chip on the item');
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Photos could not be loaded. Try again.'));
+    expect(screen.getByAltText('Photo 1 of 2 of the chip on the item')).toHaveAttribute('src', 'https://s3.example/p1');
+  });
+});

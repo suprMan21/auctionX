@@ -309,21 +309,32 @@ describe('nav by permission', () => {
     return within(nav).getAllByRole('link').map((l) => l.textContent?.trim());
   };
 
-  it('support: users, stuck payments and creator ID checks, no tokens, pricing or audit', () => {
+  it('support: users, stuck payments, creator ID checks and Settings (delete time only), no tokens or audit', () => {
     const links = navLinks('support');
-    expect(links).toEqual(expect.arrayContaining(['Accounts', 'Stuck payments', 'Creator ID checks']));
+    expect(links).toEqual(expect.arrayContaining(['Accounts', 'Stuck payments', 'Creator ID checks', 'Settings']));
     for (const hidden of ['Tokens', 'Re-issues', 'Pricing', 'Free transfers', 'Audit log']) expect(links).not.toContain(hidden);
   });
 
   it('admin: tokens, pricing and audit too', () => {
-    expect(navLinks('admin')).toEqual(expect.arrayContaining(['Accounts', 'Tokens', 'Re-issues', 'Stuck payments', 'Pricing', 'Free transfers', 'Creator ID checks', 'Audit log']));
+    expect(navLinks('admin')).toEqual(expect.arrayContaining(['Accounts', 'Tokens', 'Re-issues', 'Stuck payments', 'Settings', 'Creator ID checks', 'Audit log']));
   });
 
   it('super admin: every page, in order, under the plain names', () => {
     expect(navLinks('super_admin')).toEqual([
-      'Dashboard', 'Accounts', 'Tokens', 'Re-issues', 'Stuck payments', 'Pricing', 'Free transfers',
-      'Creator ID checks', 'Audit log', 'System health',
+      'Dashboard', 'Re-issues', 'Stuck payments', 'Creator ID checks', 'Tokens', 'Accounts', 'Audit log',
+      'Settings', 'System health',
     ]);
+  });
+
+  it('UX-3: items sit under Queues, Records, Settings and System', () => {
+    navLinks('super_admin');
+    const nav = screen.getAllByRole('navigation')[0];
+    const group = (name: string) => within(within(nav).getByRole('list', { name })).getAllByRole('link').map((l) => l.textContent?.trim());
+    expect(within(nav).getAllByRole('heading').map((h) => h.textContent)).toEqual(['Queues', 'Records', 'Settings', 'System']);
+    expect(group('Queues')).toEqual(['Re-issues', 'Stuck payments', 'Creator ID checks']);
+    expect(group('Records')).toEqual(['Tokens', 'Accounts', 'Audit log']);
+    expect(group('Settings')).toEqual(['Settings']);
+    expect(group('System')).toEqual(['System health']);
   });
 });
 
