@@ -2,7 +2,8 @@
  * S-2FA Ph3a — two-admin approval (Boss 2026-10-27).
  *
  * The daily admins approve each other's token reset, token suspend, account
- * suspend and account retire. super_admin is break-glass and acts alone (its
+ * suspend and account retire, every re-issue fulfil (chip swap), and lifting a
+ * hold another admin set. super_admin is break-glass and acts alone (its
  * role holds `act_without_approval`). The rules that must never be skipped
  * (audit first, not your own request, one open request per target, 24 h) live
  * in the database functions of migration 20261027000012.
@@ -13,15 +14,32 @@ import { z } from 'zod';
 import { isAdminTwoPersonRequired } from '../featureFlags';
 import { hasPermission, PERMISSIONS, type AdminPermission } from './permissions';
 
-export const APPROVAL_ACTIONS = ['tag_reset', 'tag_suspend', 'account_suspend', 'account_retire'] as const;
+export const APPROVAL_ACTIONS = [
+  'tag_reset', 'tag_suspend', 'tag_unsuspend', 'reissue_fulfil',
+  'account_suspend', 'account_retire', 'account_unsuspend', 'account_reactivate',
+] as const;
 export type ApprovalAction = (typeof APPROVAL_ACTIONS)[number];
 
 /** Same mapping as admin_approval_permission() in the database. */
 export const APPROVAL_PERMISSION: Record<ApprovalAction, AdminPermission> = {
   tag_reset: PERMISSIONS.manageNfc,
   tag_suspend: PERMISSIONS.manageNfc,
+  tag_unsuspend: PERMISSIONS.manageNfc,
+  reissue_fulfil: PERMISSIONS.manageNfc,
   account_suspend: PERMISSIONS.manageUsers,
   account_retire: PERMISSIONS.manageUsers,
+  account_unsuspend: PERMISSIONS.manageUsers,
+  account_reactivate: PERMISSIONS.manageUsers,
+};
+
+/**
+ * Lifting a hold waits for a second admin only when someone else set it
+ * (Boss 2026-10-27). The audit action that set the hold, per lift action.
+ */
+export const HOLD_SET_BY_ACTION: Partial<Record<ApprovalAction, { audit: string; entityType: string }>> = {
+  tag_unsuspend: { audit: 'tag_suspend', entityType: 'nfc_tag' },
+  account_unsuspend: { audit: 'account_suspend', entityType: 'user' },
+  account_reactivate: { audit: 'account_retire', entityType: 'user' },
 };
 
 /** True when this admin's destructive action must wait for a second admin. */

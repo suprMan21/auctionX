@@ -30,6 +30,7 @@ const TAG = '33333333-3333-4333-8333-333333333333';
 const NEW_TAG = '66666666-6666-4666-8666-666666666666';
 const APPROVAL = '77777777-7777-4777-8777-777777777777';
 const REASON = 'Support ticket 1234: account review';
+const REISSUE = '88888888-8888-4888-8888-888888888888';
 
 let tables: Tables;
 let hooks: MockHooks;
@@ -54,6 +55,14 @@ vi.mock('../lib/mfa/mfaService', () => ({
   hasSecondFactor: async () => true,
 }));
 
+vi.mock('../lib/reissueEvidence', () => ({
+  evidenceViewUrl: async (key: string) => `https://signed.example/${key}`,
+}));
+
+vi.mock('../lib/notifications/reissueEmails', () => ({
+  notifyReissueOwner: async () => undefined,
+}));
+
 vi.mock('../lib/ownership/ownershipProof', () => ({
   mintOwnershipProof: () => ({ ownershipId: 'own-1', tagRef: 'ref-1', saltEnc: 'salt-1' }),
 }));
@@ -65,6 +74,7 @@ const appWith = async (role: string, adminId = ADMIN) => {
   const { default: tags } = await import('../routes/admin/tags');
   const { default: users } = await import('../routes/admin/users');
   const { default: approvals } = await import('../routes/admin/approvals');
+  const { default: reissue } = await import('../routes/admin/reissue');
   const { getMe } = await import('../controllers/adminAccountsController');
   const { handle } = await import('../routes/tagManagement');
   const app = express();
@@ -80,6 +90,7 @@ const appWith = async (role: string, adminId = ADMIN) => {
   app.use('/admin/tags', tags);
   app.use('/admin/users', users);
   app.use('/admin/approvals', approvals);
+  app.use('/admin/reissue-requests', reissue);
   return app;
 };
 
@@ -99,6 +110,9 @@ beforeEach(() => {
     admin_retire_account: { data: { status: 'retired' } },
     admin_request_approval: { data: { id: APPROVAL, expires_at: '2026-10-28T23:00:00Z' } },
     admin_record_approval_result: { data: null },
+    admin_fulfil_reissue: { data: null },
+    admin_unsuspend_account: { data: { status: 'active' } },
+    admin_reactivate_account: { data: { status: 'active' } },
   };
   hooks = {
     rpc: (fn: string, args: Row) => {
@@ -119,6 +133,14 @@ beforeEach(() => {
       { id: TARGET, email: 'collector@example.com' },
     ],
     admin_action_approvals: [],
+    reissue_requests: [{
+      id: REISSUE, tag_id: TAG, requester_id: TARGET, status: 'APPROVED', payment_status: 'WAIVED',
+      tap_session_id: null, photo_keys: ['ev/1.jpg', 'ev/2.jpg'], list_amount_usd_cents: 1000, charged_amount: null,
+      charged_currency: null, review_reason: 'Seal lifting at the corner', waive_reason: 'Goodwill, first re-issue',
+      reviewed_by: ADMIN, reviewed_at: '2026-10-27T09:00:00Z', paid_at: null, fulfilled_at: null, fulfilled_by: null,
+      new_tag_id: null, created_at: '2026-10-26T12:00:00Z',
+    }],
+    audit_logs: [],
   };
 });
 
@@ -191,6 +213,107 @@ describe('gated actions', () => {
   it('GET /me says whether actions need approval', async () => {
     expect((await request(await appWith('admin')).get('/admin/me')).body.data.approvalRequired).toBe(true);
     expect((await request(await appWith('super_admin')).get('/admin/me')).body.data.approvalRequired).toBe(false);
+  });
+});
+
+describe('re-issue fulfil and lifting holds', () => {
+  const FULFIL = { newTagId: NEW_TAG, reason: REASON, confirmSuffix: '11cc22' };
+
+  it('a daily admin\'s re-issue fulfil always waits, even after they approved the re-issue', async () => {
+    const app = await appWith('admin');
+    const res = await request(app).post(`/admin/reissue-requests/${REISSUE}/fulfil`).send(FULFIL);
+    expect(res.status).toBe(202);
+    expect(calls('admin_request_approval')[0].args).toMatchObject({ p_action: 'reissue_fulfil', p_target: REISSUE, p_payload: FULFIL });
+    expect(calls('admin_fulfil_reissue')).toHaveLength(0);
+  });
+
+  it('a fulfil with the wrong confirmation is refused before a request is stored', async () => {
+    const app = await appWith('admin');
+    const res = await request(app).post(`/admin/reissue-requests/${REISSUE}/fulfil`).send({ ...FULFIL, confirmSuffix: '000000' });
+    expect(res.status).toBe(400);
+    expect(calls('admin_request_approval')).toHaveLength(0);
+  });
+
+  it('super_admin fulfils at once', async () => {
+    const app = await appWith('super_admin');
+    const res = await request(app).post(`/admin/reissue-requests/${REISSUE}/fulfil`).send(FULFIL);
+    expect(res.status).toBe(200);
+    expect(calls('admin_fulfil_reissue')).toHaveLength(1);
+  });
+
+  it('approving a stored fulfil runs it as the approver', async () => {
+    rpcAnswers.admin_decide_approval = {
+      data: { id: APPROVAL, action: 'reissue_fulfil', target_id: REISSUE, payload: FULFIL, payload_hash: payloadHash(FULFIL), requested_by: ADMIN },
+    };
+    const app = await appWith('admin', OTHER_ADMIN);
+    const res = await request(app).post(`/admin/approvals/${APPROVAL}/approve`).send({});
+    expect(res.status).toBe(200);
+    expect(calls('admin_fulfil_reissue')[0].args).toMatchObject({ p_request: REISSUE, p_new_tag: NEW_TAG, p_admin: OTHER_ADMIN });
+  });
+
+  it.each([
+    ['tag_unsuspend', `/admin/tags/${TAG}/unsuspend`, 'tag_suspend', 'nfc_tag', TAG, 'admin_set_tag_suspension'],
+    ['account_unsuspend', `/admin/users/${TARGET}/unsuspend`, 'account_suspend', 'user', TARGET, 'admin_unsuspend_account'],
+    ['account_reactivate', `/admin/users/${TARGET}/reactivate`, 'account_retire', 'user', TARGET, 'admin_reactivate_account'],
+  ])('%s: your own hold lifts at once; someone else\'s waits; an unknown one waits', async (action, path, setAction, entityType, target, rpc) => {
+    const app = await appWith('admin');
+    // Unknown setter (no audit row): waits.
+    expect((await request(app).post(path).send({ reason: REASON })).status).toBe(202);
+
+    // Set by the caller (latest row): runs at once.
+    tables.audit_logs.push(
+      { log_id: 'h0', admin_id: OTHER_ADMIN, admin_email: 'admin2@example.com', action: setAction, entity_type: entityType, entity_id: target, reason: 'old hold', created_at: '2026-10-20T00:00:00Z' },
+      { log_id: 'h1', admin_id: ADMIN, admin_email: 'admin@example.com', action: setAction, entity_type: entityType, entity_id: target, reason: 'my hold', created_at: '2026-10-27T00:00:00Z' },
+    );
+    rpcCalls.length = 0;
+    expect((await request(app).post(path).send({ reason: REASON })).status).toBe(200);
+    expect(calls(rpc)).toHaveLength(1);
+
+    // Set by someone else: waits, nothing runs.
+    tables.audit_logs.push({ log_id: 'h2', admin_id: OTHER_ADMIN, admin_email: 'admin2@example.com', action: setAction, entity_type: entityType, entity_id: target, reason: 'stolen token hold', created_at: '2026-10-27T05:00:00Z' });
+    rpcCalls.length = 0;
+    const res = await request(app).post(path).send({ reason: REASON });
+    expect(res.status).toBe(202);
+    expect(calls('admin_request_approval')[0].args.p_action).toBe(action);
+    expect(calls(rpc)).toHaveLength(0);
+  });
+
+  it('the re-issue ticket carries everything needed to decide, never the typed confirmation', async () => {
+    tables.admin_action_approvals = [{
+      id: 'r1', action: 'reissue_fulfil', target_id: REISSUE, payload: FULFIL, reason: REASON, requested_by: ADMIN,
+      requested_at: '2026-10-27T10:00:00Z', expires_at: '2099-01-01T00:00:00Z', decided_by: null, decided_at: null,
+      decision: null, decision_note: null, executed_at: null, result: null,
+    }];
+    const res = await request(await appWith('admin', OTHER_ADMIN)).get('/admin/approvals?status=waiting_for_me');
+    const [ticket] = res.body.data.approvals;
+    expect(ticket.target).toEqual({ kind: 'reissue', id: REISSUE, tokenId: TAG, chipName: 'chip_004', serialSuffix: '11CC22' });
+    expect(ticket.details).toEqual({
+      newTagId: NEW_TAG,
+      newChip: { chipName: 'chip_005', serialSuffix: '11DD33' },
+      reissue: {
+        id: REISSUE, status: 'APPROVED', paymentStatus: 'WAIVED', listAmountUsdCents: 1000, chargedAmount: null, chargedCurrency: null,
+        waiveReason: 'Goodwill, first re-issue', reviewReason: 'Seal lifting at the corner',
+        reviewedBy: { id: ADMIN, email: 'admin@example.com' }, reviewedAt: '2026-10-27T09:00:00Z',
+        requestedAt: '2026-10-26T12:00:00Z', paidAt: null,
+        owner: { id: TARGET, email: 'collector@example.com' },
+        photoCount: 2, photoUrls: ['https://signed.example/ev/1.jpg', 'https://signed.example/ev/2.jpg'],
+      },
+    });
+    expect(ticket.canApprove).toBe(true);
+    expect(JSON.stringify(res.body)).not.toContain('confirmSuffix');
+  });
+
+  it('a hold-lifting ticket says who set the hold', async () => {
+    tables.audit_logs.push({ log_id: 'h1', admin_id: OTHER_ADMIN, admin_email: 'admin2@example.com', action: 'account_suspend', entity_type: 'user', entity_id: TARGET, reason: 'Fraud review', created_at: '2026-10-27T01:00:00Z' });
+    tables.admin_action_approvals = [{
+      id: 'u1', action: 'account_unsuspend', target_id: TARGET, payload: { reason: REASON }, reason: REASON, requested_by: ADMIN,
+      requested_at: '2026-10-27T10:00:00Z', expires_at: '2099-01-01T00:00:00Z', decided_by: null, decided_at: null,
+      decision: null, decision_note: null, executed_at: null, result: null,
+    }];
+    const res = await request(await appWith('admin', OTHER_ADMIN)).get('/admin/approvals?status=open');
+    expect(res.body.data.approvals[0].details).toEqual({
+      hold: { setBy: { id: OTHER_ADMIN, email: 'admin2@example.com' }, setAt: '2026-10-27T01:00:00Z', reason: 'Fraud review' },
+    });
   });
 });
 

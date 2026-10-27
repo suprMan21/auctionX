@@ -13,7 +13,7 @@ import { ErrorLine, REASON_MIN, ReasonField } from './AdminTagDialogs';
 import { deleteConfirmationOf } from '../lib/accountActions';
 import { ACTION_FAILED, errorMessage } from '../lib/display';
 import { type ApprovalPending } from '../api/approvalSchemas';
-import { ApprovalHelper, ApprovalSentPanel } from './ApprovalSent';
+import { ApprovalHelper, ApprovalSentPanel, HoldHelper } from './ApprovalSent';
 import { needsApproval, useAdminRole } from '../lib/adminRole';
 import { useWorkQueues } from '../lib/workQueues';
 import { APPROVAL_COPY } from '../lib/labels';
@@ -118,6 +118,8 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
   if (!action) return null;
   // S-2FA Ph3a: suspend and retire wait for a second admin when /admin/me says so.
   const approval = approverNeeded && (action === 'suspend' || action === 'retire');
+  // Ph3a2: lifting a suspension / retirement waits only when another admin set it (server decides).
+  const liftMayWait = approverNeeded && (action === 'unsuspend' || action === 'reactivate');
 
   const expectedConfirm = deleteConfirmationOf(account.email);
   const reasonOk = reason.trim().length >= REASON_MIN;
@@ -137,13 +139,14 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
       const r = reason.trim();
       let pending: ApprovalPending | null | undefined = null;
       if (action === 'suspend') pending = await adminApi.suspendAccount(account.id, hours, r);
-      else if (action === 'retire') pending = await adminApi.accountAction(account.id, action, r);
+      else if (action === 'retire' || action === 'unsuspend' || action === 'reactivate') {
+        pending = await adminApi.accountAction(account.id, action, r);
+      }
       else if (action === 'delete') await adminApi.deleteAccount(account.id, confirm.trim(), r);
       else if (action === 'role') await adminApi.setAccountRole(account.id, newRole, r);
-      else if (action === 'type') {
+      else {
         await adminApi.setAccountType(account.id, typeChoice === 'collector' ? 'collector' : 'creator', typeChoice === 'creator_override', r);
       }
-      else await adminApi.accountAction(account.id, action, r);
       if (pending) { setSent(pending); refreshQueues(); return; }
       onDone(action);
     } catch (err) {
@@ -268,6 +271,7 @@ export const AccountActionDialog = ({ open, action, account, onClose, onDone }: 
 
       <ReasonField value={reason} onChange={setReason} />
       {approval && <ApprovalHelper />}
+      {liftMayWait && <HoldHelper />}
       <ErrorLine message={error} />
       <div className="flex justify-end gap-3">
         <button type="button" onClick={onClose} className={`${ADMIN_BUTTON_CLASS} bg-dark-700 text-gray-200 hover:bg-dark-600`}>

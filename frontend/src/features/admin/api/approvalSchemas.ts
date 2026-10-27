@@ -6,7 +6,11 @@
 
 import { z } from 'zod';
 
-export const APPROVAL_ACTIONS = ['tag_reset', 'tag_suspend', 'account_suspend', 'account_retire'] as const;
+export const APPROVAL_ACTIONS = [
+  'tag_reset', 'tag_suspend', 'account_suspend', 'account_retire',
+  // S-2FA Ph3a2: re-issue fulfil (always) and lifting a hold someone else set.
+  'reissue_fulfil', 'tag_unsuspend', 'account_unsuspend', 'account_reactivate',
+] as const;
 export type ApprovalAction = (typeof APPROVAL_ACTIONS)[number];
 
 export const APPROVAL_STATUSES = ['pending', 'approved', 'rejected', 'cancelled', 'expired'] as const;
@@ -19,6 +23,35 @@ export type ApprovalFilter = (typeof APPROVAL_FILTERS)[number];
 const person = z.object({ id: z.string(), email: z.string().nullable() });
 const chip = z.object({ chipName: z.string().nullable(), serialSuffix: z.string().nullable() });
 
+/** The re-issue request behind a reissue_fulfil approval, so the approver can decide from the ticket. */
+const reissueDetailsSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  paymentStatus: z.string().nullable(),
+  listAmountUsdCents: z.number().nullable(),
+  chargedAmount: z.number().nullable(),
+  chargedCurrency: z.string().nullable(),
+  waiveReason: z.string().nullable(),
+  reviewReason: z.string().nullable(),
+  reviewedBy: person.nullable(),
+  reviewedAt: z.string().nullable(),
+  requestedAt: z.string().nullable(),
+  paidAt: z.string().nullable(),
+  owner: person,
+  photoCount: z.number().int().nonnegative(),
+  /** 5-minute presigned URLs; may be empty when signing failed. */
+  photoUrls: z.array(z.string()),
+}).passthrough();
+export type ApprovalReissueDetails = z.infer<typeof reissueDetailsSchema>;
+
+/** Who placed the suspension / retirement an unsuspend or reactivate request lifts. */
+const holdSchema = z.object({
+  setBy: person.nullable(),
+  setAt: z.string().nullable(),
+  reason: z.string().nullable(),
+}).passthrough();
+export type ApprovalHold = z.infer<typeof holdSchema>;
+
 export const approvalSchema = z.object({
   id: z.string(),
   action: z.enum(APPROVAL_ACTIONS),
@@ -26,11 +59,22 @@ export const approvalSchema = z.object({
   target: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('token'), id: z.string(), chipName: z.string().nullable(), serialSuffix: z.string().nullable() }),
     z.object({ kind: z.literal('account'), id: z.string(), email: z.string().nullable() }),
+    z.object({
+      kind: z.literal('reissue'),
+      /** The re-issue request id. */
+      id: z.string(),
+      tokenId: z.string(),
+      chipName: z.string().nullable(),
+      serialSuffix: z.string().nullable(),
+    }),
   ]),
   details: z.object({
     newTagId: z.string().nullable().optional(),
     newChip: chip.nullable().optional(),
     hours: z.number().nullable().optional(),
+    // A malformed block shows as "not available" rather than breaking the whole queue.
+    reissue: reissueDetailsSchema.nullable().optional().catch(null),
+    hold: holdSchema.nullable().optional().catch(null),
   }).passthrough(),
   reason: z.string(),
   requestedBy: person,

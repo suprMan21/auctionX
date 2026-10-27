@@ -381,20 +381,30 @@ export const rejectReissue = review(false);
  * the request is PAID or WAIVED. The proof is minted BEFORE the database is
  * touched: a missing salt key must fail while nothing has changed.
  */
-export const fulfilReissue = async (req: AdminRequest, res: Response) => {
-  const route = '/api/v1/admin/reissue-requests/:id/fulfil';
-  const ctx = adminContext(req, route);
-  const logger = withLogContext({ requestId: req.requestId, route });
-  const adminId = requireAdminId(req);
-  const requestId = parseRequestId(req);
+export type FulfilBody = { newTagId: string; reason: string; confirmSuffix: string };
 
-  const parsed = reissueFulfilBodySchema.safeParse(req.body);
+const FULFIL_ROUTE = '/api/v1/admin/reissue-requests/:id/fulfil';
+
+/** The re-issue request id from the route (`:id`). */
+export const reissueIdFrom = (req: AdminRequest): string => parseRequestId(req);
+
+export const parseFulfilBody = (req: AdminRequest, requestId: string, raw: unknown): FulfilBody => {
+  const parsed = reissueFulfilBodySchema.safeParse(raw);
   if (!parsed.success) {
-    emitReissueAction(ctx, 'fulfil', requestId, null, 'invalid_argument');
+    emitReissueAction(adminContext(req, FULFIL_ROUTE), 'fulfil', requestId, null, 'invalid_argument');
     throw new AppError('invalid_argument', 'Some details are missing or not valid. Check the form and try again.', parsed.error.issues);
   }
-  const { newTagId, reason, confirmSuffix } = parsed.data;
+  return parsed.data;
+};
 
+/**
+ * Loads the request and checks the typed confirmation against the chip being
+ * retired. Runs before an approval request is stored (S-2FA Ph3a) and again
+ * when it runs.
+ */
+export const checkFulfil = async (req: AdminRequest, requestId: string, body: FulfilBody): Promise<ReissueRow> => {
+  const ctx = adminContext(req, FULFIL_ROUTE);
+  const logger = withLogContext({ requestId: req.requestId, route: FULFIL_ROUTE });
   const supabase = getServiceClient();
   const request = await loadRequest(supabase, requestId);
 
@@ -408,14 +418,29 @@ export const fulfilReissue = async (req: AdminRequest, res: Response) => {
     throw new AppError('unavailable', 'This token could not be loaded. Try again.');
   }
   if (!oldTag) {
-    emitReissueAction(ctx, 'fulfil', requestId, request.tag_id, 'not_found', newTagId);
+    emitReissueAction(ctx, 'fulfil', requestId, request.tag_id, 'not_found', body.newTagId);
     throw new AppError('not_found', 'Token not found.');
   }
-
-  if (confirmationSuffix(oldTag as { tag_uid: string; chip_serial: string | null }) !== confirmSuffix.toUpperCase()) {
-    emitReissueAction(ctx, 'fulfil', requestId, request.tag_id, 'invalid_argument', newTagId);
+  if (confirmationSuffix(oldTag as { tag_uid: string; chip_serial: string | null }) !== body.confirmSuffix.toUpperCase()) {
+    emitReissueAction(ctx, 'fulfil', requestId, request.tag_id, 'invalid_argument', body.newTagId);
     throw new AppError('invalid_argument', 'That does not match. Type the characters shown in the dialog.');
   }
+  return request;
+};
+
+/**
+ * Moves the token onto a new ENROLLED chip (Ph1 reset, same transaction) once
+ * the request is PAID or WAIVED. The proof is minted BEFORE the database is
+ * touched: a missing salt key must fail while nothing has changed. Runs as
+ * `req.admin` (the approver, when it runs from an approval).
+ */
+export const runFulfil = async (req: AdminRequest, requestId: string, body: FulfilBody) => {
+  const ctx = adminContext(req, FULFIL_ROUTE);
+  const logger = withLogContext({ requestId: req.requestId, route: FULFIL_ROUTE });
+  const adminId = requireAdminId(req);
+  const { newTagId, reason } = body;
+  const request = await checkFulfil(req, requestId, body);
+  const supabase = getServiceClient();
 
   const custodyRecordId = randomUUID();
   const minted = mintOwnershipProof(
@@ -448,12 +473,18 @@ export const fulfilReissue = async (req: AdminRequest, res: Response) => {
     chargedAmount: request.charged_amount,
   });
 
-  return ok(res, {
+  return {
     reissueRequestId: requestId,
     oldTagId: request.tag_id,
     newTagId,
     oldLifecycleStatus: 'RETIRED',
     newLifecycleStatus: 'ACTIVE',
     destructionStatus: 'PENDING',
-  });
+  };
+};
+
+export const fulfilReissue = async (req: AdminRequest, res: Response) => {
+  requireAdminId(req);
+  const requestId = parseRequestId(req);
+  return ok(res, await runFulfil(req, requestId, parseFulfilBody(req, requestId, req.body)));
 };

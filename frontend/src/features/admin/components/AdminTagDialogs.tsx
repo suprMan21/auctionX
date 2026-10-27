@@ -11,7 +11,7 @@ import { confirmsChip, useEnrolledChips } from '../lib/chipConfirm';
 import { ACTION_FAILED, errorMessage } from '../lib/display';
 import { ChipCombobox } from './ChipCombobox';
 import { pendingApprovalOf, type ApprovalPending } from '../api/approvalSchemas';
-import { ApprovalHelper, ApprovalSentPanel } from './ApprovalSent';
+import { ApprovalHelper, ApprovalSentPanel, HoldHelper } from './ApprovalSent';
 import { needsApproval, useAdminRole } from '../lib/adminRole';
 import { useWorkQueues } from '../lib/workQueues';
 import { APPROVAL_COPY } from '../lib/labels';
@@ -60,9 +60,12 @@ export const AdminSuspendDialog = ({ open, tag, suspend, onClose, onDone }: Susp
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<ApprovalPending | null>(null);
-  // S-2FA Ph3a: only suspending waits for a second admin; lifting a suspension does not.
+  // S-2FA Ph3a: suspending waits for a second admin. Ph3a2: lifting waits only when another
+  // admin set the suspension, which only the server knows; the button keeps its normal label.
   const access = useAdminRole();
-  const approval = suspend && needsApproval(access);
+  const approverNeeded = needsApproval(access);
+  const approval = suspend && approverNeeded;
+  const liftMayWait = !suspend && approverNeeded;
   const { refresh: refreshQueues } = useWorkQueues();
 
   useEffect(() => {
@@ -96,6 +99,7 @@ export const AdminSuspendDialog = ({ open, tag, suspend, onClose, onDone }: Susp
       {sent ? <ApprovalSentPanel approval={sent} onClose={onClose} /> : (<>
       <ReasonField value={reason} onChange={setReason} />
       {approval && <ApprovalHelper />}
+      {liftMayWait && <HoldHelper />}
       <ErrorLine message={error} />
       <div className="flex justify-end gap-3">
         <button type="button" onClick={onClose} className={`${ADMIN_BUTTON_CLASS} bg-dark-700 text-gray-200 hover:bg-dark-600`}>

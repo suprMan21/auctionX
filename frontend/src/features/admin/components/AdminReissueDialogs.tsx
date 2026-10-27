@@ -10,6 +10,11 @@ import { AdminDialog, ADMIN_BUTTON_CLASS } from './AdminDialog';
 import { ConfirmChipField, ErrorLine, REASON_MIN, ReasonField, ReplacementChipField } from './AdminTagDialogs';
 import { confirmsChip, useEnrolledChips } from '../lib/chipConfirm';
 import { ACTION_FAILED, errorMessage } from '../lib/display';
+import { pendingApprovalOf, type ApprovalPending } from '../api/approvalSchemas';
+import { ApprovalSentPanel } from './ApprovalSent';
+import { needsApproval, useAdminRole } from '../lib/adminRole';
+import { useWorkQueues } from '../lib/workQueues';
+import { APPROVAL_COPY } from '../lib/labels';
 
 export type ReissueDecision = 'approve' | 'approve_waived' | 'reject';
 
@@ -120,9 +125,13 @@ export const AdminReissueFulfilDialog = ({ open, request, onClose, onDone }: Ful
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<ApprovalPending | null>(null);
+  // S-2FA Ph3a2: a re-issue fulfil always waits for a second admin (super_admin acts alone).
+  const approval = needsApproval(useAdminRole());
+  const { refresh: refreshQueues } = useWorkQueues();
 
   useEffect(() => {
-    if (open) { setNewTagId(''); setReason(''); setConfirm(''); setError(null); }
+    if (open) { setNewTagId(''); setReason(''); setConfirm(''); setError(null); setSent(null); }
   }, [open]);
 
   const chip = request.tag ? { uidSuffix: request.tag.uidSuffix, serialSuffix: request.tag.serialSuffix } : null;
@@ -134,7 +143,9 @@ export const AdminReissueFulfilDialog = ({ open, request, onClose, onDone }: Ful
     setError(null);
     try {
       const res = await adminApi.fulfilReissue(request.id, { newTagId, reason: reason.trim(), confirmSuffix: confirm.trim() });
-      onDone(res.data.newTagId);
+      const pending = pendingApprovalOf(res);
+      if (pending) { setSent(pending); refreshQueues(); return; }
+      if ('newTagId' in res.data) onDone(res.data.newTagId);
     } catch (err) {
       setError(errorMessage(err, 'The re-issue could not be completed. Nothing was changed. Try again.'));
     } finally {
@@ -160,18 +171,23 @@ export const AdminReissueFulfilDialog = ({ open, request, onClose, onDone }: Ful
         </>
       }
     >
+      {sent ? <ApprovalSentPanel approval={sent} onClose={onClose} /> : (<>
       <ReplacementChipField candidates={candidates} loadError={loadError} value={newTagId} onChange={setNewTagId} />
       <ReasonField value={reason} onChange={setReason} />
       {chip ? <ConfirmChipField chip={chip} value={confirm} onChange={setConfirm} /> : <ErrorLine message="Chip details could not be loaded." />}
+      {approval && <p className="text-sm text-amber-200">{APPROVAL_COPY.fulfilHelper}</p>}
       <ErrorLine message={error} />
       <div className="flex justify-end gap-3">
         <button type="button" onClick={onClose} className={`${ADMIN_BUTTON_CLASS} bg-dark-700 text-gray-200 hover:bg-dark-600`}>
           Cancel
         </button>
         <button type="button" onClick={submit} disabled={!ready} className={`${ADMIN_BUTTON_CLASS} bg-red-600 hover:bg-red-500 text-white`}>
-          {busy ? 'Moving…' : 'Move token and retire old chip'}
+          {approval
+            ? (busy ? APPROVAL_COPY.busy : APPROVAL_COPY.button)
+            : busy ? 'Moving…' : 'Move token and retire old chip'}
         </button>
       </div>
+      </>)}
     </AdminDialog>
   );
 };

@@ -14,14 +14,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { adminApi } from '../api/adminApi';
-import { type Approval, type ApprovalFilter } from '../api/approvalSchemas';
+import { type Approval, type ApprovalFilter, type ApprovalHold, type ApprovalReissueDetails } from '../api/approvalSchemas';
 import { AdminTable, Wrap, type AdminColumn } from '../components/AdminTable';
 import { AdminPagination, FilterPills, ListState } from '../components/AdminListParts';
 import { AdminDialog, ADMIN_BUTTON_CLASS } from '../components/AdminDialog';
 import { AccountLink } from '../components/AccountLink';
 import { ErrorLine, REASON_MIN, ReasonField } from '../components/AdminTagDialogs';
-import { ACTION_FAILED, errorMessage, formatWhen, loadFailed, NONE, shortId } from '../lib/display';
-import { approvalActionLabel, approvalOutcomeLabel, approvalStatusLabel } from '../lib/labels';
+import { ACTION_FAILED, errorMessage, formatAmount, formatWhen, loadFailed, NONE, shortId } from '../lib/display';
+import { approvalActionLabel, approvalOutcomeLabel, approvalStatusLabel, reissuePaymentLabel, reissueStatusLabel } from '../lib/labels';
 import { hasPermission, PERMISSIONS, useAdminRole } from '../lib/adminRole';
 import { useWorkQueues } from '../lib/workQueues';
 import { StepUpPanel } from '@/features/security/components/StepUpPanel';
@@ -49,7 +49,20 @@ const EMPTY_TEXT: Record<ApprovalFilter, string> = {
 const targetText = (a: Approval): string => {
   if (a.target.kind === 'account') return a.target.email ?? `Account ${shortId(a.target.id)}`;
   if (a.target.chipName) return a.target.chipName;
-  return a.target.serialSuffix ? `Token …${a.target.serialSuffix}` : `Token ${shortId(a.target.id)}`;
+  const tokenId = a.target.kind === 'reissue' ? a.target.tokenId : a.target.id;
+  return a.target.serialSuffix ? `Token …${a.target.serialSuffix}` : `Token ${shortId(tokenId)}`;
+};
+
+const LINK_CLASS = 'text-primary-300 hover:underline rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500';
+
+/** Hold-lifting requests: the suspension or retirement being lifted. */
+const HOLD_ACTIONS: ReadonlySet<Approval['action']> = new Set(['tag_unsuspend', 'account_unsuspend', 'account_reactivate']);
+
+const holdText = (hold: ApprovalHold | null | undefined): string => {
+  if (!hold) return 'Who set this hold is not recorded.';
+  const by = hold.setBy ? hold.setBy.email ?? `Account ${shortId(hold.setBy.id)}` : 'an unknown admin';
+  const when = hold.setAt ? ` on ${formatWhen(hold.setAt)}` : '';
+  return `Hold set by ${by}${when}: ${hold.reason ?? 'no reason recorded'}`;
 };
 
 const TargetLink = ({ approval }: { approval: Approval }) => {
@@ -57,10 +70,11 @@ const TargetLink = ({ approval }: { approval: Approval }) => {
   if (approval.target.kind === 'account') return <AccountLink id={approval.target.id} email={approval.target.email} />;
   const text = targetText(approval);
   if (!hasPermission(access, PERMISSIONS.manageNfc)) return <span className="font-mono">{text}</span>;
+  const tokenId = approval.target.kind === 'reissue' ? approval.target.tokenId : approval.target.id;
   return (
     <Link
-      to={`/admin/tags/${encodeURIComponent(approval.target.id)}`}
-      className="font-mono text-primary-300 hover:underline rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+      to={`/admin/tags/${encodeURIComponent(tokenId)}`}
+      className={`font-mono ${LINK_CLASS}`}
     >
       {text}
     </Link>
@@ -187,8 +201,9 @@ export const AdminApprovalsPage = () => {
       <div>
         <h1 className="text-2xl font-bold text-white">Approvals</h1>
         <p className="text-gray-400 text-sm mt-1">
-          Suspending a token or account, moving a token to a new chip and retiring an account need a second admin.
-          A request runs only when another admin approves it, and expires after 24 hours.
+          Suspending a token or account, moving a token to a new chip (including a re-issue) and retiring an account
+          need a second admin, and so does lifting a hold that another admin set. A request runs only when another
+          admin approves it, and expires after 24 hours.
         </p>
       </div>
 
@@ -301,7 +316,12 @@ const ApprovalDetailDialog = ({
   const secondary = `${ADMIN_BUTTON_CLASS} bg-dark-700 text-gray-200 hover:bg-dark-600`;
 
   return (
-    <AdminDialog open onClose={onClose} title={title} danger={approval?.action === 'tag_reset' || approval?.action === 'account_retire'}>
+    <AdminDialog
+      open
+      onClose={onClose}
+      title={title}
+      danger={approval?.action === 'tag_reset' || approval?.action === 'reissue_fulfil' || approval?.action === 'account_retire'}
+    >
       {loading ? (
         <p role="status" className="text-sm text-gray-400">Loading the request…</p>
       ) : !approval ? (
@@ -327,8 +347,13 @@ const ApprovalDetailDialog = ({
       ) : (
         <>
           <dl className="grid grid-cols-1 gap-y-2 text-sm">
-            <Row label={approval.target.kind === 'account' ? 'Account' : 'Token'}><TargetLink approval={approval} /></Row>
-            {approval.action === 'tag_reset' && (
+            <Row label={approval.target.kind === 'account' ? 'Account' : approval.target.kind === 'reissue' ? 'Token (old chip)' : 'Token'}>
+              <TargetLink approval={approval} />
+              {approval.target.kind === 'reissue' && approval.target.serialSuffix && approval.target.chipName && (
+                <span className="text-gray-400"> (serial …{approval.target.serialSuffix})</span>
+              )}
+            </Row>
+            {(approval.action === 'tag_reset' || approval.action === 'reissue_fulfil') && (
               <Row label="New chip">
                 {approval.details.newChip?.chipName
                   ?? (approval.details.newChip?.serialSuffix ? `Token …${approval.details.newChip.serialSuffix}` : approval.details.newTagId ? shortId(approval.details.newTagId) : NONE)}
@@ -337,6 +362,7 @@ const ApprovalDetailDialog = ({
             {approval.action === 'account_suspend' && typeof approval.details.hours === 'number' && (
               <Row label="Length">{hoursText(approval.details.hours)}</Row>
             )}
+            {HOLD_ACTIONS.has(approval.action) && <Row label="Hold">{holdText(approval.details.hold)}</Row>}
             <Row label="Asked by"><Wrap text={approval.requestedBy.email ?? shortId(approval.requestedBy.id)} /></Row>
             <Row label="Asked">{formatWhen(approval.requestedAt)}</Row>
             {approval.status === 'pending' && <Row label="Expires">{formatWhen(approval.expiresAt)}</Row>}
@@ -345,6 +371,10 @@ const ApprovalDetailDialog = ({
             {approval.decidedAt && <Row label="Decided">{formatWhen(approval.decidedAt)}</Row>}
             {approval.decisionNote && <Row label={approval.status === 'rejected' ? 'Why it was rejected' : 'Note'}>{approval.decisionNote}</Row>}
           </dl>
+
+          {approval.action === 'reissue_fulfil' && (
+            <ReissueFacts approval={approval} reissue={approval.details.reissue ?? null} onRefresh={onChanged} />
+          )}
 
           {approval.status === 'pending' && !approval.canApprove && !approval.canCancel && (
             <p className="text-sm text-gray-400">Another admin with access to this action approves it.</p>
@@ -401,3 +431,95 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }) 
     <dd className="text-gray-200 break-words [overflow-wrap:anywhere]">{children}</dd>
   </div>
 );
+
+/** Everything about the re-issue a second admin needs, so they can decide from the ticket. */
+const ReissueFacts = ({
+  approval, reissue, onRefresh,
+}: {
+  approval: Approval;
+  reissue: ApprovalReissueDetails | null;
+  onRefresh: () => void;
+}) => {
+  const requestId = approval.target.kind === 'reissue' ? approval.target.id : reissue?.id ?? null;
+  const requestLink = requestId ? (
+    <Link to={`/admin/reissue-requests?request=${encodeURIComponent(requestId)}`} className={LINK_CLASS}>
+      Open the re-issue request
+    </Link>
+  ) : null;
+
+  if (!reissue) {
+    return (
+      <section aria-label="Re-issue request" className="space-y-2 text-sm">
+        <p className="text-amber-300">The re-issue request details could not be loaded.</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={onRefresh} className={`${ADMIN_BUTTON_CLASS} bg-dark-700 text-gray-200 hover:bg-dark-600`}>Refresh</button>
+          {requestLink}
+        </div>
+      </section>
+    );
+  }
+
+  const fee = reissue.paymentStatus === 'WAIVED'
+    ? `Fee waived: ${reissue.waiveReason ?? 'no reason recorded'}`
+    : reissue.chargedAmount !== null
+      ? `${formatAmount(reissue.chargedAmount, reissue.chargedCurrency)} paid`
+      : `${reissuePaymentLabel(reissue.paymentStatus)}${reissue.listAmountUsdCents !== null ? ` (price ${formatAmount(reissue.listAmountUsdCents, 'usd')})` : ''}`;
+  const total = reissue.photoCount;
+
+  return (
+    <section aria-label="Re-issue request" className="space-y-3 rounded-xl border border-white/10 bg-dark-700/50 px-4 py-3">
+      <h3 className="text-sm font-semibold text-white">Re-issue request</h3>
+      <dl className="grid grid-cols-1 gap-y-2 text-sm">
+        <Row label="Owner"><AccountLink id={reissue.owner.id} email={reissue.owner.email} /></Row>
+        <Row label="Re-issue status">{reissueStatusLabel(reissue.status)}</Row>
+        <Row label="Fee">{fee}</Row>
+        <Row label="Re-issue approved by">
+          {reissue.reviewedBy ? <Wrap text={reissue.reviewedBy.email ?? shortId(reissue.reviewedBy.id)} /> : NONE}
+          {reissue.reviewedAt && <span className="text-gray-400"> on {formatWhen(reissue.reviewedAt)}</span>}
+        </Row>
+        {reissue.reviewReason && <Row label="Their reason">{reissue.reviewReason}</Row>}
+        <Row label="Requested">{formatWhen(reissue.requestedAt)}</Row>
+        <Row label="Paid">{reissue.paymentStatus === 'WAIVED' ? 'Not needed (fee waived)' : formatWhen(reissue.paidAt)}</Row>
+      </dl>
+
+      <div className="space-y-2">
+        <p className="text-sm text-gray-400">Photos of the chip on the item:</p>
+        {reissue.photoUrls.length > 0 ? (
+          <ul className="flex flex-wrap gap-3" aria-label="Evidence photos">
+            {reissue.photoUrls.map((url, i) => (
+              <li key={url}>
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  aria-label={`Open photo ${i + 1} of ${reissue.photoUrls.length} full size (opens in a new tab)`}
+                  className="block rounded-xl overflow-hidden border border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                >
+                  <img
+                    src={url}
+                    alt={`Photo ${i + 1} of ${reissue.photoUrls.length} of the chip on the item`}
+                    className="h-28 w-28 object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : total > 0 ? (
+          <p role="alert" className="text-sm text-amber-300">Photos could not be loaded, refresh.</p>
+        ) : (
+          <p className="text-sm text-gray-300">No photos.</p>
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {total > 0 && (
+            <button type="button" onClick={onRefresh} className={`${ADMIN_BUTTON_CLASS} bg-dark-700 text-gray-200 hover:bg-dark-600`}>
+              Refresh
+            </button>
+          )}
+          {total > 0 && <span className="text-xs text-gray-400">Photo links stop working after 5 minutes.</span>}
+          {requestLink}
+        </div>
+      </div>
+    </section>
+  );
+};

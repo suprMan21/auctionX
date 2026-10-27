@@ -2,7 +2,9 @@
 -- S-2FA Ph3a: two-admin approval (Boss 2026-10-27).
 --
 -- The daily admins (admin@, admin2@) approve each other's token reset, token
--- suspend, account suspend and account retire. super_admin is break-glass and
+-- suspend, account suspend and account retire, every re-issue fulfil (chip
+-- swap), and lifting a hold (token / account unsuspend, reactivate) that
+-- another admin set (the backend decides who set it). super_admin is break-glass and
 -- acts alone: its role holds `act_without_approval` (enum added in ...000011).
 -- The backend decides whether a request must wait (flag FEATURE_ADMIN_TWO_PERSON
 -- + that permission); these functions hold the rules that must never be skipped:
@@ -27,7 +29,8 @@ UPDATE admin_roles
 -- ── 2. Table ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.admin_action_approvals (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  action        TEXT NOT NULL CHECK (action IN ('tag_reset', 'tag_suspend', 'account_suspend', 'account_retire')),
+  action        TEXT NOT NULL CHECK (action IN ('tag_reset', 'tag_suspend', 'tag_unsuspend', 'reissue_fulfil',
+                                    'account_suspend', 'account_retire', 'account_unsuspend', 'account_reactivate')),
   target_id     UUID NOT NULL,
   -- The exact parsed request body. It runs as stored, never re-read from the requester.
   payload       JSONB NOT NULL,
@@ -66,10 +69,14 @@ IMMUTABLE
 SET search_path = public, pg_temp
 AS $$
   SELECT CASE p_action
-           WHEN 'tag_reset'       THEN 'manage_nfc'
-           WHEN 'tag_suspend'     THEN 'manage_nfc'
-           WHEN 'account_suspend' THEN 'manage_users'
-           WHEN 'account_retire'  THEN 'manage_users'
+           WHEN 'tag_reset'          THEN 'manage_nfc'
+           WHEN 'tag_suspend'        THEN 'manage_nfc'
+           WHEN 'tag_unsuspend'      THEN 'manage_nfc'
+           WHEN 'reissue_fulfil'     THEN 'manage_nfc'
+           WHEN 'account_suspend'    THEN 'manage_users'
+           WHEN 'account_retire'     THEN 'manage_users'
+           WHEN 'account_unsuspend'  THEN 'manage_users'
+           WHEN 'account_reactivate' THEN 'manage_users'
          END;
 $$;
 
@@ -123,7 +130,7 @@ BEGIN
   IF p_target IS NULL OR p_payload IS NULL OR jsonb_typeof(p_payload) <> 'object' THEN
     RAISE EXCEPTION 'invalid_argument' USING ERRCODE = 'invalid_parameter_value';
   END IF;
-  IF p_action IN ('account_suspend', 'account_retire') AND p_target = p_admin THEN
+  IF p_action LIKE 'account\_%' AND p_target = p_admin THEN
     RAISE EXCEPTION 'self_action' USING ERRCODE = 'insufficient_privilege';
   END IF;
 
@@ -198,7 +205,7 @@ BEGIN
       RAISE EXCEPTION 'reason_required' USING ERRCODE = 'invalid_parameter_value';
     END IF;
     -- An account action never runs on the approver's own account.
-    IF p_decision = 'approved' AND v_row.action IN ('account_suspend', 'account_retire') AND v_row.target_id = p_admin THEN
+    IF p_decision = 'approved' AND v_row.action LIKE 'account\_%' AND v_row.target_id = p_admin THEN
       RAISE EXCEPTION 'self_action' USING ERRCODE = 'insufficient_privilege';
     END IF;
     -- A request dies with its requester's access (suspended, retired, demoted).

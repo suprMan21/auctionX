@@ -220,6 +220,17 @@ const reasonAction = (fn: string, action: string) => async (req: AdminRequest, r
   return ok(res, data);
 };
 
+const runReasonRpc = (fn: string, action: string) => async (req: AdminRequest, target: string, body: ReasonBody) => {
+  const adminId = requireAdminId(req);
+  const data = await callRpc<unknown>(fn, { p_admin: adminId, p_target: target, p_reason: body.reason });
+  logAction(req, action, target);
+  return data;
+};
+
+/** Lifting a hold; runs as `req.admin` (the approver, when it runs from an approval). */
+export const runUnsuspendAccount = runReasonRpc('admin_unsuspend_account', 'account_unsuspend');
+export const runReactivateAccount = runReasonRpc('admin_reactivate_account', 'account_reactivate');
+
 export const unsuspendAccount = reasonAction('admin_unsuspend_account', 'account_unsuspend');
 export const retireAccount = async (req: AdminRequest, res: Response) => {
   const target = accountId(req);
