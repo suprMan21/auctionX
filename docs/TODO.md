@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-27 (S-ANCHOR1 Ph1 code complete; Boss testnet setup next)
+**Last updated:** 2026-10-27 (S-ANCHOR1 Ph1 code merged; testnet deploy on hold for the hardware wallet)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -20,11 +20,14 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
       Account type); Admin → Accounts → Type filter; test2@ → **Change account type…** → Creator now, skip the ID
       check (badge "Creator (set by staff)"), then back to Collector. `docs/ACCOUNT_TYPES_VERIFICATION.md`.
 
-### S-ANCHOR1 Ph1 — testnet setup (2026-10-27)
-- [ ] Follow the runbook in `docs/S_ANCHOR1_PH1_VERIFICATION.md`: KMS key script → fund writer + throwaway
-      deployer (faucet) → deploy + verify the registry (owner = hardware wallet) → App Runner env → Vault
-      `anchor_tick_secret` (no trailing newline) → GitHub label `anchoring` → push `dev`.
+### S-ANCHOR1 Ph1 — testnet setup (on hold until the hardware wallet arrives, ~2026-10-28)
+- KMS writer key done + funded. First deploy `0xC74C…913d` is **abandoned** (its owner was the faucet's address).
+- [ ] Set up the hardware wallet; send Claude the address from its app's **Receive** screen (not from Basescan).
+- [ ] Faucet a new throwaway deployer (Claude makes it) → Claude redeploys → App Runner `ANCHOR_*` env (incl.
+      `ANCHOR_LOW_BALANCE_WEI=20000000000000`) → Vault `anchor_tick_secret` (no trailing newline) →
+      `gh label create anchoring --repo suprMan21/auctionX` → push `dev`. Runbook: `docs/S_ANCHOR1_PH1_VERIFICATION.md`.
 - [ ] Rotation drill with the hardware wallet on Basescan (runbook step 9).
+- [ ] Optional: Etherscan API key so the contract source can be verified on Basescan.
 
 ### Verified Creator OAuth (DR-3, 2026-10-26)
 Source: Notion "OAuth Platform Approval Matrix v1.0" (https://app.notion.com/p/4053baf696648120be1af1894ffbe9b5).
