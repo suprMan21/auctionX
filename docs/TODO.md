@@ -23,6 +23,9 @@ Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live o
 - [ ] Regenerate `database.types.ts` (migrations `20261027000009/10` added columns + `auth_change_permits`).
 - [ ] **Ph3**: two-admin approval; email-code recovery (72 h hold, 7-day freeze, backup email); Postmark staging
       security server (tracking off, retention 7 d, token in 1Password); release + transfer-completed owner emails.
+- [ ] **App Runner env var cap** (2 slots left, 2026-10-27): Boss deletes vars equal to defaults (`WEBAUTHN_RP_NAME`,
+      `MFA_SESSION_TTL_HOURS`, every `FEATURE_*=false`). Ph3: `WEBAUTHN_ORIGINS` defaults to `https://<WEBAUTHN_RP_ID>`;
+      move secrets into one Secrets Manager JSON secret read at boot by `am-backend-staging-instance` (one env var).
 - [ ] Ph4: phones (iOS Safari, Android Chrome), then flags in order: `FEATURE_REQUIRE_2FA` → `FEATURE_REQUIRE_ADMIN_2FA` → `FEATURE_REQUIRE_STEP_UP`.
 
 ### Account types (2026-10-27)
