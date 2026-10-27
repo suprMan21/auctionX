@@ -346,6 +346,54 @@ describe('OwnershipPanel', () => {
     expect(doc).toMatchObject({ kind: 'authentic-materials.ownership-receipt', tagId: TAG, saltHex: receipt.saltHex });
   });
 
+  it('S-ANCHOR1: says when anchoring is pending, and says nothing for an older backend', () => {
+    const { unmount } = withRouter(<OwnershipPanel tagId={TAG} ownershipId={OWNERSHIP_ID} anchor={null} />);
+    expect(screen.getByTestId('ownership-anchor')).toHaveTextContent('can take up to 24 hours');
+    unmount();
+    withRouter(<OwnershipPanel tagId={TAG} ownershipId={OWNERSHIP_ID} />);
+    expect(screen.queryByTestId('ownership-anchor')).not.toBeInTheDocument();
+  });
+
+  it('S-ANCHOR1: once anchored, links to the explorer in a new tab, with no blockchain jargon', () => {
+    const url = 'https://sepolia.basescan.org/tx/0x' + '7'.repeat(64);
+    withRouter(
+      <OwnershipPanel tagId={TAG} ownershipId={OWNERSHIP_ID} anchor={{ anchoredAt: '2026-10-28T12:00:00.000Z', explorerUrl: url }} />,
+    );
+    const line = screen.getByTestId('ownership-anchor');
+    expect(line).toHaveTextContent('Recorded in the public registry on');
+    expect(line.textContent ?? '').not.toMatch(/blockchain|NFT|crypto|token on/i);
+    const link = screen.getByRole('link', { name: /Verify independently/ });
+    expect(link).toHaveAttribute('href', url);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('S-ANCHOR1: an anchored Receipt carries its proof path and plain verification steps', async () => {
+    const receipt: Receipt = {
+      ownershipId: OWNERSHIP_ID,
+      ownershipEventId: '33333333-3333-4333-8333-333333333333',
+      ownershipEventType: 'claim',
+      tagRef: 'am:tag:1',
+      saltHex: 'cd'.repeat(32),
+      issuedAt: '2026-10-03T00:00:00.000Z',
+      algorithm: { hash: 'keccak256', preimage: 'p' },
+      anchor: {
+        status: 'anchored', mode: 'daily_batch', chainId: 84532, registryAddress: '0x' + 'ab'.repeat(20),
+        txHash: '0x' + '7'.repeat(64), blockNumber: 42, anchoredAt: '2026-10-28T00:10:00.000Z',
+        anchoredValue: '0x' + 'ee'.repeat(32), merkleProof: ['0x' + '11'.repeat(32)], leafEncoding: 'oz', explorerUrl: null,
+      },
+    };
+    api.receipt.mockResolvedValue(receipt);
+    const user = userEvent.setup();
+    withRouter(<OwnershipPanel tagId={TAG} ownershipId={OWNERSHIP_ID} anchor={null} />);
+    await user.click(screen.getByRole('button', { name: 'Download Receipt' }));
+
+    await screen.findByText('Receipt downloaded.');
+    const [, doc] = download.mock.calls[0] as [string, Record<string, unknown>];
+    expect(doc.anchor).toMatchObject({ status: 'anchored', merkleProof: ['0x' + '11'.repeat(32)] });
+    expect((doc.howToVerify as string[]).join(' ')).toContain('StandardMerkleTree.verify');
+  });
+
   it('reports a failed Receipt request', async () => {
     api.receipt.mockRejectedValue(new TokenApiError('Not found', 404, 'not_found', null));
     const user = userEvent.setup();

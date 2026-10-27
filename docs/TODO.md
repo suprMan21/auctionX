@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-27 (account types live on staging; next S-ANCHOR1 Ph1)
+**Last updated:** 2026-10-27 (S-ANCHOR1 Ph1 code complete; Boss testnet setup next)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -20,9 +20,11 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
       Account type); Admin → Accounts → Type filter; test2@ → **Change account type…** → Creator now, skip the ID
       check (badge "Creator (set by staff)"), then back to Collector. `docs/ACCOUNT_TYPES_VERIFICATION.md`.
 
-### S-ANCHOR1 Ph1 (next session)
-- [ ] Have the **hardware wallet** at hand (contract owner, testnet too) and be ready to run the AWS script that
-      creates the KMS secp256k1 writer key (Claude's AWS access is read-only).
+### S-ANCHOR1 Ph1 — testnet setup (2026-10-27)
+- [ ] Follow the runbook in `docs/S_ANCHOR1_PH1_VERIFICATION.md`: KMS key script → fund writer + throwaway
+      deployer (faucet) → deploy + verify the registry (owner = hardware wallet) → App Runner env → Vault
+      `anchor_tick_secret` (no trailing newline) → GitHub label `anchoring` → push `dev`.
+- [ ] Rotation drill with the hardware wallet on Basescan (runbook step 9).
 
 ### Verified Creator OAuth (DR-3, 2026-10-26)
 Source: Notion "OAuth Platform Approval Matrix v1.0" (https://app.notion.com/p/4053baf696648120be1af1894ffbe9b5).

@@ -107,6 +107,132 @@ export type Database = {
           },
         ]
       }
+      anchor_alerts: {
+        Row: {
+          dedupe_key: string
+          detail: Json
+          first_seen_at: string
+          github_issue_number: number | null
+          github_issue_url: string | null
+          id: string
+          kind: string
+          last_seen_at: string
+          resolved_at: string | null
+          seen_count: number
+        }
+        Insert: {
+          dedupe_key: string
+          detail?: Json
+          first_seen_at?: string
+          github_issue_number?: number | null
+          github_issue_url?: string | null
+          id?: string
+          kind: string
+          last_seen_at?: string
+          resolved_at?: string | null
+          seen_count?: number
+        }
+        Update: {
+          dedupe_key?: string
+          detail?: Json
+          first_seen_at?: string
+          github_issue_number?: number | null
+          github_issue_url?: string | null
+          id?: string
+          kind?: string
+          last_seen_at?: string
+          resolved_at?: string | null
+          seen_count?: number
+        }
+        Relationships: []
+      }
+      anchor_batches: {
+        Row: {
+          anchored_at: string | null
+          attempts: number
+          batch_day: string | null
+          block_number: number | null
+          chain_id: number
+          created_at: string
+          cutoff_at: string
+          id: string
+          last_error: string | null
+          leaf_count: number
+          merkle_root: string
+          mode: string
+          next_attempt_at: string
+          padding_leaf: string | null
+          registry_address: string
+          status: string
+          submitted_at: string | null
+          tx_hash: string | null
+          tx_nonce: number | null
+        }
+        Insert: {
+          anchored_at?: string | null
+          attempts?: number
+          batch_day?: string | null
+          block_number?: number | null
+          chain_id: number
+          created_at?: string
+          cutoff_at: string
+          id?: string
+          last_error?: string | null
+          leaf_count: number
+          merkle_root: string
+          mode: string
+          next_attempt_at?: string
+          padding_leaf?: string | null
+          registry_address: string
+          status?: string
+          submitted_at?: string | null
+          tx_hash?: string | null
+          tx_nonce?: number | null
+        }
+        Update: {
+          anchored_at?: string | null
+          attempts?: number
+          batch_day?: string | null
+          block_number?: number | null
+          chain_id?: number
+          created_at?: string
+          cutoff_at?: string
+          id?: string
+          last_error?: string | null
+          leaf_count?: number
+          merkle_root?: string
+          mode?: string
+          next_attempt_at?: string
+          padding_leaf?: string | null
+          registry_address?: string
+          status?: string
+          submitted_at?: string | null
+          tx_hash?: string | null
+          tx_nonce?: number | null
+        }
+        Relationships: []
+      }
+      anchor_chain_state: {
+        Row: {
+          chain_id: number
+          last_scanned_block: number
+          registry_address: string
+          updated_at: string
+        }
+        Insert: {
+          chain_id: number
+          last_scanned_block: number
+          registry_address: string
+          updated_at?: string
+        }
+        Update: {
+          chain_id?: number
+          last_scanned_block?: number
+          registry_address?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       auctions: {
         Row: {
           created_at: string
@@ -1320,10 +1446,12 @@ export type Database = {
       }
       ownership_proofs: {
         Row: {
+          anchor_batch_id: string | null
           anchored_at: string | null
           anchored_tx_hash: string | null
           created_at: string
           id: string
+          merkle_proof: Json | null
           owner_id: string | null
           ownership_event_id: string
           ownership_event_type: string
@@ -1334,10 +1462,12 @@ export type Database = {
           tag_ref: string
         }
         Insert: {
+          anchor_batch_id?: string | null
           anchored_at?: string | null
           anchored_tx_hash?: string | null
           created_at?: string
           id?: string
+          merkle_proof?: Json | null
           owner_id?: string | null
           ownership_event_id: string
           ownership_event_type: string
@@ -1348,10 +1478,12 @@ export type Database = {
           tag_ref: string
         }
         Update: {
+          anchor_batch_id?: string | null
           anchored_at?: string | null
           anchored_tx_hash?: string | null
           created_at?: string
           id?: string
+          merkle_proof?: Json | null
           owner_id?: string | null
           ownership_event_id?: string
           ownership_event_type?: string
@@ -1362,6 +1494,13 @@ export type Database = {
           tag_ref?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ownership_proofs_anchor_batch_id_fkey"
+            columns: ["anchor_batch_id"]
+            isOneToOne: false
+            referencedRelation: "anchor_batches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ownership_proofs_owner_id_fkey"
             columns: ["owner_id"]
@@ -3354,6 +3493,15 @@ export type Database = {
         Args: { trailing_12mo_sales: number }
         Returns: Database["public"]["Enums"]["tier_level"]
       }
+      confirm_anchor_batch: {
+        Args: {
+          p_anchored_at: string
+          p_batch_id: string
+          p_block_number: number
+          p_tx_hash: string
+        }
+        Returns: boolean
+      }
       current_token_price: { Args: { p_kind: string }; Returns: number }
       determine_risk_level: {
         Args: { flags: Database["public"]["Enums"]["content_flag"][] }
@@ -3381,6 +3529,30 @@ export type Database = {
       payment_admin_actor_email: {
         Args: { p_admin: string; p_need_admin: boolean }
         Returns: string
+      }
+      record_anchor_alert: {
+        Args: { p_dedupe_key: string; p_detail: Json; p_kind: string }
+        Returns: {
+          alert_id: string
+          github_issue_number: number
+          is_new: boolean
+        }[]
+      }
+      record_anchor_batch: {
+        Args: {
+          p_batch_day: string
+          p_chain_id: number
+          p_cutoff_at: string
+          p_leaves: Json
+          p_merkle_root: string
+          p_mode: string
+          p_padding_leaf: string
+          p_registry_address: string
+        }
+        Returns: {
+          batch_id: string
+          created: boolean
+        }[]
       }
       record_payment_incident: {
         Args: {

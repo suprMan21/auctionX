@@ -14,6 +14,7 @@ import notificationRoutes from './routes/notifications';
 import adminRoutes from './routes/admin/index';
 import tokenFeeWebhookRoutes from './routes/tokenFeeWebhook';
 import tokenFeeSweepRoutes from './routes/tokenFeeSweep';
+import anchorTickRoutes from './routes/anchorTick';
 import { ownershipRoutes } from './routes/tagManagement';
 
 // ── Parked marketplace routers (mounted only when FEATURE_MARKETPLACE=true) ──
@@ -52,6 +53,8 @@ export const TOKEN_MOUNTS: readonly Mount[] = [
   { path: '/api/v1/webhooks/stripe-token-fees', router: tokenFeeWebhookRoutes, raw: true },
   // S-ADMIN1 Ph3a: the 10-minute reconciliation tick (pg_cron, shared secret).
   { path: '/api/v1/internal/token-fee-sweep', router: tokenFeeSweepRoutes },
+  // S-ANCHOR1 Ph1: the hourly anchoring tick (pg_cron, its own shared secret).
+  { path: '/api/v1/internal/anchor-tick', router: anchorTickRoutes },
   { path: '/api/v1/verification', router: yotiVerificationRoutes },
   { path: '/api/v1/nfc', router: nfcRoutes },
   { path: '/api/v1/ownership', router: ownershipRoutes },

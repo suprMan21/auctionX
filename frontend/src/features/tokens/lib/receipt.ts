@@ -14,6 +14,15 @@ export const receiptDocument = (tagId: string, receipt: Receipt) => ({
   tagId,
   ...receipt,
   note: 'Keep this private. It proves you held this ownership. It cannot be used to transfer or claim the token.',
+  howToVerify: receipt.anchor?.status === 'anchored'
+    ? [
+        'Recompute keccak256 of the preimage described in "algorithm" and check it equals ownershipId.',
+        receipt.anchor.mode === 'daily_batch'
+          ? 'Check ownershipId is in the Merkle root "anchoredValue" using "merkleProof" (see "leafEncoding"; OpenZeppelin StandardMerkleTree.verify works as-is).'
+          : 'In per_event mode the value written on-chain is the ownershipId itself.',
+        'Open "explorerUrl" (or look up "txHash" on any Base explorer) and check the registry event carries "anchoredValue".',
+      ]
+    : ['Not yet recorded in the public registry. Download the Receipt again after it is, to get the proof path.'],
 });
 
 export const receiptFileName = (receipt: Receipt): string =>

@@ -125,6 +125,15 @@ describe('S-ISO1 route allowlist — FEATURE_MARKETPLACE off (default)', () => {
     expect(tokenPaths).not.toContain('/api/v1/stripe-connect');
   });
 
+  it('mounts only the known internal (pg_cron, shared-secret) routes', async () => {
+    vi.resetModules();
+    const { TOKEN_MOUNTS, MARKETPLACE_MOUNTS } = await import('../app');
+    const internal = [...TOKEN_MOUNTS, ...MARKETPLACE_MOUNTS]
+      .map((m) => m.path)
+      .filter((p) => p.startsWith('/api/v1/internal/'));
+    expect(internal.sort()).toEqual(['/api/v1/internal/anchor-tick', '/api/v1/internal/token-fee-sweep']);
+  });
+
   it('mounts every raw-body webhook before the JSON parser', async () => {
     vi.resetModules();
     const { TOKEN_MOUNTS } = await import('../app');

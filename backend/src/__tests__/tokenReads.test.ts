@@ -10,6 +10,7 @@ import {
 import { createLocalTagKeyProvider } from '../services/nfc/keys/tagKeyProvider';
 import { createMockSupabase, resetMockIds, type Tables, type Row } from './helpers/supabaseMock';
 import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEvents';
+import { buildDailyTree, randomLeaf, verifyInRoot } from '../lib/anchoring/merkle';
 
 /**
  * S-NFC3-FE Ph1 — tap sessions and the token read endpoints.
@@ -619,6 +620,46 @@ describe('GET /nfc/:tagId/receipt', () => {
     expect(logSpy.named('ownership.receipt')[0]).toMatchObject({ result: 'ok', tag_id: TAG_ID });
     // The salt never reaches a log line.
     expect(logSpy.blob()).not.toContain(receipt.saltHex as string);
+  });
+
+  it('S-ANCHOR1: shows anchor pending until the batch is confirmed', async () => {
+    const token = await tapFor(1);
+    const { claimTag } = await writes();
+    await call(claimTag, makeReq(OWNER, { tapSession: token }));
+
+    const { getReceipt } = await reads();
+    const out = await call(getReceipt, makeReq(OWNER, {}, { tagId: TAG_ID }));
+    expect(data(out).anchor).toEqual({ status: 'pending' });
+  });
+
+  it('S-ANCHOR1: once anchored, the Receipt path verifies against the published root and never carries the padding leaf', async () => {
+    const token = await tapFor(1);
+    const { claimTag } = await writes();
+    const claimed = await call(claimTag, makeReq(OWNER, { tapSession: token }));
+    const ownershipId = data(claimed).ownershipId as `0x${string}`;
+
+    const padding = randomLeaf();
+    const tree = buildDailyTree([ownershipId, '0x' + '5'.repeat(64)], padding);
+    const txHash = '0x' + '7'.repeat(64);
+    tables.anchor_batches = [{
+      id: 'batch-1', mode: 'daily_batch', merkle_root: tree.root, padding_leaf: padding, chain_id: 84532,
+      registry_address: '0x' + 'ab'.repeat(20), block_number: 4242, status: 'confirmed',
+    }];
+    Object.assign(tables.ownership_proofs.find((p) => p.ownership_id === ownershipId)!, {
+      anchor_batch_id: 'batch-1', merkle_proof: tree.proofs.get(ownershipId),
+      anchored_tx_hash: txHash, anchored_at: '2026-10-28T00:10:00.000Z',
+    });
+
+    const { getReceipt } = await reads();
+    const out = await call(getReceipt, makeReq(OWNER, {}, { tagId: TAG_ID }));
+    const anchor = data(out).anchor as Record<string, unknown>;
+
+    expect(anchor).toMatchObject({
+      status: 'anchored', mode: 'daily_batch', chainId: 84532, txHash, blockNumber: 4242,
+      anchoredValue: tree.root, explorerUrl: `https://sepolia.basescan.org/tx/${txHash}`,
+    });
+    expect(verifyInRoot(anchor.anchoredValue as string, ownershipId, anchor.merkleProof as string[])).toBe(true);
+    expect(JSON.stringify(data(out))).not.toContain(padding.slice(2));
   });
 
   it('forbids anyone but the current owner, including a previous owner', async () => {
