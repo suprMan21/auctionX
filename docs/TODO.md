@@ -18,8 +18,8 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ### S-2FA (2026-10-27)
 Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live on staging, all three flags off.
 `docs/S_2FA_PH1_VERIFICATION.md`, `docs/S_2FA_PH2_VERIFICATION.md`. Supabase Secure password + email change: on.
-- [ ] Boss: `scripts/deploy-frontend.sh staging` (Ph2b screens), then daily admins (`admin@`, `admin2@`) add a passkey
-      + save backup codes. super_admin YubiKeys wait for Ph4 (attestation + AAGUID allowlist may need re-registering).
+- [x] Frontend deployed; daily admins enrolled (2026-10-27). super_admin YubiKeys wait for Ph4 (attestation +
+      AAGUID allowlist may need re-registering).
 - [ ] Regenerate `database.types.ts` (migrations `20261027000009/10` added columns + `auth_change_permits`).
 - [ ] **Ph3**: two-admin approval; email-code recovery (72 h hold, 7-day freeze, backup email); Postmark staging
       security server (tracking off, retention 7 d, token in 1Password); release + transfer-completed owner emails.
@@ -27,7 +27,7 @@ Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live o
       `MFA_SESSION_TTL_HOURS`, every `FEATURE_*=false`). Ph3: `WEBAUTHN_ORIGINS` defaults to `https://<WEBAUTHN_RP_ID>`;
       move secrets into one Secrets Manager JSON secret read at boot by `am-backend-staging-instance` (one env var).
 - [x] 2026-10-27: `admin@` has authenticator app + passkey "adminkey1" (synced; waits until 2026-10-28 18:46 EDT).
-      Fix was a leading space in the `WEBAUTHN_RP_ID` name. `admin2@` still to enrol.
+      Fix was a leading space in the `WEBAUTHN_RP_ID` name. `admin2@`: passkey (no wait) + 10 backup codes.
 - [ ] Ph3 tidy-up: why App Runner has `AWS_ACCESS_KEY_ID` (should be the instance role); confirm NFT vars are gone;
       delete the dead NFT mint code (`services/nfc/nftMinting.ts`, `pinataService.ts`, `/nfc/mint`).
 - [ ] Ph4: phones (iOS Safari, Android Chrome), then flags in order: `FEATURE_REQUIRE_2FA` → `FEATURE_REQUIRE_ADMIN_2FA` → `FEATURE_REQUIRE_STEP_UP`.
