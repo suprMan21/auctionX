@@ -102,3 +102,23 @@ recovery hold.
 2. Boss pushes `dev`; `scripts/verify-backend-deploy.sh`.
 3. `scripts/deploy-frontend.sh staging` (Boss). Grep `dist/assets` for `pk_test_` first (frontend gotcha).
 4. Signed-in smoke: Settings → Security loads (a 503 means the MFA secrets are missing on App Runner).
+
+## Ph2b — Boss follow-ups (2026-10-27, `dev` `f9050d8`)
+
+Boss: "go with your recommendations on all three".
+
+| Item | What shipped | Evidence |
+|---|---|---|
+| **M1 cool-off** | A passkey or authenticator app added with a step-up confirmed by a **code** can sign in at once but cannot confirm **any** step-up for **24 h** (`new_method_waiting`, refused before a code is spent). Grants record their method (`step_up_grants.method`; a pre-migration NULL counts as a code). Owner emailed at once with the wait end; staff audit `{ method, coolOff }`. Screens hide waiting methods from Confirm it's you and show "approves … from <time>" | migration `20261027000009`, live `s_2fa_cooloff_live.sql` **10/10**; `mfaCoolOff.test.ts` (16) |
+| **Password / email change lock (Option A)** | `auth.users` BEFORE UPDATE trigger `guard_auth_change`: for an account with a passkey or confirmed authenticator app, a change to `encrypted_password` or a non-empty `email_change` needs one live 2-minute permit from `auth_change_permits`, else `insufficient_privilege` (GoTrue answers "Database error updating user"). `POST /auth/mfa/account-change {kind}` issues it after a verified session + step-up `account_change` (passkey or authenticator code; staff passkey only; never a backup code). Change password form on `/reset-password` and Settings → Security, incl. Supabase reauthentication (emailed code, then a fresh confirm). Rollback: `DROP TRIGGER IF EXISTS guard_auth_change ON auth.users;` | rolled-back trial 6/6, migration `20261027000010`, live `s_2fa_account_change_live.sql` **15/15**; anon gets 42501 on the table; `mfaAccountChange.test.ts` (15) |
+| **Option B** | Boss turned on Supabase "Secure password change" + "Secure email change" (2026-10-27) | dashboard |
+| **Release email** | Not built: Ph3 as recommended | — |
+
+Notes: staging had **no** account with a second factor when the trigger went on (checked first). Someone with only
+backup codes left can't change their password until a new method's 24 h wait ends (or Ph3 email recovery). The
+email trigger relies on secure email change staying on (otherwise `email_change` may never be set). `mfa-cleanup`
+cron now also deletes permits a day past expiry. Audit labels added for the five staff sign-in events.
+
+Tests: backend **992 passed / 23 skipped**, frontend **349 passed**, tsc 0 both. Ph1/Ph2 live SQL re-run 19/19, 9/9.
+Backend deploy of Ph2 (`a8bc29d`) SUCCEEDED 17:37 after a manual Deploy (push did not trigger App Runner).
+Regenerate `database.types.ts` (new columns + table) next session.
