@@ -28,7 +28,7 @@ describe('HomePage', () => {
   it('shows the locked headlines', () => {
     renderHome();
     expect(screen.getByRole('heading', { level: 1, name: /sealed with a story\./i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /look for it\. tap it\. keep it\./i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /every seal tells a story\./i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /why the seal matters\./i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /work with us\./i })).toBeInTheDocument();
   });
