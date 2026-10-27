@@ -520,7 +520,7 @@ export const claimTag = async (req: TagRequest, res: Response) => {
   }
   const body = parsed.data;
 
-  if (!passesTwoFactor(req, 'claim', ctx)) {
+  if (!(await passesTwoFactor(req, 'claim', ctx))) {
     emitSecurityEvent({
       event: 'nfc.claim', tag_id: null, prior_status: null, result: '2fa_required',
       request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user',
@@ -876,7 +876,7 @@ export const completeTransfer = async (req: TagRequest, res: Response) => {
     throw errorFor('forbidden');
   }
 
-  if (!passesTwoFactor(req, 'transfer_complete', ctx)) {
+  if (!(await passesTwoFactor(req, 'transfer_complete', ctx))) {
     emitTransfer('2fa_required');
     throw errorFor('2fa_required');
   }

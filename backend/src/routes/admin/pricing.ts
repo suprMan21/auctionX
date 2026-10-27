@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { handle } from '../tagManagement';
 import { requirePermission } from '../../middleware/adminAuth';
 import { PERMISSIONS } from '../../lib/admin/permissions';
+import { requireStepUp } from '../../middleware/mfaGates';
 import { cancelPrice, listPrices, setPrice } from '../../controllers/adminPricingController';
 
 /**
@@ -13,7 +14,8 @@ const router = Router();
 router.use(requirePermission(PERMISSIONS.managePricing));
 
 router.get('/', handle(listPrices));
-router.post('/', handle(setPrice));
-router.post('/:id/cancel', handle(cancelPrice));
+// S-2FA: a price change needs a fresh passkey check (FEATURE_REQUIRE_STEP_UP).
+router.post('/', requireStepUp('price_change', () => 'token_prices'), handle(setPrice));
+router.post('/:id/cancel', requireStepUp('price_change', (req) => `price:${req.params.id}`), handle(cancelPrice));
 
 export default router;

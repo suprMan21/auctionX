@@ -9,6 +9,7 @@ import {
 import { createLocalTagKeyProvider } from '../services/nfc/keys/tagKeyProvider';
 import { createMockSupabase, resetMockIds, type MockHooks, type Tables, type Row } from './helpers/supabaseMock';
 import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEvents';
+import { bearerWith, createMfaFakeState, createMfaStoreFake } from './helpers/mfaStoreFake';
 
 /**
  * S-NFC3 — token lifecycle behaviour.
@@ -363,11 +364,27 @@ describe('origin claim', () => {
     expect(eventsNamed('nfc.claim').at(-1)).toMatchObject({ result: 'replay_detected' });
   });
 
-  it('blocks the claim when 2FA is required and the token is only aal1', async () => {
+  const SESSION = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
+  const withMfa = async (verified: boolean) => {
+    const state = createMfaFakeState();
+    if (verified) {
+      state.sessions.set(SESSION, {
+        session_id: SESSION, user_id: OWNER, method: 'passkey',
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      });
+    }
+    const { __setMfaStore } = await import('../lib/mfa/store');
+    __setMfaStore(createMfaStoreFake(state));
+  };
+
+  it('blocks the claim when 2FA is required and this session has not passed it', async () => {
     process.env.FEATURE_REQUIRE_2FA = 'true';
+    await withMfa(false);
 
     const { claimTag } = await controllers();
-    const out = await call(claimTag, makeReq(OWNER, { tagUid: TAG_UID, sunMessage: sunFor(1) }));
+    const req = makeReq(OWNER, { tagUid: TAG_UID, sunMessage: sunFor(1) });
+    req.headers.authorization = bearerWith({ sub: OWNER, session_id: SESSION });
+    const out = await call(claimTag, req);
 
     expect(out.threw?.message).toMatch(/two-factor/i);
     expect(tag().lifecycle_status).toBe('ENROLLED');
@@ -375,13 +392,26 @@ describe('origin claim', () => {
     expect(eventsNamed('nfc.claim')[0]).toMatchObject({ result: '2fa_required' });
   });
 
-  it('allows the claim with an aal2 token when 2FA is required', async () => {
+  it('a Supabase aal2 token alone does not pass (S-2FA uses its own marker)', async () => {
     process.env.FEATURE_REQUIRE_2FA = 'true';
+    await withMfa(false);
 
     const { claimTag } = await controllers();
     const req = makeReq(OWNER, { tagUid: TAG_UID, sunMessage: sunFor(1) });
-    // { "aal": "aal2" }
-    req.headers.authorization = 'Bearer header.eyJhYWwiOiJhYWwyIn0.sig';
+    req.headers.authorization = bearerWith({ sub: OWNER, session_id: SESSION, aal: 'aal2' });
+    const out = await call(claimTag, req);
+
+    expect(out.threw?.message).toMatch(/two-factor/i);
+    expect(tag().lifecycle_status).toBe('ENROLLED');
+  });
+
+  it('allows the claim when this session passed its second factor', async () => {
+    process.env.FEATURE_REQUIRE_2FA = 'true';
+    await withMfa(true);
+
+    const { claimTag } = await controllers();
+    const req = makeReq(OWNER, { tagUid: TAG_UID, sunMessage: sunFor(1) });
+    req.headers.authorization = bearerWith({ sub: OWNER, session_id: SESSION });
 
     const out = await call(claimTag, req);
 

@@ -15,6 +15,7 @@ import adminRoutes from './routes/admin/index';
 import tokenFeeWebhookRoutes from './routes/tokenFeeWebhook';
 import tokenFeeSweepRoutes from './routes/tokenFeeSweep';
 import anchorTickRoutes from './routes/anchorTick';
+import mfaRoutes from './routes/mfa';
 import { ownershipRoutes } from './routes/tagManagement';
 
 // ── Parked marketplace routers (mounted only when FEATURE_MARKETPLACE=true) ──
@@ -61,6 +62,8 @@ export const TOKEN_MOUNTS: readonly Mount[] = [
   { path: '/api/v1/verify', router: publicVerificationRoutes },
   { path: '/api/v1/notifications', router: notificationRoutes },
   { path: '/api/v1/admin', router: adminRoutes },
+  // S-2FA: passkeys, authenticator app, backup codes, step-up.
+  { path: '/api/v1/auth/mfa', router: mfaRoutes },
 ] as const;
 
 /**

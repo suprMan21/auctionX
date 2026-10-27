@@ -27,19 +27,25 @@ export const isMarketplaceEnabled = (): boolean => truthy(process.env.FEATURE_MA
 /**
  * FEATURE_REQUIRE_2FA — S-NFC3. Default OFF.
  *
- * The locked lifecycle decision makes verified email + 2FA mandatory before any
- * origin claim or transfer completion. Enforcement (an AAL2 check) ships in
- * S-NFC3, but there is currently NO MFA enrollment path anywhere in the product,
- * so turning this on would make /claim and /transfer/:id/complete unreachable.
+ * The locked lifecycle decision makes 2FA mandatory for every account. When on,
+ * claim, transfer completion and the other token actions refuse a session that
+ * has not passed its second factor (S-2FA marker, not Supabase `aal2`).
  *
- * HARD PREREQUISITE before this may default to true in production:
- *   "S-2FA — MFA enrollment + AAL2 step-up".
+ * Turn on only with the S-2FA Ph2 enrolment screens live (Ph4), or every token
+ * action becomes unreachable.
  */
 export const isTwoFactorRequired = (): boolean => truthy(process.env.FEATURE_REQUIRE_2FA);
 
 /**
- * S-ADMIN2 AC 5 — admin routes require AAL2 (a verified second factor).
- * DEFAULT OFF: there is no MFA enrolment yet (S-2FA). Switching it on before
- * enrolment exists locks every admin out of the console.
+ * S-ADMIN2 AC 5 — admin routes require a verified second factor for this
+ * session (S-2FA's own marker, not Supabase `aal2`). DEFAULT OFF until every
+ * admin has enrolled a passkey (S-2FA Ph4).
  */
 export const isAdminTwoFactorRequired = (): boolean => truthy(process.env.FEATURE_REQUIRE_ADMIN_2FA);
+
+/**
+ * S-2FA — release, transfer completion and price changes need a fresh,
+ * single-use passkey check (`X-Step-Up`). DEFAULT OFF until the Ph2 screens
+ * send it. Removing a sign-in method always needs one, flag or not.
+ */
+export const isStepUpRequired = (): boolean => truthy(process.env.FEATURE_REQUIRE_STEP_UP);

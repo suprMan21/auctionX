@@ -8,6 +8,7 @@
 import { Router, RequestHandler, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { requireAuth, optionalAuth } from '../middleware/auth';
+import { requireSecondFactor, requireStepUp } from '../middleware/mfaGates';
 import { AppError, toAppError } from '../lib/errors';
 import { log } from '../lib/logger';
 import {
@@ -60,6 +61,17 @@ const CLIENT_REASONS = new Set([
   'token_suspended',
   'transfer_pending',
   '2fa_required',
+  // S-2FA (lib/mfa/mfaService.ts MfaReason)
+  'second_factor_required',
+  'step_up_required',
+  'mfa_locked',
+  'invalid_code',
+  'passkey_invalid',
+  'synced_passkey_not_allowed',
+  'last_factor',
+  'already_set_up',
+  'no_passkey',
+  'not_available',
 ]);
 
 const sunReason = (details: unknown): string | null => {
@@ -147,7 +159,16 @@ tagManagementRoutes.post('/enroll', requireAuth, mutationLimit, handle(enrollTag
 tagManagementRoutes.get('/enroll/precheck/:tagUid', requireAuth, mutationLimit, handle(enrollPrecheck));
 tagManagementRoutes.post('/enroll/reserve-name', requireAuth, mutationLimit, handle(reserveChipName));
 tagManagementRoutes.post('/claim', requireAuth, mutationLimit, handle(claimTag));
-tagManagementRoutes.post('/release', requireAuth, mutationLimit, handle(releaseTag));
+// S-2FA: release ends a token for good, so it needs the second factor AND a
+// fresh passkey check for this exact token (typed RELEASE stays as well).
+tagManagementRoutes.post(
+  '/release',
+  requireAuth,
+  mutationLimit,
+  requireSecondFactor(),
+  requireStepUp('release', (req) => (req.body as { tagId?: unknown } | undefined)?.tagId),
+  handle(releaseTag),
+);
 // S-ADMIN1: the non-atomic owner/staff replace is gone. The token reset is
 // admin-only and transactional at POST /api/v1/admin/tags/:tagId/reset. 410
 // (not 404) so an old client or script learns the endpoint moved on purpose.
@@ -162,11 +183,11 @@ tagManagementRoutes.post('/replace', requireAuth, mutationLimit, (_req: Request,
 // S-ADMIN1 Ph2 re-issue (owner side). The `/reissue-requests/...` prefix
 // cannot collide with `/:tagId/...` below: those need a second segment of
 // `disclosure` or `receipt`.
-tagManagementRoutes.post('/reissue-request/photo-url', requireAuth, mutationLimit, handle(reissuePhotoUrl));
-tagManagementRoutes.post('/reissue-request', requireAuth, mutationLimit, handle(requestReissue));
+tagManagementRoutes.post('/reissue-request/photo-url', requireAuth, mutationLimit, requireSecondFactor(), handle(reissuePhotoUrl));
+tagManagementRoutes.post('/reissue-request', requireAuth, mutationLimit, requireSecondFactor(), handle(requestReissue));
 tagManagementRoutes.get('/reissue-requests/mine', requireAuth, readLimit, handle(listMyReissueRequests));
-tagManagementRoutes.post('/reissue-requests/:id/pay', requireAuth, mutationLimit, handle(payReissue));
-tagManagementRoutes.post('/reissue-requests/:id/cancel', requireAuth, mutationLimit, handle(cancelReissue));
+tagManagementRoutes.post('/reissue-requests/:id/pay', requireAuth, mutationLimit, requireSecondFactor(), handle(payReissue));
+tagManagementRoutes.post('/reissue-requests/:id/cancel', requireAuth, mutationLimit, requireSecondFactor(), handle(cancelReissue));
 
 // S-NFC3-FE reads. `/tap` is public (optional auth personalises it); the rest
 // are the caller's own data.
@@ -179,13 +200,21 @@ tagManagementRoutes.get('/transfers/incoming', requireAuth, readLimit, handle(li
 
 // `/transfer/initiate` MUST be registered before `/transfer/:id/...`, otherwise
 // Express matches "initiate" as an `:id`.
-tagManagementRoutes.post('/transfer/initiate', requireAuth, mutationLimit, handle(initiateTransfer));
-tagManagementRoutes.post('/transfer/:id/complete', requireAuth, mutationLimit, handle(completeTransfer));
-tagManagementRoutes.post('/transfer/:id/cancel', requireAuth, mutationLimit, handle(cancelTransfer));
+tagManagementRoutes.post('/transfer/initiate', requireAuth, mutationLimit, requireSecondFactor(), handle(initiateTransfer));
+// The second-factor check for completion runs inside the controller (it emits
+// the transfer event); the passkey step-up is bound to this transfer id.
+tagManagementRoutes.post(
+  '/transfer/:id/complete',
+  requireAuth,
+  mutationLimit,
+  requireStepUp('transfer_complete', (req) => req.params.id),
+  handle(completeTransfer),
+);
+tagManagementRoutes.post('/transfer/:id/cancel', requireAuth, mutationLimit, requireSecondFactor(), handle(cancelTransfer));
 tagManagementRoutes.get('/transfer/:id', requireAuth, readLimit, handle(getTransfer));
 
 // ── Parameterized route LAST ────────────────────────────────────────────────
-tagManagementRoutes.patch('/:tagId/disclosure', requireAuth, mutationLimit, handle(updateDisclosure));
+tagManagementRoutes.patch('/:tagId/disclosure', requireAuth, mutationLimit, requireSecondFactor(), handle(updateDisclosure));
 // Two segments, so it cannot collide with routes/nfc.ts `GET /:tagId`.
 tagManagementRoutes.get('/:tagId/receipt', requireAuth, readLimit, handle(getReceipt));
 

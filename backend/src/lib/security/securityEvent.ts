@@ -60,6 +60,11 @@ export const securityResultSchema = z.enum([
   // another chip, or superseded by a newer tap. One code for all five on
   // purpose — telling a caller WHICH would help someone probing tokens.
   'tap_session_invalid',
+  // S-2FA: a fresh passkey check was needed and missing or spent; too many
+  // wrong codes; a wrong code or failed passkey check.
+  'step_up_required',
+  'mfa_locked',
+  'invalid_code',
 ]);
 
 export type SecurityResult = z.infer<typeof securityResultSchema>;
@@ -234,8 +239,26 @@ const authzDeniedSchema = envelopeSchema.extend({
 
 const twoFactorGateSchema = envelopeSchema.extend({
   event: z.literal('auth.2fa_gate'),
-  gate: z.enum(['claim', 'transfer_complete']),
+  // S-2FA: `token_action` = the other token routes (release, transfer start
+  // and cancel, disclosure, re-issue); `admin` = verifyAdminAuth.
+  gate: z.enum(['claim', 'transfer_complete', 'token_action', 'admin']),
   outcome: z.enum(['passed', 'missing', 'failed']),
+}).strict();
+
+/**
+ * S-2FA: a second-factor change or check. Never carries a code, a challenge, a
+ * credential id, a public key, a step-up token or a passkey nickname (free text).
+ * `break_glass` marks the super_admin account (S-SEC0 alerts on every one).
+ */
+const mfaSchema = envelopeSchema.extend({
+  event: z.literal('auth.mfa'),
+  action: z.enum(['enrol', 'remove', 'sign_in', 'step_up_issue', 'step_up_use', 'recovery_regen', 'lockout']),
+  method: z.enum(['passkey', 'totp', 'recovery_code']).nullable(),
+  step_up_action: z.enum([
+    'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
+    'admin_action', 'admin_approve',
+  ]).nullable(),
+  break_glass: z.boolean(),
 }).strict();
 
 const ownershipLookupSchema = envelopeSchema.extend({
@@ -290,6 +313,7 @@ export const securityEventSchema = z.discriminatedUnion('event', [
   disclosureChangeSchema,
   authzDeniedSchema,
   twoFactorGateSchema,
+  mfaSchema,
   ownershipLookupSchema,
   ownershipAuthAttemptSchema,
   kmsOpSchema,
