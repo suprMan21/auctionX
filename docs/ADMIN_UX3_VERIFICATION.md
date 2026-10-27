@@ -36,7 +36,10 @@ complete at the end; click cuts never remove a safety step.
     `#8b5cf6` ran through the palette validator against the dark card surface (all checks pass; `#a78bfa` failed
     lightness); columns ≤ 24px with 4px rounded tops and a 2px gap; 1px grid; text in gray, never the series
     colour; hover tooltip over the whole column band; "Show as table" has every value; x labels spaced by pixels
-    (≥ 64px) so they never overlap at 375px. Screenshot-checked at 1280px and 375px (no horizontal scroll, no
+    (≥ 64px) so they never overlap at 375px. **Side scroll** (Boss 2026-10-27): columns keep a 16px minimum band;
+    when the card is narrower the plot scrolls sideways inside its strip instead of squeezing (y-axis pinned,
+    opens on the newest dates, "Swipe or scroll for earlier dates" hint, strip keyboard-focusable). Measured: 1280
+    and 900px fill the card with no scroll; 375px scrolls (269px visible of 498px), page never scrolls sideways. Screenshot-checked at 1280px and 375px (no horizontal scroll, no
     console errors).
   - Backend: `GET /api/v1/admin/stats/growth?series&from&to&bucket&tz` (`controllers/adminStatsController.ts`,
     `lib/admin/growthStats.ts`, `routes/admin/stats.ts`) → `admin_growth_series()` (migration
@@ -74,7 +77,7 @@ complete at the end; click cuts never remove a safety step.
 ## Tests
 
 - Backend: tsc 0; vitest **818 passed / 21 skipped** (+27 in `adminStats.test.ts`).
-- Frontend: tsc 0; vitest **289 passed** (+18: `adminUx3.test.tsx` 16, re-issue Refresh photos 2; nav tests updated
+- Frontend: tsc 0; vitest **291 passed** (+20: chart side scroll 2, `adminUx3.test.tsx` 16, re-issue Refresh photos 2; nav tests updated
   for the groups and Settings); eslint 0 on `src/features/admin` + `App.tsx`.
 - Live DB (`supabase/tests/admin_ux3_growth_live.sql`, rolled back): dry run before `db push` **16/16**, again after
   **16/16**. Covers lockdown, refusals (non-admin, reversed, over cap, bad zone, NULLs), 30-day and 12-month
