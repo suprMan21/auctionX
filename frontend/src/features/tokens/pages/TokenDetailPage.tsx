@@ -96,7 +96,7 @@ export const TokenDetailPage = () => {
               onChanged={() => refresh()}
             />
 
-            {load.token.ownershipId && <OwnershipPanel tagId={load.token.tagId} ownershipId={load.token.ownershipId} />}
+            {load.token.ownershipId && <OwnershipPanel tagId={load.token.tagId} ownershipId={load.token.ownershipId} anchor={load.token.ownershipAnchor} />}
 
             <DisclosureSettings
               tagId={load.token.tagId}

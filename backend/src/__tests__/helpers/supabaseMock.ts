@@ -20,6 +20,8 @@
  * lookup cannot pass silently), and nfc_tags inserts enforce the v2 identity
  * indexes (UID unique among v1 rows only; serial and fingerprint unique).
  *
+ * S-ANCHOR1: `.upsert(row, { onConflict })`.
+ *
  * S-NFC3.5: `.lt()` (the conditional counter burn) and an optional
  * `beforeUpdate` hook, so a test can play a concurrent request that wins the
  * race between our read and our conditional write.
@@ -154,6 +156,25 @@ class QueryBuilder {
   update(patch: Row): this {
     this.mode = 'update';
     this.patch = patch;
+    return this;
+  }
+
+  /**
+   * S-ANCHOR1: insert, or update the row whose `onConflict` columns match.
+   * The conflict columns must be named, exactly as a composite-key upsert needs.
+   */
+  upsert(row: Row, opts: { onConflict?: string } = {}): this {
+    if (!opts.onConflict) throw new Error('supabaseMock: upsert needs an explicit onConflict');
+    const keys = opts.onConflict.split(',').map((k) => k.trim());
+    const existing = this.tables[this.table].find((r) => keys.every((k) => r[k] === row[k]));
+    if (existing) {
+      this.mode = 'update';
+      this.patch = row;
+      for (const k of keys) this.filters.push({ column: k, op: 'eq', value: row[k] });
+    } else {
+      this.mode = 'insert';
+      this.inserted = { ...row };
+    }
     return this;
   }
 

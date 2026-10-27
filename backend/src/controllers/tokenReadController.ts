@@ -25,6 +25,8 @@ import { AppError } from '../lib/errors';
 import { emitSecurityEvent } from '../lib/security/securityEvent';
 import { securityContext } from '../lib/security/requestContext';
 import { openReceipt } from '../lib/ownership/ownershipProof';
+import { BASE_SEPOLIA_CHAIN_ID, explorerTxUrl } from '../lib/anchoring/config';
+import { LEAF_DESCRIPTION } from '../lib/anchoring/merkle';
 import { TRANSFER_FEE_CENTS } from '../lib/tokenFees';
 import { parseSunMessage } from '../services/nfc/ntag424';
 import { sunFailureCode } from '../services/nfc/sunVerification';
@@ -212,6 +214,15 @@ type OwnedTagRow = {
 /** The owner-facing chip reference when a token has no title: the end of its serial (as printed in admin). */
 const SERIAL_SUFFIX_LENGTH = 6;
 
+/** Null while anchoring is pending (a daily root can lag up to a day). */
+const ownershipAnchorFor = (
+  proof: { anchored_at: string | null; anchored_tx_hash: string | null } | undefined,
+  chainId: number,
+): { anchoredAt: string; explorerUrl: string | null } | null =>
+  proof?.anchored_at && proof.anchored_tx_hash
+    ? { anchoredAt: proof.anchored_at, explorerUrl: explorerTxUrl(chainId, proof.anchored_tx_hash) }
+    : null;
+
 /** Every token the caller currently owns, newest claim first. */
 export const listMyTokens = async (req: ReadRequest, res: Response) => {
   const user = requireUser(req);
@@ -231,7 +242,7 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
     loadProvenance(supabase, tagIds),
     supabase
       .from('ownership_proofs')
-      .select('tag_id, ownership_id')
+      .select('tag_id, ownership_id, anchored_at, anchored_tx_hash')
       .eq('owner_id', user.id)
       .eq('status', 'current')
       .in('tag_id', tagIds),
@@ -247,9 +258,10 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
       .in('id', tags.map((t) => t.linked_item_id).filter((id): id is string => id !== null)),
   ]);
 
-  const proofByTag = new Map(
-    ((proofs.data ?? []) as { tag_id: string; ownership_id: string }[]).map((p) => [p.tag_id, p.ownership_id]),
-  );
+  type ProofRow = { tag_id: string; ownership_id: string; anchored_at: string | null; anchored_tx_hash: string | null };
+  const proofByTag = new Map(((proofs.data ?? []) as ProofRow[]).map((p) => [p.tag_id, p]));
+  // S-ANCHOR1: the public half only (date + explorer link). The Receipt holds the rest.
+  const anchorChainId = Number.parseInt(process.env.ANCHOR_CHAIN_ID ?? '', 10) || BASE_SEPOLIA_CHAIN_ID;
   const pendingByTag = new Map(((outgoing.data ?? []) as TransferRow[]).map((t) => [t.tag_id, t]));
   const titleByItem = new Map(
     ((items.data ?? []) as { id: string; title: string | null }[]).map((i) => [i.id, i.title]),
@@ -267,7 +279,8 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
         chipName: t.chip_name,
         serialSuffix: t.chip_serial ? t.chip_serial.slice(-SERIAL_SUFFIX_LENGTH).toUpperCase() : null,
         disclosure: t.disclosure ?? {},
-        ownershipId: proofByTag.get(t.id) ?? null,
+        ownershipId: proofByTag.get(t.id)?.ownership_id ?? null,
+        ownershipAnchor: ownershipAnchorFor(proofByTag.get(t.id), anchorChainId),
         provenance: provenance.get(t.id) ?? null,
         pendingTransfer: pending
           ? {
@@ -425,7 +438,7 @@ export const getReceipt = async (req: ReadRequest, res: Response) => {
 
   const { data: proof } = await supabase
     .from('ownership_proofs')
-    .select('ownership_id, ownership_event_id, ownership_event_type, salt_enc, created_at')
+    .select('ownership_id, ownership_event_id, ownership_event_type, salt_enc, created_at, anchor_batch_id, merkle_proof, anchored_tx_hash, anchored_at')
     .eq('tag_id', tagId)
     .eq('owner_id', user.id)
     .eq('status', 'current')
@@ -435,6 +448,7 @@ export const getReceipt = async (req: ReadRequest, res: Response) => {
     throw new AppError('not_found', 'Not found');
   }
 
+  const anchor = await receiptAnchor(supabase, proof);
   const receipt = openReceipt({ tagId, saltEnc: proof.salt_enc as string }, ctx);
   emitReceipt('ok');
 
@@ -451,5 +465,64 @@ export const getReceipt = async (req: ReadRequest, res: Response) => {
       hash: 'keccak256',
       preimage: 'utf8(tagRef) || 16 raw bytes of ownershipEventId (UUID) || 32-byte salt',
     },
+    anchor,
   });
+};
+
+// ── Receipt anchor (S-ANCHOR1) ──────────────────────────────────────────────
+
+export type ReceiptAnchor =
+  | { status: 'pending' }
+  | {
+      status: 'anchored';
+      mode: 'daily_batch' | 'per_event';
+      chainId: number;
+      registryAddress: string;
+      txHash: string;
+      blockNumber: number;
+      anchoredAt: string;
+      /** The value written on-chain: the day's root, or the Ownership ID itself. */
+      anchoredValue: string;
+      /** Path from the Ownership ID to the root; empty in per_event mode. */
+      merkleProof: string[];
+      leafEncoding: string | null;
+      explorerUrl: string | null;
+    };
+
+/**
+ * Where this Ownership ID is on-chain. 'pending' until the batch holding it is
+ * confirmed (daily_batch can lag up to a day). The padding leaf is never
+ * returned. Only the batch columns needed for verification are read.
+ */
+const receiptAnchor = async (
+  supabase: ReturnType<typeof getServiceClient>,
+  proof: { anchor_batch_id: string | null; merkle_proof: unknown; anchored_tx_hash: string | null; anchored_at: string | null },
+): Promise<ReceiptAnchor> => {
+  if (!proof.anchor_batch_id || !proof.anchored_tx_hash || !proof.anchored_at) return { status: 'pending' };
+
+  const { data: batch, error } = await supabase
+    .from('anchor_batches')
+    .select('mode, merkle_root, chain_id, registry_address, block_number, status')
+    .eq('id', proof.anchor_batch_id)
+    .maybeSingle();
+  if (error || !batch || batch.status !== 'confirmed' || batch.block_number === null) return { status: 'pending' };
+
+  const mode = batch.mode === 'per_event' ? 'per_event' : 'daily_batch';
+  const merkleProof = Array.isArray(proof.merkle_proof)
+    ? proof.merkle_proof.filter((p): p is string => typeof p === 'string')
+    : [];
+
+  return {
+    status: 'anchored',
+    mode,
+    chainId: batch.chain_id,
+    registryAddress: batch.registry_address,
+    txHash: proof.anchored_tx_hash,
+    blockNumber: batch.block_number,
+    anchoredAt: proof.anchored_at,
+    anchoredValue: batch.merkle_root,
+    merkleProof,
+    leafEncoding: mode === 'daily_batch' ? LEAF_DESCRIPTION : null,
+    explorerUrl: explorerTxUrl(batch.chain_id, proof.anchored_tx_hash),
+  };
 };

@@ -7,12 +7,17 @@ import { downloadJson, receiptDocument, receiptFileName } from '../lib/receipt';
 interface OwnershipPanelProps {
   readonly tagId: string;
   readonly ownershipId: string;
+  /** S-ANCHOR1: null while pending; undefined when the backend predates anchoring. */
+  readonly anchor?: { readonly anchoredAt: string; readonly explorerUrl: string | null } | null;
 }
+
+const formatDate = (iso: string): string =>
+  new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 
 type ReceiptState = { kind: 'idle' } | { kind: 'loading' } | { kind: 'done' } | { kind: 'error'; message: string };
 
 /** The public Ownership ID, plus the private Receipt that backs it. */
-export const OwnershipPanel = ({ tagId, ownershipId }: OwnershipPanelProps) => {
+export const OwnershipPanel = ({ tagId, ownershipId, anchor }: OwnershipPanelProps) => {
   const [copied, setCopied] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptState>({ kind: 'idle' });
 
@@ -48,6 +53,28 @@ export const OwnershipPanel = ({ tagId, ownershipId }: OwnershipPanelProps) => {
         A public fingerprint of your ownership. It reveals nothing about you and never authorizes anything.
       </p>
       <p className="font-mono text-xs text-gray-300 break-all mb-4">{ownershipId}</p>
+      {anchor !== undefined && (
+        <p className="text-sm text-gray-300 mb-4" data-testid="ownership-anchor">
+          {anchor ? (
+            <>
+              Recorded in the public registry on {formatDate(anchor.anchoredAt)}.{' '}
+              {anchor.explorerUrl && (
+                <a
+                  href={anchor.explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary-300 underline hover:text-primary-200"
+                >
+                  Verify independently
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              )}
+            </>
+          ) : (
+            'Being added to the public registry. This happens once a day, so it can take up to 24 hours.'
+          )}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-4 mb-6">
         <button
           type="button"

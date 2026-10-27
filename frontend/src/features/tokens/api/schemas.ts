@@ -76,6 +76,8 @@ export const myTokenSchema = z.object({
   serialSuffix: z.string().nullable().optional(),
   disclosure: z.record(z.boolean()),
   ownershipId: z.string().nullable(),
+  // S-ANCHOR1: null while anchoring is pending. Optional so an older backend still parses.
+  ownershipAnchor: z.object({ anchoredAt: z.string(), explorerUrl: z.string().nullable() }).nullable().optional(),
   provenance: provenanceSchema.nullable(),
   pendingTransfer: z
     .object({
@@ -216,6 +218,25 @@ export const receiptSchema = z.object({
   saltHex: z.string(),
   issuedAt: z.string().nullable(),
   algorithm: z.object({ hash: z.string(), preimage: z.string() }),
+  // S-ANCHOR1: where the Ownership ID was published. Optional so an older backend still parses.
+  anchor: z
+    .discriminatedUnion('status', [
+      z.object({ status: z.literal('pending') }),
+      z.object({
+        status: z.literal('anchored'),
+        mode: z.enum(['daily_batch', 'per_event']),
+        chainId: z.number(),
+        registryAddress: z.string(),
+        txHash: z.string(),
+        blockNumber: z.number(),
+        anchoredAt: z.string(),
+        anchoredValue: z.string(),
+        merkleProof: z.array(z.string()),
+        leafEncoding: z.string().nullable(),
+        explorerUrl: z.string().nullable(),
+      }),
+    ])
+    .optional(),
 });
 export type Receipt = z.infer<typeof receiptSchema>;
 

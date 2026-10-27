@@ -267,8 +267,9 @@ const ownershipReceiptSchema = envelopeSchema.extend({
 
 const kmsOpSchema = envelopeSchema.extend({
   event: z.literal('kms.op'),
-  operation: z.enum(['Encrypt', 'Decrypt', 'GenerateDataKey', 'GenerateMac']),
-  purpose: z.enum(['ownership_salt', 'tag_key']),
+  operation: z.enum(['Encrypt', 'Decrypt', 'GenerateDataKey', 'GenerateMac', 'Sign', 'GetPublicKey']),
+  // anchor_writer: the S-ANCHOR1 registry writer key (secp256k1, sign-only).
+  purpose: z.enum(['ownership_salt', 'tag_key', 'anchor_writer']),
   tag_id: uuid.nullable(),
 }).strict();
 

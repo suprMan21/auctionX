@@ -70,8 +70,14 @@ const call = async (path: string, body: Record<string, unknown>): Promise<Record
   }
 };
 
-export const createIssue = async (title: string, body: string): Promise<IssueRef | null> => {
-  const data = await call('/issues', { title, body, labels: [STUCK_PAYMENT_LABEL] });
+export const ANCHORING_LABEL = 'anchoring';
+
+export const createIssue = async (
+  title: string,
+  body: string,
+  labels: readonly string[] = [STUCK_PAYMENT_LABEL],
+): Promise<IssueRef | null> => {
+  const data = await call('/issues', { title, body, labels: [...labels] });
   if (!data || typeof data.number !== 'number' || typeof data.html_url !== 'string') return null;
   return { number: data.number, url: data.html_url };
 };
