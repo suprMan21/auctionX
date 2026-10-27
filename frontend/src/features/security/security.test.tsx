@@ -38,6 +38,7 @@ import { TransferCompleteFlow } from '@/features/tokens/components/TransferCompl
 const baseStatus = (over: Partial<MfaStatus> = {}): MfaStatus => ({
   passkeys: [],
   authenticatorApp: false,
+  authenticatorAppUsableFrom: null,
   backupCodesLeft: 10,
   hasFactor: true,
   sessionVerified: true,
@@ -49,7 +50,8 @@ const baseStatus = (over: Partial<MfaStatus> = {}): MfaStatus => ({
   ...over,
 });
 
-const passkey = { id: 'pk-1', nickname: 'My iPhone', synced: true, createdAt: '2026-10-27T12:00:00Z', lastUsedAt: null };
+const passkey = { id: 'pk-1', nickname: 'My iPhone', synced: true, createdAt: '2026-10-27T12:00:00Z', lastUsedAt: null, usableFrom: null };
+const tomorrow = () => new Date(Date.now() + 24 * 3600 * 1000).toISOString();
 
 const seed = (status: MfaStatus | null) =>
   useMfaStore.setState({ sessionKey: 'k', status, state: status ? 'ready' : 'idle' });
@@ -135,6 +137,20 @@ describe('StepUpPanel', () => {
     renderPanel('factor_remove');
     expect(screen.getByRole('button', { name: 'Use passkey' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Use a backup code' })).toBeInTheDocument();
+  });
+
+  it('does not offer a passkey or app added with a code until its 24 hours are up', () => {
+    seed(baseStatus({ passkeys: [{ ...passkey, usableFrom: tomorrow() }], authenticatorApp: true, authenticatorAppUsableFrom: tomorrow() }));
+    renderPanel();
+    expect(screen.queryByRole('button', { name: 'Use passkey' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Use authenticator app code' })).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent('24 hours after it was added');
+  });
+
+  it('offers them again once the wait is over', () => {
+    seed(baseStatus({ passkeys: [{ ...passkey, usableFrom: new Date(Date.now() - 1000).toISOString() }] }));
+    renderPanel();
+    expect(screen.getByRole('button', { name: 'Use passkey' })).toBeInTheDocument();
   });
 
   it('shows the server reason in plain words and keeps the person on the panel', async () => {

@@ -13,7 +13,8 @@ import { hashEmailForLog } from '../security/securityEvent';
 import { log } from '../logger';
 
 export type MfaEmail =
-  | { kind: 'factor_added'; method: 'passkey' | 'totp'; nickname?: string }
+  /** `waitUntil` (ISO): the method was added with a code and cannot confirm a step-up before then. */
+  | { kind: 'factor_added'; method: 'passkey' | 'totp'; nickname?: string; waitUntil?: string }
   | { kind: 'factor_removed'; method: 'passkey' | 'totp'; nickname?: string }
   | { kind: 'recovery_code_used'; left: number }
   | { kind: 'recovery_codes_new' }
@@ -28,16 +29,32 @@ const escapeHtml = (s: string): string =>
 const methodName = (method: 'passkey' | 'totp', nickname?: string): string =>
   method === 'passkey' ? `a passkey${nickname ? ` ("${nickname}")` : ''}` : 'an authenticator app';
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "28 October 2026, 14:05 UTC". Null for an unreadable time. */
+export const formatUtc = (iso: string): string | null => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+};
+
 export const mfaEmailContent = (email: MfaEmail): { subject: string; lines: string[] } => {
   switch (email.kind) {
-    case 'factor_added':
+    case 'factor_added': {
+      const added = `${methodName(email.method, email.nickname)[0].toUpperCase()}${methodName(email.method, email.nickname).slice(1)} can now be used to sign in to your account.`;
+      const until = email.waitUntil ? formatUtc(email.waitUntil) : null;
       return {
         subject: 'A new sign-in method was added to your account',
-        lines: [
-          `${methodName(email.method, email.nickname)[0].toUpperCase()}${methodName(email.method, email.nickname).slice(1)} can now be used to sign in to your account.`,
-          "If this wasn't you, sign in and remove it from Security settings, then change your password.",
-        ],
+        lines: until
+          ? [
+              added,
+              `Because it was confirmed with a code rather than a passkey, it can't approve releases, transfers or account changes until ${until}.`,
+              "If this wasn't you, sign in and remove it now, then change your password.",
+            ]
+          : [added, "If this wasn't you, sign in and remove it from Security settings, then change your password."],
       };
+    }
     case 'factor_removed':
       return {
         subject: 'A sign-in method was removed from your account',

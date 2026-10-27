@@ -60,11 +60,14 @@ const passkeySchema = z.object({
   synced: z.boolean(),
   createdAt: z.string(),
   lastUsedAt: z.string().nullable().optional(),
+  /** Set while a passkey added with a code waits 24 h before it can confirm anything. */
+  usableFrom: z.string().nullable().optional().default(null),
 });
 
 export const mfaStatusSchema = z.object({
   passkeys: z.array(passkeySchema),
   authenticatorApp: z.boolean(),
+  authenticatorAppUsableFrom: z.string().nullable().optional().default(null),
   backupCodesLeft: z.number().int(),
   hasFactor: z.boolean(),
   sessionVerified: z.boolean(),
@@ -92,7 +95,7 @@ const assertionOptionsSchema = optionsSchema<PublicKeyCredentialRequestOptionsJS
 const ended = { otherSessionsEnded: z.boolean().optional() };
 
 const registerResultSchema = z.object({
-  passkey: passkeySchema.omit({ lastUsedAt: true }),
+  passkey: passkeySchema.omit({ lastUsedAt: true, usableFrom: true }).extend({ usableFrom: z.string().nullable().optional() }),
   backupCodes: z.array(z.string()).nullable(),
   ...ended,
 });

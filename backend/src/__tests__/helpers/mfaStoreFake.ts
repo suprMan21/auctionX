@@ -8,6 +8,7 @@
 import { randomUUID } from 'crypto';
 import type {
   ChallengeRow,
+  MfaMethod,
   MfaSessionRow,
   MfaStore,
   NewPasskey,
@@ -23,7 +24,7 @@ export interface MfaFakeState {
   codes: Array<{ user_id: string; code_hash: string; used_at: string | null }>;
   challenges: Array<ChallengeRow & { used_at: string | null }>;
   sessions: Map<string, MfaSessionRow>;
-  grants: Array<{ token_hash: string; user_id: string; session_id: string; action: StepUpAction; target_id: string; expires_at: string; used_at: string | null }>;
+  grants: Array<{ token_hash: string; user_id: string; session_id: string; action: StepUpAction; target_id: string; expires_at: string; method: MfaMethod | null; used_at: string | null }>;
   failures: Map<string, { failed: number; locked_until: string | null; lock_count: number }>;
   staff: Map<string, string>;
   /** Every endOtherSessions call, in order. */
@@ -67,7 +68,7 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
     async insertPasskey(row: NewPasskey) {
       guard('insertPasskey');
       if (st.passkeys.some((p) => p.credential_id === row.credential_id)) return null;
-      const full: PasskeyRow = { ...row, id: randomUUID(), created_at: new Date().toISOString(), last_used_at: null };
+      const full: PasskeyRow = { ...row, usable_from: row.usable_from ?? null, id: randomUUID(), created_at: new Date().toISOString(), last_used_at: null };
       st.passkeys.push(full);
       return full;
     },
@@ -106,10 +107,10 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
     async getTotp(userId) {
       return st.totp.get(userId) ?? null;
     },
-    async startTotp(userId, secretEnc) {
+    async startTotp(userId, secretEnc, usableFrom) {
       const cur = st.totp.get(userId);
       if (cur?.verified_at) return false;
-      st.totp.set(userId, { user_id: userId, secret_enc: secretEnc, verified_at: null, last_used_step: 0 });
+      st.totp.set(userId, { user_id: userId, secret_enc: secretEnc, verified_at: null, last_used_step: 0, usable_from: usableFrom });
       return true;
     },
     async useTotpStep(userId, step, confirm) {
@@ -138,7 +139,7 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
     async createChallenge(row) {
       guard('createChallenge');
       const id = randomUUID();
-      st.challenges.push({ ...row, id, used_at: null });
+      st.challenges.push({ ...row, code_confirmed: row.code_confirmed ?? false, id, used_at: null });
       return id;
     },
     async consumeChallenge(id, userId, sessionId, purpose, nowIso) {
@@ -168,9 +169,9 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
         (x) => x.token_hash === tokenHash && x.user_id === userId && x.session_id === sessionId
           && x.action === action && x.target_id === targetId && x.used_at === null && x.expires_at > nowIso,
       );
-      if (!g) return false;
+      if (!g) return null;
       g.used_at = nowIso;
-      return true;
+      return { method: g.method };
     },
     async lockedUntil(userId, nowIso) {
       const f = st.failures.get(userId);

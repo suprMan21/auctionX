@@ -42,3 +42,7 @@ const reasonOf = (err: unknown): string | null => {
 /** `/sign-in/verify?next=…` for the current page. */
 export const secondFactorPathFor = (next: string): string =>
   `/sign-in/verify?next=${encodeURIComponent(next)}`;
+
+/** True while a method added with a code is still in its 24-hour wait. */
+export const isWaiting = (usableFrom: string | null | undefined, now: number = Date.now()): boolean =>
+  Boolean(usableFrom) && new Date(usableFrom as string).getTime() > now;

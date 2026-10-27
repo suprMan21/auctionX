@@ -54,6 +54,13 @@ export const SUPER_ADMIN_SESSION_TTL_MS = 60 * 60 * 1000;
 
 export const RECOVERY_CODE_COUNT = 10;
 
+/**
+ * A sign-in method added with a step-up that a code (authenticator or backup
+ * code) confirmed waits this long before it can confirm any step-up. It may
+ * still sign in. (Boss, 2026-10-27, S-2FA review M1.)
+ */
+export const NEW_METHOD_COOL_OFF_MS = 24 * 60 * 60 * 1000;
+
 /** 32-byte key, base64. Encrypts TOTP secrets. */
 export const mfaSecretKey = (): Buffer => {
   const key = Buffer.from(required('MFA_SECRET_KEY'), 'base64');

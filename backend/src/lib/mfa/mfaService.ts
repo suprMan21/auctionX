@@ -27,6 +27,13 @@
  *     marker, and an alert email on every sign-in.
  *   - 5 wrong codes (authenticator or backup) lock code entry for 15 minutes.
  *     Passkeys cannot be guessed, so they never count and are never locked.
+ *   - New-method wait (Boss, 2026-10-27, review M1): a passkey or authenticator
+ *     app added with a `factor_add` step-up that a CODE confirmed (authenticator
+ *     or backup code) waits 24 hours (`usable_from`) before it can confirm ANY
+ *     step-up, including removing other methods. It may still sign in. The
+ *     owner is emailed at once with the time. Otherwise password + a code could
+ *     plant a passkey and use it where only a passkey is accepted. The first
+ *     factor never waits; a grant with no recorded method counts as a code.
  */
 
 import { createHash, randomBytes } from 'crypto';
@@ -42,6 +49,7 @@ import { emitSecurityEvent } from '../security/securityEvent';
 import type { SecurityLogContext } from '../ownership/ownershipProof';
 import {
   CHALLENGE_TTL_MS,
+  NEW_METHOD_COOL_OFF_MS,
   STEP_UP_TTL_MS,
   SUPER_ADMIN_SESSION_TTL_MS,
   mfaSessionTtlMs,
@@ -52,7 +60,14 @@ import { openSecret, sealSecret } from './secretBox';
 import { generateTotpSecret, matchTotp, otpauthUri, base32Encode } from './totp';
 import { sendMfaEmail } from './mfaEmails';
 import { log } from '../logger';
-import { getMfaStore, type MfaMethod, type PasskeyRow, type StaffMfaAuditAction, type StepUpAction } from './store';
+import {
+  getMfaStore,
+  type ConsumedGrant,
+  type MfaMethod,
+  type PasskeyRow,
+  type StaffMfaAuditAction,
+  type StepUpAction,
+} from './store';
 
 export const STEP_UP_ACTIONS: readonly StepUpAction[] = [
   'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
@@ -97,7 +112,9 @@ export type MfaReason =
   /** Staff confirm token actions with a passkey only. */
   | 'passkey_required'
   /** A backup code cannot confirm a token action (passkey or authenticator app). */
-  | 'backup_code_not_allowed';
+  | 'backup_code_not_allowed'
+  /** The method was added with a code and cannot confirm a step-up for 24 hours. */
+  | 'new_method_waiting';
 
 const refuse = (code: 'permission_denied' | 'invalid_argument' | 'conflict' | 'resource_exhausted' | 'failed_precondition',
   message: string, reason: MfaReason): never => {
@@ -146,7 +163,12 @@ const errText = (err: unknown): string => (err instanceof Error ? err.message.sl
  * AFTER the change is committed, so a failed write is logged, never thrown:
  * the change already happened and the security event still records it.
  */
-const auditIfStaff = async (caller: Caller, action: StaffMfaAuditAction, method: MfaMethod | null): Promise<void> => {
+const auditIfStaff = async (
+  caller: Caller,
+  action: StaffMfaAuditAction,
+  method: MfaMethod | null,
+  coolOff = false,
+): Promise<void> => {
   try {
     if (!(await getMfaStore().staffRole(caller.userId))) return;
     if (!caller.email) {
@@ -159,6 +181,7 @@ const auditIfStaff = async (caller: Caller, action: StaffMfaAuditAction, method:
       action,
       method,
       ip: caller.log.ip === 'unknown' ? null : caller.log.ip,
+      ...(coolOff ? { coolOff: true } : {}),
     });
   } catch (err) {
     log.error('mfa_staff_audit_failed', { requestId: caller.log.requestId, action, error: errText(err) });
@@ -182,10 +205,28 @@ const endOtherSessions = async (caller: Caller): Promise<boolean> => {
 };
 
 /** Everything that follows a committed sign-in method change. */
-const afterFactorChange = async (caller: Caller, action: StaffMfaAuditAction, method: MfaMethod): Promise<boolean> => {
-  const [ended] = await Promise.all([endOtherSessions(caller), auditIfStaff(caller, action, method)]);
+const afterFactorChange = async (
+  caller: Caller,
+  action: StaffMfaAuditAction,
+  method: MfaMethod,
+  coolOff = false,
+): Promise<boolean> => {
+  const [ended] = await Promise.all([endOtherSessions(caller), auditIfStaff(caller, action, method, coolOff)]);
   return ended;
 };
+
+/** True while a method added with a code may not confirm a step-up. */
+const isCooling = (usableFrom: string | null | undefined, now = Date.now()): boolean =>
+  Boolean(usableFrom) && Date.parse(usableFrom as string) > now;
+
+/** The wait end shown to the client, or null once it is over. */
+const pendingUntil = (usableFrom: string | null | undefined): string | null =>
+  isCooling(usableFrom) ? new Date(Date.parse(usableFrom as string)).toISOString() : null;
+
+const coolOffEnd = (): string => new Date(Date.now() + NEW_METHOD_COOL_OFF_MS).toISOString();
+
+const refuseWaiting = (): never =>
+  refuse('permission_denied', 'This sign-in method was added recently with a code. It can confirm this after the waiting period.', 'new_method_waiting');
 const sha256Hex = (s: string): string => createHash('sha256').update(s).digest('hex');
 
 // ── Status ──────────────────────────────────────────────────────────────────
@@ -193,6 +234,7 @@ const sha256Hex = (s: string): string => createHash('sha256').update(s).digest('
 interface FactorSummary {
   passkeys: PasskeyRow[];
   totpConfirmed: boolean;
+  totpUsableFrom: string | null;
   total: number;
 }
 
@@ -200,7 +242,12 @@ const factorSummary = async (userId: string): Promise<FactorSummary> => {
   const store = getMfaStore();
   const [passkeys, totp] = await Promise.all([store.listPasskeys(userId), store.getTotp(userId)]);
   const totpConfirmed = Boolean(totp?.verified_at);
-  return { passkeys, totpConfirmed, total: passkeys.length + (totpConfirmed ? 1 : 0) };
+  return {
+    passkeys,
+    totpConfirmed,
+    totpUsableFrom: totpConfirmed ? totp?.usable_from ?? null : null,
+    total: passkeys.length + (totpConfirmed ? 1 : 0),
+  };
 };
 
 export const hasSecondFactor = async (userId: string, sessionId: string | null): Promise<boolean> => {
@@ -230,8 +277,11 @@ export const getStatus = async (caller: Caller, secondFactorRequired: boolean) =
       synced: p.backed_up,
       createdAt: p.created_at,
       lastUsedAt: p.last_used_at,
+      // Set while a passkey added with a code may not confirm a step-up yet.
+      usableFrom: pendingUntil(p.usable_from),
     })),
     authenticatorApp: summary.totpConfirmed,
+    authenticatorAppUsableFrom: pendingUntil(summary.totpUsableFrom),
     backupCodesLeft: codesLeft,
     hasFactor: summary.total > 0,
     sessionVerified: verified,
@@ -291,7 +341,9 @@ export const passkeyRegisterOptions = async (caller: Caller, stepUpToken?: strin
   const sessionId = requireSessionId(caller);
   const { first } = await assertMayEnrol(caller);
   // A stolen session must not be able to plant its own passkey.
-  if (!first) await requireFreshCheck(caller, stepUpToken, 'factor_add', 'passkey');
+  const grantMethod = first ? null : await requireFreshCheck(caller, stepUpToken, 'factor_add', 'passkey');
+  // Confirmed by a code (or by an unrecorded method): the new passkey waits.
+  const codeConfirmed = !first && grantMethod !== 'passkey';
   const cfg = webAuthnConfig();
   const store = getMfaStore();
   const [existing, superAdmin] = await Promise.all([store.listPasskeys(caller.userId), isSuperAdmin(caller.userId)]);
@@ -320,6 +372,7 @@ export const passkeyRegisterOptions = async (caller: Caller, stepUpToken?: strin
     action: null,
     target_id: null,
     expires_at: new Date(Date.now() + CHALLENGE_TTL_MS).toISOString(),
+    code_confirmed: codeConfirmed,
   });
   return { challengeId, options };
 };
@@ -361,6 +414,8 @@ export const passkeyRegisterVerify = async (
     refuse('invalid_argument', 'This account needs a hardware security key, not a synced passkey.', 'synced_passkey_not_allowed');
   }
 
+  // A first factor never waits (nothing to check it against, and no other method to misuse).
+  const usableFrom = !first && challenge!.code_confirmed ? coolOffEnd() : null;
   const inserted = await store.insertPasskey({
     user_id: caller.userId,
     credential_id: info.credential.id,
@@ -370,19 +425,22 @@ export const passkeyRegisterVerify = async (
     aaguid: info.aaguid ?? null,
     backed_up: info.credentialBackedUp,
     nickname: input.nickname.trim(),
+    usable_from: usableFrom,
   });
   if (!inserted) refuse('conflict', 'That passkey is already added', 'already_set_up');
   const row = inserted!;
 
   const backupCodes = first ? await finishFirstFactor(caller, 'passkey', superAdmin) : null;
   emit(caller, 'enrol', 'passkey', 'ok', superAdmin);
-  notify(caller, superAdmin, { kind: 'factor_added', method: 'passkey', nickname: row.nickname });
+  notify(caller, superAdmin, {
+    kind: 'factor_added', method: 'passkey', nickname: row.nickname, ...(usableFrom ? { waitUntil: usableFrom } : {}),
+  });
   // A first factor ends the other sessions too: harmless, and it signs out
   // anyone else who was already in with just the password.
-  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_add', 'passkey');
+  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_add', 'passkey', usableFrom !== null);
 
   return {
-    passkey: { id: row.id, nickname: row.nickname, synced: row.backed_up, createdAt: row.created_at },
+    passkey: { id: row.id, nickname: row.nickname, synced: row.backed_up, createdAt: row.created_at, usableFrom },
     backupCodes,
     otherSessionsEnded,
   };
@@ -401,8 +459,11 @@ const assertionOptions = async (
   const sessionId = requireSessionId(caller);
   const store = getMfaStore();
   const [passkeys, superAdmin] = await Promise.all([store.listPasskeys(caller.userId), isSuperAdmin(caller.userId)]);
-  const usable = usablePasskeys(passkeys, superAdmin);
+  const allowed = usablePasskeys(passkeys, superAdmin);
+  // A passkey still in its new-method wait may sign in, but not confirm a step-up.
+  const usable = purpose === 'step_up' ? allowed.filter((p) => !isCooling(p.usable_from)) : allowed;
   if (usable.length === 0) {
+    if (allowed.length > 0) refuseWaiting();
     refuse('failed_precondition', 'Add a passkey first', 'no_passkey');
   }
   const cfg = webAuthnConfig();
@@ -567,11 +628,20 @@ const notify = (caller: Caller, superAdmin: boolean, email: Parameters<typeof se
   if (alert && alert.toLowerCase() !== (caller.email ?? '').toLowerCase()) sendMfaEmail(alert, email);
 };
 
-/** Spends a step-up grant for this action, or refuses with `step_up_required`. */
-const requireFreshCheck = async (caller: Caller, token: string | undefined, action: StepUpAction, targetId: string) => {
-  if (!(await consumeStepUp(caller, token, action, targetId))) {
-    refuse('permission_denied', 'Confirm it is you to continue', 'step_up_required');
-  }
+/**
+ * Spends a step-up grant for this action, or refuses with `step_up_required`.
+ * Returns how the grant was confirmed (null = not recorded, i.e. issued before
+ * the method column existed; callers treat that as "not a passkey").
+ */
+const requireFreshCheck = async (
+  caller: Caller,
+  token: string | undefined,
+  action: StepUpAction,
+  targetId: string,
+): Promise<MfaMethod | null> => {
+  const spent = await spendStepUp(caller, token, action, targetId);
+  if (!spent) refuse('permission_denied', 'Confirm it is you to continue', 'step_up_required');
+  return spent!.method;
 };
 
 // ── Step-up ─────────────────────────────────────────────────────────────────
@@ -585,7 +655,7 @@ export type StepUpVerifyInput =
   | { challengeId: string; response: AuthenticationResponseJSON }
   | ({ action: StepUpAction; targetId: string } & CodeInput);
 
-const issueGrant = async (caller: Caller, sessionId: string, action: StepUpAction, targetId: string) => {
+const issueGrant = async (caller: Caller, sessionId: string, action: StepUpAction, targetId: string, method: MfaMethod) => {
   const token = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + STEP_UP_TTL_MS).toISOString();
   await getMfaStore().createGrant({
@@ -595,6 +665,7 @@ const issueGrant = async (caller: Caller, sessionId: string, action: StepUpActio
     action,
     target_id: targetId,
     expires_at: expiresAt,
+    method,
   });
   return { stepUpToken: token, expiresAt, action, targetId };
 };
@@ -612,7 +683,13 @@ export const stepUpVerify = async (caller: Caller, input: StepUpVerifyInput) => 
       refuse('invalid_argument', 'That passkey check did not work. Try again.', 'passkey_invalid');
     }
     const action = ok!.challenge.action as StepUpAction;
-    const grant = await issueGrant(caller, sessionId, action, ok!.challenge.target_id as string);
+    // Checked after the assertion (its counter is recorded, the challenge is
+    // spent), so only the key's holder learns it is still waiting.
+    if (isCooling(ok!.passkey.usable_from)) {
+      emit(caller, 'step_up_issue', 'passkey', 'forbidden', superAdmin, action);
+      refuseWaiting();
+    }
+    const grant = await issueGrant(caller, sessionId, action, ok!.challenge.target_id as string, 'passkey');
     emit(caller, 'step_up_issue', 'passkey', 'ok', superAdmin, action);
     return grant;
   }
@@ -626,10 +703,38 @@ export const stepUpVerify = async (caller: Caller, input: StepUpVerifyInput) => 
   } else if (!CODE_STEP_UP_ACTIONS.includes(input.action)) {
     refuse('invalid_argument', 'Use your passkey to confirm this', 'no_passkey');
   }
+  // An authenticator app in its new-method wait: refused before the code is
+  // checked, so the code is never spent and the attempt never counted.
+  if ('totp' in input && !superAdmin) {
+    const totp = await getMfaStore().getTotp(caller.userId);
+    if (totp?.verified_at && isCooling(totp.usable_from)) {
+      emit(caller, 'step_up_issue', 'totp', 'forbidden', superAdmin, input.action);
+      refuseWaiting();
+    }
+  }
   const { method } = await checkCode(caller, input, superAdmin, 'step_up_issue');
-  const grant = await issueGrant(caller, sessionId, input.action, input.targetId);
+  const grant = await issueGrant(caller, sessionId, input.action, input.targetId, method);
   emit(caller, 'step_up_issue', method, 'ok', superAdmin, input.action);
   return grant;
+};
+
+/**
+ * Spends a grant: only for this user, this session, this action and this
+ * target, once. Returns the spent grant (with how it was confirmed) or null.
+ */
+const spendStepUp = async (
+  caller: Caller,
+  token: string | undefined,
+  action: StepUpAction,
+  targetId: string,
+): Promise<ConsumedGrant | null> => {
+  const superAdmin = await isSuperAdmin(caller.userId);
+  const spent =
+    token && caller.sessionId && /^[A-Za-z0-9_-]{43}$/.test(token)
+      ? await getMfaStore().consumeGrant(sha256Hex(token), caller.userId, caller.sessionId, action, targetId, nowIso())
+      : null;
+  emit(caller, 'step_up_use', spent?.method ?? null, spent ? 'ok' : 'step_up_required', superAdmin, action);
+  return spent;
 };
 
 /** Spends a grant. True only for this user, this session, this action and this target, once. */
@@ -638,18 +743,7 @@ export const consumeStepUp = async (
   token: string | undefined,
   action: StepUpAction,
   targetId: string,
-): Promise<boolean> => {
-  const superAdmin = await isSuperAdmin(caller.userId);
-  const ok = Boolean(
-    token &&
-      caller.sessionId &&
-      /^[A-Za-z0-9_-]{43}$/.test(token) &&
-      (await getMfaStore().consumeGrant(sha256Hex(token), caller.userId, caller.sessionId, action, targetId, nowIso())),
-  );
-  // The grant does not record how it was issued (step_up_issue carries the method).
-  emit(caller, 'step_up_use', null, ok ? 'ok' : 'step_up_required', superAdmin, action);
-  return ok;
-};
+): Promise<boolean> => Boolean(await spendStepUp(caller, token, action, targetId));
 
 // ── Authenticator app ───────────────────────────────────────────────────────
 
@@ -659,9 +753,11 @@ export const totpSetup = async (caller: Caller, stepUpToken?: string) => {
     refuse('permission_denied', 'This account signs in with its security key only.', 'not_available');
   }
   const { first } = await assertMayEnrol(caller);
-  if (!first) await requireFreshCheck(caller, stepUpToken, 'factor_add', 'totp');
+  const grantMethod = first ? null : await requireFreshCheck(caller, stepUpToken, 'factor_add', 'totp');
+  // Confirmed by a code (or an unrecorded method): the app waits, counted from setup.
+  const usableFrom = !first && grantMethod !== 'passkey' ? coolOffEnd() : null;
   const secret = generateTotpSecret();
-  const started = await getMfaStore().startTotp(caller.userId, sealSecret(secret, caller.userId));
+  const started = await getMfaStore().startTotp(caller.userId, sealSecret(secret, caller.userId), usableFrom);
   if (!started) refuse('conflict', 'An authenticator app is already set up', 'already_set_up');
   return {
     secret: base32Encode(secret),
@@ -683,9 +779,10 @@ export const totpConfirm = async (caller: Caller, input: { code: string }) => {
   await store.clearFailures(caller.userId);
   const backupCodes = first ? await finishFirstFactor(caller, 'totp', false) : null;
   emit(caller, 'enrol', 'totp', 'ok', false);
-  sendMfaEmail(caller.email, { kind: 'factor_added', method: 'totp' });
-  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_add', 'totp');
-  return { authenticatorApp: true, backupCodes, otherSessionsEnded };
+  const waitUntil = pendingUntil(totp!.usable_from);
+  sendMfaEmail(caller.email, { kind: 'factor_added', method: 'totp', ...(waitUntil ? { waitUntil } : {}) });
+  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_add', 'totp', waitUntil !== null);
+  return { authenticatorApp: true, authenticatorAppUsableFrom: waitUntil, backupCodes, otherSessionsEnded };
 };
 
 // ── Backup codes ────────────────────────────────────────────────────────────

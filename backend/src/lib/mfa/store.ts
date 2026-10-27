@@ -37,6 +37,8 @@ export interface PasskeyRow {
   nickname: string;
   created_at: string;
   last_used_at: string | null;
+  /** NULL = usable now; otherwise it may sign in but not confirm a step-up before this time. */
+  usable_from: string | null;
 }
 
 export interface TotpRow {
@@ -44,6 +46,8 @@ export interface TotpRow {
   secret_enc: string;
   verified_at: string | null;
   last_used_step: number;
+  /** NULL = usable now; otherwise it may sign in but not confirm a step-up before this time. */
+  usable_from: string | null;
 }
 
 export interface ChallengeRow {
@@ -55,6 +59,8 @@ export interface ChallengeRow {
   action: string | null;
   target_id: string | null;
   expires_at: string;
+  /** register only: the factor_add step-up was confirmed by a code, so the new passkey waits. */
+  code_confirmed?: boolean;
 }
 
 export interface MfaSessionRow {
@@ -73,6 +79,13 @@ export interface NewPasskey {
   aaguid: string | null;
   backed_up: boolean;
   nickname: string;
+  /** Set when the passkey was added with a code-confirmed step-up (24 h wait). */
+  usable_from?: string | null;
+}
+
+/** A spent grant. `method` is NULL only for grants issued before migration 20261027000009. */
+export interface ConsumedGrant {
+  method: MfaMethod | null;
 }
 
 export interface MfaStore {
@@ -87,8 +100,11 @@ export interface MfaStore {
   removeFactor(userId: string, kind: 'passkey' | 'totp', id: string | null, breakGlass: boolean): Promise<'removed' | 'not_found' | 'last_factor'>;
 
   getTotp(userId: string): Promise<TotpRow | null>;
-  /** Replaces any unconfirmed setup; refuses (returns false) when a confirmed one exists. */
-  startTotp(userId: string, secretEnc: string): Promise<boolean>;
+  /**
+   * Replaces any unconfirmed setup; refuses (returns false) when a confirmed one exists.
+   * `usableFrom` (or null) is stored as the app's step-up wait.
+   */
+  startTotp(userId: string, secretEnc: string, usableFrom: string | null): Promise<boolean>;
   /** Spends `step` only if it is newer than the last one used; optionally confirms setup. */
   useTotpStep(userId: string, step: number, confirm: boolean): Promise<boolean>;
 
@@ -103,8 +119,12 @@ export interface MfaStore {
   markSession(row: MfaSessionRow): Promise<void>;
   getSession(sessionId: string, userId: string, nowIso: string): Promise<MfaSessionRow | null>;
 
-  createGrant(row: { token_hash: string; user_id: string; session_id: string; action: StepUpAction; target_id: string; expires_at: string }): Promise<void>;
-  consumeGrant(tokenHash: string, userId: string, sessionId: string, action: StepUpAction, targetId: string, nowIso: string): Promise<boolean>;
+  createGrant(row: {
+    token_hash: string; user_id: string; session_id: string; action: StepUpAction; target_id: string; expires_at: string;
+    method: MfaMethod;
+  }): Promise<void>;
+  /** Spends a grant; null when there was no live grant to spend. */
+  consumeGrant(tokenHash: string, userId: string, sessionId: string, action: StepUpAction, targetId: string, nowIso: string): Promise<ConsumedGrant | null>;
 
   /** null = not locked, otherwise the lock end. */
   lockedUntil(userId: string, nowIso: string): Promise<string | null>;
@@ -141,6 +161,8 @@ export interface StaffMfaAudit {
   action: StaffMfaAuditAction;
   method: MfaMethod | null;
   ip: string | null;
+  /** true when the added method waits 24 h before it can confirm a step-up. Omitted otherwise. */
+  coolOff?: boolean;
 }
 
 // ── Supabase implementation ─────────────────────────────────────────────────
@@ -150,7 +172,7 @@ const fail = (op: string, error: { message?: string } | null): never => {
 };
 
 const PASSKEY_COLS =
-  'id, user_id, credential_id, public_key, sign_count, transports, aaguid, backed_up, nickname, created_at, last_used_at';
+  'id, user_id, credential_id, public_key, sign_count, transports, aaguid, backed_up, nickname, created_at, last_used_at, usable_from';
 
 export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
   async listPasskeys(userId) {
@@ -197,16 +219,16 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
   },
 
   async getTotp(userId) {
-    const { data, error } = await db.from('user_totp_factors').select('user_id, secret_enc, verified_at, last_used_step').eq('user_id', userId).maybeSingle();
+    const { data, error } = await db.from('user_totp_factors').select('user_id, secret_enc, verified_at, last_used_step, usable_from').eq('user_id', userId).maybeSingle();
     if (error) fail('getTotp', error);
     return (data as TotpRow | null) ?? null;
   },
 
-  async startTotp(userId, secretEnc) {
+  async startTotp(userId, secretEnc, usableFrom) {
     // Only an unconfirmed setup may be replaced.
     const { error: delError } = await db.from('user_totp_factors').delete().eq('user_id', userId).is('verified_at', null);
     if (delError) fail('startTotp.delete', delError);
-    const { error } = await db.from('user_totp_factors').insert({ user_id: userId, secret_enc: secretEnc });
+    const { error } = await db.from('user_totp_factors').insert({ user_id: userId, secret_enc: secretEnc, usable_from: usableFrom });
     if (error) {
       // 23505: a confirmed authenticator app already exists.
       if ((error as { code?: string }).code === '23505') return false;
@@ -270,7 +292,7 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
       .eq('purpose', purpose)
       .is('used_at', null)
       .gt('expires_at', nowIso)
-      .select('id, user_id, session_id, purpose, challenge, action, target_id, expires_at')
+      .select('id, user_id, session_id, purpose, challenge, action, target_id, expires_at, code_confirmed')
       .maybeSingle();
     if (error) fail('consumeChallenge', error);
     return (data as ChallengeRow | null) ?? null;
@@ -309,10 +331,12 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
       .eq('target_id', targetId)
       .is('used_at', null)
       .gt('expires_at', nowIso)
-      .select('id')
+      .select('id, method')
       .maybeSingle();
     if (error) fail('consumeGrant', error);
-    return Boolean(data);
+    if (!data) return null;
+    const method = (data as { method: string | null }).method;
+    return { method: method === 'passkey' || method === 'totp' || method === 'recovery_code' ? method : null };
   },
 
   async lockedUntil(userId, nowIso) {
@@ -374,7 +398,7 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
       // console links the row to the account page.
       entity_type: 'user',
       entity_id: row.adminId,
-      changes: { method: row.method },
+      changes: row.coolOff ? { method: row.method, coolOff: true } : { method: row.method },
       reason: null,
       ip_address: row.ip && isIP(row.ip) ? row.ip : null,
       brand,

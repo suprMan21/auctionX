@@ -209,8 +209,8 @@ describe('token step-up with an authenticator code', () => {
 
     const ok = await request(app).post('/act/tag-a').set('Authorization', auth(USER, S1)).set('X-Step-Up', grant.body.data.stepUpToken);
     expect(ok.status).toBe(200);
-    // The grant does not know how it was issued, so the use event carries no method.
-    expect(events.named('auth.mfa').at(-1)).toMatchObject({ action: 'step_up_use', method: null, result: 'ok' });
+    // The grant records how it was issued (migration 20261027000009), so the use event carries it.
+    expect(events.named('auth.mfa').at(-1)).toMatchObject({ action: 'step_up_use', method: 'totp', result: 'ok' });
 
     const transfer = await codeStepUp(app, USER, 'transfer_complete', { totp: { code: codeFor(secret, 1) } });
     expect(transfer.status).toBe(200);
@@ -281,7 +281,7 @@ describe('status', () => {
     // Still required for actions; no longer asked to enrol.
     expect(enrolled.body.data).toMatchObject({ secondFactorRequired: true, enrolmentRequired: false });
     expect(Object.keys(enrolled.body.data).sort()).toEqual([
-      'authenticatorApp', 'backupCodesLeft', 'breakGlass', 'codeEntryLockedUntil', 'enrolmentRequired', 'hasFactor',
+      'authenticatorApp', 'authenticatorAppUsableFrom', 'backupCodesLeft', 'breakGlass', 'codeEntryLockedUntil', 'enrolmentRequired', 'hasFactor',
       'isStaff', 'passkeys', 'secondFactorRequired', 'sessionVerified',
     ]);
   });
