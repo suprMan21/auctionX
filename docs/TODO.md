@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-27 (S-2FA Ph1 backend live on staging, flags off; S-ANCHOR1 on hold for the hardware wallet)
+**Last updated:** 2026-10-27 (S-2FA Ph2 + Ph2b live on staging, flags off; S-ANCHOR1 on hold for the hardware wallet)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -16,10 +16,13 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ## 🔴 BOSS ACTION
 
 ### S-2FA (2026-10-27)
-Ph1 backend live on staging (`dev` `9909db7`, all three flags off). `docs/S_2FA_PH1_VERIFICATION.md`.
-- [ ] Optional now: Supabase Auth → **Secure password change** on (Ph2 also routes password/email change behind the second factor).
-- [ ] After Ph2 screens: daily admins (`admin@`, `admin2@`) add a passkey + save backup codes. super_admin YubiKeys
-      wait for Ph4 (attestation + AAGUID allowlist may need keys re-registered).
+Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live on staging, all three flags off.
+`docs/S_2FA_PH1_VERIFICATION.md`, `docs/S_2FA_PH2_VERIFICATION.md`. Supabase Secure password + email change: on.
+- [ ] Boss: `scripts/deploy-frontend.sh staging` (Ph2b screens), then daily admins (`admin@`, `admin2@`) add a passkey
+      + save backup codes. super_admin YubiKeys wait for Ph4 (attestation + AAGUID allowlist may need re-registering).
+- [ ] Regenerate `database.types.ts` (migrations `20261027000009/10` added columns + `auth_change_permits`).
+- [ ] **Ph3**: two-admin approval; email-code recovery (72 h hold, 7-day freeze, backup email); Postmark staging
+      security server (tracking off, retention 7 d, token in 1Password); release + transfer-completed owner emails.
 - [ ] Ph4: phones (iOS Safari, Android Chrome), then flags in order: `FEATURE_REQUIRE_2FA` → `FEATURE_REQUIRE_ADMIN_2FA` → `FEATURE_REQUIRE_STEP_UP`.
 
 ### Account types (2026-10-27)
@@ -112,8 +115,8 @@ Deferred behind default-off flags since S-NFC3: **2FA** (`FEATURE_REQUIRE_2FA`, 
 never shared with staging. Decide **multi-Region vs single-Region at creation**, because it cannot be changed later and chip
 keys cannot be re-derived without the master. Multi-Region is needed if prod must survive a us-east-2 outage.
 
-**S-2FA** (in-house passkeys + authenticator app + backup codes, step-up, two-admin approval): Ph1 backend ✅ live
-2026-10-27 (flags off) → Ph2 screens → Ph3 two-admin approval → Ph4 phones + flags. Must land before any real token sale.
+**S-2FA** (in-house passkeys + authenticator app + backup codes, step-up, two-admin approval): Ph1 backend + Ph2 screens + Ph2b ✅ live
+2026-10-27 (flags off) → Ph3 two-admin approval → Ph4 phones + flags. Must land before any real token sale.
 
 ---
 
