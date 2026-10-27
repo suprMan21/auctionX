@@ -93,3 +93,8 @@ complete at the end; click cuts never remove a safety step.
    Free transfers, phone menu (Escape), Refresh photos.
 
 Migration `20261027000001` is already applied to staging (2026-10-27).
+
+**Deployed 2026-10-27:** Boss pushed `d718065` (01:40) and `b344017` (01:47). App Runner START_DEPLOYMENT SUCCEEDED
+01:40 (backend code identical in `b344017`, which changed frontend + docs only); `GET /api/v1/admin/stats/growth`
+without a token → 401. Staging bundle `index-BBUx1Llq.js` contains the side-scroll hint, so the frontend is the
+latest build. Remaining: Boss click-through (step 3).
