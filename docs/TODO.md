@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-27 (S-ANCHOR1 Ph1 code merged; testnet deploy on hold for the hardware wallet)
+**Last updated:** 2026-10-27 (S-2FA Ph1 backend live on staging, flags off; S-ANCHOR1 on hold for the hardware wallet)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -14,6 +14,13 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ---
 
 ## 🔴 BOSS ACTION
+
+### S-2FA (2026-10-27)
+Ph1 backend live on staging (`dev` `9909db7`, all three flags off). `docs/S_2FA_PH1_VERIFICATION.md`.
+- [ ] Optional now: Supabase Auth → **Secure password change** on (Ph2 also routes password/email change behind the second factor).
+- [ ] After Ph2 screens: daily admins (`admin@`, `admin2@`) add a passkey + save backup codes. super_admin YubiKeys
+      wait for Ph4 (attestation + AAGUID allowlist may need keys re-registered).
+- [ ] Ph4: phones (iOS Safari, Android Chrome), then flags in order: `FEATURE_REQUIRE_2FA` → `FEATURE_REQUIRE_ADMIN_2FA` → `FEATURE_REQUIRE_STEP_UP`.
 
 ### Account types (2026-10-27)
 - [ ] `scripts/deploy-frontend.sh staging`, then click through: sign up a throwaway as **A creator** (lands on
@@ -105,8 +112,8 @@ Deferred behind default-off flags since S-NFC3: **2FA** (`FEATURE_REQUIRE_2FA`, 
 never shared with staging. Decide **multi-Region vs single-Region at creation**, because it cannot be changed later and chip
 keys cannot be re-derived without the master. Multi-Region is needed if prod must survive a us-east-2 outage.
 
-**S-2FA (MFA enrollment + AAL2 step-up)** has no fixed slot but gates `FEATURE_REQUIRE_2FA` in
-production, so it must land before any real token sale.
+**S-2FA** (in-house passkeys + authenticator app + backup codes, step-up, two-admin approval): Ph1 backend ✅ live
+2026-10-27 (flags off) → Ph2 screens → Ph3 two-admin approval → Ph4 phones + flags. Must land before any real token sale.
 
 ---
 
@@ -175,7 +182,7 @@ token sale without admin tooling.
   Price locked at transfer start; changes now or scheduled; voucher used by the fee payer. Console click-through
   verified against the audit log.
   - [ ] A voucher transfer on a real chip, the next time a transfer is tested anyway (do not spend a chip for it).
-  - [ ] Passkey step-up for price changes once S-2FA lands.
+  - [ ] Passkey step-up for price changes: built in S-2FA Ph1, turns on with `FEATURE_REQUIRE_STEP_UP` (Ph4).
 - **S-ADMIN2 Ph1: accounts, roles and permissions ✅ live + verified 2026-10-26** (`docs/S_ADMIN2_PH1_VERIFICATION.md`,
   migrations `20261025000002/3`, `20261026000001`). Users search/detail, Suspend / Retire → Delete (24 h window),
   staff roles super_admin / admin / support (super_admin only), one permission model, audit log filters. Revoking or

@@ -1,8 +1,9 @@
 # S-2FA Ph1 — Verification (backend)
 
 **Date:** 2026-10-27 · **Branch:** `feature/s-2fa` · **Plan:** `docs/plans/2026-10-27-s-2fa.md`
-**Status:** Code complete and tested; migration applied to staging. **Not deployed** (all flags off; nothing
-user-visible until Ph2 screens + Ph4 rollout).
+**Status:** ✅ Live on staging 2026-10-27 (`dev` `9909db7`; App Runner env set, update SUCCEEDED 16:18 EDT). All
+flags off; nothing user-visible until Ph2 screens + Ph4 rollout. Unauthenticated probe: every `/api/v1/auth/mfa`
+route answers 401. Secrets loaded is only provable with a signed-in call (missing secrets → 503), first in Ph2.
 
 ## What shipped
 
