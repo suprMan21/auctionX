@@ -14,11 +14,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import toast from 'react-hot-toast';
 import { AdminApiError, adminApi, onAdminRequestRefused } from '../api/adminApi';
 import { AdminRoleContext, type AdminAccessState } from '../lib/adminRole';
+import { useMfaStore } from '@/features/security/store/mfaStore';
+import { secondFactorPathFor } from '@/features/security/lib/stepUp';
 
 type CheckState = 'loading' | 'admin' | 'not-admin' | 'unauthenticated' | 'signed-out' | 'needs-2fa' | 'error';
 type Checked = { userId: string; state: Exclude<CheckState, 'loading' | 'unauthenticated'>; access: AdminAccessState };
@@ -37,6 +39,9 @@ export const AdminProtectedRoute = () => {
   const [checked, setChecked] = useState<Checked | null>(null);
   const [attempt, setAttempt] = useState(0);
   const userId = session?.user.id ?? null;
+  const location = useLocation();
+  const mfaVerified = useMfaStore((s) => s.status?.sessionVerified ?? false);
+  const mfaLoading = useMfaStore((s) => s.state === 'loading');
 
   useEffect(() => {
     if (authLoading || !initialized || !userId) return;
@@ -50,8 +55,11 @@ export const AdminProtectedRoute = () => {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        const needs2fa = err instanceof AdminApiError && err.code === 'ADMIN_2FA_REQUIRED';
+        // A cached "verified" may be from before the marker expired.
+        if (needs2fa) void useMfaStore.getState().refresh();
         const state: Checked['state'] =
-          err instanceof AdminApiError && err.code === 'ADMIN_2FA_REQUIRED' ? 'needs-2fa'
+          needs2fa ? 'needs-2fa'
             : err instanceof AdminApiError && err.status === 401 ? 'signed-out'
               : err instanceof AdminApiError && err.status === 403 ? 'not-admin'
                 : 'error';
@@ -88,9 +96,17 @@ export const AdminProtectedRoute = () => {
             : { userId, state: 'admin', access: next }));
         })
         .catch((err: unknown) => {
+          if (cancelled) return;
+          // The second-factor marker expired (12 h; 1 h for break-glass):
+          // ask for it again rather than signing out.
+          if (err instanceof AdminApiError && err.code === 'ADMIN_2FA_REQUIRED') {
+            void useMfaStore.getState().refresh();
+            setChecked({ userId, state: 'needs-2fa', access: { status: 'loading' } });
+            return;
+          }
           // Revoked, suspended, retired or signed out elsewhere. A network
           // blip keeps the console: the server still refuses every request.
-          if (!cancelled && err instanceof AdminApiError && (err.status === 401 || err.status === 403)) {
+          if (err instanceof AdminApiError && (err.status === 401 || err.status === 403)) {
             setChecked({ userId, state: 'signed-out', access: { status: 'loading' } });
           }
         })
@@ -138,6 +154,13 @@ export const AdminProtectedRoute = () => {
   }
   if (checkState === 'not-admin') return <Navigate to="/" replace />;
 
+  // Sent to the second step, which comes straight back here once it is done.
+  // If this session already passed it and the server still refuses, show the
+  // card below instead of bouncing between the two pages.
+  if (checkState === 'needs-2fa' && !mfaVerified && !mfaLoading) {
+    return <Navigate to={secondFactorPathFor(location.pathname + location.search)} replace />;
+  }
+
   if (checkState === 'needs-2fa' || checkState === 'error') {
     return (
       <div className="min-h-screen bg-dark-800 flex items-center justify-center p-4">
@@ -147,7 +170,7 @@ export const AdminProtectedRoute = () => {
           </h1>
           <p className="text-gray-400 text-sm">
             {checkState === 'needs-2fa'
-              ? 'The admin console needs a second factor. Sign in again with your security key or authenticator.'
+              ? 'The admin console still needs your passkey or code. Sign out, sign in again, and confirm with your security key.'
               : 'Your admin access could not be checked. Try again in a moment.'}
           </p>
           {checkState === 'error' && (

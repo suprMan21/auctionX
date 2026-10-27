@@ -36,6 +36,10 @@ import { hasSunParams } from './features/tokens/lib/tapUrl';
 import { loadTap } from './features/tokens/lib/tapCache';
 import { loginPathFor } from './features/auth/lib/safeNext';
 import { AdminProtectedRoute } from '@/features/admin/components/AdminProtectedRoute';
+import { SecondFactorGate } from '@/features/security/components/SecondFactorGate';
+import { SecurityPage } from '@/features/security/pages/SecurityPage';
+import { SecondFactorPage } from '@/features/security/pages/SecondFactorPage';
+import { EnrolRequiredPage } from '@/features/security/pages/EnrolRequiredPage';
 import { AdminLayout } from '@/features/admin/AdminLayout';
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
 import { AdminUsersPage } from '@/features/admin/pages/AdminUsersPage';
@@ -90,10 +94,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <>
+    <SecondFactorGate session={session}>
       <Header />
       {children}
-    </>
+    </SecondFactorGate>
   );
 }
 
@@ -146,6 +150,8 @@ function App() {
           <Route path="/register" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          {/* S-2FA Ph2: the step after the password. Not behind the gate (it is the gate's target). */}
+          <Route path="/sign-in/verify" element={<SecondFactorPage />} />
           
           <Route
             path="/profile"
@@ -375,6 +381,22 @@ function App() {
             }
           />
 
+          <Route
+            path="/settings/security"
+            element={
+              <ProtectedRoute>
+                <SecurityPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings/security/setup"
+            element={
+              <ProtectedRoute>
+                <EnrolRequiredPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/settings/account-type"
             element={

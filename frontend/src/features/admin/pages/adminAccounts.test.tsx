@@ -389,6 +389,7 @@ describe('admin route guard (GET /admin/me)', () => {
         <Routes>
           <Route path="/" element={<p>home page</p>} />
           <Route path="/login" element={<p>login page</p>} />
+          <Route path="/sign-in/verify" element={<p>second step</p>} />
           <Route path="/admin" element={<AdminProtectedRoute />}>
             <Route index element={<p>admin console</p>} />
           </Route>
@@ -424,10 +425,11 @@ describe('admin route guard (GET /admin/me)', () => {
     expect(api.getMe).toHaveBeenCalledTimes(2);
   });
 
-  it('ADMIN_2FA_REQUIRED explains the second factor', async () => {
+  it('ADMIN_2FA_REQUIRED opens the second sign-in step instead of signing out (S-2FA Ph2)', async () => {
     api.getMe.mockRejectedValue(new AdminApiError('Admin access needs two-factor sign-in', 403, 'ADMIN_2FA_REQUIRED'));
     renderGuard();
-    expect(await screen.findByRole('heading', { name: 'Two-factor sign-in needed' })).toBeInTheDocument();
+    expect(await screen.findByText('second step')).toBeInTheDocument();
+    expect(screen.queryByText('login page')).toBeNull();
   });
 
   const RoleProbe = () => {

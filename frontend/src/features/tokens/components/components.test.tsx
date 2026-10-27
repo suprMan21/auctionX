@@ -234,7 +234,7 @@ describe('ReleaseTokenDialog', () => {
     await user.click(submit);
 
     await waitFor(() => expect(onReleased).toHaveBeenCalled());
-    expect(api.release).toHaveBeenCalledWith(TAG);
+    expect(api.release).toHaveBeenCalledWith(TAG, undefined);
   });
 
   it('cannot be bypassed with the keyboard', async () => {
@@ -503,7 +503,7 @@ describe('TransferCompleteFlow', () => {
     renderFlow(SESSION, onSessionSpent);
 
     await user.click(screen.getByRole('button', { name: 'Accept and continue to payment' }));
-    expect(api.completeTransfer).toHaveBeenCalledWith(TRANSFER, SESSION);
+    expect(api.completeTransfer).toHaveBeenCalledWith(TRANSFER, SESSION, undefined);
     expect(onSessionSpent).toHaveBeenCalled();
 
     const amount = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD' }).format(3.45);

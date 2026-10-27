@@ -12,6 +12,7 @@ import type {
   MfaStore,
   NewPasskey,
   PasskeyRow,
+  StaffMfaAudit,
   StepUpAction,
   TotpRow,
 } from '../../lib/mfa/store';
@@ -25,6 +26,10 @@ export interface MfaFakeState {
   grants: Array<{ token_hash: string; user_id: string; session_id: string; action: StepUpAction; target_id: string; expires_at: string; used_at: string | null }>;
   failures: Map<string, { failed: number; locked_until: string | null; lock_count: number }>;
   staff: Map<string, string>;
+  /** Every endOtherSessions call, in order. */
+  endedSessions: Array<{ userId: string; keep: string }>;
+  /** Every staff audit row written. */
+  audits: StaffMfaAudit[];
   /** Set to make the next call of that method throw like a database error. */
   failNext: Set<keyof MfaStore>;
 }
@@ -38,6 +43,8 @@ export const createMfaFakeState = (): MfaFakeState => ({
   grants: [],
   failures: new Map(),
   staff: new Map(),
+  endedSessions: [],
+  audits: [],
   failNext: new Set(),
 });
 
@@ -193,6 +200,24 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
     async staffRole(userId) {
       guard('staffRole');
       return st.staff.get(userId) ?? null;
+    },
+    // Same rules as mfa_end_other_sessions (auth.sessions deletes are proven by s_2fa_ph2_live.sql).
+    async endOtherSessions(userId, keep) {
+      guard('endOtherSessions');
+      st.endedSessions.push({ userId, keep });
+      let n = 0;
+      for (const [id, s] of st.sessions) {
+        if (s.user_id === userId && id !== keep) {
+          st.sessions.delete(id);
+          n += 1;
+        }
+      }
+      st.grants = st.grants.filter((g) => g.user_id !== userId || g.session_id === keep || g.used_at !== null);
+      return n;
+    },
+    async writeStaffAudit(row) {
+      guard('writeStaffAudit');
+      st.audits.push({ ...row });
     },
   };
 };

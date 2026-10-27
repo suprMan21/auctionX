@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
@@ -8,6 +8,8 @@ import { supabase } from '@/lib/supabase';
 import { BRAND_LABEL } from '@/constants/branding';
 import { isMarketplaceEnabledOnClient } from '@/lib/featureFlags';
 import { safeNextPath } from '../lib/safeNext';
+import { sessionKeyOf, useMfaStore } from '@/features/security/store/mfaStore';
+import { secondFactorPathFor } from '@/features/security/lib/stepUp';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -24,8 +26,11 @@ export function LoginPage() {
 
   // If a returning visitor hits /login while their session cookie is still good,
   // bounce them straight to the authenticated landing instead of forcing a relogin.
+  // While the form is submitting, handleSubmit decides where to go (it may
+  // need the second sign-in step first).
+  const submitting = useRef(false);
   useEffect(() => {
-    if (initialized && user) {
+    if (initialized && user && !submitting.current) {
       navigate(next, { replace: true });
     }
   }, [initialized, user, navigate, next]);
@@ -33,6 +38,7 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
+    submitting.current = true;
 
     try {
       await signIn(email, password);
@@ -44,12 +50,19 @@ export function LoginPage() {
         // An explicit return path beats the profile nudge: a claim has a
         // 10-minute tap window and must not be detoured.
         const hasExplicitNext = searchParams.get('next') !== null;
-        navigate(isProfileComplete || hasExplicitNext ? next : '/profile');
+        const target = isProfileComplete || hasExplicitNext ? next : '/profile';
+        // S-2FA: an account with a passkey or authenticator app confirms it
+        // next. If the status cannot be read, carry on: the server still
+        // refuses every protected action without it.
+        const mfa = await useMfaStore.getState().ensure(sessionKeyOf(session.access_token, session.user.id));
+        navigate(mfa?.hasFactor && !mfa.sessionVerified ? secondFactorPathFor(target) : target);
       } else {
         navigate(next);
       }
     } catch (err) {
       console.error('Login error:', err);
+    } finally {
+      submitting.current = false;
     }
   };
 

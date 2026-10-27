@@ -65,7 +65,7 @@ export const claimErrorCopy = (reason: TokenErrorReason | null, fallback: string
     case 'token_suspended':
       return 'This token is on hold and cannot be claimed right now.';
     case '2fa_required':
-      return 'Claiming needs two-factor authentication on your account. It is not available yet. We will let you know when it is.';
+      return 'Claiming needs two-step sign-in. Confirm it is you with your passkey or code (Settings → Security), then tap the token again.';
     default:
       return fallback;
   }
@@ -91,7 +91,7 @@ export const transferErrorCopy = (error: { reason: TokenErrorReason | null; code
     case 'invalid_signature':
       return 'We could not verify your tap. Tap the token again to accept.';
     case '2fa_required':
-      return 'Transfers need two-factor authentication on your account. It is not available yet. We will let you know when it is.';
+      return 'Transfers need two-step sign-in. Confirm it is you with your passkey or code (Settings → Security), then try again.';
     default:
       break;
   }
@@ -116,6 +116,8 @@ export const releaseErrorCopy = (reason: TokenErrorReason | null, fallback: stri
       return 'This chip was retired. There is nothing to release.';
     case 'token_suspended':
       return 'This token is on hold and cannot be released right now.';
+    case '2fa_required':
+      return 'Releasing needs two-step sign-in. Confirm it is you with your passkey or code (Settings → Security), then try again.';
     default:
       return fallback;
   }

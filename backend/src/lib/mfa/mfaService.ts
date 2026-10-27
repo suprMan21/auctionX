@@ -7,7 +7,21 @@
  *   - Adding a factor needs a session that already passed its second factor,
  *     except the very first one (nothing to check against yet).
  *   - Removing a factor needs a step-up, and the last factor can never go.
- *   - Step-up is passkey only, single use, for one action on one target.
+ *   - Step-up is single use, for one action on one target. What may confirm it:
+ *       factor_add / factor_remove / recovery_regen: passkey, authenticator code
+ *         or backup code (a user who lost their phone must be able to fix this);
+ *       release / transfer_complete: passkey or authenticator code, never a
+ *         backup code; staff accounts passkey only (Boss, 2026-10-27; this
+ *         replaces the passkey-only release decision of 2026-10-03 for
+ *         non-staff accounts);
+ *       price_change / admin_action / admin_approve: passkey only.
+ *   - Adding or removing a sign-in method, or making new backup codes, ends
+ *     every other session of the account (Ph2). The change is committed first;
+ *     if ending the other sessions fails, it is logged loudly and the response
+ *     says `otherSessionsEnded: false` rather than failing a change that
+ *     already happened.
+ *   - Staff accounts' own sign-in method changes and code lockouts also go to
+ *     audit_logs (method only, written after the change, never blocking).
  *   - super_admin is the break-glass account: device-bound passkeys only (a
  *     hardware key; synced passkeys refused), no authenticator app, a 1-hour
  *     marker, and an alert email on every sign-in.
@@ -37,7 +51,8 @@ import { generateRecoveryCodes, hashRecoveryCode, normaliseRecoveryCode } from '
 import { openSecret, sealSecret } from './secretBox';
 import { generateTotpSecret, matchTotp, otpauthUri, base32Encode } from './totp';
 import { sendMfaEmail } from './mfaEmails';
-import { getMfaStore, type MfaMethod, type PasskeyRow, type StepUpAction } from './store';
+import { log } from '../logger';
+import { getMfaStore, type MfaMethod, type PasskeyRow, type StaffMfaAuditAction, type StepUpAction } from './store';
 
 export const STEP_UP_ACTIONS: readonly StepUpAction[] = [
   'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
@@ -48,9 +63,15 @@ export const STEP_UP_ACTIONS: readonly StepUpAction[] = [
  * Changing the sign-in methods themselves may be confirmed with an
  * authenticator or backup code as well as a passkey: someone who lost their
  * phone must still be able to add a new passkey and remove the lost one.
- * Token and admin actions stay passkey only (release decision, Locked 2026-10-03).
  */
 export const CODE_STEP_UP_ACTIONS: readonly StepUpAction[] = ['factor_add', 'factor_remove', 'recovery_regen'];
+
+/**
+ * Token actions a non-staff account may confirm with its authenticator app
+ * (Boss, 2026-10-27). Never with a backup code, and never for staff: staff
+ * confirm these with a passkey. Every other action is passkey only.
+ */
+export const TOTP_STEP_UP_ACTIONS: readonly StepUpAction[] = ['release', 'transfer_complete'];
 
 export interface Caller {
   userId: string;
@@ -72,7 +93,11 @@ export type MfaReason =
   | 'last_factor'
   | 'already_set_up'
   | 'no_passkey'
-  | 'not_available';
+  | 'not_available'
+  /** Staff confirm token actions with a passkey only. */
+  | 'passkey_required'
+  /** A backup code cannot confirm a token action (passkey or authenticator app). */
+  | 'backup_code_not_allowed';
 
 const refuse = (code: 'permission_denied' | 'invalid_argument' | 'conflict' | 'resource_exhausted' | 'failed_precondition',
   message: string, reason: MfaReason): never => {
@@ -113,6 +138,54 @@ const emit = (
 };
 
 const nowIso = (): string => new Date().toISOString();
+
+const errText = (err: unknown): string => (err instanceof Error ? err.message.slice(0, 200) : 'unknown');
+
+/**
+ * Staff accounts' own sign-in method changes go to audit_logs as well. Runs
+ * AFTER the change is committed, so a failed write is logged, never thrown:
+ * the change already happened and the security event still records it.
+ */
+const auditIfStaff = async (caller: Caller, action: StaffMfaAuditAction, method: MfaMethod | null): Promise<void> => {
+  try {
+    if (!(await getMfaStore().staffRole(caller.userId))) return;
+    if (!caller.email) {
+      log.error('mfa_staff_audit_skipped', { requestId: caller.log.requestId, action, cause: 'no_email' });
+      return;
+    }
+    await getMfaStore().writeStaffAudit({
+      adminId: caller.userId,
+      adminEmail: caller.email,
+      action,
+      method,
+      ip: caller.log.ip === 'unknown' ? null : caller.log.ip,
+    });
+  } catch (err) {
+    log.error('mfa_staff_audit_failed', { requestId: caller.log.requestId, action, error: errText(err) });
+  }
+};
+
+/**
+ * Ends every other session of the account after a sign-in method changed,
+ * keeping the caller's. Never throws: the change is already committed, so a
+ * failure is logged loudly and reported as `otherSessionsEnded: false`.
+ */
+const endOtherSessions = async (caller: Caller): Promise<boolean> => {
+  if (!caller.sessionId) return false;
+  try {
+    await getMfaStore().endOtherSessions(caller.userId, caller.sessionId);
+    return true;
+  } catch (err) {
+    log.error('mfa_end_other_sessions_failed', { requestId: caller.log.requestId, actorId: caller.userId, error: errText(err) });
+    return false;
+  }
+};
+
+/** Everything that follows a committed sign-in method change. */
+const afterFactorChange = async (caller: Caller, action: StaffMfaAuditAction, method: MfaMethod): Promise<boolean> => {
+  const [ended] = await Promise.all([endOtherSessions(caller), auditIfStaff(caller, action, method)]);
+  return ended;
+};
 const sha256Hex = (s: string): string => createHash('sha256').update(s).digest('hex');
 
 // ── Status ──────────────────────────────────────────────────────────────────
@@ -135,14 +208,19 @@ export const hasSecondFactor = async (userId: string, sessionId: string | null):
   return Boolean(await getMfaStore().getSession(sessionId, userId, nowIso()));
 };
 
-/** Public-safe status: never a public key, credential id, secret or hash. */
-export const getStatus = async (caller: Caller, enrolmentRequired: boolean) => {
+/**
+ * Public-safe status: never a public key, credential id, secret or hash.
+ * `secondFactorRequired` (the caller's input) = the server refuses this
+ * account's token / admin actions without a verified second factor.
+ * `isStaff` tells the frontend to offer only a passkey for token step-ups.
+ */
+export const getStatus = async (caller: Caller, secondFactorRequired: boolean) => {
   const store = getMfaStore();
-  const [summary, codesLeft, verified, superAdmin, lockedUntil] = await Promise.all([
+  const [summary, codesLeft, verified, role, lockedUntil] = await Promise.all([
     factorSummary(caller.userId),
     store.countRecoveryCodes(caller.userId),
     hasSecondFactor(caller.userId, caller.sessionId),
-    isSuperAdmin(caller.userId),
+    store.staffRole(caller.userId),
     store.lockedUntil(caller.userId, nowIso()),
   ]);
   return {
@@ -157,8 +235,10 @@ export const getStatus = async (caller: Caller, enrolmentRequired: boolean) => {
     backupCodesLeft: codesLeft,
     hasFactor: summary.total > 0,
     sessionVerified: verified,
-    enrolmentRequired: enrolmentRequired && summary.total === 0,
-    breakGlass: superAdmin,
+    enrolmentRequired: secondFactorRequired && summary.total === 0,
+    secondFactorRequired,
+    breakGlass: role === 'super_admin',
+    isStaff: role !== null,
     codeEntryLockedUntil: lockedUntil,
   };
 };
@@ -297,10 +377,14 @@ export const passkeyRegisterVerify = async (
   const backupCodes = first ? await finishFirstFactor(caller, 'passkey', superAdmin) : null;
   emit(caller, 'enrol', 'passkey', 'ok', superAdmin);
   notify(caller, superAdmin, { kind: 'factor_added', method: 'passkey', nickname: row.nickname });
+  // A first factor ends the other sessions too: harmless, and it signs out
+  // anyone else who was already in with just the password.
+  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_add', 'passkey');
 
   return {
     passkey: { id: row.id, nickname: row.nickname, synced: row.backed_up, createdAt: row.created_at },
     backupCodes,
+    otherSessionsEnded,
   };
 };
 
@@ -401,6 +485,7 @@ const startCodeAttempt = async (caller: Caller, method: MfaMethod, superAdmin: b
   if (newlyLocked) {
     emit(caller, 'lockout', method, 'mfa_locked', superAdmin);
     notify(caller, superAdmin, { kind: 'code_entry_locked' });
+    await auditIfStaff(caller, 'mfa_lockout', method);
   }
   emit(caller, action, method, 'mfa_locked', superAdmin);
   throw new AppError('resource_exhausted', LOCKED_MESSAGE, { reason: 'mfa_locked' });
@@ -517,7 +602,8 @@ const issueGrant = async (caller: Caller, sessionId: string, action: StepUpActio
 export const stepUpVerify = async (caller: Caller, input: StepUpVerifyInput) => {
   const sessionId = requireSessionId(caller);
   await assertVerifiedSession(caller);
-  const superAdmin = await isSuperAdmin(caller.userId);
+  const role = await getMfaStore().staffRole(caller.userId);
+  const superAdmin = role === 'super_admin';
 
   if ('challengeId' in input) {
     const ok = await verifyAssertion(caller, 'step_up', input.challengeId, input.response, superAdmin);
@@ -531,7 +617,13 @@ export const stepUpVerify = async (caller: Caller, input: StepUpVerifyInput) => 
     return grant;
   }
 
-  if (!CODE_STEP_UP_ACTIONS.includes(input.action)) {
+  // Refused before the code is checked, so a refused code is never spent.
+  if (TOTP_STEP_UP_ACTIONS.includes(input.action)) {
+    if (role !== null) refuse('invalid_argument', 'Staff accounts confirm this with a passkey', 'passkey_required');
+    if (!('totp' in input)) {
+      refuse('invalid_argument', 'Use your passkey or authenticator app to confirm this', 'backup_code_not_allowed');
+    }
+  } else if (!CODE_STEP_UP_ACTIONS.includes(input.action)) {
     refuse('invalid_argument', 'Use your passkey to confirm this', 'no_passkey');
   }
   const { method } = await checkCode(caller, input, superAdmin, 'step_up_issue');
@@ -554,7 +646,8 @@ export const consumeStepUp = async (
       /^[A-Za-z0-9_-]{43}$/.test(token) &&
       (await getMfaStore().consumeGrant(sha256Hex(token), caller.userId, caller.sessionId, action, targetId, nowIso())),
   );
-  emit(caller, 'step_up_use', 'passkey', ok ? 'ok' : 'step_up_required', superAdmin, action);
+  // The grant does not record how it was issued (step_up_issue carries the method).
+  emit(caller, 'step_up_use', null, ok ? 'ok' : 'step_up_required', superAdmin, action);
   return ok;
 };
 
@@ -591,7 +684,8 @@ export const totpConfirm = async (caller: Caller, input: { code: string }) => {
   const backupCodes = first ? await finishFirstFactor(caller, 'totp', false) : null;
   emit(caller, 'enrol', 'totp', 'ok', false);
   sendMfaEmail(caller.email, { kind: 'factor_added', method: 'totp' });
-  return { authenticatorApp: true, backupCodes };
+  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_add', 'totp');
+  return { authenticatorApp: true, backupCodes, otherSessionsEnded };
 };
 
 // ── Backup codes ────────────────────────────────────────────────────────────
@@ -607,7 +701,8 @@ export const regenerateRecoveryCodes = async (caller: Caller, stepUpToken?: stri
   const superAdmin = await isSuperAdmin(caller.userId);
   emit(caller, 'recovery_regen', 'recovery_code', 'ok', superAdmin);
   notify(caller, superAdmin, { kind: 'recovery_codes_new' });
-  return { backupCodes: codes };
+  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_recovery_regen', 'recovery_code');
+  return { backupCodes: codes, otherSessionsEnded };
 };
 
 // ── Manage factors ──────────────────────────────────────────────────────────
@@ -637,7 +732,8 @@ export const removePasskey = async (caller: Caller, id: string) => {
   }
   emit(caller, 'remove', 'passkey', 'ok', superAdmin);
   notify(caller, superAdmin, { kind: 'factor_removed', method: 'passkey', nickname: target.nickname });
-  return { removed: id };
+  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_remove', 'passkey');
+  return { removed: id, otherSessionsEnded };
 };
 
 export const removeTotp = async (caller: Caller) => {
@@ -649,5 +745,6 @@ export const removeTotp = async (caller: Caller) => {
   }
   emit(caller, 'remove', 'totp', 'ok', superAdmin);
   notify(caller, superAdmin, { kind: 'factor_removed', method: 'totp' });
-  return { removed: 'totp' };
+  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_remove', 'totp');
+  return { removed: 'totp', otherSessionsEnded };
 };

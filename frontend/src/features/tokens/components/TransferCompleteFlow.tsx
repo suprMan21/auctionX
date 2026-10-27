@@ -9,6 +9,8 @@ import type { TransferCompletePaid } from '../api/schemas';
 import { formatMoney, transferErrorCopy } from '../lib/copy';
 import { transferReturnUrl } from '../lib/transferReturn';
 import { TransferProcessing } from './TransferProcessing';
+import { StepUpPanel } from '@/features/security/components/StepUpPanel';
+import { isSecondFactorRefusal, isStepUpRefusal } from '@/features/security/lib/stepUp';
 
 interface TransferCompleteFlowProps {
   readonly transferId: string;
@@ -26,6 +28,8 @@ type Phase =
   /** A free transfer (voucher) was used: the server already completed it. No Stripe step. */
   | { kind: 'free' }
   | { kind: 'processing' }
+  /** S-2FA: the server wants a fresh passkey or authenticator check first. */
+  | { kind: 'step-up' }
   | { kind: 'error'; message: string };
 
 /**
@@ -39,17 +43,23 @@ type Phase =
 export const TransferCompleteFlow = ({ transferId, tagId, tapSession, onSessionSpent, onCompleted }: TransferCompleteFlowProps) => {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
 
-  const start = async () => {
+  const start = async (stepUpToken?: string) => {
     if (!tapSession) return;
     setPhase({ kind: 'starting' });
     try {
-      const charge = await tokenApi.completeTransfer(transferId, tapSession);
+      const charge = await tokenApi.completeTransfer(transferId, tapSession, stepUpToken);
       onSessionSpent();
       setPhase(charge.voucherApplied ? { kind: 'free' } : { kind: 'paying', charge });
     } catch (err) {
+      // The second-factor gates refuse before the handler runs, so the tap
+      // session is still good: confirm, then send it again.
+      if (isStepUpRefusal(err)) {
+        setPhase({ kind: 'step-up' });
+        return;
+      }
       const apiError = err instanceof TokenApiError ? err : null;
-      // Any answer from /complete has spent the session, success or not.
-      if (apiError && apiError.status !== 0) onSessionSpent();
+      // Any other answer from /complete has spent the session, success or not.
+      if (apiError && apiError.status !== 0 && !isSecondFactorRefusal(err)) onSessionSpent();
       setPhase({
         kind: 'error',
         message: apiError ? transferErrorCopy(apiError) : 'Something went wrong. Please try again.',
@@ -91,10 +101,20 @@ export const TransferCompleteFlow = ({ transferId, tagId, tapSession, onSessionS
           <p className="text-gray-400 text-sm mb-5">
             You pay a small transfer fee. You will see the exact amount before you pay.
           </p>
-          <Button onClick={start} disabled={phase.kind === 'starting'} aria-busy={phase.kind === 'starting'}>
+          <Button onClick={() => void start()} disabled={phase.kind === 'starting'} aria-busy={phase.kind === 'starting'}>
             {phase.kind === 'starting' ? 'Preparing payment…' : 'Accept and continue to payment'}
           </Button>
         </>
+      )}
+
+      {phase.kind === 'step-up' && tapSession && (
+        <StepUpPanel
+          action="transfer_complete"
+          targetId={transferId}
+          purpose="accept this transfer"
+          onConfirmed={(token) => void start(token)}
+          onCancel={() => setPhase({ kind: 'idle' })}
+        />
       )}
 
       {phase.kind === 'paying' && (

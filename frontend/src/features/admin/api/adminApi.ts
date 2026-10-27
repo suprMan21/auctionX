@@ -66,6 +66,9 @@ async function getAuthHeader(): Promise<{ Authorization: string }> {
   return { Authorization: `Bearer ${session.access_token}` };
 }
 
+/** S-2FA: a one-time "Confirm it's you" grant for this exact action. */
+const stepUpHeaders = (token?: string): Record<string, string> => (token ? { 'X-Step-Up': token } : {});
+
 /** A non-2xx admin API answer. `message` is the server's safe text. */
 export class AdminApiError extends Error {
   constructor(message: string, readonly status: number, readonly code: string | null) {
@@ -577,20 +580,21 @@ export const adminApi = {
   },
 
   /** POST /admin/pricing — effectiveFrom null = now; a future time schedules it. */
-  async setPrice(body: { kind: PriceKind; amountUsdCents: number; effectiveFrom: string | null; reason: string }) {
+  async setPrice(body: { kind: PriceKind; amountUsdCents: number; effectiveFrom: string | null; reason: string }, stepUpToken?: string) {
     return parseEnvelope(
       setPriceResultSchema,
-      await adminFetch<unknown>('/pricing', { method: 'POST', body: JSON.stringify(body) }),
+      await adminFetch<unknown>('/pricing', { method: 'POST', body: JSON.stringify(body), headers: stepUpHeaders(stepUpToken) }),
     );
   },
 
   /** POST /admin/pricing/:id/cancel — scheduled changes only. */
-  async cancelPrice(priceId: string, reason: string) {
+  async cancelPrice(priceId: string, reason: string, stepUpToken?: string) {
     return parseEnvelope(
       cancelPriceResultSchema,
       await adminFetch<unknown>(`/pricing/${encodeURIComponent(priceId)}/cancel`, {
         method: 'POST',
         body: JSON.stringify({ reason }),
+        headers: stepUpHeaders(stepUpToken),
       }),
     );
   },
