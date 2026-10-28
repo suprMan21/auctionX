@@ -6,6 +6,8 @@ import {
   __setHardwareKeyRoots,
   checkHardwareKeyAttestation,
 } from '../lib/mfa/hardwareKeyAttestation';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { TEST_ROOT_PEM, otherVendor, testVendor } from './helpers/attestationFixtures';
 
 /** S-2FA Ph4: the break-glass account's YubiKey check (chain part; signatures are @simplewebauthn's). */
@@ -79,6 +81,17 @@ describe('checkHardwareKeyAttestation', () => {
     trustTest();
     const later = Date.parse('2200-01-01');
     expect(checkHardwareKeyAttestation(attObj('packed', testVendor().chainPem.map(der)), MODEL, later)).toBe('bad_chain');
+  });
+
+  it('refuses a leaf that is not a FIDO attestation certificate (e.g. PIV), even under a trusted root', () => {
+    const fx = (f: string) => readFileSync(join(__dirname, 'fixtures', 'attestation', f), 'utf8');
+    __setHardwareKeyRoots([fx('nofido-root.pem')]);
+    expect(checkHardwareKeyAttestation(attObj('packed', [der(fx('nofido-leaf.pem'))]), MODEL)).toBe('bad_chain');
+  });
+
+  it('refuses a CA certificate as the leaf', () => {
+    trustTest();
+    expect(checkHardwareKeyAttestation(attObj('packed', [der(testVendor().chainPem[1])]), MODEL)).toBe('bad_chain');
   });
 
   it('refuses a blank model ID', () => {

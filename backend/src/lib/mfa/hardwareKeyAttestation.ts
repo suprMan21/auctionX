@@ -11,7 +11,10 @@
  *   - format `packed` with a certificate chain (x5c), never self attestation;
  *   - every certificate in date; each one signed by the next; intermediates are CAs;
  *   - the chain ends at one of Yubico's FIDO roots, pinned below;
+ *   - the leaf is a FIDO attestation certificate (model-ID extension, not a CA);
  *   - the model ID is not all zeros.
+ * Only `packed` is accepted: older U2F-only keys (`fido-u2f`) are refused. Every YubiKey 5
+ * and Security Key series key uses `packed`.
  * Synced passkeys are refused separately (backup flags).
  *
  * Roots from https://developers.yubico.com/PKI/yubico-ca-certs.txt (2026-10-28),
@@ -107,6 +110,9 @@ export const __setHardwareKeyRoots = (pems: readonly string[] | null): void => {
 
 export type HardwareKeyRefusal = 'no_attestation' | 'bad_chain' | 'unknown_vendor' | 'no_model';
 
+/** DER of OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid), which every FIDO2 attestation leaf carries. */
+const FIDO_AAGUID_OID = Buffer.from('060b2b0601040182e51c010104', 'hex');
+
 const ZERO_AAGUID = '00000000-0000-0000-0000-000000000000';
 
 const inDate = (c: X509Certificate, now: number): boolean =>
@@ -130,6 +136,8 @@ export const checkHardwareKeyAttestation = (
   }
   try {
     if (!certs.every((c) => inDate(c, now))) return 'bad_chain';
+    // Review L4: a FIDO attestation leaf (Yubico's newest root also issues PIV ones).
+    if (certs[0].ca || !certs[0].raw.includes(FIDO_AAGUID_OID)) return 'bad_chain';
     for (let i = 0; i < certs.length - 1; i++) {
       const next = certs[i + 1];
       if (!next.ca || !certs[i].checkIssued(next) || !certs[i].verify(next.publicKey)) return 'bad_chain';

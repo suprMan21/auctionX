@@ -3356,6 +3356,7 @@ export type Database = {
         Row: {
           aaguid: string | null
           added_by_recovery: string | null
+          attested_vendor: string | null
           backed_up: boolean
           created_at: string
           credential_id: string
@@ -3371,6 +3372,7 @@ export type Database = {
         Insert: {
           aaguid?: string | null
           added_by_recovery?: string | null
+          attested_vendor?: string | null
           backed_up?: boolean
           created_at?: string
           credential_id: string
@@ -3386,6 +3388,7 @@ export type Database = {
         Update: {
           aaguid?: string | null
           added_by_recovery?: string | null
+          attested_vendor?: string | null
           backed_up?: boolean
           created_at?: string
           credential_id?: string

@@ -543,6 +543,7 @@ export const passkeyRegisterVerify = async (
     nickname: input.nickname.trim(),
     usable_from: usableFrom,
     added_by_recovery: claimed,
+    attested_vendor: superAdmin ? 'yubico' : null,
   });
   } finally {
     if (claimed && !inserted) await store.releaseRecoveryEnrolment(caller.userId, claimed);
@@ -572,8 +573,11 @@ export const passkeyRegisterVerify = async (
 
 // ── Passkey assertion (sign-in second step and step-up) ─────────────────────
 
+/** Ph4 review M1: the break-glass account uses only YubiKeys attested at registration. */
+const breakGlassUsable = (p: PasskeyRow): boolean => !p.backed_up && p.attested_vendor === 'yubico';
+
 const usablePasskeys = (passkeys: PasskeyRow[], superAdmin: boolean): PasskeyRow[] =>
-  superAdmin ? passkeys.filter((p) => !p.backed_up) : passkeys;
+  superAdmin ? passkeys.filter(breakGlassUsable) : passkeys;
 
 const assertionOptions = async (
   caller: Caller,
@@ -625,8 +629,8 @@ const verifyAssertion = async (
   if (!challenge) return null;
 
   const passkey = await store.getPasskeyByCredentialId(response.id);
-  // Another account's passkey, or a synced one on the break-glass account: no.
-  if (!passkey || passkey.user_id !== caller.userId || (superAdmin && passkey.backed_up)) return null;
+  // Another account's passkey, or a synced / unattested one on the break-glass account: no.
+  if (!passkey || passkey.user_id !== caller.userId || (superAdmin && !breakGlassUsable(passkey))) return null;
 
   const cfg = webAuthnConfig();
   try {

@@ -313,6 +313,25 @@ describe('super_admin (break-glass)', () => {
     expect(events.named('auth.mfa').at(-1)).toMatchObject({ action: 'enrol', result: 'forbidden', break_glass: true });
   });
 
+  it('stores the attested maker; a passkey without it (added before Ph4) cannot sign in', async () => {
+    const app = await loadApp();
+    const { key } = await enrolFirst(app, ROOT, S1);
+    expect(mfaState.passkeys[0].attested_vendor).toBe('yubico');
+    expect((await signInWithPasskey(app, key, ROOT, S2)).status).toBe(200);
+
+    mfaState.passkeys[0].attested_vendor = null; // as stored before Ph4
+    // No usable passkey left: the options are refused, so nothing can be signed.
+    const opts = await request(app).post('/auth/mfa/sign-in/options').set('Authorization', auth(ROOT, 'dddddddd-dddd-4ddd-8ddd-ddddddddddd3'));
+    expect(opts.status).not.toBe(200);
+    expect(mfaState.sessions.get('dddddddd-dddd-4ddd-8ddd-ddddddddddd3')).toBeUndefined();
+  });
+
+  it('a regular account stores no maker', async () => {
+    const app = await loadApp();
+    await enrolFirst(app, USER, S1);
+    expect(mfaState.passkeys[0].attested_vendor ?? null).toBeNull();
+  });
+
   it('everyone else may still register without attestation', async () => {
     const app = await loadApp();
     const res = await enrolFirst(app, USER, S1, { attestation: 'other_vendor' });
