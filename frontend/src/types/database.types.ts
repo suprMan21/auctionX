@@ -14,6 +14,65 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_recoveries: {
+        Row: {
+          cancelled_at: string | null
+          channel: string
+          created_at: string
+          enrol_until: string | null
+          enrolled_at: string | null
+          finished_at: string | null
+          finished_session_id: string | null
+          freeze_ends_at: string | null
+          hold_ends_at: string
+          id: string
+          started_session_id: string
+          status: string
+          undone_at: string | null
+          user_id: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          channel: string
+          created_at?: string
+          enrol_until?: string | null
+          enrolled_at?: string | null
+          finished_at?: string | null
+          finished_session_id?: string | null
+          freeze_ends_at?: string | null
+          hold_ends_at: string
+          id?: string
+          started_session_id: string
+          status?: string
+          undone_at?: string | null
+          user_id: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          channel?: string
+          created_at?: string
+          enrol_until?: string | null
+          enrolled_at?: string | null
+          finished_at?: string | null
+          finished_session_id?: string | null
+          freeze_ends_at?: string | null
+          hold_ends_at?: string
+          id?: string
+          started_session_id?: string
+          status?: string
+          undone_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_recoveries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       account_settings: {
         Row: {
           delete_window_hours: number
@@ -34,6 +93,75 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      admin_action_approvals: {
+        Row: {
+          action: string
+          decided_at: string | null
+          decided_by: string | null
+          decision: string | null
+          decision_note: string | null
+          executed_at: string | null
+          expires_at: string
+          id: string
+          payload: Json
+          payload_hash: string
+          reason: string
+          requested_at: string
+          requested_by: string
+          result: Json | null
+          target_id: string
+        }
+        Insert: {
+          action: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: string | null
+          decision_note?: string | null
+          executed_at?: string | null
+          expires_at?: string
+          id?: string
+          payload: Json
+          payload_hash: string
+          reason: string
+          requested_at?: string
+          requested_by: string
+          result?: Json | null
+          target_id: string
+        }
+        Update: {
+          action?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: string | null
+          decision_note?: string | null
+          executed_at?: string | null
+          expires_at?: string
+          id?: string
+          payload?: Json
+          payload_hash?: string
+          reason?: string
+          requested_at?: string
+          requested_by?: string
+          result?: Json | null
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_action_approvals_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["admin_id"]
+          },
+          {
+            foreignKeyName: "admin_action_approvals_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["admin_id"]
+          },
+        ]
       }
       admin_roles: {
         Row: {
@@ -381,6 +509,41 @@ export type Database = {
           },
         ]
       }
+      auth_change_permits: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          kind: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          kind: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          kind?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auth_change_permits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bids: {
         Row: {
           amount_cents: number
@@ -586,6 +749,59 @@ export type Database = {
             columns: ["transaction_id"]
             isOneToOne: false
             referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_codes: {
+        Row: {
+          attempts: number
+          channel: string
+          code_hash: string
+          created_at: string
+          expires_at: string
+          id: string
+          nonce_hash: string
+          purpose: string
+          session_id: string
+          used_at: string | null
+          user_id: string
+          voided_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          channel: string
+          code_hash: string
+          created_at?: string
+          expires_at: string
+          id: string
+          nonce_hash: string
+          purpose: string
+          session_id: string
+          used_at?: string | null
+          user_id: string
+          voided_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          channel?: string
+          code_hash?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          nonce_hash?: string
+          purpose?: string
+          session_id?: string
+          used_at?: string | null
+          user_id?: string
+          voided_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_codes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -948,6 +1164,88 @@ export type Database = {
           {
             foreignKeyName: "messages_sender_id_fkey"
             columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mfa_challenges: {
+        Row: {
+          action: string | null
+          challenge: string
+          code_confirmed: boolean
+          created_at: string
+          expires_at: string
+          id: string
+          purpose: string
+          session_id: string
+          target_id: string | null
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          action?: string | null
+          challenge: string
+          code_confirmed?: boolean
+          created_at?: string
+          expires_at: string
+          id?: string
+          purpose: string
+          session_id: string
+          target_id?: string | null
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string | null
+          challenge?: string
+          code_confirmed?: boolean
+          created_at?: string
+          expires_at?: string
+          id?: string
+          purpose?: string
+          session_id?: string
+          target_id?: string | null
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mfa_challenges_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mfa_sessions: {
+        Row: {
+          expires_at: string
+          method: string
+          session_id: string
+          user_id: string
+          verified_at: string
+        }
+        Insert: {
+          expires_at: string
+          method: string
+          session_id: string
+          user_id: string
+          verified_at?: string
+        }
+        Update: {
+          expires_at?: string
+          method?: string
+          session_id?: string
+          user_id?: string
+          verified_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mfa_sessions_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -2679,6 +2977,53 @@ export type Database = {
           },
         ]
       }
+      step_up_grants: {
+        Row: {
+          action: string
+          created_at: string
+          expires_at: string
+          id: string
+          method: string | null
+          session_id: string
+          target_id: string
+          token_hash: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          method?: string | null
+          session_id: string
+          target_id: string
+          token_hash: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          method?: string | null
+          session_id?: string
+          target_id?: string
+          token_hash?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "step_up_grants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       token_prices: {
         Row: {
           amount_usd_cents: number
@@ -2938,6 +3283,210 @@ export type Database = {
             foreignKeyName: "transfer_voucher_redemptions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_backup_emails: {
+        Row: {
+          created_at: string
+          email: string
+          pending_email: string | null
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          pending_email?: string | null
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          pending_email?: string | null
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_backup_emails_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_mfa_state: {
+        Row: {
+          failed_attempts: number
+          lock_count: number
+          locked_until: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          failed_attempts?: number
+          lock_count?: number
+          locked_until?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          failed_attempts?: number
+          lock_count?: number
+          locked_until?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_mfa_state_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_passkeys: {
+        Row: {
+          aaguid: string | null
+          added_by_recovery: string | null
+          backed_up: boolean
+          created_at: string
+          credential_id: string
+          id: string
+          last_used_at: string | null
+          nickname: string
+          public_key: string
+          sign_count: number
+          transports: string[]
+          usable_from: string | null
+          user_id: string
+        }
+        Insert: {
+          aaguid?: string | null
+          added_by_recovery?: string | null
+          backed_up?: boolean
+          created_at?: string
+          credential_id: string
+          id?: string
+          last_used_at?: string | null
+          nickname: string
+          public_key: string
+          sign_count?: number
+          transports?: string[]
+          usable_from?: string | null
+          user_id: string
+        }
+        Update: {
+          aaguid?: string | null
+          added_by_recovery?: string | null
+          backed_up?: boolean
+          created_at?: string
+          credential_id?: string
+          id?: string
+          last_used_at?: string | null
+          nickname?: string
+          public_key?: string
+          sign_count?: number
+          transports?: string[]
+          usable_from?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_passkeys_added_by_recovery_fkey"
+            columns: ["added_by_recovery"]
+            isOneToOne: false
+            referencedRelation: "account_recoveries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_passkeys_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_recovery_codes: {
+        Row: {
+          code_hash: string
+          created_at: string
+          id: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          code_hash: string
+          created_at?: string
+          id?: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          code_hash?: string
+          created_at?: string
+          id?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_recovery_codes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_totp_factors: {
+        Row: {
+          added_by_recovery: string | null
+          created_at: string
+          last_used_step: number
+          secret_enc: string
+          usable_from: string | null
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          added_by_recovery?: string | null
+          created_at?: string
+          last_used_step?: number
+          secret_enc: string
+          usable_from?: string | null
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          added_by_recovery?: string | null
+          created_at?: string
+          last_used_step?: number
+          secret_enc?: string
+          usable_from?: string | null
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_totp_factors_added_by_recovery_fkey"
+            columns: ["added_by_recovery"]
+            isOneToOne: false
+            referencedRelation: "account_recoveries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_totp_factors_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -3276,9 +3825,19 @@ export type Database = {
         Args: { p_admin: string; p_permission: string }
         Returns: string
       }
+      admin_approval_permission: { Args: { p_action: string }; Returns: string }
       admin_audit_log_facets: { Args: never; Returns: Json }
       admin_cancel_token_price: {
         Args: { p_admin: string; p_price: string; p_reason: string }
+        Returns: Json
+      }
+      admin_decide_approval: {
+        Args: {
+          p_admin: string
+          p_decision: string
+          p_id: string
+          p_note: string
+        }
         Returns: Json
       }
       admin_delete_account: {
@@ -3291,6 +3850,7 @@ export type Database = {
         Returns: Json
       }
       admin_end_sessions: { Args: { p_user: string }; Returns: number }
+      admin_expire_approvals: { Args: never; Returns: number }
       admin_fulfil_reissue: {
         Args: {
           p_admin: string
@@ -3354,12 +3914,27 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_record_approval_result: {
+        Args: { p_id: string; p_result: Json }
+        Returns: undefined
+      }
       admin_refund_payment_incident: {
         Args: {
           p_admin: string
           p_incident: string
           p_reason: string
           p_refund_id: string
+        }
+        Returns: Json
+      }
+      admin_request_approval: {
+        Args: {
+          p_action: string
+          p_admin: string
+          p_payload: Json
+          p_payload_hash: string
+          p_reason: string
+          p_target: string
         }
         Returns: Json
       }
@@ -3481,6 +4056,7 @@ export type Database = {
         Returns: Json
       }
       available_transfer_vouchers: { Args: { p_user: string }; Returns: number }
+      begin_mfa_code_attempt: { Args: { p_user: string }; Returns: Json }
       calculate_platform_fee_percent: {
         Args: { tier: Database["public"]["Enums"]["tier_level"] }
         Returns: number
@@ -3496,6 +4072,11 @@ export type Database = {
         Args: { trailing_12mo_sales: number }
         Returns: Database["public"]["Enums"]["tier_level"]
       }
+      cancel_account_recovery: { Args: { p_user: string }; Returns: string }
+      claim_recovery_enrolment: {
+        Args: { p_session: string; p_user: string }
+        Returns: string
+      }
       confirm_anchor_batch: {
         Args: {
           p_anchored_at: string
@@ -3509,6 +4090,15 @@ export type Database = {
       determine_risk_level: {
         Args: { flags: Database["public"]["Enums"]["content_flag"][] }
         Returns: Database["public"]["Enums"]["content_risk_level"]
+      }
+      finish_account_recovery: {
+        Args: {
+          p_enrol_minutes: number
+          p_freeze_days: number
+          p_session: string
+          p_user: string
+        }
+        Returns: Json
       }
       generate_token_name: { Args: { p_user_id: string }; Returns: string }
       get_minimum_next_bid: { Args: { auction_uuid: string }; Returns: number }
@@ -3528,6 +4118,23 @@ export type Database = {
       is_high_bidder: {
         Args: { auction_uuid: string; user_uuid: string }
         Returns: boolean
+      }
+      issue_email_code: {
+        Args: {
+          p_channel: string
+          p_code_hash: string
+          p_expires_at: string
+          p_id: string
+          p_nonce_hash: string
+          p_purpose: string
+          p_session: string
+          p_user: string
+        }
+        Returns: Json
+      }
+      mfa_end_other_sessions: {
+        Args: { p_keep_session: string; p_user: string }
+        Returns: number
       }
       payment_admin_actor_email: {
         Args: { p_admin: string; p_need_admin: boolean }
@@ -3580,6 +4187,23 @@ export type Database = {
         }
         Returns: Json
       }
+      release_recovery_enrolment: {
+        Args: { p_id: string; p_user: string }
+        Returns: undefined
+      }
+      remove_mfa_factor: {
+        Args: {
+          p_break_glass: boolean
+          p_id: string
+          p_kind: string
+          p_user: string
+        }
+        Returns: string
+      }
+      replace_recovery_codes: {
+        Args: { p_hashes: string[]; p_user: string }
+        Returns: number
+      }
       request_creator_account: { Args: { p_user: string }; Returns: Json }
       reserve_chip_name: {
         Args: { p_actor?: string; p_name?: string; p_sig_sha256: string }
@@ -3587,6 +4211,30 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      start_account_recovery: {
+        Args: {
+          p_channel: string
+          p_hold_hours: number
+          p_session: string
+          p_user: string
+        }
+        Returns: Json
+      }
+      undo_account_recovery: {
+        Args: { p_id: string; p_keep_session: string; p_user: string }
+        Returns: Json
+      }
+      use_email_code: {
+        Args: {
+          p_code_hash: string
+          p_id: string
+          p_nonce_hash: string
+          p_purpose: string
+          p_session: string
+          p_user: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       admin_permission:
@@ -3607,6 +4255,7 @@ export type Database = {
         | "manage_pricing"
         | "view_creator_ids"
         | "manage_creator_ids"
+        | "act_without_approval"
       auction_status:
         | "DRAFT"
         | "SCHEDULED"
@@ -3863,6 +4512,7 @@ export const Constants = {
         "manage_pricing",
         "view_creator_ids",
         "manage_creator_ids",
+        "act_without_approval",
       ],
       auction_status: [
         "DRAFT",

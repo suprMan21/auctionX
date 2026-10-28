@@ -34,7 +34,7 @@
 
 ## Rollout (Boss)
 
-1. `supabase db push --linked` (applies `…13`), re-run the live SQL → 27/27, regenerate both `database.types.ts`, empty `PENDING_MIGRATION_COLUMNS`. (Claude's attempt to push was blocked by the permission check.)
+1. ✅ Done 2026-10-27: migration `…13` applied (Boss), live SQL 27/27 on staging, both `database.types.ts` regenerated, `PENDING_MIGRATION_COLUMNS` emptied.
 2. SES, us-east-2: verify the domain `authentic-materials.com` (Easy DKIM, 3 CNAMEs). While SES is in its sandbox it only sends to verified addresses: verify `test@` / `test2@` to test, then request production access.
 3. IAM: `ses:SendEmail` on the identity `authentic-materials.com` for whatever credentials App Runner actually uses. **App Runner has `AWS_ACCESS_KEY_ID` set**: env keys win over the instance role, so either remove them (better) or grant that user.
 4. App Runner env `SECURITY_MAIL_FROM` = `Authentic Materials <security@authentic-materials.com>` (one slot). Remove the Postmark security-server token if it is set (no longer used).
