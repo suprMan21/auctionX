@@ -13,13 +13,13 @@ Plan: `docs/plans/2026-10-28-s-seal1-ph1.md`.
 | # | Criterion | Status |
 |---|-----------|--------|
 | 1 | G1–G4 answered and recorded before the first code commit | ✅ Decisions DB 4073baf6…de2d0 (Locked 2026-10-28) |
-| 2 | Migration applied to staging; live SQL: format, unique, write-once, backfill, anon cannot read | ⏳ Dry run on staging **16/16** (BEGIN … ROLLBACK). `db push` blocked for Claude (classifier) → Boss runs it, then `supabase/tests/seal_code_live.sql` |
+| 2 | Migration applied to staging; live SQL: format, unique, write-once, backfill, anon cannot read | ✅ Boss `db push` 2026-10-28 (`20261028000003` applied remotely); live SQL `seal_code_live.sql` **16/16** after push (dry run 16/16 before) |
 | 3 | Encoder gets the seal code in the reserve step; unit-tested; next real encode recorded | ✅ unit tests (tag-encoder 253 passed). ⏳ next real encode: record its seal code here |
-| 4 | Valid tap → Verified seal with its own code + live cues; after the window → Sealed; failed / unknown → no seal | ✅ tests + browser (mocked tap). ⏳ silicon (AC 8) |
+| 4 | Valid tap → Verified seal with its own code + live cues; after the window → Sealed; failed / unknown → no seal | ✅ tests + browser (mocked tap) + silicon (AC 8) |
 | 5 | Reduced motion verified in a browser (no spin / glow; clock still updates) | ✅ Chromium 390×844, `reducedMotion: reduce`: badge + ring `animation-name: none`, "Checked by tap · 3 s ago" still counting |
 | 6 | Homepage unchanged visually; `publicSite.test.ts` + `HomePage.test.tsx` green | ✅ 6 + 21 green; seals still 48 / 88 / 44 px; glow now 3.0 s (the Locked change) |
 | 7 | No-private-fields tests; tsc 0; backend + frontend vitest green | ✅ tsc 0 both; backend 1109 passed / 23 skipped; frontend 427 passed |
-| 8 | Live check on silicon with `chip_004` (no re-encode) | ⏳ after deploy |
+| 8 | Live check on silicon with `chip_004` (no re-encode) | ✅ 2026-10-28, iPhone: code matches the database, Verified → Sealed after 90 s, refresh → Owned |
 | 9 | This report | ✅ |
 
 ## What changed
@@ -71,9 +71,12 @@ Plan: `docs/plans/2026-10-28-s-seal1-ph1.md`.
 4. Tap **chip_004** → Verified seal shows chip_004's code (compare: `select seal_code from nfc_tags where chip_name='chip_004'`)
    → wait 90 s → still seal with "Tap the seal again to check". Refresh → still seal, "Owned".
 
-## Results to fill in
+## Results
 
-- Live SQL after push: _
-- chip_004 seal code (DB) / shown on phone: _ / _
-- Phone (iOS / Android) Verified → Sealed: _
+Deploy 2026-10-28: backend START_DEPLOYMENT `67da1bc9…` SUCCEEDED (health 200, fake-SUN probe → `not_found`); dev pushed again with types + seal wording sweep; frontend staging deployed by Boss.
+
+
+- Live SQL after push: 16/16 ok (2026-10-28)
+- chip_004 seal code (DB) / shown on phone: `WAV4F6TT` / WAV4-F6TT ✅
+- Phone (iOS / Android) Verified → Sealed: iPhone ✅ (Verified with live cues → still seal "Tap the seal again to check" after 90 s → refresh shows still seal + "Owned"). Android not run.
 - Next real encode: chip name _, seal code _
