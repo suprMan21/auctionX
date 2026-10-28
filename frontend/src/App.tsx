@@ -40,6 +40,7 @@ import { SecondFactorGate } from '@/features/security/components/SecondFactorGat
 import { SecurityPage } from '@/features/security/pages/SecurityPage';
 import { SecondFactorPage } from '@/features/security/pages/SecondFactorPage';
 import { EnrolRequiredPage } from '@/features/security/pages/EnrolRequiredPage';
+import { RecoveryPage } from '@/features/security/pages/RecoveryPage';
 import { AdminLayout } from '@/features/admin/AdminLayout';
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
 import { AdminUsersPage } from '@/features/admin/pages/AdminUsersPage';
@@ -153,6 +154,8 @@ function App() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           {/* S-2FA Ph2: the step after the password. Not behind the gate (it is the gate's target). */}
           <Route path="/sign-in/verify" element={<SecondFactorPage />} />
+          {/* S-2FA Ph3b: email-code recovery. Signed in with the password only, so not behind the gate either. */}
+          <Route path="/sign-in/recover" element={<RecoveryPage />} />
           
           <Route
             path="/profile"

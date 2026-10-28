@@ -18,6 +18,7 @@ import type { StepUpAction } from '../lib/mfa/store';
 import { emitSecurityEvent } from '../lib/security/securityEvent';
 import { securityContext, type ActorType } from '../lib/security/requestContext';
 import { log } from '../lib/logger';
+import { activeFreeze, FREEZE_MESSAGE } from '../lib/mfa/recoveryState';
 
 type AnyReq = Request & { user?: { id: string; email?: string | null }; admin?: { admin_id: string; email: string }; requestId?: string };
 
@@ -93,3 +94,35 @@ export const requireStepUp =
       return deny(res, 503, 'Service temporarily unavailable', 'unavailable');
     }
   };
+
+/**
+ * S-2FA Ph3b: refuses token actions during the 7 days after an email-code
+ * recovery (transfer start + accept, release, re-issue request). Always on,
+ * flag or not: a freeze only exists after a recovery. Runs before any step-up
+ * so a refused request never spends one. Fails closed.
+ */
+export const refuseWhileFrozen: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const caller = callerFrom(req as AnyReq);
+    if (!caller) return deny(res, 401, 'Authentication required', 'unauthenticated');
+    const until = await activeFreeze(caller.userId);
+    if (!until) return next();
+    emitSecurityEvent({
+      event: 'auth.mfa',
+      action: 'recovery_freeze_block',
+      method: null,
+      step_up_action: null,
+      break_glass: false,
+      result: 'recovery_freeze',
+      request_id: caller.log.requestId,
+      actor_id: caller.log.actorId,
+      actor_type: caller.log.actorType,
+      ip: caller.log.ip,
+      route: caller.log.route,
+    });
+    res.status(403).json({ success: false, data: null, error: FREEZE_MESSAGE, code: 'recovery_freeze', reason: 'recovery_freeze', freezeEndsAt: until });
+  } catch (err) {
+    log.error('recovery_freeze_gate_failed', { error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' });
+    return deny(res, 503, 'Service temporarily unavailable', 'unavailable');
+  }
+};

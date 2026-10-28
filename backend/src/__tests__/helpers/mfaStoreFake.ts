@@ -8,6 +8,9 @@
 import { randomUUID } from 'crypto';
 import type {
   AccountChangeKind,
+  BackupEmailRow,
+  NewEmailCode,
+  RecoveryRow,
   ChallengeRow,
   MfaMethod,
   MfaSessionRow,
@@ -36,6 +39,10 @@ export interface MfaFakeState {
   permits: Array<{ user_id: string; kind: AccountChangeKind; expires_at: string; used_at: string | null }>;
   /** Set to make the next call of that method throw like a database error. */
   failNext: Set<keyof MfaStore>;
+  // ── Ph3b ──
+  backupEmails: Map<string, BackupEmailRow>;
+  emailCodes: Array<NewEmailCode & { attempts: number; used_at: string | null; voided_at: string | null; created_at: string }>;
+  recoveries: Array<RecoveryRow & { user_id: string; cancelled_at: string | null; undone_at: string | null }>;
 }
 
 export const createMfaFakeState = (): MfaFakeState => ({
@@ -51,6 +58,9 @@ export const createMfaFakeState = (): MfaFakeState => ({
   audits: [],
   permits: [],
   failNext: new Set(),
+  backupEmails: new Map(),
+  emailCodes: [],
+  recoveries: [],
 });
 
 export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
@@ -72,7 +82,10 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
     async insertPasskey(row: NewPasskey) {
       guard('insertPasskey');
       if (st.passkeys.some((p) => p.credential_id === row.credential_id)) return null;
-      const full: PasskeyRow = { ...row, usable_from: row.usable_from ?? null, id: randomUUID(), created_at: new Date().toISOString(), last_used_at: null };
+      const full: PasskeyRow = {
+        ...row, usable_from: row.usable_from ?? null, added_by_recovery: row.added_by_recovery ?? null,
+        id: randomUUID(), created_at: new Date().toISOString(), last_used_at: null,
+      };
       st.passkeys.push(full);
       return full;
     },
@@ -111,10 +124,13 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
     async getTotp(userId) {
       return st.totp.get(userId) ?? null;
     },
-    async startTotp(userId, secretEnc, usableFrom) {
+    async startTotp(userId, secretEnc, usableFrom, addedByRecovery = null) {
       const cur = st.totp.get(userId);
       if (cur?.verified_at) return false;
-      st.totp.set(userId, { user_id: userId, secret_enc: secretEnc, verified_at: null, last_used_step: 0, usable_from: usableFrom });
+      st.totp.set(userId, {
+        user_id: userId, secret_enc: secretEnc, verified_at: null, last_used_step: 0, usable_from: usableFrom,
+        added_by_recovery: addedByRecovery,
+      });
       return true;
     },
     async useTotpStep(userId, step, confirm) {
@@ -227,6 +243,147 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
     async createAuthChangePermit(userId, kind, expiresAt) {
       guard('createAuthChangePermit');
       st.permits.push({ user_id: userId, kind, expires_at: expiresAt, used_at: null });
+    },
+
+    // ── Ph3b: same rules as the SQL functions (proven by s_2fa_ph3b_live.sql) ──
+    async getBackupEmail(userId) {
+      guard('getBackupEmail');
+      return st.backupEmails.get(userId) ?? null;
+    },
+    async setPendingBackupEmail(userId, email) {
+      guard('setPendingBackupEmail');
+      const cur = st.backupEmails.get(userId);
+      if (cur?.verified_at && cur.email !== email) {
+        cur.pending_email = email;
+        return;
+      }
+      st.backupEmails.set(userId, { email, verified_at: null, pending_email: null });
+    },
+    async verifyBackupEmail(userId, email) {
+      const row = st.backupEmails.get(userId);
+      if (!row) return false;
+      if (row.pending_email === email) {
+        row.email = email;
+        row.verified_at = new Date().toISOString();
+        row.pending_email = null;
+        return true;
+      }
+      if (row.email !== email || row.verified_at) return false;
+      row.verified_at = new Date().toISOString();
+      return true;
+    },
+    async deleteBackupEmail(userId) {
+      const row = st.backupEmails.get(userId);
+      st.backupEmails.delete(userId);
+      return row?.email ?? null;
+    },
+    async issueEmailCode(row) {
+      guard('issueEmailCode');
+      const now = Date.now();
+      const mine = st.emailCodes.filter((c) => c.user_id === row.user_id);
+      const last = mine.reduce((m, c) => Math.max(m, Date.parse(c.created_at)), 0);
+      if (last && last > now - 60_000) return { status: 'cooldown', retryAfter: new Date(last + 60_000).toISOString() };
+      const hour = mine.filter((c) => Date.parse(c.created_at) > now - 3_600_000);
+      if (hour.length >= 3) return { status: 'hour_limit', retryAfter: new Date(Math.min(...hour.map((c) => Date.parse(c.created_at))) + 3_600_000).toISOString() };
+      const day = mine.filter((c) => Date.parse(c.created_at) > now - 86_400_000);
+      if (day.length >= 10) return { status: 'day_limit', retryAfter: new Date(Math.min(...day.map((c) => Date.parse(c.created_at))) + 86_400_000).toISOString() };
+      for (const c of mine) if (c.purpose === row.purpose && !c.used_at && !c.voided_at) c.voided_at = new Date(now).toISOString();
+      st.emailCodes.push({ ...row, attempts: 0, used_at: null, voided_at: null, created_at: new Date(now).toISOString() });
+      return { status: 'ok', retryAfter: new Date(now + 60_000).toISOString() };
+    },
+    async useEmailCode(p) {
+      guard('useEmailCode');
+      const c = st.emailCodes.find((x) => x.id === p.id && x.user_id === p.userId && x.purpose === p.purpose);
+      if (!c || c.session_id !== p.sessionId || c.nonce_hash !== p.nonceHash) return { result: 'invalid', channel: null };
+      if (c.used_at || c.voided_at || c.expires_at <= new Date().toISOString()) return { result: 'expired', channel: null };
+      if (c.attempts >= 5) return { result: 'locked', channel: null };
+      c.attempts += 1;
+      if (c.code_hash === p.codeHash) {
+        c.used_at = new Date().toISOString();
+        return { result: 'ok', channel: c.channel };
+      }
+      return { result: c.attempts >= 5 ? 'locked' : 'wrong', channel: null };
+    },
+    async latestRecovery(userId) {
+      guard('latestRecovery');
+      const mine = st.recoveries.filter((r) => r.user_id === userId);
+      return mine.length ? mine[mine.length - 1] : null;
+    },
+    async startRecovery(userId, sessionId, channel, holdHours) {
+      guard('startRecovery');
+      const now = new Date().toISOString();
+      const mine = st.recoveries.filter((r) => r.user_id === userId);
+      if (mine.some((r) => r.status === 'holding')) return { status: 'busy', id: null, holdEndsAt: null };
+      if (mine.some((r) => r.status === 'completed' && (r.freeze_ends_at ?? '') > now)) return { status: 'frozen', id: null, holdEndsAt: null };
+      const row = {
+        id: randomUUID(), user_id: userId, channel, status: 'holding' as const, started_session_id: sessionId,
+        hold_ends_at: new Date(Date.now() + holdHours * 3_600_000).toISOString(),
+        finished_at: null, finished_session_id: null, freeze_ends_at: null, enrol_until: null, enrolled_at: null,
+        created_at: now, cancelled_at: null, undone_at: null,
+      };
+      st.recoveries.push(row);
+      return { status: 'ok', id: row.id, holdEndsAt: row.hold_ends_at };
+    },
+    async finishRecovery(userId, sessionId, freezeDays, enrolMinutes) {
+      guard('finishRecovery');
+      const r = st.recoveries.find((x) => x.user_id === userId && x.status === 'holding');
+      if (!r) return { status: 'none', id: null, freezeEndsAt: null, enrolUntil: null, holdEndsAt: null };
+      if (r.hold_ends_at > new Date().toISOString()) return { status: 'not_ready', id: null, freezeEndsAt: null, enrolUntil: null, holdEndsAt: r.hold_ends_at };
+      r.status = 'completed';
+      r.finished_at = new Date().toISOString();
+      r.finished_session_id = sessionId;
+      r.freeze_ends_at = new Date(Date.now() + freezeDays * 86_400_000).toISOString();
+      r.enrol_until = new Date(Date.now() + enrolMinutes * 60_000).toISOString();
+      st.codes = st.codes.filter((c) => c.user_id !== userId);
+      const existing = st.sessions.get(sessionId);
+      if (!existing || existing.user_id === userId) {
+        st.sessions.set(sessionId, { session_id: sessionId, user_id: userId, method: 'email_recovery', expires_at: r.enrol_until });
+      }
+      return { status: 'ok', id: r.id, freezeEndsAt: r.freeze_ends_at, enrolUntil: r.enrol_until, holdEndsAt: r.hold_ends_at };
+    },
+    async cancelRecovery(userId) {
+      guard('cancelRecovery');
+      const r = st.recoveries.find((x) => x.user_id === userId && x.status === 'holding');
+      if (!r) return null;
+      r.status = 'cancelled';
+      r.cancelled_at = new Date().toISOString();
+      return r.id;
+    },
+    async claimRecoveryEnrolment(userId, sessionId) {
+      guard('claimRecoveryEnrolment');
+      const now = new Date().toISOString();
+      const r = st.recoveries.find(
+        (x) => x.user_id === userId && x.status === 'completed' && x.finished_session_id === sessionId
+          && !x.enrolled_at && (x.enrol_until ?? '') > now,
+      );
+      if (!r) return null;
+      r.enrolled_at = now;
+      return r.id;
+    },
+    async releaseRecoveryEnrolment(userId, recoveryId) {
+      const r = st.recoveries.find((x) => x.id === recoveryId && x.user_id === userId && x.status === 'completed');
+      const used = st.passkeys.some((p) => p.added_by_recovery === recoveryId)
+        || [...st.totp.values()].some((t) => t.added_by_recovery === recoveryId && t.verified_at);
+      if (r && !used) r.enrolled_at = null;
+    },
+    async undoRecovery(userId, recoveryId, keepSessionId) {
+      guard('undoRecovery');
+      const r = st.recoveries.find(
+        (x) => x.id === recoveryId && x.user_id === userId && x.status === 'completed' && (x.freeze_ends_at ?? '') > new Date().toISOString(),
+      );
+      if (!r) return { status: 'none', passkeysRemoved: 0, totpRemoved: 0 };
+      r.status = 'undone';
+      r.undone_at = new Date().toISOString();
+      const before = st.passkeys.length;
+      st.passkeys = st.passkeys.filter((p) => !(p.user_id === userId && p.added_by_recovery === recoveryId));
+      const t = st.totp.get(userId);
+      const totpRemoved = t?.added_by_recovery === recoveryId ? 1 : 0;
+      if (totpRemoved) st.totp.delete(userId);
+      // Same transaction as mfa_end_other_sessions.
+      st.endedSessions.push({ userId, keep: keepSessionId });
+      for (const [id, sess] of st.sessions) if (sess.user_id === userId && id !== keepSessionId) st.sessions.delete(id);
+      st.grants = st.grants.filter((g) => g.user_id !== userId || g.session_id === keepSessionId || g.used_at !== null);
+      return { status: 'ok', passkeysRemoved: before - st.passkeys.length, totpRemoved };
     },
   };
 };

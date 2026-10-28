@@ -187,7 +187,7 @@ describe('first passkey', () => {
     expect(body).not.toContain(mfaState.passkeys[0].public_key);
     expect(body).not.toContain(mfaState.codes[0].code_hash);
     expect(body).not.toContain(res.body.data.backupCodes[0]);
-    expect(Object.keys(s.body.data.passkeys[0]).sort()).toEqual(['createdAt', 'id', 'lastUsedAt', 'nickname', 'synced', 'usableFrom']);
+    expect(Object.keys(s.body.data.passkeys[0]).sort()).toEqual(['createdAt', 'fromRecovery', 'id', 'lastUsedAt', 'nickname', 'synced', 'usableFrom']);
   });
 
   it('a second passkey needs a session that already passed its second factor', async () => {

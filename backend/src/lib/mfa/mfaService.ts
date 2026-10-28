@@ -61,6 +61,8 @@ import { generateRecoveryCodes, hashRecoveryCode, normaliseRecoveryCode } from '
 import { openSecret, sealSecret } from './secretBox';
 import { generateTotpSecret, matchTotp, otpauthUri, base32Encode } from './totp';
 import { sendMfaEmail } from './mfaEmails';
+import { activeFreeze, assertNotFrozen, recoveryEnrolment } from './recoveryState';
+import { maskEmail } from './emailCodes';
 import { log } from '../logger';
 import {
   getMfaStore,
@@ -74,7 +76,7 @@ import {
 
 export const STEP_UP_ACTIONS: readonly StepUpAction[] = [
   'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
-  'admin_action', 'admin_approve', 'account_change',
+  'admin_action', 'admin_approve', 'account_change', 'recovery_undo', 'recovery_channel',
 ];
 
 /**
@@ -82,7 +84,15 @@ export const STEP_UP_ACTIONS: readonly StepUpAction[] = [
  * authenticator or backup code as well as a passkey: someone who lost their
  * phone must still be able to add a new passkey and remove the lost one.
  */
-export const CODE_STEP_UP_ACTIONS: readonly StepUpAction[] = ['factor_add', 'factor_remove', 'recovery_regen'];
+export const CODE_STEP_UP_ACTIONS: readonly StepUpAction[] = ['factor_add', 'factor_remove', 'recovery_regen', 'recovery_channel'];
+
+/**
+ * Ph3b: step-ups refused during the post-recovery freeze (Boss 2026-10-27).
+ * Refused before anything is checked, so no code is spent.
+ */
+export const FROZEN_STEP_UP_ACTIONS: readonly StepUpAction[] = [
+  'release', 'transfer_complete', 'factor_add', 'factor_remove', 'recovery_regen', 'account_change', 'recovery_channel',
+];
 
 /**
  * Token actions a non-staff account may confirm with its authenticator app
@@ -117,9 +127,26 @@ export type MfaReason =
   /** A backup code cannot confirm a token action (passkey or authenticator app). */
   | 'backup_code_not_allowed'
   /** The method was added with a code and cannot confirm a step-up for 24 hours. */
-  | 'new_method_waiting';
+  | 'new_method_waiting'
+  // ── Ph3b ──
+  /** Paused for the 7 days after an email-code recovery. */
+  | 'recovery_freeze'
+  /** Email recovery is not open to this account / session right now. */
+  | 'recovery_not_available'
+  /** A recovery is waiting out its 72 h hold. */
+  | 'recovery_waiting'
+  /** Undo needs one of the methods the account had before the recovery. */
+  | 'recovery_method_not_allowed'
+  | 'code_expired'
+  | 'code_locked'
+  | 'code_send_limit'
+  /** Security mail (SES) is not configured or refused the send. */
+  | 'mail_unavailable'
+  /** X-Recovery-Nonce missing or malformed. */
+  | 'nonce_required'
+  | 'same_as_account_email';
 
-const refuse = (code: 'permission_denied' | 'invalid_argument' | 'conflict' | 'resource_exhausted' | 'failed_precondition',
+const refuse = (code: 'permission_denied' | 'invalid_argument' | 'conflict' | 'resource_exhausted' | 'failed_precondition' | 'unavailable',
   message: string, reason: MfaReason): never => {
   throw new AppError(code, message, { reason });
 };
@@ -134,11 +161,13 @@ const requireSessionId = (caller: Caller): string => {
 const isSuperAdmin = async (userId: string): Promise<boolean> =>
   (await getMfaStore().staffRole(userId)) === 'super_admin';
 
-const emit = (
+export const emit = (
   caller: Caller,
-  action: 'enrol' | 'remove' | 'sign_in' | 'step_up_issue' | 'step_up_use' | 'recovery_regen' | 'lockout' | 'account_change_permit',
-  method: MfaMethod | null,
-  result: 'ok' | 'invalid_code' | 'mfa_locked' | 'step_up_required' | 'forbidden',
+  action: 'enrol' | 'remove' | 'sign_in' | 'step_up_issue' | 'step_up_use' | 'recovery_regen' | 'lockout' | 'account_change_permit'
+    | 'email_code_send' | 'email_code_check' | 'recovery_start' | 'recovery_cancel' | 'recovery_finish' | 'recovery_enrol'
+    | 'recovery_undo' | 'backup_email_add' | 'backup_email_verify' | 'backup_email_remove' | 'recovery_freeze_block',
+  method: MfaMethod | 'email_code' | null,
+  result: 'ok' | 'invalid_code' | 'mfa_locked' | 'step_up_required' | 'forbidden' | 'rate_limited' | 'recovery_freeze' | 'unavailable',
   breakGlass: boolean,
   stepUpAction: StepUpAction | null = null,
 ): void => {
@@ -260,6 +289,13 @@ export const hasSecondFactor = async (userId: string, sessionId: string | null):
   return Boolean(await getMfaStore().getSession(sessionId, userId, nowIso()));
 };
 
+/** A marker earned with a method, not by finishing an email recovery (admin gate). */
+export const hasStaffSecondFactor = async (userId: string, sessionId: string | null): Promise<boolean> => {
+  if (!sessionId) return false;
+  const s = await getMfaStore().getSession(sessionId, userId, nowIso());
+  return Boolean(s) && s!.method !== 'email_recovery';
+};
+
 /**
  * Public-safe status: never a public key, credential id, secret or hash.
  * `secondFactorRequired` (the caller's input) = the server refuses this
@@ -268,13 +304,22 @@ export const hasSecondFactor = async (userId: string, sessionId: string | null):
  */
 export const getStatus = async (caller: Caller, secondFactorRequired: boolean) => {
   const store = getMfaStore();
-  const [summary, codesLeft, verified, role, lockedUntil] = await Promise.all([
+  const [summary, codesLeft, session, role, lockedUntil, recovery, backup] = await Promise.all([
     factorSummary(caller.userId),
     store.countRecoveryCodes(caller.userId),
-    hasSecondFactor(caller.userId, caller.sessionId),
+    caller.sessionId ? store.getSession(caller.sessionId, caller.userId, nowIso()) : Promise.resolve(null),
     store.staffRole(caller.userId),
     store.lockedUntil(caller.userId, nowIso()),
+    store.latestRecovery(caller.userId),
+    store.getBackupEmail(caller.userId),
   ]);
+  const verified = Boolean(session);
+  const pendingBackup = backup?.pending_email ?? null;
+  const now = Date.now();
+  const frozenUntil = recovery?.status === 'completed' && recovery.freeze_ends_at && Date.parse(recovery.freeze_ends_at) > now
+    ? recovery.freeze_ends_at : null;
+  const enrolHere = recovery?.status === 'completed' && recovery.finished_session_id === caller.sessionId
+    && !recovery.enrolled_at && recovery.enrol_until && Date.parse(recovery.enrol_until) > now;
   return {
     passkeys: summary.passkeys.map((p) => ({
       id: p.id,
@@ -284,6 +329,8 @@ export const getStatus = async (caller: Caller, secondFactorRequired: boolean) =
       lastUsedAt: p.last_used_at,
       // Set while a passkey added with a code may not confirm a step-up yet.
       usableFrom: pendingUntil(p.usable_from),
+      // Ph3b: added by the account recovery (cannot confirm Undo).
+      fromRecovery: Boolean(p.added_by_recovery),
     })),
     authenticatorApp: summary.totpConfirmed,
     authenticatorAppUsableFrom: pendingUntil(summary.totpUsableFrom),
@@ -295,17 +342,53 @@ export const getStatus = async (caller: Caller, secondFactorRequired: boolean) =
     breakGlass: role === 'super_admin',
     isStaff: role !== null,
     codeEntryLockedUntil: lockedUntil,
+    // Ph3b. Never an address in full.
+    backupEmail: backup
+      ? {
+          masked: maskEmail(backup.email),
+          verified: Boolean(backup.verified_at),
+          ...(pendingBackup ? { pendingMasked: maskEmail(pendingBackup) } : {}),
+        }
+      : null,
+    recovery: recovery && (recovery.status === 'holding' || frozenUntil)
+      ? {
+          id: recovery.id,
+          status: recovery.status,
+          holdEndsAt: recovery.status === 'holding' ? recovery.hold_ends_at : null,
+          freezeEndsAt: frozenUntil,
+          // This session finished it and must now add its passkey or authenticator app.
+          mustAddMethod: Boolean(enrolHere),
+          addMethodBefore: enrolHere ? recovery.enrol_until : null,
+          // Signed in with a method (not the recovery itself): Undo may be offered.
+          // The step-up still refuses a method the recovery added.
+          canUndo: Boolean(frozenUntil) && verified && session?.method !== 'email_recovery',
+        }
+      : null,
   };
 };
 
-/** First factor, or a session that already passed its second factor. */
-const assertMayEnrol = async (caller: Caller): Promise<{ first: boolean }> => {
+/**
+ * First factor, a session that already passed its second factor, or (Ph3b) the
+ * session that just finished an email-code recovery, which may add ONE method
+ * without a step-up (it has nothing to step up with). `recoveryId` is set only
+ * in that last case.
+ */
+const assertMayEnrol = async (caller: Caller): Promise<{ first: boolean; recoveryId: string | null }> => {
   const summary = await factorSummary(caller.userId);
-  if (summary.total === 0) return { first: true };
+  if (summary.total === 0) return { first: true, recoveryId: null };
   if (!(await hasSecondFactor(caller.userId, caller.sessionId))) {
     refuse('permission_denied', 'Confirm it is you with your passkey or code first', 'second_factor_required');
   }
-  return { first: false };
+  const recovery = await recoveryEnrolment(caller.userId, caller.sessionId);
+  return { first: false, recoveryId: recovery?.id ?? null };
+};
+
+/** Ph3b: emits the refusal, then throws `recovery_freeze`. */
+const refuseIfFrozen = async (caller: Caller, stepUpAction: StepUpAction | null = null): Promise<void> => {
+  if (await activeFreeze(caller.userId)) {
+    emit(caller, 'recovery_freeze_block', null, 'recovery_freeze', false, stepUpAction);
+    await assertNotFrozen(caller.userId);
+  }
 };
 
 const assertVerifiedSession = async (caller: Caller): Promise<void> => {
@@ -322,7 +405,7 @@ const finishFirstFactor = async (caller: Caller, method: MfaMethod, superAdmin: 
   return codes;
 };
 
-const markVerified = async (caller: Caller, method: MfaMethod, superAdmin: boolean): Promise<void> => {
+export const markVerified = async (caller: Caller, method: MfaMethod, superAdmin: boolean): Promise<void> => {
   const ttl = superAdmin ? SUPER_ADMIN_SESSION_TTL_MS : mfaSessionTtlMs();
   await getMfaStore().markSession({
     session_id: requireSessionId(caller),
@@ -344,11 +427,14 @@ const userIdBytes = (userId: string): Uint8Array<ArrayBuffer> => toBytes(Buffer.
 
 export const passkeyRegisterOptions = async (caller: Caller, stepUpToken?: string) => {
   const sessionId = requireSessionId(caller);
-  const { first } = await assertMayEnrol(caller);
+  const { first, recoveryId } = await assertMayEnrol(caller);
+  // The one add after a recovery needs no step-up; every other add is frozen with it.
+  const plain = !first && !recoveryId;
+  if (plain) await refuseIfFrozen(caller, 'factor_add');
   // A stolen session must not be able to plant its own passkey.
-  const grantMethod = first ? null : await requireFreshCheck(caller, stepUpToken, 'factor_add', 'passkey');
+  const grantMethod = plain ? await requireFreshCheck(caller, stepUpToken, 'factor_add', 'passkey') : null;
   // Confirmed by a code (or by an unrecorded method): the new passkey waits.
-  const codeConfirmed = !first && grantMethod !== 'passkey';
+  const codeConfirmed = plain && grantMethod !== 'passkey';
   const cfg = webAuthnConfig();
   const store = getMfaStore();
   const [existing, superAdmin] = await Promise.all([store.listPasskeys(caller.userId), isSuperAdmin(caller.userId)]);
@@ -387,7 +473,8 @@ export const passkeyRegisterVerify = async (
   input: { challengeId: string; nickname: string; response: RegistrationResponseJSON },
 ) => {
   const sessionId = requireSessionId(caller);
-  const { first } = await assertMayEnrol(caller);
+  const { first, recoveryId } = await assertMayEnrol(caller);
+  if (!first && !recoveryId) await refuseIfFrozen(caller, 'factor_add');
   const store = getMfaStore();
   const superAdmin = await isSuperAdmin(caller.userId);
 
@@ -419,9 +506,18 @@ export const passkeyRegisterVerify = async (
     refuse('invalid_argument', 'This account needs a hardware security key, not a synced passkey.', 'synced_passkey_not_allowed');
   }
 
+  // Ph3b: the finishing session's one add. Claimed before the insert (atomic,
+  // so two parallel adds cannot both use it) and given back if the insert fails.
+  const claimed = recoveryId ? await store.claimRecoveryEnrolment(caller.userId, sessionId) : null;
+  if (recoveryId && !claimed) {
+    refuse('failed_precondition', 'The time to add a sign-in method after recovery is over.', 'recovery_not_available');
+  }
+
   // A first factor never waits (nothing to check it against, and no other method to misuse).
-  const usableFrom = !first && challenge!.code_confirmed ? coolOffEnd() : null;
-  const inserted = await store.insertPasskey({
+  const usableFrom = !first && !claimed && challenge!.code_confirmed ? coolOffEnd() : null;
+  let inserted: PasskeyRow | null = null;
+  try {
+    inserted = await store.insertPasskey({
     user_id: caller.userId,
     credential_id: info.credential.id,
     public_key: Buffer.from(info.credential.publicKey).toString('base64url'),
@@ -431,18 +527,25 @@ export const passkeyRegisterVerify = async (
     backed_up: info.credentialBackedUp,
     nickname: input.nickname.trim(),
     usable_from: usableFrom,
+    added_by_recovery: claimed,
   });
+  } finally {
+    if (claimed && !inserted) await store.releaseRecoveryEnrolment(caller.userId, claimed);
+  }
   if (!inserted) refuse('conflict', 'That passkey is already added', 'already_set_up');
   const row = inserted!;
 
-  const backupCodes = first ? await finishFirstFactor(caller, 'passkey', superAdmin) : null;
-  emit(caller, 'enrol', 'passkey', 'ok', superAdmin);
+  // After a recovery the old backup codes are void: the new method brings a new set.
+  const backupCodes = first || claimed ? await finishFirstFactor(caller, 'passkey', superAdmin) : null;
+  emit(caller, claimed ? 'recovery_enrol' : 'enrol', 'passkey', 'ok', superAdmin);
   notify(caller, superAdmin, {
     kind: 'factor_added', method: 'passkey', nickname: row.nickname, ...(usableFrom ? { waitUntil: usableFrom } : {}),
   });
   // A first factor ends the other sessions too: harmless, and it signs out
   // anyone else who was already in with just the password.
-  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_add', 'passkey', usableFrom !== null);
+  // Review L1: the one add after a recovery leaves other sessions alone, so the
+  // owner (signed in with an old method) can still Undo. The freeze protects tokens.
+  const otherSessionsEnded = claimed ? false : await afterFactorChange(caller, 'mfa_factor_add', 'passkey', usableFrom !== null);
 
   return {
     passkey: { id: row.id, nickname: row.nickname, synced: row.backed_up, createdAt: row.created_at, usableFrom },
@@ -466,7 +569,10 @@ const assertionOptions = async (
   const [passkeys, superAdmin] = await Promise.all([store.listPasskeys(caller.userId), isSuperAdmin(caller.userId)]);
   const allowed = usablePasskeys(passkeys, superAdmin);
   // A passkey still in its new-method wait may sign in, but not confirm a step-up.
-  const usable = purpose === 'step_up' ? allowed.filter((p) => !isCooling(p.usable_from)) : allowed;
+  // Undoing a recovery: only the passkeys the account had before it.
+  const usable = purpose === 'step_up'
+    ? allowed.filter((p) => !isCooling(p.usable_from) && !(stepUp?.action === 'recovery_undo' && p.added_by_recovery))
+    : allowed;
   if (usable.length === 0) {
     if (allowed.length > 0) refuseWaiting();
     refuse('failed_precondition', 'Add a passkey first', 'no_passkey');
@@ -653,6 +759,7 @@ const requireFreshCheck = async (
 
 export const stepUpOptions = async (caller: Caller, input: { action: StepUpAction; targetId: string }) => {
   await assertVerifiedSession(caller);
+  if (FROZEN_STEP_UP_ACTIONS.includes(input.action)) await refuseIfFrozen(caller, input.action);
   return assertionOptions(caller, 'step_up', input);
 };
 
@@ -694,13 +801,29 @@ export const stepUpVerify = async (caller: Caller, input: StepUpVerifyInput) => 
       emit(caller, 'step_up_issue', 'passkey', 'forbidden', superAdmin, action);
       refuseWaiting();
     }
+    if (FROZEN_STEP_UP_ACTIONS.includes(action)) await refuseIfFrozen(caller, action);
+    // Undo must be confirmed with a method the account had BEFORE the recovery.
+    if (action === 'recovery_undo' && ok!.passkey.added_by_recovery) {
+      emit(caller, 'step_up_issue', 'passkey', 'forbidden', superAdmin, action);
+      refuse('permission_denied', 'Use a passkey or authenticator app you had before the recovery', 'recovery_method_not_allowed');
+    }
     const grant = await issueGrant(caller, sessionId, action, ok!.challenge.target_id as string, 'passkey');
     emit(caller, 'step_up_issue', 'passkey', 'ok', superAdmin, action);
     return grant;
   }
 
   // Refused before the code is checked, so a refused code is never spent.
-  if (TOTP_STEP_UP_ACTIONS.includes(input.action)) {
+  if (FROZEN_STEP_UP_ACTIONS.includes(input.action)) await refuseIfFrozen(caller, input.action);
+  if (input.action === 'recovery_undo') {
+    // Old authenticator app only: never a backup code (the old set is void
+    // anyway), never an app the recovery added.
+    if (!('totp' in input)) refuse('invalid_argument', 'Use your passkey or authenticator app to confirm this', 'backup_code_not_allowed');
+    const totp = await getMfaStore().getTotp(caller.userId);
+    if (totp?.added_by_recovery) {
+      emit(caller, 'step_up_issue', 'totp', 'forbidden', superAdmin, input.action);
+      refuse('permission_denied', 'Use a passkey or authenticator app you had before the recovery', 'recovery_method_not_allowed');
+    }
+  } else if (TOTP_STEP_UP_ACTIONS.includes(input.action)) {
     if (role !== null) refuse('invalid_argument', 'Staff accounts confirm this with a passkey', 'passkey_required');
     if (!('totp' in input)) {
       refuse('invalid_argument', 'Use your passkey or authenticator app to confirm this', 'backup_code_not_allowed');
@@ -757,12 +880,16 @@ export const totpSetup = async (caller: Caller, stepUpToken?: string) => {
   if (await isSuperAdmin(caller.userId)) {
     refuse('permission_denied', 'This account signs in with its security key only.', 'not_available');
   }
-  const { first } = await assertMayEnrol(caller);
-  const grantMethod = first ? null : await requireFreshCheck(caller, stepUpToken, 'factor_add', 'totp');
+  const { first, recoveryId } = await assertMayEnrol(caller);
+  const plain = !first && !recoveryId;
+  if (plain) await refuseIfFrozen(caller, 'factor_add');
+  const grantMethod = plain ? await requireFreshCheck(caller, stepUpToken, 'factor_add', 'totp') : null;
   // Confirmed by a code (or an unrecorded method): the app waits, counted from setup.
-  const usableFrom = !first && grantMethod !== 'passkey' ? coolOffEnd() : null;
+  const usableFrom = plain && grantMethod !== 'passkey' ? coolOffEnd() : null;
   const secret = generateTotpSecret();
-  const started = await getMfaStore().startTotp(caller.userId, sealSecret(secret, caller.userId), usableFrom);
+  // After a recovery, an old authenticator app is kept: this refuses with
+  // already_set_up and the screen offers a passkey instead.
+  const started = await getMfaStore().startTotp(caller.userId, sealSecret(secret, caller.userId), usableFrom, recoveryId);
   if (!started) refuse('conflict', 'An authenticator app is already set up', 'already_set_up');
   return {
     secret: base32Encode(secret),
@@ -772,21 +899,37 @@ export const totpSetup = async (caller: Caller, stepUpToken?: string) => {
 
 export const totpConfirm = async (caller: Caller, input: { code: string }) => {
   requireSessionId(caller);
-  const { first } = await assertMayEnrol(caller);
+  const sessionId = requireSessionId(caller);
+  const { first, recoveryId } = await assertMayEnrol(caller);
   const store = getMfaStore();
   const totp = await store.getTotp(caller.userId);
   if (!totp || totp.verified_at) refuse('failed_precondition', 'Start the authenticator app setup again', 'not_available');
-  await startCodeAttempt(caller, 'totp', false, 'enrol');
-  const step = matchTotp(openSecret(totp!.secret_enc, caller.userId), input.code.trim(), Date.now());
-  if (step === null || !(await store.useTotpStep(caller.userId, step, true))) {
-    return wrongCode(caller, 'totp', false, 'enrol');
+  const fromRecovery = totp!.added_by_recovery ?? null;
+  // A setup started by a recovery can only be confirmed by that recovery's finishing session.
+  if (fromRecovery && fromRecovery !== recoveryId) {
+    refuse('failed_precondition', 'Start the authenticator app setup again', 'not_available');
   }
+  if (!first && !fromRecovery) await refuseIfFrozen(caller, 'factor_add');
+  // Claimed before the code check (atomic) and given back on a wrong code.
+  const claimed = fromRecovery ? await store.claimRecoveryEnrolment(caller.userId, sessionId) : null;
+  if (fromRecovery && claimed !== fromRecovery) {
+    refuse('failed_precondition', 'The time to add a sign-in method after recovery is over.', 'recovery_not_available');
+  }
+  let confirmed = false;
+  try {
+    await startCodeAttempt(caller, 'totp', false, 'enrol');
+    const step = matchTotp(openSecret(totp!.secret_enc, caller.userId), input.code.trim(), Date.now());
+    confirmed = step !== null && (await store.useTotpStep(caller.userId, step, true));
+  } finally {
+    if (claimed && !confirmed) await store.releaseRecoveryEnrolment(caller.userId, claimed);
+  }
+  if (!confirmed) return wrongCode(caller, 'totp', false, 'enrol');
   await store.clearFailures(caller.userId);
-  const backupCodes = first ? await finishFirstFactor(caller, 'totp', false) : null;
-  emit(caller, 'enrol', 'totp', 'ok', false);
+  const backupCodes = first || claimed ? await finishFirstFactor(caller, 'totp', false) : null;
+  emit(caller, claimed ? 'recovery_enrol' : 'enrol', 'totp', 'ok', false);
   const waitUntil = pendingUntil(totp!.usable_from);
   sendMfaEmail(caller.email, { kind: 'factor_added', method: 'totp', ...(waitUntil ? { waitUntil } : {}) });
-  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_add', 'totp', waitUntil !== null);
+  const otherSessionsEnded = claimed ? false : await afterFactorChange(caller, 'mfa_factor_add', 'totp', waitUntil !== null);
   return { authenticatorApp: true, authenticatorAppUsableFrom: waitUntil, backupCodes, otherSessionsEnded };
 };
 
@@ -794,6 +937,7 @@ export const totpConfirm = async (caller: Caller, input: { code: string }) => {
 
 export const regenerateRecoveryCodes = async (caller: Caller, stepUpToken?: string) => {
   await assertVerifiedSession(caller);
+  await refuseIfFrozen(caller, 'recovery_regen');
   const summary = await factorSummary(caller.userId);
   if (summary.total === 0) refuse('failed_precondition', 'Add a passkey first', 'no_passkey');
   // A stolen session must not be able to void the owner's codes and take a set.
@@ -823,6 +967,7 @@ export const renamePasskey = async (caller: Caller, id: string, nickname: string
  * one hardware key.
  */
 export const removePasskey = async (caller: Caller, id: string) => {
+  await refuseIfFrozen(caller, 'factor_remove');
   const store = getMfaStore();
   const [passkeys, superAdmin] = await Promise.all([store.listPasskeys(caller.userId), isSuperAdmin(caller.userId)]);
   const target = passkeys.find((p) => p.id === id);
@@ -839,6 +984,7 @@ export const removePasskey = async (caller: Caller, id: string) => {
 };
 
 export const removeTotp = async (caller: Caller) => {
+  await refuseIfFrozen(caller, 'factor_remove');
   const superAdmin = await isSuperAdmin(caller.userId);
   const result = await getMfaStore().removeFactor(caller.userId, 'totp', null, superAdmin);
   if (result === 'not_found') throw new AppError('not_found', 'No authenticator app is set up');
@@ -863,6 +1009,7 @@ export const removeTotp = async (caller: Caller) => {
  */
 export const startAccountChange = async (caller: Caller, kind: AccountChangeKind) => {
   await assertVerifiedSession(caller);
+  await refuseIfFrozen(caller, 'account_change');
   const expiresAt = new Date(Date.now() + ACCOUNT_CHANGE_PERMIT_TTL_MS).toISOString();
   await getMfaStore().createAuthChangePermit(caller.userId, kind, expiresAt);
   const superAdmin = await isSuperAdmin(caller.userId);
@@ -872,5 +1019,14 @@ export const startAccountChange = async (caller: Caller, kind: AccountChangeKind
   return { kind, expiresAt };
 };
 
-/** Express-free check used by the route before the step-up is spent. */
-export const assertSecondFactorDone = (caller: Caller): Promise<void> => assertVerifiedSession(caller);
+/** Express-free check used by the route before the step-up is spent (Ph3b: also not frozen). */
+export const assertSecondFactorDone = async (caller: Caller): Promise<void> => {
+  await assertVerifiedSession(caller);
+  await refuseIfFrozen(caller, 'account_change');
+};
+
+/** Verified session only (undo is allowed during the freeze: it is how the freeze is used). */
+export const assertSecondFactorDoneOnly = (caller: Caller): Promise<void> => assertVerifiedSession(caller);
+
+/** Ph3b: shared with the recovery service. */
+export { assertVerifiedSession, isSuperAdmin, notify, refuse, refuseIfFrozen, requireSessionId };

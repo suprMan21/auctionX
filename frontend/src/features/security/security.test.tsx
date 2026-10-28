@@ -53,10 +53,12 @@ const baseStatus = (over: Partial<MfaStatus> = {}): MfaStatus => ({
   breakGlass: false,
   isStaff: false,
   codeEntryLockedUntil: null,
+  backupEmail: null,
+  recovery: null,
   ...over,
 });
 
-const passkey = { id: 'pk-1', nickname: 'My iPhone', synced: true, createdAt: '2026-10-27T12:00:00Z', lastUsedAt: null, usableFrom: null };
+const passkey = { id: 'pk-1', nickname: 'My iPhone', synced: true, createdAt: '2026-10-27T12:00:00Z', lastUsedAt: null, usableFrom: null, fromRecovery: false };
 const tomorrow = () => new Date(Date.now() + 24 * 3600 * 1000).toISOString();
 
 const seed = (status: MfaStatus | null) =>

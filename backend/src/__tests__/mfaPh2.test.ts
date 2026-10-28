@@ -281,8 +281,8 @@ describe('status', () => {
     // Still required for actions; no longer asked to enrol.
     expect(enrolled.body.data).toMatchObject({ secondFactorRequired: true, enrolmentRequired: false });
     expect(Object.keys(enrolled.body.data).sort()).toEqual([
-      'authenticatorApp', 'authenticatorAppUsableFrom', 'backupCodesLeft', 'breakGlass', 'codeEntryLockedUntil', 'enrolmentRequired', 'hasFactor',
-      'isStaff', 'passkeys', 'secondFactorRequired', 'sessionVerified',
+      'authenticatorApp', 'authenticatorAppUsableFrom', 'backupCodesLeft', 'backupEmail', 'breakGlass', 'codeEntryLockedUntil', 'enrolmentRequired', 'hasFactor',
+      'isStaff', 'passkeys', 'recovery', 'secondFactorRequired', 'sessionVerified',
     ]);
   });
 });

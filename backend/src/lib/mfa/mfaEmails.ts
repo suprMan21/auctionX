@@ -7,7 +7,7 @@
  * app", "backup codes"), no jargon, no em dashes.
  */
 
-import { sendEmail } from '../notifications/emailSender';
+import { sendSecurityNotice } from '../notifications/securityMailSender';
 import { frontendBaseUrl, heading, para, shell, btn } from '../notifications/transferEmails';
 import { hashEmailForLog } from '../security/securityEvent';
 import { log } from '../logger';
@@ -21,7 +21,14 @@ export type MfaEmail =
   | { kind: 'break_glass_sign_in'; method: 'passkey' | 'recovery_code' }
   | { kind: 'code_entry_locked' }
   /** Ph2b: a permit for a password change or an email change was issued. */
-  | { kind: 'account_change_started'; change: 'password' | 'email' };
+  | { kind: 'account_change_started'; change: 'password' | 'email' }
+  /** Ph3b: email-code recovery. Sent to the account email and the backup email. */
+  | { kind: 'recovery_started'; holdEndsAt: string; device: string }
+  | { kind: 'recovery_cancelled' }
+  | { kind: 'recovery_finished'; freezeEndsAt: string }
+  | { kind: 'recovery_undone' }
+  | { kind: 'backup_email_added' }
+  | { kind: 'backup_email_removed' };
 
 const FOOTER = "You're receiving this because it's about how your Authentic Materials account signs in. These emails can't be turned off.";
 
@@ -108,6 +115,56 @@ export const mfaEmailContent = (email: MfaEmail): { subject: string; lines: stri
               "If this wasn't you, sign in now, change your password and check Security settings.",
             ],
           };
+    case 'recovery_started':
+      return {
+        subject: 'Someone started recovering your account',
+        lines: [
+          `Someone proved they can read this inbox and asked to get into your account without your passkey or authenticator app. The request came from ${email.device}.`,
+          `Nothing changes yet. From ${formatUtc(email.holdEndsAt) ?? 'in 3 days'} they can finish and add their own sign-in method.`,
+          "If this wasn't you, sign in with your passkey or authenticator app and cancel it in Security settings, then change your password and the password of this inbox.",
+        ],
+      };
+    case 'recovery_cancelled':
+      return {
+        subject: 'Account recovery was cancelled',
+        lines: [
+          'The account recovery that was waiting has been cancelled. Nothing on your account changed.',
+          "If you didn't cancel it, sign in and check Security settings.",
+        ],
+      };
+    case 'recovery_finished':
+      return {
+        subject: 'Your account was recovered',
+        lines: [
+          'Your account was recovered with a code sent by email. Your old backup codes no longer work.',
+          `Until ${formatUtc(email.freezeEndsAt) ?? 'a week from now'}, transfers, releases and sign-in changes are paused to keep your tokens safe.`,
+          "If this wasn't you, sign in with your old passkey or authenticator app and choose Undo recovery in Security settings.",
+        ],
+      };
+    case 'recovery_undone':
+      return {
+        subject: 'Account recovery was undone',
+        lines: [
+          'The recent account recovery was undone. The sign-in method it added was removed and its sessions were signed out.',
+          'You have a new set of backup codes. Change your password and the password of your email inbox.',
+        ],
+      };
+    case 'backup_email_added':
+      return {
+        subject: 'A backup email was added to your account',
+        lines: [
+          'A backup email address can now be used to recover your account.',
+          "If this wasn't you, sign in, remove it in Security settings and change your password.",
+        ],
+      };
+    case 'backup_email_removed':
+      return {
+        subject: 'A backup email was removed from your account',
+        lines: [
+          'This address can no longer be used to recover the account.',
+          "If this wasn't you, sign in and check Security settings, then change your password.",
+        ],
+      };
     case 'break_glass_sign_in':
       return {
         subject: 'The super admin account was just used',
@@ -136,7 +193,7 @@ export const sendMfaEmail = (to: string | null | undefined, email: MfaEmail): vo
   });
   const text = [`${subject}.`, '', ...lines, '', `Security settings: ${securityUrl}`].join('\n');
 
-  void sendEmail({ to, subject, html, text })
+  void sendSecurityNotice({ to, subject, html, text, kind: email.kind })
     .then((ok) => {
       if (!ok) log.warn('mfa_email_not_sent', { kind: email.kind, to_hash: hashEmailForLog(to) });
     })

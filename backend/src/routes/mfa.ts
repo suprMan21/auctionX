@@ -15,6 +15,18 @@ import { requireAuth } from '../middleware/auth';
 import { requireStepUp } from '../middleware/mfaGates';
 import { handle } from './tagManagement';
 import {
+  deleteBackupEmail,
+  getRecovery,
+  postBackupEmail,
+  postBackupEmailVerify,
+  postRecoveryCancel,
+  postRecoveryCode,
+  postRecoveryFinish,
+  postRecoveryStart,
+  postRecoveryUndo,
+  preBackupEmailAdd,
+  preBackupEmailRemove,
+  preRecoveryUndo,
   deletePasskey,
   deleteTotp,
   getMfaStatus,
@@ -128,5 +140,46 @@ router.post(
 );
 
 router.post('/recovery-codes/regenerate', codeCheckIpLimit, requireAuth, verifyLimit, handle(postRegenerateCodes));
+
+// ── Ph3b: email-code recovery + backup email ────────────────────────────────
+// Sends are limited in the database too (60 s, 3 an hour, 10 a day per
+// account); this per-minute cap only stops a tight loop before it gets there.
+const sendLimit = byAccount(5);
+
+router.get('/recovery', requireAuth, generalLimit, handle(getRecovery));
+router.post('/recovery/code', codeCheckIpLimit, requireAuth, sendLimit, handle(postRecoveryCode));
+router.post('/recovery/start', codeCheckIpLimit, requireAuth, verifyLimit, handle(postRecoveryStart));
+router.post('/recovery/finish', codeCheckIpLimit, requireAuth, verifyLimit, handle(postRecoveryFinish));
+router.post('/recovery/cancel', requireAuth, generalLimit, handle(postRecoveryCancel));
+// Undo needs a step-up with a method the account had before the recovery,
+// bound to this recovery id (mfaService refuses a recovery-added method).
+router.post(
+  '/recovery/undo',
+  codeCheckIpLimit,
+  requireAuth,
+  verifyLimit,
+  handleThen(preRecoveryUndo),
+  requireStepUp('recovery_undo', (req) => (req.body as { recoveryId?: unknown } | undefined)?.recoveryId, { always: true }),
+  handle(postRecoveryUndo),
+);
+router.post(
+  '/backup-email',
+  codeCheckIpLimit,
+  requireAuth,
+  sendLimit,
+  handleThen(preBackupEmailAdd),
+  requireStepUp('recovery_channel', () => 'backup_email', { always: true }),
+  handle(postBackupEmail),
+);
+router.post('/backup-email/verify', codeCheckIpLimit, requireAuth, verifyLimit, handle(postBackupEmailVerify));
+router.delete(
+  '/backup-email',
+  codeCheckIpLimit,
+  requireAuth,
+  verifyLimit,
+  handleThen(preBackupEmailRemove),
+  requireStepUp('recovery_channel', () => 'backup_email', { always: true }),
+  handle(deleteBackupEmail),
+);
 
 export default router;

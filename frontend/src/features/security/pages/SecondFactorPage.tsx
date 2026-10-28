@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { loginPathFor, safeNextPath } from '@/features/auth/lib/safeNext';
@@ -137,8 +137,12 @@ export const SecondFactorPage = () => {
         <div className="border-t border-white/10 pt-4 space-y-2 text-sm text-gray-400">
           <p>
             Lost your passkeys{hasTotp ? ', authenticator app' : ''} and backup codes? We can&apos;t switch off two-step
-            sign-in for you: that is what stops someone with your password from taking your tokens.
+            sign-in for you, but you can recover your account by email. It takes 3 days, so someone with your password
+            can&apos;t do it quietly.
           </p>
+          {!status?.isStaff && (
+            <Link to="/sign-in/recover" className="block text-primary-300 underline">Recover by email</Link>
+          )}
           <button
             type="button"
             onClick={() => { useMfaStore.getState().clear(); void signOut(); }}
