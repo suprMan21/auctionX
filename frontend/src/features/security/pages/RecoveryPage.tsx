@@ -247,7 +247,7 @@ export const RecoveryPage = () => {
             </p>
             <p className="text-sm text-gray-400">
               We emailed every address on the account. If it wasn&apos;t you, the owner can cancel it from any device that
-              still has their passkey or authenticator app.
+              still has a passkey or authenticator app added at least 7 days before this request.
             </p>
           </div>
         )}

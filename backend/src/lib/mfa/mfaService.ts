@@ -63,7 +63,7 @@ import { generateRecoveryCodes, hashRecoveryCode, normaliseRecoveryCode } from '
 import { openSecret, sealSecret } from './secretBox';
 import { generateTotpSecret, matchTotp, otpauthUri, base32Encode } from './totp';
 import { sendMfaEmail } from './mfaEmails';
-import { activeFreeze, assertNotFrozen, recoveryEnrolment } from './recoveryState';
+import { activeFreeze, assertNotFrozen, methodPredatesRecovery, OLD_METHOD_MESSAGE, recoveryEnrolment } from './recoveryState';
 import { maskEmail } from './emailCodes';
 import { log } from '../logger';
 import {
@@ -590,10 +590,14 @@ const assertionOptions = async (
   const allowed = usablePasskeys(passkeys, superAdmin);
   // A passkey still in its new-method wait may sign in, but not confirm a step-up.
   // Undoing a recovery: only the passkeys the account had before it.
+  // Ph4: and only those added at least 7 days before it started.
+  const undoOf = stepUp?.action === 'recovery_undo' ? await store.latestRecovery(caller.userId) : null;
   const usable = purpose === 'step_up'
-    ? allowed.filter((p) => !isCooling(p.usable_from) && !(stepUp?.action === 'recovery_undo' && p.added_by_recovery))
+    ? allowed.filter((p) => !isCooling(p.usable_from) && !(stepUp?.action === 'recovery_undo'
+        && (p.added_by_recovery || !undoOf || !methodPredatesRecovery(p.created_at, undoOf.created_at))))
     : allowed;
   if (usable.length === 0) {
+    if (undoOf && allowed.length > 0) refuse('permission_denied', OLD_METHOD_MESSAGE, 'recovery_method_not_allowed');
     if (allowed.length > 0) refuseWaiting();
     refuse('failed_precondition', 'Add a passkey first', 'no_passkey');
   }
@@ -839,9 +843,12 @@ export const stepUpVerify = async (caller: Caller, input: StepUpVerifyInput) => 
     }
     if (FROZEN_STEP_UP_ACTIONS.includes(action)) await refuseIfFrozen(caller, action);
     // Undo must be confirmed with a method the account had BEFORE the recovery.
-    if (action === 'recovery_undo' && ok!.passkey.added_by_recovery) {
-      emit(caller, 'step_up_issue', 'passkey', 'forbidden', superAdmin, action);
-      refuse('permission_denied', 'Use a passkey or authenticator app you had before the recovery', 'recovery_method_not_allowed');
+    if (action === 'recovery_undo') {
+      const rec = await getMfaStore().latestRecovery(caller.userId);
+      if (ok!.passkey.added_by_recovery || !rec || !methodPredatesRecovery(ok!.passkey.created_at, rec.created_at)) {
+        emit(caller, 'step_up_issue', 'passkey', 'forbidden', superAdmin, action);
+        refuse('permission_denied', OLD_METHOD_MESSAGE, 'recovery_method_not_allowed');
+      }
     }
     const grant = await issueGrant(caller, sessionId, action, ok!.challenge.target_id as string, 'passkey');
     emit(caller, 'step_up_issue', 'passkey', 'ok', superAdmin, action);
@@ -854,10 +861,10 @@ export const stepUpVerify = async (caller: Caller, input: StepUpVerifyInput) => 
     // Old authenticator app only: never a backup code (the old set is void
     // anyway), never an app the recovery added.
     if (!('totp' in input)) refuse('invalid_argument', 'Use your passkey or authenticator app to confirm this', 'backup_code_not_allowed');
-    const totp = await getMfaStore().getTotp(caller.userId);
-    if (totp?.added_by_recovery) {
+    const [totp, rec] = await Promise.all([getMfaStore().getTotp(caller.userId), getMfaStore().latestRecovery(caller.userId)]);
+    if (totp?.added_by_recovery || !rec || !methodPredatesRecovery(totp?.verified_at, rec.created_at)) {
       emit(caller, 'step_up_issue', 'totp', 'forbidden', superAdmin, input.action);
-      refuse('permission_denied', 'Use a passkey or authenticator app you had before the recovery', 'recovery_method_not_allowed');
+      refuse('permission_denied', OLD_METHOD_MESSAGE, 'recovery_method_not_allowed');
     }
   } else if (TOTP_STEP_UP_ACTIONS.includes(input.action)) {
     if (role !== null) refuse('invalid_argument', 'Staff accounts confirm this with a passkey', 'passkey_required');

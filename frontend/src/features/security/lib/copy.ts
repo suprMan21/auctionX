@@ -25,7 +25,7 @@ const REASON_COPY: Record<string, string> = {
   // Ph3b: email-code recovery
   recovery_freeze: 'Your account was recovered recently, so this is paused for a few days to keep your tokens safe.',
   recovery_waiting: 'Your recovery is waiting. You can finish it when the wait ends.',
-  recovery_method_not_allowed: 'Use a passkey or authenticator app you had before the recovery.',
+  recovery_method_not_allowed: 'Use a passkey or authenticator app you added at least 7 days before the recovery started.',
   code_expired: 'This code has expired or was replaced. Ask for a new one.',
   code_locked: 'Too many tries. Ask for a new code.',
   mail_unavailable: 'We can’t send codes right now. Try again in a few minutes.',
