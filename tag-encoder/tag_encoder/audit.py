@@ -21,6 +21,7 @@ DEFAULT_AUDIT_PATH = Path.home() / ".am-tag-encoder" / "audit.jsonl"
 _ALLOWED = frozenset({
     "ts", "event", "operator", "result", "reason", "stage", "item", "token", "tag_id",
     "key_version", "readback_counter", "resumed", "mode", "encoder_version",
+    "seal_code",  # S-SEAL1: public, digital only (never on the chip)
 })
 
 

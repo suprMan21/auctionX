@@ -34,6 +34,7 @@ import { resolveAndBurnSun } from '../services/nfc/tapResolver';
 import { issueTapSession } from '../services/nfc/tapSession';
 import { tapSchema } from '../services/nfc/tagManagementSchemas';
 import { confirmedEmail } from '../lib/security/confirmedEmail';
+import { displaySealCode } from '../lib/nfc/sealCode';
 
 interface ReadRequest extends RequestWithId, AuthRequest {}
 
@@ -158,6 +159,8 @@ export const tapTag = async (req: ReadRequest, res: Response) => {
     user_agent: req.headers['user-agent'] ?? null,
   });
 
+  const checkedAt = new Date().toISOString();
+
   if (!result.valid || result.counterValue === null) {
     // Nothing about the token for a tap that did not verify.
     return ok(res, { valid: false, reason: sunFailureCode(sunResult) });
@@ -193,6 +196,10 @@ export const tapTag = async (req: ReadRequest, res: Response) => {
     valid: true,
     tagId: tag.id,
     lifecycleStatus: lifecycle,
+    // S-SEAL1: public-safe (identifies, never authenticates). checkedAt is the
+    // server's check time; the Verified seal window is counted from the tap.
+    sealCode: displaySealCode(tag.seal_code),
+    checkedAt,
     provenance,
     tapSession,
     viewer,
@@ -209,6 +216,7 @@ type OwnedTagRow = {
   linked_item_id: string | null;
   chip_name: string | null;
   chip_serial: string | null;
+  seal_code: string | null;
 };
 
 /** The owner-facing chip reference when a token has no title: the end of its serial (as printed in admin). */
@@ -230,7 +238,7 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
 
   const { data: tagRows, error } = await supabase
     .from('nfc_tags')
-    .select('id, lifecycle_status, activated_at, disclosure, linked_item_id, chip_name, chip_serial')
+    .select('id, lifecycle_status, activated_at, disclosure, linked_item_id, chip_name, chip_serial, seal_code')
     .eq('current_owner_id', user.id);
   if (error) throw new AppError('internal', 'Could not load your tokens');
 
@@ -278,6 +286,7 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
         // Fallback names when there is no title (S-ADMIN1 follow-up, Boss 2026-10-19).
         chipName: t.chip_name,
         serialSuffix: t.chip_serial ? t.chip_serial.slice(-SERIAL_SUFFIX_LENGTH).toUpperCase() : null,
+        sealCode: displaySealCode(t.seal_code),
         disclosure: t.disclosure ?? {},
         ownershipId: proofByTag.get(t.id)?.ownership_id ?? null,
         ownershipAnchor: ownershipAnchorFor(proofByTag.get(t.id), anchorChainId),

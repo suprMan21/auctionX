@@ -72,6 +72,7 @@ import { redeemTransferVoucher } from '../lib/payments/tokenFeeApply';
 import { notifyTransferRecipient } from '../lib/notifications/transferEmails';
 import { confirmedEmail } from '../lib/security/confirmedEmail';
 import { hasManageNfc } from '../lib/admin/tokenAdmin';
+import { displaySealCode } from '../lib/nfc/sealCode';
 
 interface TagRequest extends RequestWithId, AuthRequest {}
 
@@ -389,14 +390,18 @@ export const reserveChipName = async (req: TagRequest, res: Response) => {
   }
   const { sigSha256, name } = parsed.data;
 
-  const { data, error } = await supabase.rpc('reserve_chip_name', {
+  // S-SEAL1: the seal code is reserved in the same step as the name (Locked).
+  const { data: rows, error } = await supabase.rpc('reserve_chip_identity', {
     p_sig_sha256: sigSha256,
     p_name: name,
     p_actor: userId,
   });
+  const reserved = Array.isArray(rows) ? (rows[0] as { name?: unknown; seal_code?: unknown } | undefined) : undefined;
+  const data = typeof reserved?.name === 'string' ? reserved.name : null;
+  const sealCode = displaySealCode(typeof reserved?.seal_code === 'string' ? reserved.seal_code : null);
 
-  if (error || typeof data !== 'string' || data.length === 0) {
-    const message = error?.message ?? 'no name returned';
+  if (error || data === null || data.length === 0 || sealCode === null) {
+    const message = error?.message ?? 'no name or seal code returned';
     if (message.includes('chip_name_taken')) {
       throw new AppError('conflict', 'That chip name is already in use');
     }
@@ -412,7 +417,7 @@ export const reserveChipName = async (req: TagRequest, res: Response) => {
   }
 
   logger.info('nfc_chip_name_reserved', { chip_name: data, auto: name === undefined, actor_id: userId });
-  return ok(res, { name: data, auto: name === undefined });
+  return ok(res, { name: data, auto: name === undefined, sealCode });
 };
 
 // ── GET /api/v1/nfc/enroll/precheck/:tagUid ─────────────────────────────────

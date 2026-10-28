@@ -113,11 +113,13 @@ class EncodeOutcome:
     readback_url: str  # operator display only; never logged
     serial_hex: str | None = None
     name: str | None = None
+    seal_code: str | None = None  # S-SEAL1: public, digital only
 
     def as_dict(self) -> dict:
         return {
             "tagId": self.tag_id,
             "name": self.name,
+            "sealCode": self.seal_code,
             "uid": self.uid_hex,
             "serial": self.serial_hex,
             "readbackCounter": self.readback_counter,
@@ -333,12 +335,14 @@ def personalise(
         if pre.exists:
             raise Refused("already_registered", "registry", f"lifecycle {pre.lifecycle_status}")
         try:
-            name = registry.reserve_name(sig_sha256, job.token)
+            reservation = registry.reserve_identity(sig_sha256, job.token)
         except NameTaken as exc:
             raise Refused("name_taken", "registry", str(exc)) from exc
         except RegistryError as exc:
             raise Refused("registry_unavailable", "registry", str(exc)) from exc
-        base_audit.update(item=job.item or name, token=name)
+        name = reservation.name
+        # S-SEAL1: the seal code is digital only; it never goes on the chip.
+        base_audit.update(item=job.item or name, token=name, seal_code=reservation.seal_code)
         try:
             template = build_sdm_template(job.base_url, name, serial)
         except ValueError as exc:
@@ -418,4 +422,4 @@ def personalise(
 
     # The serial is an identifier like the UID, so it stays out of the ledger (tag_id links it).
     audit.write(**base_audit, result="encoded", tag_id=tag_id, readback_counter=counter, resumed=resumed)
-    return EncodeOutcome(tag_id, uid_hex, counter, resumed, url, serial_hex, name)
+    return EncodeOutcome(tag_id, uid_hex, counter, resumed, url, serial_hex, name, reservation.seal_code)
