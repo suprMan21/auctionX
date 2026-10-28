@@ -202,11 +202,11 @@ tagManagementRoutes.post('/replace', requireAuth, mutationLimit, (_req: Request,
 // S-ADMIN1 Ph2 re-issue (owner side). The `/reissue-requests/...` prefix
 // cannot collide with `/:tagId/...` below: those need a second segment of
 // `disclosure` or `receipt`.
-tagManagementRoutes.post('/reissue-request/photo-url', requireAuth, mutationLimit, requireSecondFactor(), handle(reissuePhotoUrl));
+tagManagementRoutes.post('/reissue-request/photo-url', requireAuth, mutationLimit, requireSecondFactor(), refuseWhileFrozen, handle(reissuePhotoUrl));
 tagManagementRoutes.post('/reissue-request', requireAuth, mutationLimit, requireSecondFactor(), refuseWhileFrozen, handle(requestReissue));
 tagManagementRoutes.get('/reissue-requests/mine', requireAuth, readLimit, handle(listMyReissueRequests));
-tagManagementRoutes.post('/reissue-requests/:id/pay', requireAuth, mutationLimit, requireSecondFactor(), handle(payReissue));
-tagManagementRoutes.post('/reissue-requests/:id/cancel', requireAuth, mutationLimit, requireSecondFactor(), handle(cancelReissue));
+tagManagementRoutes.post('/reissue-requests/:id/pay', requireAuth, mutationLimit, requireSecondFactor(), refuseWhileFrozen, handle(payReissue));
+tagManagementRoutes.post('/reissue-requests/:id/cancel', requireAuth, mutationLimit, requireSecondFactor(), refuseWhileFrozen, handle(cancelReissue));
 
 // S-NFC3-FE reads. `/tap` is public (optional auth personalises it); the rest
 // are the caller's own data.
@@ -230,11 +230,11 @@ tagManagementRoutes.post(
   requireStepUp('transfer_complete', (req) => req.params.id),
   handle(completeTransfer),
 );
-tagManagementRoutes.post('/transfer/:id/cancel', requireAuth, mutationLimit, requireSecondFactor(), handle(cancelTransfer));
+tagManagementRoutes.post('/transfer/:id/cancel', requireAuth, mutationLimit, requireSecondFactor(), refuseWhileFrozen, handle(cancelTransfer));
 tagManagementRoutes.get('/transfer/:id', requireAuth, readLimit, handle(getTransfer));
 
 // ── Parameterized route LAST ────────────────────────────────────────────────
-tagManagementRoutes.patch('/:tagId/disclosure', requireAuth, mutationLimit, requireSecondFactor(), handle(updateDisclosure));
+tagManagementRoutes.patch('/:tagId/disclosure', requireAuth, mutationLimit, requireSecondFactor(), refuseWhileFrozen, handle(updateDisclosure));
 // Two segments, so it cannot collide with routes/nfc.ts `GET /:tagId`.
 tagManagementRoutes.get('/:tagId/receipt', requireAuth, readLimit, handle(getReceipt));
 

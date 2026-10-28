@@ -16,7 +16,7 @@ import { emitSecurityEvent } from './securityEvent';
 import type { SecurityLogContext } from '../ownership/ownershipProof';
 import { isTwoFactorRequired } from '../featureFlags';
 import { readVerifiedClaims } from '../mfa/jwtClaims';
-import { hasSecondFactor } from '../mfa/mfaService';
+import { hasSecondFactor, hasStaffSecondFactor } from '../mfa/mfaService';
 
 export type TwoFactorGate = 'claim' | 'transfer_complete';
 
@@ -24,12 +24,17 @@ export type TwoFactorGate = 'claim' | 'transfer_complete';
  * True when this request's session has a live second-factor marker. Fails
  * closed: a database error reads as "not verified".
  */
-export const sessionHasSecondFactor = async (authHeader: string | undefined, userId: string | null): Promise<boolean> => {
+export const sessionHasSecondFactor = async (
+  authHeader: string | undefined,
+  userId: string | null,
+  opts: { staff?: boolean } = {},
+): Promise<boolean> => {
   if (!userId) return false;
   const { sessionId, sub } = readVerifiedClaims(authHeader);
   if (!sessionId || sub !== userId) return false;
   try {
-    return await hasSecondFactor(userId, sessionId);
+    // S-2FA Ph3b review L4: an email-recovery marker never opens the admin console.
+    return opts.staff ? await hasStaffSecondFactor(userId, sessionId) : await hasSecondFactor(userId, sessionId);
   } catch {
     return false;
   }

@@ -122,7 +122,7 @@ export const verifyAdminAuth = async (
     // 5. S-ADMIN2 AC 5: admin routes need this session to have passed its
     //    second factor (S-2FA marker) once FEATURE_REQUIRE_ADMIN_2FA is on.
     //    Off until every admin has a passkey (S-2FA Ph4). Fails closed.
-    if (isAdminTwoFactorRequired() && !(await sessionHasSecondFactor(authHeader, user.id))) {
+    if (isAdminTwoFactorRequired() && !(await sessionHasSecondFactor(authHeader, user.id, { staff: true }))) {
       res.status(403).json({
         success: false,
         data: null,

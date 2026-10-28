@@ -105,6 +105,8 @@ export interface NewPasskey {
 export interface BackupEmailRow {
   email: string;
   verified_at: string | null;
+  /** A replacement waiting for its code; the confirmed `email` keeps working meanwhile. */
+  pending_email?: string | null;
 }
 
 export type RecoveryStatus = 'holding' | 'cancelled' | 'completed' | 'undone';
@@ -214,9 +216,12 @@ export interface MfaStore {
 
   // ── Ph3b ──
   getBackupEmail(userId: string): Promise<BackupEmailRow | null>;
-  /** Replaces any backup email with this one, unverified. */
+  /**
+   * No confirmed backup email: stores this one unconfirmed. A confirmed one:
+   * keeps it and stores this as the pending replacement.
+   */
   setPendingBackupEmail(userId: string, email: string): Promise<void>;
-  /** Marks it verified only if it is still this address and unverified. */
+  /** Confirms this address if it is the pending replacement or the unconfirmed one. */
   verifyBackupEmail(userId: string, email: string): Promise<boolean>;
   /** Returns the removed address (for the notice), or null when there was none. */
   deleteBackupEmail(userId: string): Promise<string | null>;
@@ -236,7 +241,8 @@ export interface MfaStore {
   cancelRecovery(userId: string): Promise<string | null>;
   claimRecoveryEnrolment(userId: string, sessionId: string): Promise<string | null>;
   releaseRecoveryEnrolment(userId: string, recoveryId: string): Promise<void>;
-  undoRecovery(userId: string, recoveryId: string): Promise<{ status: 'ok' | 'none'; passkeysRemoved: number; totpRemoved: number }>;
+  /** Also ends every other session except `keepSessionId`, in the same transaction. */
+  undoRecovery(userId: string, recoveryId: string, keepSessionId: string): Promise<{ status: 'ok' | 'none'; passkeysRemoved: number; totpRemoved: number }>;
 }
 
 export type StaffMfaAuditAction =
@@ -521,23 +527,44 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
   // ── Ph3b ──
 
   async getBackupEmail(userId) {
-    const { data, error } = await db.from('user_backup_emails').select('email, verified_at').eq('user_id', userId).maybeSingle();
+    const { data, error } = await db.from('user_backup_emails').select('email, verified_at, pending_email').eq('user_id', userId).maybeSingle();
     if (error) fail('getBackupEmail', error);
     return (data as BackupEmailRow | null) ?? null;
   },
 
   async setPendingBackupEmail(userId, email) {
+    // A confirmed address stays until its replacement is confirmed.
+    const { data: kept, error: keepError } = await db
+      .from('user_backup_emails')
+      .update({ pending_email: email })
+      .eq('user_id', userId)
+      .not('verified_at', 'is', null)
+      .neq('email', email)
+      .select('user_id')
+      .maybeSingle();
+    if (keepError) fail('setPendingBackupEmail.keep', keepError);
+    if (kept) return;
     const { error } = await db.from('user_backup_emails').upsert(
-      { user_id: userId, email, verified_at: null, created_at: new Date().toISOString() },
+      { user_id: userId, email, verified_at: null, pending_email: null, created_at: new Date().toISOString() },
       { onConflict: 'user_id' },
     );
     if (error) fail('setPendingBackupEmail', error);
   },
 
   async verifyBackupEmail(userId, email) {
+    const now = new Date().toISOString();
+    const { data: swapped, error: swapError } = await db
+      .from('user_backup_emails')
+      .update({ email, verified_at: now, pending_email: null })
+      .eq('user_id', userId)
+      .eq('pending_email', email)
+      .select('user_id')
+      .maybeSingle();
+    if (swapError) fail('verifyBackupEmail.swap', swapError);
+    if (swapped) return true;
     const { data, error } = await db
       .from('user_backup_emails')
-      .update({ verified_at: new Date().toISOString() })
+      .update({ verified_at: now })
       .eq('user_id', userId)
       .eq('email', email)
       .is('verified_at', null)
@@ -628,8 +655,8 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
     if (error) fail('releaseRecoveryEnrolment', error);
   },
 
-  async undoRecovery(userId, recoveryId) {
-    const { data, error } = await db.rpc('undo_account_recovery', { p_user: userId, p_id: recoveryId });
+  async undoRecovery(userId, recoveryId, keepSessionId) {
+    const { data, error } = await db.rpc('undo_account_recovery', { p_user: userId, p_id: recoveryId, p_keep_session: keepSessionId });
     const out = rpcJson('undoRecovery', data, error);
     if (out.status !== 'ok' && out.status !== 'none') fail('undoRecovery', null);
     return {

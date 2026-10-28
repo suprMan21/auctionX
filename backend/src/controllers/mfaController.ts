@@ -215,8 +215,8 @@ export const postRecoveryCancel = async (req: Request, res: Response) => {
 
 /** Before the `recovery_undo` step-up is spent: valid body, verified session. */
 export const preRecoveryUndo = async (req: Request, _res: Response, next: NextFunction) => {
-  parse(schemas.recoveryUndo, req.body);
-  await mfa.assertSecondFactorDoneOnly(caller(req));
+  const { recoveryId } = parse(schemas.recoveryUndo, req.body);
+  await recovery.assertMayUndo(caller(req), recoveryId);
   next();
 };
 

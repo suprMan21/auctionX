@@ -340,24 +340,38 @@ export const undoRecovery = async (caller: Caller, ctx: RecoveryContext, recover
   const sessionId = requireSessionId(caller);
   await assertVerifiedSession(caller);
   const store = getMfaStore();
-  const undone = await store.undoRecovery(caller.userId, recoveryId);
+  // One transaction: the added methods go AND every other session ends, or nothing happens.
+  const undone = await store.undoRecovery(caller.userId, recoveryId, sessionId);
   if (undone.status !== 'ok') throw new AppError('not_found', 'There is no recovery to undo');
 
   // The recovery voided the old codes: the owner gets a fresh set.
   const codes = generateRecoveryCodes();
-  await store.replaceRecoveryCodes(caller.userId, codes.map((c) => hashRecoveryCode(caller.userId, c)));
-  let otherSessionsEnded = true;
   try {
-    await store.endOtherSessions(caller.userId, sessionId);
+    await store.replaceRecoveryCodes(caller.userId, codes.map((c) => hashRecoveryCode(caller.userId, c)));
   } catch (err) {
-    otherSessionsEnded = false;
-    log.error('recovery_undo_end_sessions_failed', {
+    // The undo already happened; the owner can make codes from Security settings.
+    log.error('recovery_undo_codes_failed', {
       requestId: caller.log.requestId, error: err instanceof Error ? err.message.slice(0, 200) : 'unknown',
     });
+    emit(caller, 'recovery_undo', null, 'ok', false, 'recovery_undo');
+    await notifyAll(caller.userId, ctx.primaryEmail, { kind: 'recovery_undone' });
+    return { undone: recoveryId, backupCodes: null, otherSessionsEnded: true };
   }
   emit(caller, 'recovery_undo', null, 'ok', false, 'recovery_undo');
   await notifyAll(caller.userId, ctx.primaryEmail, { kind: 'recovery_undone' });
-  return { undone: recoveryId, backupCodes: codes, otherSessionsEnded };
+  return { undone: recoveryId, backupCodes: codes, otherSessionsEnded: true };
+};
+
+/**
+ * Before the `recovery_undo` step-up is spent (review L2): verified session and
+ * a recovery with this id that can still be undone.
+ */
+export const assertMayUndo = async (caller: Caller, recoveryId: string): Promise<void> => {
+  await assertVerifiedSession(caller);
+  const r = await getMfaStore().latestRecovery(caller.userId);
+  if (!r || r.id !== recoveryId || r.status !== 'completed' || !r.freeze_ends_at || Date.parse(r.freeze_ends_at) <= Date.now()) {
+    throw new AppError('not_found', 'There is no recovery to undo');
+  }
 };
 
 // ── Backup email ────────────────────────────────────────────────────────────
@@ -371,13 +385,13 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
  */
 export const addBackupEmail = async (caller: Caller, ctx: RecoveryContext, rawEmail: string) => {
   const email = await assertMayAddBackupEmail(caller, ctx, rawEmail);
-  const store = getMfaStore();
-  const previous = await store.getBackupEmail(caller.userId);
-  await store.setPendingBackupEmail(caller.userId, email);
-  // Replacing a confirmed address: the old one is told it no longer works.
-  if (previous?.verified_at && previous.email !== email) sendMfaEmail(previous.email, { kind: 'backup_email_removed' });
+  // Code first (review L2): a send limit or SES failure leaves the stored
+  // address untouched. A confirmed address keeps working until the new one is
+  // confirmed (it is kept as the pending replacement meanwhile).
+  const sent = await issueAndSend(caller, ctx, 'backup_email_verify', 'backup', email);
+  await getMfaStore().setPendingBackupEmail(caller.userId, email);
   emit(caller, 'backup_email_add', null, 'ok', false, 'recovery_channel');
-  return issueAndSend(caller, ctx, 'backup_email_verify', 'backup', email);
+  return sent;
 };
 
 /**
@@ -412,17 +426,22 @@ export const verifyBackupEmail = async (caller: Caller, ctx: RecoveryContext, in
   await assertVerifiedSession(caller);
   await refuseIfFrozen(caller, 'recovery_channel');
   const store = getMfaStore();
-  const pending = await store.getBackupEmail(caller.userId);
-  if (!pending || pending.verified_at) refuse('failed_precondition', 'Add the backup email again.', 'not_available');
+  const row = await store.getBackupEmail(caller.userId);
+  // The address waiting for this code: the pending replacement, or an unconfirmed first address.
+  const target = row?.pending_email ?? (row && !row.verified_at ? row.email : null);
+  if (!row || !target) refuse('failed_precondition', 'Add the backup email again.', 'not_available');
+  const previous = { email: row!.email, verified: Boolean(row!.verified_at) };
   await checkEmailCode(caller, ctx, 'backup_email_verify', input);
   // Conditional on the address: a replace in between makes this a no-op.
-  if (!(await store.verifyBackupEmail(caller.userId, pending!.email))) {
+  if (!(await store.verifyBackupEmail(caller.userId, target as string))) {
     refuse('failed_precondition', 'Add the backup email again.', 'not_available');
   }
   emit(caller, 'backup_email_verify', 'email_code', 'ok', false);
   sendMfaEmail(ctx.primaryEmail, { kind: 'backup_email_added' });
-  sendMfaEmail(pending!.email, { kind: 'backup_email_added' });
-  return { backupEmail: { masked: maskEmail(pending!.email), verified: true } };
+  sendMfaEmail(target, { kind: 'backup_email_added' });
+  // Replaced a confirmed address: it is told it no longer works.
+  if (previous.verified && previous.email !== target) sendMfaEmail(previous.email, { kind: 'backup_email_removed' });
+  return { backupEmail: { masked: maskEmail(target as string), verified: true } };
 };
 
 /** The `recovery_channel` step-up is spent by the route first. */

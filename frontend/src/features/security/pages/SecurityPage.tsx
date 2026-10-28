@@ -87,8 +87,8 @@ export const SecurityPage = () => {
       if (!token) return;
       const r = await mfaApi.undoRecovery(recoveryId, token);
       await refresh();
-      setOpen({ codes: r.backupCodes });
-      toast.success(`Recovery undone.${signedOut(r.otherSessionsEnded)}`);
+      if (r.backupCodes) setOpen({ codes: r.backupCodes });
+      toast.success(`Recovery undone.${signedOut(r.otherSessionsEnded)}${r.backupCodes ? '' : ' Make new backup codes below.'}`);
     });
 
   const newCodes = () =>
@@ -391,7 +391,7 @@ const PasskeyRow = ({ passkey, disabled, canRemove, onRemove, onRenamed }: Passk
 };
 
 interface BackupEmailSectionProps {
-  readonly backupEmail: { masked: string; verified: boolean } | null;
+  readonly backupEmail: { masked: string; verified: boolean; pendingMasked?: string } | null;
   readonly disabled: boolean;
   readonly confirmStepUp: (purpose: string) => Promise<string | null>;
   readonly onChanged: (message: string) => void;
@@ -453,6 +453,11 @@ const BackupEmailSection = ({ backupEmail, disabled, confirmStepUp, onChanged }:
           <p className="text-sm text-gray-300">
             {backupEmail.masked}{' '}
             {!backupEmail.verified && <span className="text-amber-200">(not confirmed: add it again to get a new code)</span>}
+            {backupEmail.pendingMasked && (
+              <span className="block text-xs text-gray-400">
+                Replacing with {backupEmail.pendingMasked}: this address keeps working until the new one is confirmed.
+              </span>
+            )}
           </p>
           <Button variant="secondary" size="sm" onClick={() => void remove()} disabled={disabled || busy}>Remove</Button>
         </div>

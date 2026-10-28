@@ -289,6 +289,13 @@ export const hasSecondFactor = async (userId: string, sessionId: string | null):
   return Boolean(await getMfaStore().getSession(sessionId, userId, nowIso()));
 };
 
+/** A marker earned with a method, not by finishing an email recovery (admin gate). */
+export const hasStaffSecondFactor = async (userId: string, sessionId: string | null): Promise<boolean> => {
+  if (!sessionId) return false;
+  const s = await getMfaStore().getSession(sessionId, userId, nowIso());
+  return Boolean(s) && s!.method !== 'email_recovery';
+};
+
 /**
  * Public-safe status: never a public key, credential id, secret or hash.
  * `secondFactorRequired` (the caller's input) = the server refuses this
@@ -307,6 +314,7 @@ export const getStatus = async (caller: Caller, secondFactorRequired: boolean) =
     store.getBackupEmail(caller.userId),
   ]);
   const verified = Boolean(session);
+  const pendingBackup = backup?.pending_email ?? null;
   const now = Date.now();
   const frozenUntil = recovery?.status === 'completed' && recovery.freeze_ends_at && Date.parse(recovery.freeze_ends_at) > now
     ? recovery.freeze_ends_at : null;
@@ -335,7 +343,13 @@ export const getStatus = async (caller: Caller, secondFactorRequired: boolean) =
     isStaff: role !== null,
     codeEntryLockedUntil: lockedUntil,
     // Ph3b. Never an address in full.
-    backupEmail: backup ? { masked: maskEmail(backup.email), verified: Boolean(backup.verified_at) } : null,
+    backupEmail: backup
+      ? {
+          masked: maskEmail(backup.email),
+          verified: Boolean(backup.verified_at),
+          ...(pendingBackup ? { pendingMasked: maskEmail(pendingBackup) } : {}),
+        }
+      : null,
     recovery: recovery && (recovery.status === 'holding' || frozenUntil)
       ? {
           id: recovery.id,
@@ -529,7 +543,9 @@ export const passkeyRegisterVerify = async (
   });
   // A first factor ends the other sessions too: harmless, and it signs out
   // anyone else who was already in with just the password.
-  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_add', 'passkey', usableFrom !== null);
+  // Review L1: the one add after a recovery leaves other sessions alone, so the
+  // owner (signed in with an old method) can still Undo. The freeze protects tokens.
+  const otherSessionsEnded = claimed ? false : await afterFactorChange(caller, 'mfa_factor_add', 'passkey', usableFrom !== null);
 
   return {
     passkey: { id: row.id, nickname: row.nickname, synced: row.backed_up, createdAt: row.created_at, usableFrom },
@@ -913,7 +929,7 @@ export const totpConfirm = async (caller: Caller, input: { code: string }) => {
   emit(caller, claimed ? 'recovery_enrol' : 'enrol', 'totp', 'ok', false);
   const waitUntil = pendingUntil(totp!.usable_from);
   sendMfaEmail(caller.email, { kind: 'factor_added', method: 'totp', ...(waitUntil ? { waitUntil } : {}) });
-  const otherSessionsEnded = await afterFactorChange(caller, 'mfa_factor_add', 'totp', waitUntil !== null);
+  const otherSessionsEnded = claimed ? false : await afterFactorChange(caller, 'mfa_factor_add', 'totp', waitUntil !== null);
   return { authenticatorApp: true, authenticatorAppUsableFrom: waitUntil, backupCodes, otherSessionsEnded };
 };
 

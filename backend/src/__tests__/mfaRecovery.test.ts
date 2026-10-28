@@ -570,6 +570,60 @@ describe('freeze and undo', () => {
   });
 });
 
+// ── Security review fixes (2026-10-27) ──────────────────────────────────────
+
+describe('review fixes', () => {
+  it('L1: the add after a recovery does not sign out the owner', async () => {
+    const app = await loadApp();
+    const { key } = await finishRecovery(app);
+    await signInWithPasskey(app, key);
+    const ended = mfaState.endedSessions.length;
+    const k = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN });
+    const o = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(USER, S2));
+    const v = await request(app).post('/auth/mfa/passkeys/register/verify').set('Authorization', auth(USER, S2))
+      .send({ challengeId: o.body.data.challengeId, nickname: 'New', response: k.register(o.body.data.options.challenge) });
+    expect(v.body.data.otherSessionsEnded).toBe(false);
+    expect(mfaState.endedSessions).toHaveLength(ended);
+    expect(mfaState.sessions.has(S3)).toBe(true);
+  });
+
+  it('M1: undo ends every other session in the same step (incl. sessions marked by a recovery-added method)', async () => {
+    const app = await loadApp();
+    const { key } = await finishRecovery(app);
+    mfaState.sessions.set(S1, { session_id: S1, user_id: USER, method: 'recovery_code', expires_at: new Date(Date.now() + 60_000).toISOString() });
+    await signInWithPasskey(app, key);
+    const recId = mfaState.recoveries[0].id;
+    const su = await stepUp(app, key, 'recovery_undo', recId, USER, S3);
+    const u = await request(app).post('/auth/mfa/recovery/undo').set('Authorization', auth(USER, S3))
+      .set('X-Step-Up', su.token as string).send({ recoveryId: recId });
+    expect(u.status).toBe(200);
+    expect([...mfaState.sessions.keys()]).toEqual([S3]);
+  });
+
+  it('L2: a stale recovery id is refused before the undo step-up is spent', async () => {
+    const app = await loadApp();
+    const { key } = await finishRecovery(app);
+    await signInWithPasskey(app, key);
+    const recId = mfaState.recoveries[0].id;
+    const su = await stepUp(app, key, 'recovery_undo', recId, USER, S3);
+    const r = await request(app).post('/auth/mfa/recovery/undo').set('Authorization', auth(USER, S3))
+      .set('X-Step-Up', su.token as string).send({ recoveryId: '00000000-0000-4000-8000-000000000000' });
+    expect(r.status).toBe(404);
+    expect(mfaState.grants.find((g) => g.action === 'recovery_undo')?.used_at).toBeNull();
+  });
+
+  it('L4: an email-recovery marker never passes the staff second-factor check', async () => {
+    const { __setMfaStore } = await import('../lib/mfa/store');
+    __setMfaStore(createMfaStoreFake(mfaState));
+    const { hasStaffSecondFactor, hasSecondFactor } = await import('../lib/mfa/mfaService');
+    mfaState.sessions.set(S2, { session_id: S2, user_id: USER, method: 'email_recovery', expires_at: new Date(Date.now() + 60_000).toISOString() });
+    expect(await hasSecondFactor(USER, S2)).toBe(true);
+    expect(await hasStaffSecondFactor(USER, S2)).toBe(false);
+    mfaState.sessions.set(S3, { session_id: S3, user_id: USER, method: 'passkey', expires_at: new Date(Date.now() + 60_000).toISOString() });
+    expect(await hasStaffSecondFactor(USER, S3)).toBe(true);
+  });
+});
+
 // ── Backup email ────────────────────────────────────────────────────────────
 
 describe('backup email', () => {
@@ -590,7 +644,7 @@ describe('backup email', () => {
     const r = await addWithStepUp(app, key, 'Backup@Example.org');
     expect(r.status).toBe(200);
     expect(codeMails().at(-1)?.to).toBe('backup@example.org');
-    expect(mfaState.backupEmails.get(USER)).toEqual({ email: 'backup@example.org', verified_at: null });
+    expect(mfaState.backupEmails.get(USER)).toMatchObject({ email: 'backup@example.org', verified_at: null });
     const v = await request(app).post('/auth/mfa/backup-email/verify').set('Authorization', auth(USER, S1))
       .set('X-Recovery-Nonce', NONCE).send({ codeId: r.body.data.codeId, code: lastCode() });
     expect(v.status).toBe(200);
@@ -614,6 +668,27 @@ describe('backup email', () => {
     const r = await request(app).post('/auth/mfa/backup-email').set('Authorization', auth(ADMIN, S1))
       .set('X-Recovery-Nonce', NONCE).set('X-Step-Up', suA.token as string).send({ email: 'x@example.org' });
     expect(r.body.reason).toBe('recovery_not_available');
+  });
+
+  it('L2: replacing keeps the confirmed address until the new one is confirmed; a send limit changes nothing', async () => {
+    const app = await loadApp();
+    const { key } = await enrolFirst(app);
+    mfaState.backupEmails.set(USER, { email: 'old@example.org', verified_at: new Date().toISOString(), pending_email: null });
+    const r = await addWithStepUp(app, key, 'new@example.org');
+    expect(r.status).toBe(200);
+    expect(mfaState.backupEmails.get(USER)).toMatchObject({ email: 'old@example.org', pending_email: 'new@example.org' });
+    expect(ses.some((m) => m.to === 'old@example.org' && /removed/.test(m.subject))).toBe(false);
+    // Cooldown: refused after the step-up, but the stored address is untouched.
+    const again = await addWithStepUp(app, key, 'other@example.org');
+    expect(again.body.reason).toBe('code_send_limit');
+    expect(mfaState.backupEmails.get(USER)).toMatchObject({ email: 'old@example.org', pending_email: 'new@example.org' });
+    const v = await request(app).post('/auth/mfa/backup-email/verify').set('Authorization', auth(USER, S1))
+      .set('X-Recovery-Nonce', NONCE).send({ codeId: r.body.data.codeId, code: lastCode() });
+    expect(v.status).toBe(200);
+    expect(mfaState.backupEmails.get(USER)).toMatchObject({ email: 'new@example.org', pending_email: null });
+    await flush();
+    await flush();
+    expect(ses.map((m) => `${m.to} ${m.subject}`)).toContain('old@example.org A backup email was removed from your account');
   });
 
   it('remove needs a step-up and tells both addresses', async () => {

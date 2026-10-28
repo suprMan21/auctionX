@@ -12,7 +12,7 @@
 -- rows (created_at, hold_ends_at, expires_at), never by waiting.
 --
 -- Run: supabase db query --linked -f supabase/tests/s_2fa_ph3b_live.sql
--- Expect: ERROR  P0001: RESULTS {"ok": 24, "total": 24, "failures": {}}
+-- Expect: ERROR  P0001: RESULTS {"ok": 27, "total": 27, "failures": {}}
 
 DO $$
 DECLARE
@@ -27,7 +27,9 @@ DECLARE
     'public.cancel_account_recovery(uuid)',
     'public.claim_recovery_enrolment(uuid, uuid)',
     'public.release_recovery_enrolment(uuid, uuid)',
-    'public.undo_account_recovery(uuid, uuid)'];
+    'public.undo_account_recovery(uuid, uuid, uuid)',
+    'public.guard_recovery_method()',
+    'public.guard_staff_recovery()'];
   v_tables  CONSTANT TEXT[] := ARRAY['public.user_backup_emails', 'public.email_codes', 'public.account_recoveries'];
   v_n1      CONSTANT TEXT := repeat('1a', 32);   -- nonce hash
   v_n2      CONSTANT TEXT := repeat('2b', 32);
@@ -201,19 +203,49 @@ BEGIN
   v_res := v_res || jsonb_build_object('19_release', CASE WHEN v_ok
     AND (SELECT enrolled_at IS NOT NULL FROM account_recoveries WHERE id = v_rec) THEN 'ok' ELSE 'FAIL' END);
 
-  -- 20. Undo: the added passkey goes, the old one stays, recovery markers end; twice = none.
-  v_out := undo_account_recovery(v_u, v_rec);
+  -- 20. Undo: the added passkey goes, the old one stays, every other session's marker ends
+  --     (incl. one earned with a method), the kept session stays; twice = none.
+  INSERT INTO mfa_sessions (session_id, user_id, method, expires_at) VALUES (v_s2, v_u, 'passkey', now() + interval '1 hour');
+  INSERT INTO mfa_sessions (session_id, user_id, method, expires_at)
+  VALUES ('a2fa3b00-0000-4000-8000-0000000000c9', v_u, 'passkey', now() + interval '1 hour');
+  v_out := undo_account_recovery(v_u, v_rec, 'a2fa3b00-0000-4000-8000-0000000000c9');
   v_res := v_res || jsonb_build_object('20_undo', CASE WHEN v_out->>'status' = 'ok' AND (v_out->>'passkeys_removed')::int = 1
     AND NOT EXISTS (SELECT 1 FROM user_passkeys WHERE id = v_new_pk)
     AND EXISTS (SELECT 1 FROM user_passkeys WHERE id = v_old_pk)
-    AND NOT EXISTS (SELECT 1 FROM mfa_sessions WHERE user_id = v_u AND method = 'email_recovery')
+    AND NOT EXISTS (SELECT 1 FROM mfa_sessions WHERE user_id = v_u AND session_id <> 'a2fa3b00-0000-4000-8000-0000000000c9')
+    AND EXISTS (SELECT 1 FROM mfa_sessions WHERE session_id = 'a2fa3b00-0000-4000-8000-0000000000c9')
     AND (SELECT status FROM account_recoveries WHERE id = v_rec) = 'undone'
-    AND undo_account_recovery(v_u, v_rec)->>'status' = 'none' THEN 'ok' ELSE 'FAIL' END);
+    AND undo_account_recovery(v_u, v_rec, v_s1)->>'status' = 'none' THEN 'ok' ELSE 'FAIL' END);
+
+  -- 20b. A method tagged with an undone recovery can no longer be saved (review M2).
+  BEGIN
+    INSERT INTO user_passkeys (user_id, credential_id, public_key, nickname, added_by_recovery)
+    VALUES (v_u, 'latelatelatelate0000', 'pk', 'Late key', v_rec);
+    v_state := 'inserted';
+  EXCEPTION WHEN insufficient_privilege THEN v_state := 'refused';
+  END;
+  v_res := v_res || jsonb_build_object('20b_no_method_after_undo', CASE WHEN v_state = 'refused' THEN 'ok' ELSE 'FAIL' END);
+
+  -- 20c. No new recovery for 7 days after an undo (review L1).
+  v_res := v_res || jsonb_build_object('20c_no_recovery_after_undo',
+    CASE WHEN start_account_recovery(v_u, v_s2, 'primary', 72)->>'status' = 'frozen' THEN 'ok' ELSE 'FAIL' END);
+
+  -- 20d. No staff role while a recovery is waiting (review L4).
+  UPDATE account_recoveries SET undone_at = now() - interval '8 days' WHERE id = v_rec;
+  PERFORM start_account_recovery(v_u, v_s2, 'primary', 72);
+  BEGIN
+    INSERT INTO admin_users (admin_id, role_id, brand, is_active)
+    SELECT v_u, role_id, 'both', true FROM admin_roles WHERE role_name = 'support';
+    v_state := 'inserted';
+  EXCEPTION WHEN check_violation THEN v_state := 'refused';
+  END;
+  PERFORM cancel_account_recovery(v_u);
+  v_res := v_res || jsonb_build_object('20d_no_staff_during_recovery', CASE WHEN v_state = 'refused' THEN 'ok' ELSE 'FAIL: ' || v_state END);
 
   -- 21. Undo is refused once the freeze is over.
   UPDATE account_recoveries SET status = 'completed', undone_at = NULL, freeze_ends_at = now() - interval '1 second' WHERE id = v_rec;
   v_res := v_res || jsonb_build_object('21_no_undo_after_freeze',
-    CASE WHEN undo_account_recovery(v_u, v_rec)->>'status' = 'none' THEN 'ok' ELSE 'FAIL' END);
+    CASE WHEN undo_account_recovery(v_u, v_rec, v_s1)->>'status' = 'none' THEN 'ok' ELSE 'FAIL' END);
 
   -- 22. CHECKs: old values still accepted, new values accepted, junk refused.
   v_ok := true;

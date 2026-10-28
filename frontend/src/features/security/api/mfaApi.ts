@@ -128,7 +128,7 @@ export const mfaStatusSchema = z.object({
   isStaff: z.boolean().optional().default(false),
   codeEntryLockedUntil: z.string().nullable(),
   // Ph3b; older backends leave them out.
-  backupEmail: z.object({ masked: z.string(), verified: z.boolean() }).nullable().optional().default(null),
+  backupEmail: z.object({ masked: z.string(), verified: z.boolean(), pendingMasked: z.string().optional() }).nullable().optional().default(null),
   recovery: recoveryStatusSchema.nullable().optional().default(null),
 });
 
@@ -162,7 +162,7 @@ const recoveryFinishedSchema = z.object({
   passwordPermitExpiresAt: z.string().nullable(),
 });
 const cancelledSchema = z.object({ cancelled: z.string() });
-const undoneSchema = z.object({ undone: z.string(), backupCodes: z.array(z.string()), otherSessionsEnded: z.boolean() });
+const undoneSchema = z.object({ undone: z.string(), backupCodes: z.array(z.string()).nullable(), otherSessionsEnded: z.boolean() });
 const backupVerifiedSchema = z.object({ backupEmail: z.object({ masked: z.string(), verified: z.literal(true) }) });
 const backupRemovedSchema = z.object({ removed: z.literal(true) });
 

@@ -252,11 +252,23 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
     },
     async setPendingBackupEmail(userId, email) {
       guard('setPendingBackupEmail');
-      st.backupEmails.set(userId, { email, verified_at: null });
+      const cur = st.backupEmails.get(userId);
+      if (cur?.verified_at && cur.email !== email) {
+        cur.pending_email = email;
+        return;
+      }
+      st.backupEmails.set(userId, { email, verified_at: null, pending_email: null });
     },
     async verifyBackupEmail(userId, email) {
       const row = st.backupEmails.get(userId);
-      if (!row || row.email !== email || row.verified_at) return false;
+      if (!row) return false;
+      if (row.pending_email === email) {
+        row.email = email;
+        row.verified_at = new Date().toISOString();
+        row.pending_email = null;
+        return true;
+      }
+      if (row.email !== email || row.verified_at) return false;
       row.verified_at = new Date().toISOString();
       return true;
     },
@@ -354,7 +366,7 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
         || [...st.totp.values()].some((t) => t.added_by_recovery === recoveryId && t.verified_at);
       if (r && !used) r.enrolled_at = null;
     },
-    async undoRecovery(userId, recoveryId) {
+    async undoRecovery(userId, recoveryId, keepSessionId) {
       guard('undoRecovery');
       const r = st.recoveries.find(
         (x) => x.id === recoveryId && x.user_id === userId && x.status === 'completed' && (x.freeze_ends_at ?? '') > new Date().toISOString(),
@@ -367,7 +379,10 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
       const t = st.totp.get(userId);
       const totpRemoved = t?.added_by_recovery === recoveryId ? 1 : 0;
       if (totpRemoved) st.totp.delete(userId);
-      for (const [id, sess] of st.sessions) if (sess.user_id === userId && sess.method === 'email_recovery') st.sessions.delete(id);
+      // Same transaction as mfa_end_other_sessions.
+      st.endedSessions.push({ userId, keep: keepSessionId });
+      for (const [id, sess] of st.sessions) if (sess.user_id === userId && id !== keepSessionId) st.sessions.delete(id);
+      st.grants = st.grants.filter((g) => g.user_id !== userId || g.session_id === keepSessionId || g.used_at !== null);
       return { status: 'ok', passkeysRemoved: before - st.passkeys.length, totpRemoved };
     },
   };

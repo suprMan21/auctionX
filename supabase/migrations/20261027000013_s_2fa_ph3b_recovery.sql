@@ -15,7 +15,9 @@
 --      step_up_grants.action + 'recovery_undo', 'recovery_channel'
 --   6. Functions: issue_email_code, use_email_code, start_account_recovery,
 --      finish_account_recovery, cancel_account_recovery, claim_recovery_enrolment,
---      release_recovery_enrolment, undo_account_recovery
+--      release_recovery_enrolment, undo_account_recovery (ends other sessions in
+--      the same transaction); triggers guard_recovery_method (passkeys, TOTP) and
+--      guard_staff_recovery (admin_users) from the pre-merge security review
 --   7. account_delete_blockers: these rows (and auth_change_permits) go with a deleted account
 --   8. RLS on, no policies; service_role only. Every function: SECURITY DEFINER,
 --      search_path public, pg_temp, EXECUTE revoked from PUBLIC, anon, authenticated
@@ -34,9 +36,14 @@ CREATE TABLE IF NOT EXISTS public.user_backup_emails (
   user_id     UUID PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
   email       TEXT NOT NULL,
   verified_at TIMESTAMPTZ,              -- NULL until the code sent to it is entered
+  -- A replacement waiting for its code. The confirmed address keeps working until it is confirmed.
+  pending_email TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT user_backup_emails_email_chk CHECK (
-    length(email) BETWEEN 3 AND 254 AND email = lower(btrim(email)) AND email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$')
+    length(email) BETWEEN 3 AND 254 AND email = lower(btrim(email)) AND email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
+  CONSTRAINT user_backup_emails_pending_chk CHECK (pending_email IS NULL OR (
+    length(pending_email) BETWEEN 3 AND 254 AND pending_email = lower(btrim(pending_email))
+    AND pending_email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'))
 );
 
 COMMENT ON TABLE public.user_backup_emails IS
@@ -223,6 +230,11 @@ BEGIN
               WHERE user_id = p_user AND status = 'completed' AND freeze_ends_at > now()) THEN
     RETURN jsonb_build_object('status', 'frozen');
   END IF;
+  -- Review L1: after an undo, no new recovery for 7 days (the owner changes passwords meanwhile).
+  IF EXISTS (SELECT 1 FROM account_recoveries
+              WHERE user_id = p_user AND status = 'undone' AND undone_at > now() - interval '7 days') THEN
+    RETURN jsonb_build_object('status', 'frozen');
+  END IF;
   v_ends := now() + make_interval(hours => p_hold_hours);
   INSERT INTO account_recoveries (user_id, channel, started_session_id, hold_ends_at)
   VALUES (p_user, p_channel, p_session, v_ends)
@@ -329,11 +341,13 @@ BEGIN
 END;
 $$;
 
--- Undoes a completed recovery during its freeze: removes every method it added,
--- ends its recovery markers. The backend then ends the account's other sessions
--- and makes the owner a new set of backup codes.
--- Returns { status: ok | none, passkeys_removed, totp_removed }.
-CREATE OR REPLACE FUNCTION public.undo_account_recovery(p_user UUID, p_id UUID)
+-- Undoes a completed recovery during its freeze, in ONE transaction (review M1):
+-- removes every method it added, and ends every other session of the account
+-- (auth sessions, refresh tokens, markers, unused grants and challenges) except
+-- p_keep_session, the owner's. If ending them fails, the undo rolls back. The
+-- backend then makes the owner a new set of backup codes.
+-- Returns { status: ok | none, passkeys_removed, totp_removed, sessions_ended }.
+CREATE OR REPLACE FUNCTION public.undo_account_recovery(p_user UUID, p_id UUID, p_keep_session UUID)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -342,7 +356,12 @@ AS $$
 DECLARE
   v_pk   INTEGER;
   v_totp INTEGER;
+  v_n    INTEGER;
 BEGIN
+  IF p_keep_session IS NULL THEN
+    RAISE EXCEPTION 'invalid_session' USING ERRCODE = 'check_violation';
+  END IF;
+  -- The row lock also makes a racing recovery enrolment wait, then fail (guard_recovery_method).
   UPDATE account_recoveries SET status = 'undone', undone_at = now()
    WHERE id = p_id AND user_id = p_user AND status = 'completed' AND freeze_ends_at > now();
   IF NOT FOUND THEN
@@ -352,10 +371,71 @@ BEGIN
   GET DIAGNOSTICS v_pk = ROW_COUNT;
   DELETE FROM user_totp_factors WHERE user_id = p_user AND added_by_recovery = p_id;
   GET DIAGNOSTICS v_totp = ROW_COUNT;
-  DELETE FROM mfa_sessions WHERE user_id = p_user AND method = 'email_recovery';
-  RETURN jsonb_build_object('status', 'ok', 'passkeys_removed', v_pk, 'totp_removed', v_totp);
+  v_n := mfa_end_other_sessions(p_user, p_keep_session);
+  RETURN jsonb_build_object('status', 'ok', 'passkeys_removed', v_pk, 'totp_removed', v_totp, 'sessions_ended', v_n);
 END;
 $$;
+
+-- Review M2: a method tagged added_by_recovery can only be saved while that
+-- recovery is completed and frozen. FOR SHARE waits for a running undo (which
+-- holds the row lock) and then sees 'undone'; an undo that starts after this
+-- waits for the insert to commit and then deletes it.
+CREATE OR REPLACE FUNCTION public.guard_recovery_method()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_ok BOOLEAN;
+BEGIN
+  IF NEW.added_by_recovery IS NULL THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW.added_by_recovery IS NOT DISTINCT FROM OLD.added_by_recovery
+     AND (to_jsonb(NEW)->>'verified_at') IS NOT DISTINCT FROM (to_jsonb(OLD)->>'verified_at') THEN
+    RETURN NEW;
+  END IF;
+  SELECT status = 'completed' AND freeze_ends_at > now() AND user_id = NEW.user_id INTO v_ok
+    FROM account_recoveries WHERE id = NEW.added_by_recovery
+    FOR SHARE;
+  IF NOT coalesce(v_ok, false) THEN
+    RAISE EXCEPTION 'recovery_not_active' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS guard_recovery_method ON public.user_passkeys;
+CREATE TRIGGER guard_recovery_method BEFORE INSERT OR UPDATE ON public.user_passkeys
+  FOR EACH ROW EXECUTE FUNCTION public.guard_recovery_method();
+DROP TRIGGER IF EXISTS guard_recovery_method ON public.user_totp_factors;
+CREATE TRIGGER guard_recovery_method BEFORE INSERT OR UPDATE ON public.user_totp_factors
+  FOR EACH ROW EXECUTE FUNCTION public.guard_recovery_method();
+
+-- Review L4: no staff role while a recovery is waiting or its freeze runs.
+-- (Email recovery is never offered to staff; this stops a role being granted
+-- or reactivated around one.) Additive: a BEFORE trigger on admin_users.
+CREATE OR REPLACE FUNCTION public.guard_staff_recovery()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF NEW.is_active AND EXISTS (
+       SELECT 1 FROM account_recoveries
+        WHERE user_id = NEW.admin_id
+          AND (status = 'holding' OR (status = 'completed' AND freeze_ends_at > now()))) THEN
+    RAISE EXCEPTION 'recovery_in_progress' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS guard_staff_recovery ON public.admin_users;
+CREATE TRIGGER guard_staff_recovery BEFORE INSERT OR UPDATE OF is_active, role_id ON public.admin_users
+  FOR EACH ROW EXECUTE FUNCTION public.guard_staff_recovery();
 
 -- ── 7. account_delete_blockers ──────────────────────────────────────────────
 -- Unchanged from 20261027000006 §9 except the exclusion list: the Ph3b rows and
@@ -457,7 +537,9 @@ REVOKE EXECUTE ON FUNCTION public.finish_account_recovery(UUID, UUID, INTEGER, I
 REVOKE EXECUTE ON FUNCTION public.cancel_account_recovery(UUID)                                        FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.claim_recovery_enrolment(UUID, UUID)                                 FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.release_recovery_enrolment(UUID, UUID)                               FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.undo_account_recovery(UUID, UUID)                                    FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.undo_account_recovery(UUID, UUID, UUID)                              FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.guard_recovery_method()                                              FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.guard_staff_recovery()                                               FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.account_delete_blockers(UUID)                                        FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.issue_email_code(UUID, UUID, UUID, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ) TO service_role;
 GRANT EXECUTE ON FUNCTION public.use_email_code(UUID, UUID, UUID, TEXT, TEXT, TEXT)                    TO service_role;
@@ -466,7 +548,7 @@ GRANT EXECUTE ON FUNCTION public.finish_account_recovery(UUID, UUID, INTEGER, IN
 GRANT EXECUTE ON FUNCTION public.cancel_account_recovery(UUID)                                        TO service_role;
 GRANT EXECUTE ON FUNCTION public.claim_recovery_enrolment(UUID, UUID)                                 TO service_role;
 GRANT EXECUTE ON FUNCTION public.release_recovery_enrolment(UUID, UUID)                               TO service_role;
-GRANT EXECUTE ON FUNCTION public.undo_account_recovery(UUID, UUID)                                    TO service_role;
+GRANT EXECUTE ON FUNCTION public.undo_account_recovery(UUID, UUID, UUID)                              TO service_role;
 GRANT EXECUTE ON FUNCTION public.account_delete_blockers(UUID)                                        TO service_role;
 
 -- ── 9. mfa-cleanup also clears old codes ────────────────────────────────────
