@@ -9,8 +9,8 @@
  * Nothing is deleted. Reversal: `supabase secrets set MARKETPLACE_ENABLED=true`
  * (see docs/PARKED_MARKETPLACE.md).
  *
- * Functions that are NOT gated: waitlist-welcome (live) and upload-url (a
- * generic S3 presigner the token origin-video flow needs).
+ * Functions that are NOT gated: upload-url (a generic S3 presigner the token
+ * origin-video flow needs).
  */
 
 export const isMarketplaceEnabled = (): boolean => {

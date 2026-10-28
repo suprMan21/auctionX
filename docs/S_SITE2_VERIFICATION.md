@@ -67,7 +67,7 @@ pre-signup homepage build (`index-BfLLNTOt.js`, form always failing) for a short
 
 ## Follow-ups
 
-- Delete the unused `waitlist-welcome` edge function once the live run passes.
+- ~~Delete the unused `waitlist-welcome` edge function~~ Done 2026-10-28 (404). Its secret `WAITLIST_WEBHOOK_SECRET` is still set in Supabase: Boss to unset.
 - Regenerate `database.types.ts` (new columns); the store uses an untyped client meanwhile.
 - Restore the canvas claims when S-SEC1 exits clean ("proves it's real" never returns).
 - Add Privacy / Terms links when counsel passes the pages (G4).

@@ -98,8 +98,8 @@ The gate runs immediately after the CORS preflight branch.
 **Gated (8):** `process-payment`, `payment-webhook`, `release-escrow`, `settle-auction`,
 `reconcile-escrow`, `check-payment-window`, `place-bid`, `listings`. All deployed to staging 2026-09-18.
 
-**Not gated (2):** `waitlist-welcome` (live), `upload-url` (generic S3 presigner the token
-origin-video flow needs).
+**Not gated (1):** `upload-url` (generic S3 presigner the token origin-video flow needs).
+`waitlist-welcome` was deleted 2026-10-28 (S-SITE2: the backend sends the early-access welcome).
 
 Verified live on staging:
 
@@ -107,7 +107,7 @@ Verified live on staging:
 |---|---|---|
 | `release-escrow`, `reconcile-escrow`, `payment-webhook`, `settle-auction`, `listings` | **410 `MARKETPLACE_PARKED`** | reachable without a JWT, so the gate answers |
 | `process-payment`, `place-bid`, `check-payment-window` | **401** at the gateway | `verify_jwt = true`, so the request never reaches the gate — blocked earlier and harder |
-| `waitlist-welcome` | 401 (its own auth) | correctly NOT marketplace-gated |
+| `waitlist-welcome` | 404 | deleted 2026-10-28 (S-SITE2) |
 
 ### `verify_jwt` posture (fixed 2026-09-18)
 
