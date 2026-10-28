@@ -49,6 +49,8 @@ export const RecoveryPage = () => {
   const [step, setStep] = useState<Step>({ kind: 'loading' });
   const [channel, setChannel] = useState<RecoveryChannel>('primary');
   const [newPassword, setNewPassword] = useState('');
+  // Ph4: an explicit choice, so browser autofill cannot change the password unasked.
+  const [setPassword, setSetPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pwId = useId();
@@ -102,7 +104,7 @@ export const RecoveryPage = () => {
         setStep({ kind: 'waiting', holdEndsAt: r.holdEndsAt });
         return;
       }
-      const wantsPassword = newPassword.length > 0;
+      const wantsPassword = setPassword && newPassword.length > 0;
       const r = await mfaApi.finishRecovery(sent.codeId, code, wantsPassword);
       let passwordError: string | null = null;
       if (wantsPassword && r.passwordPermitExpiresAt) {
@@ -110,6 +112,7 @@ export const RecoveryPage = () => {
         if (pwErr) passwordError = 'Your new password was not saved. You can set it from Security settings after the pause.';
       }
       setNewPassword('');
+      setSetPassword(false);
       await refresh();
       setStep({ kind: 'add_method', freezeEndsAt: r.freezeEndsAt, passwordError });
     });
@@ -120,7 +123,7 @@ export const RecoveryPage = () => {
   };
 
   const status = useMfaStore.getState().status;
-  const passwordOk = newPassword.length === 0 || newPassword.length >= 8;
+  const passwordOk = !setPassword || newPassword.length >= 8;
 
   return (
     <div className="min-h-screen bg-dark-800 flex items-center justify-center p-4">
@@ -181,21 +184,41 @@ export const RecoveryPage = () => {
               The wait is over. We&apos;ll email you one more code to finish. Then you add a new passkey or authenticator
               app, and get new backup codes.
             </p>
-            <div className="space-y-1">
-              <label htmlFor={pwId} className="block text-sm text-gray-300">New password (optional)</label>
-              <input
-                id={pwId}
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full rounded-xl bg-dark-700 border border-white/10 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <p className="text-xs text-gray-400">
-                {passwordOk
-                  ? 'Leave empty to keep your current password. You can’t change it from Security settings for the next 7 days.'
-                  : 'At least 8 characters.'}
-              </p>
+            <div className="space-y-2">
+              <label className="flex items-center gap-3 min-h-[44px] text-sm text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={setPassword}
+                  onChange={(e) => {
+                    setSetPassword(e.target.checked);
+                    if (!e.target.checked) setNewPassword('');
+                  }}
+                  className="h-5 w-5 rounded border-white/20 bg-dark-700 text-primary-500 focus:ring-2 focus:ring-primary-500"
+                />
+                Set a new password too
+              </label>
+              {setPassword ? (
+                <div className="space-y-1">
+                  <label htmlFor={pwId} className="block text-sm text-gray-300">New password</label>
+                  <input
+                    id={pwId}
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full rounded-xl bg-dark-700 border border-white/10 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="text-xs text-gray-400">
+                    {passwordOk
+                      ? 'You can’t change it from Security settings for the next 7 days, so set it now if you need to.'
+                      : 'At least 8 characters.'}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">
+                  Your password stays the same. You can’t change it from Security settings for the next 7 days.
+                </p>
+              )}
             </div>
             <Button onClick={() => void send()} disabled={busy || !passwordOk} aria-busy={busy}>
               {busy ? 'Sending…' : 'Email me a code'}

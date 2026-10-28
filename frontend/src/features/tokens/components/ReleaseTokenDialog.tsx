@@ -1,4 +1,6 @@
 import { useId, useState } from 'react';
+import { isSecondFactorRefusal } from '@/features/security/lib/stepUp';
+import { SecondFactorNeeded } from '@/features/security/components/SecondFactorNeeded';
 import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
 import { tokenApi, TokenApiError } from '../api/tokenApi';
@@ -21,7 +23,7 @@ type Step =
   | { kind: 'confirm' }
   | { kind: 'submitting' }
   | { kind: 'step-up' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; secondFactor?: boolean };
 
 /**
  * Release is terminal: the token dies and nobody can claim it again. Three
@@ -62,6 +64,7 @@ export const ReleaseTokenDialog = ({ isOpen, tagId, onClose, onReleased }: Relea
       setStep({
         kind: 'error',
         message: releaseErrorCopy(apiError?.reason ?? null, apiError?.message ?? 'Something went wrong. Please try again.'),
+        secondFactor: isSecondFactorRefusal(err),
       });
     }
   };
@@ -126,6 +129,7 @@ export const ReleaseTokenDialog = ({ isOpen, tagId, onClose, onReleased }: Relea
               {step.message}
             </p>
           )}
+          {step.kind === 'error' && step.secondFactor && <SecondFactorNeeded />}
 
           <div className="flex flex-wrap gap-3">
             <button

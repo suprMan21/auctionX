@@ -148,7 +148,10 @@ describe('/sign-in/recover', () => {
     sb.updateUser.mockResolvedValue({ error: null });
     const user = userEvent.setup();
     renderPage();
-    await user.type(await screen.findByLabelText('New password (optional)'), 'a-new-long-password');
+    // Ph4: the password field only exists after an explicit choice (autofill lesson).
+    expect(screen.queryByLabelText('New password')).toBeNull();
+    await user.click(await screen.findByLabelText('Set a new password too'));
+    await user.type(screen.getByLabelText('New password'), 'a-new-long-password');
     await user.click(screen.getByRole('button', { name: 'Email me a code' }));
     expect(mfa.sendRecoveryCode).toHaveBeenCalledWith(undefined);
     await user.type(await screen.findByLabelText(/Code sent to/), '654321');
@@ -157,6 +160,24 @@ describe('/sign-in/recover', () => {
     await waitFor(() => expect(sb.updateUser).toHaveBeenCalledWith({ password: 'a-new-long-password' }));
     expect(await screen.findByText('Your account is recovered.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add passkey' })).toBeInTheDocument();
+  });
+
+  it('finish without ticking "Set a new password": no permit, password untouched', async () => {
+    seed(baseStatus({ sessionVerified: false }));
+    mfa.recoveryOverview.mockResolvedValue({
+      available: true, notAvailableReason: null, channels: [{ channel: 'primary', sentTo: 'u•••@e•••.com' }],
+      recovery: { status: 'holding', holdEndsAt: inDays(-0.01), ready: true, channel: 'primary' },
+    });
+    mfa.sendRecoveryCode.mockResolvedValue({ codeId: CODE_ID, purpose: 'recovery_finish', sentTo: 'u•••@e•••.com', expiresAt: inDays(0.01), resendAfter: null });
+    mfa.finishRecovery.mockResolvedValue({ status: 'completed', freezeEndsAt: inDays(7), addMethodBefore: inDays(0.02), passwordPermitExpiresAt: null });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Email me a code' }));
+    await user.type(await screen.findByLabelText(/Code sent to/), '654321');
+    await user.click(screen.getByRole('button', { name: 'Finish recovery' }));
+    expect(mfa.finishRecovery).toHaveBeenCalledWith(CODE_ID, '654321', false);
+    expect(await screen.findByText('Your account is recovered.')).toBeInTheDocument();
+    expect(sb.updateUser).not.toHaveBeenCalled();
   });
 
   it('a wrong code shows plain copy', async () => {

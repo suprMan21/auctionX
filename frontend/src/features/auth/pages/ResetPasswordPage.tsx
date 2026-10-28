@@ -98,6 +98,14 @@ export const ResetPasswordPage = () => {
           ? <p className="text-center text-sm text-gray-400" role="status">Checking your reset link…</p>
           : <ChangePasswordForm onDone={finished} />}
 
+        {recoverySession && (
+          <p className="mt-4 text-center text-xs text-gray-400">
+            Lost your passkey and authenticator app too?{' '}
+            <Link to="/sign-in/recover" className="underline text-primary-300">Recover by email</Link>
+            {' '}instead (it takes 72 hours).
+          </p>
+        )}
+
         <div className="mt-6 text-center">
           <Link to="/login" className="text-sm font-medium text-accent-500 hover:text-accent-400 transition-colors">
             Return to sign in

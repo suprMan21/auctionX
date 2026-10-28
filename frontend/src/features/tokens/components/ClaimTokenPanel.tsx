@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { isSecondFactorRefusal } from '@/features/security/lib/stepUp';
+import { SecondFactorNeeded } from '@/features/security/components/SecondFactorNeeded';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { tokenApi, TokenApiError } from '../api/tokenApi';
@@ -20,7 +22,7 @@ type Phase =
   | { kind: 'idle' }
   | { kind: 'confirming' }
   | { kind: 'submitting' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; secondFactor?: boolean };
 
 /**
  * Origin claim from the verify page. One tap: the tap that opened the page is
@@ -40,6 +42,7 @@ export const ClaimTokenPanel = ({ returnTo, signedIn, tapSession, onClaimed, onS
         <p role="alert" className="text-red-300 text-sm">
           {phase.message}
         </p>
+        {phase.secondFactor && <SecondFactorNeeded />}
       </section>
     );
   }
@@ -89,6 +92,7 @@ export const ClaimTokenPanel = ({ returnTo, signedIn, tapSession, onClaimed, onS
       setPhase({
         kind: 'error',
         message: claimErrorCopy(apiError?.reason ?? null, apiError?.message ?? 'Something went wrong. Please try again.'),
+        secondFactor: isSecondFactorRefusal(err),
       });
     }
   };

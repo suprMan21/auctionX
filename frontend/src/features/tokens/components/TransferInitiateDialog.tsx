@@ -1,4 +1,6 @@
 import { useEffect, useId, useState } from 'react';
+import { isSecondFactorRefusal } from '@/features/security/lib/stepUp';
+import { SecondFactorNeeded } from '@/features/security/components/SecondFactorNeeded';
 import { z } from 'zod';
 import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
@@ -15,7 +17,7 @@ interface TransferInitiateDialogProps {
   readonly onStarted: (result: TransferInitiateResult) => void;
 }
 
-type Phase = { kind: 'editing' } | { kind: 'submitting' } | { kind: 'error'; message: string };
+type Phase = { kind: 'editing' } | { kind: 'submitting' } | { kind: 'error'; message: string; secondFactor?: boolean };
 
 /** The fee shown here comes from GET /nfc/prices; the server locks it when the transfer starts. */
 type Fee = { kind: 'loading' } | { kind: 'ready'; usdCents: number } | { kind: 'unavailable' };
@@ -84,6 +86,7 @@ export const TransferInitiateDialog = ({ isOpen, tagId, onClose, onStarted }: Tr
           err instanceof TokenApiError
             ? transferErrorCopy(err)
             : 'Something went wrong. Please try again.',
+        secondFactor: isSecondFactorRefusal(err),
       });
     }
   };
@@ -164,6 +167,7 @@ export const TransferInitiateDialog = ({ isOpen, tagId, onClose, onStarted }: Tr
             {phase.message}
           </p>
         )}
+        {phase.kind === 'error' && phase.secondFactor && <SecondFactorNeeded />}
 
         <div className="flex flex-wrap gap-3">
           <Button type="submit" disabled={submitting} aria-busy={submitting}>
