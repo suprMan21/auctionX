@@ -194,6 +194,9 @@ export interface MfaStore {
   /** Active staff role name, or null for a non-staff account. */
   staffRole(userId: string): Promise<string | null>;
 
+  /** `users.account_type` ('collector' | 'creator'), or null when the row is missing. */
+  accountType(userId: string): Promise<string | null>;
+
   /**
    * Ends every other Supabase session of the account (and its refresh tokens,
    * markers, unused grants and challenges), keeping `keepSessionId`
@@ -488,6 +491,12 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
     const { data: role, error: roleError } = await db.from('admin_roles').select('role_name').eq('role_id', roleId).maybeSingle();
     if (roleError) fail('staffRole.role', roleError);
     return (role as { role_name?: string } | null)?.role_name ?? null;
+  },
+
+  async accountType(userId) {
+    const { data, error } = await db.from('users').select('account_type').eq('id', userId).maybeSingle();
+    if (error) fail('accountType', error);
+    return (data as { account_type?: string } | null)?.account_type ?? null;
   },
 
   async endOtherSessions(userId, keepSessionId) {

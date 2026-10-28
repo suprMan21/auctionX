@@ -2,8 +2,8 @@
  * 2FA gate for origin claim and transfer completion — S-NFC3, rewired in S-2FA.
  *
  * The locked lifecycle decision: "every account needs 2FA". Enforcement is
- * behind `FEATURE_REQUIRE_2FA` (lib/featureFlags.ts, the only reader), default
- * off until S-2FA Ph4 turns it on with the enrolment screens live.
+ * per account by lib/mfa/policy.ts (FEATURE_REQUIRE_2FA for everyone; staff and
+ * Creators under their own flags), default off until S-2FA Ph4.
  *
  * S-2FA: the check is our own per-session marker (`mfa_sessions`, keyed on the
  * JWT `session_id` claim), written when the caller passes a passkey, an
@@ -14,7 +14,7 @@
 import type { Request } from 'express';
 import { emitSecurityEvent } from './securityEvent';
 import type { SecurityLogContext } from '../ownership/ownershipProof';
-import { isTwoFactorRequired } from '../featureFlags';
+import { twoFactorPolicy } from '../mfa/policy';
 import { readVerifiedClaims } from '../mfa/jwtClaims';
 import { hasSecondFactor, hasStaffSecondFactor } from '../mfa/mfaService';
 
@@ -52,7 +52,15 @@ export const passesTwoFactor = async (
   gate: TwoFactorGate,
   ctx: SecurityLogContext,
 ): Promise<boolean> => {
-  const required = isTwoFactorRequired();
+  // Ph4: lib/mfa/policy.ts. A database error reads as "required" (fail closed).
+  let required = true;
+  if (ctx.actorId) {
+    try {
+      required = (await twoFactorPolicy(ctx.actorId)).forTokenActions;
+    } catch {
+      required = true;
+    }
+  }
   const { sessionId } = readVerifiedClaims(req.headers.authorization);
   const verified = required ? await sessionHasSecondFactor(req.headers.authorization, ctx.actorId) : false;
   const satisfied = !required || verified;

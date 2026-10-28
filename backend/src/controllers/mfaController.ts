@@ -7,7 +7,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
 import { AppError } from '../lib/errors';
-import { isAdminTwoFactorRequired, isTwoFactorRequired } from '../lib/featureFlags';
+import { twoFactorPolicy } from '../lib/mfa/policy';
 import { callerFrom, STEP_UP_HEADER } from '../middleware/mfaGates';
 import * as mfa from '../lib/mfa/mfaService';
 import { getMfaStore } from '../lib/mfa/store';
@@ -101,8 +101,7 @@ const ok = (res: Response, data: unknown, status = 200) => res.status(status).js
 
 export const getMfaStatus = async (req: Request, res: Response) => {
   const c = caller(req);
-  const staff = isAdminTwoFactorRequired() ? Boolean(await getMfaStore().staffRole(c.userId)) : false;
-  ok(res, await mfa.getStatus(c, isTwoFactorRequired() || staff));
+  ok(res, await mfa.getStatus(c, await twoFactorPolicy(c.userId)));
 };
 
 const stepUpHeader = (req: Request): string | undefined => req.get(STEP_UP_HEADER) ?? undefined;

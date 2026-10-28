@@ -31,6 +31,8 @@ export interface MfaFakeState {
   grants: Array<{ token_hash: string; user_id: string; session_id: string; action: StepUpAction; target_id: string; expires_at: string; method: MfaMethod | null; used_at: string | null }>;
   failures: Map<string, { failed: number; locked_until: string | null; lock_count: number }>;
   staff: Map<string, string>;
+  /** users.account_type; missing = 'collector'. */
+  accountTypes: Map<string, string>;
   /** Every endOtherSessions call, in order. */
   endedSessions: Array<{ userId: string; keep: string }>;
   /** Every staff audit row written. */
@@ -54,6 +56,7 @@ export const createMfaFakeState = (): MfaFakeState => ({
   grants: [],
   failures: new Map(),
   staff: new Map(),
+  accountTypes: new Map(),
   endedSessions: [],
   audits: [],
   permits: [],
@@ -223,6 +226,10 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
       return st.staff.get(userId) ?? null;
     },
     // Same rules as mfa_end_other_sessions (auth.sessions deletes are proven by s_2fa_ph2_live.sql).
+    async accountType(userId) {
+      guard('accountType');
+      return st.accountTypes.get(userId) ?? 'collector';
+    },
     async endOtherSessions(userId, keep) {
       guard('endOtherSessions');
       st.endedSessions.push({ userId, keep });

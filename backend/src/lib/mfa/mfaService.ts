@@ -37,6 +37,7 @@
  *     factor never waits; a grant with no recorded method counts as a code.
  */
 
+import type { TwoFactorPolicy } from './policy';
 import { createHash, randomBytes } from 'crypto';
 import {
   generateAuthenticationOptions,
@@ -298,11 +299,14 @@ export const hasStaffSecondFactor = async (userId: string, sessionId: string | n
 
 /**
  * Public-safe status: never a public key, credential id, secret or hash.
- * `secondFactorRequired` (the caller's input) = the server refuses this
- * account's token / admin actions without a verified second factor.
- * `isStaff` tells the frontend to offer only a passkey for token step-ups.
+ * `secondFactorRequired` = the server refuses this account's token / admin
+ * actions without a verified second factor. `enrolmentRequired` = no method yet
+ * and this account must add one right after its password (staff, Creators;
+ * lib/mfa/policy.ts). `isStaff` tells the frontend to offer only a passkey for
+ * token step-ups.
  */
-export const getStatus = async (caller: Caller, secondFactorRequired: boolean) => {
+export const getStatus = async (caller: Caller, policy: TwoFactorPolicy) => {
+  const secondFactorRequired = policy.forTokenActions;
   const store = getMfaStore();
   const [summary, codesLeft, session, role, lockedUntil, recovery, backup] = await Promise.all([
     factorSummary(caller.userId),
@@ -337,7 +341,7 @@ export const getStatus = async (caller: Caller, secondFactorRequired: boolean) =
     backupCodesLeft: codesLeft,
     hasFactor: summary.total > 0,
     sessionVerified: verified,
-    enrolmentRequired: secondFactorRequired && summary.total === 0,
+    enrolmentRequired: policy.atSignIn && summary.total === 0,
     secondFactorRequired,
     breakGlass: role === 'super_admin',
     isStaff: role !== null,
@@ -540,6 +544,7 @@ export const passkeyRegisterVerify = async (
   emit(caller, claimed ? 'recovery_enrol' : 'enrol', 'passkey', 'ok', superAdmin);
   notify(caller, superAdmin, {
     kind: 'factor_added', method: 'passkey', nickname: row.nickname, ...(usableFrom ? { waitUntil: usableFrom } : {}),
+    ...(first ? { first: true } : {}),
   });
   // A first factor ends the other sessions too: harmless, and it signs out
   // anyone else who was already in with just the password.
@@ -944,7 +949,7 @@ export const totpConfirm = async (caller: Caller, input: { code: string }) => {
   const backupCodes = first || claimed ? await finishFirstFactor(caller, 'totp', false) : null;
   emit(caller, claimed ? 'recovery_enrol' : 'enrol', 'totp', 'ok', false);
   const waitUntil = pendingUntil(totp!.usable_from);
-  sendMfaEmail(caller.email, { kind: 'factor_added', method: 'totp', ...(waitUntil ? { waitUntil } : {}) });
+  sendMfaEmail(caller.email, { kind: 'factor_added', method: 'totp', ...(waitUntil ? { waitUntil } : {}), ...(first ? { first: true } : {}) });
   const otherSessionsEnded = claimed ? false : await afterFactorChange(caller, 'mfa_factor_add', 'totp', waitUntil !== null);
   return { authenticatorApp: true, authenticatorAppUsableFrom: waitUntil, backupCodes, otherSessionsEnded };
 };

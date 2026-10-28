@@ -173,6 +173,8 @@ describe('first passkey', () => {
     expect(JSON.stringify(mfaState.codes)).not.toContain(res.body.data.backupCodes[0]);
     expect(mfaState.sessions.get(S1)).toMatchObject({ user_id: USER, method: 'passkey' });
     expect(sent.map((m) => m.subject)).toContain('A new sign-in method was added to your account');
+    // Ph4: a first method is trusted on sight, so the email points to Recover by email.
+    expect(sent.find((m) => m.subject === 'A new sign-in method was added to your account')?.text).toContain('Recover by email');
     expect(events.named('auth.mfa').at(-1)).toMatchObject({ action: 'enrol', method: 'passkey', result: 'ok', break_glass: false });
   });
 
@@ -446,6 +448,10 @@ describe('authenticator app', () => {
       .send({ code: codeFor(setup.body.data.secret, -1) });
     expect(confirm.status).toBe(200);
     expect(confirm.body.data.backupCodes).toHaveLength(10);
+    await flush();
+    // Ph4: the first method always emails the owner, pointing to Recover by email.
+    const mail = sent.find((m) => m.subject === 'A new sign-in method was added to your account');
+    expect(mail?.text).toContain('Recover by email');
 
     const code = codeFor(setup.body.data.secret);
     const signIn = await request(app).post('/auth/mfa/sign-in/verify').set('Authorization', auth(USER, S2)).send({ totp: { code } });

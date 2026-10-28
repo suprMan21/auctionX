@@ -58,6 +58,7 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.FEATURE_REQUIRE_2FA;
   delete process.env.FEATURE_REQUIRE_STEP_UP;
+  delete process.env.FEATURE_REQUIRE_CREATOR_2FA;
 });
 
 describe('second factor required (FEATURE_REQUIRE_2FA)', () => {
@@ -78,6 +79,33 @@ describe('second factor required (FEATURE_REQUIRE_2FA)', () => {
       .send(body);
     expect(res.status).toBe(403);
     expect(res.body.reason).toBe('2fa_required');
+  });
+});
+
+describe('Creators under FEATURE_REQUIRE_CREATOR_2FA (Ph4)', () => {
+  const release = (app: Awaited<ReturnType<typeof loadApp>>) =>
+    request(app).post('/api/v1/nfc/release').set('Authorization', AUTH).send({ tagId: TAG, confirm: true, confirmPhrase: 'RELEASE' });
+
+  it('a Creator without a second factor is refused a token action', async () => {
+    process.env.FEATURE_REQUIRE_CREATOR_2FA = 'true';
+    mfaState.accountTypes.set(USER, 'creator');
+    const res = await release(await loadApp());
+    expect(res.status).toBe(403);
+    expect(res.body.reason).toBe('2fa_required');
+  });
+
+  it('a collector passes the gate when only the creator flag is on', async () => {
+    process.env.FEATURE_REQUIRE_CREATOR_2FA = 'true';
+    const res = await release(await loadApp());
+    // Past the gate: the controller runs and hits the mock, so not a 2FA refusal.
+    expect(res.body.reason).not.toBe('2fa_required');
+  });
+
+  it('fails closed when the account type cannot be read', async () => {
+    process.env.FEATURE_REQUIRE_CREATOR_2FA = 'true';
+    mfaState.failNext.add('accountType');
+    const res = await release(await loadApp());
+    expect(res.status).toBe(503);
   });
 });
 
