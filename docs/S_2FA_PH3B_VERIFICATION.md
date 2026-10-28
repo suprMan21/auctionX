@@ -32,15 +32,28 @@
 - Live SQL `supabase/tests/s_2fa_ph3b_live.sql` **27/27** (dry run with the migration, rolled back; staging left clean).
 - `schemaColumnDrift.test.ts`: the new tables/columns are listed in `PENDING_MIGRATION_COLUMNS` until the migration is applied and types regenerated (remove them then).
 
-## Rollout (Boss)
+## Rollout (done 2026-10-27 / 28)
 
-1. ✅ Done 2026-10-27: migration `…13` applied (Boss), live SQL 27/27 on staging, both `database.types.ts` regenerated, `PENDING_MIGRATION_COLUMNS` emptied.
-2. SES, us-east-2: verify the domain `authentic-materials.com` (Easy DKIM, 3 CNAMEs). While SES is in its sandbox it only sends to verified addresses: verify `test@` / `test2@` to test, then request production access.
-3. IAM: `ses:SendEmail` on the identity `authentic-materials.com` for whatever credentials App Runner actually uses. **App Runner has `AWS_ACCESS_KEY_ID` set**: env keys win over the instance role, so either remove them (better) or grant that user.
-4. App Runner env `SECURITY_MAIL_FROM` = `Authentic Materials <security@authentic-materials.com>` (one slot). Remove the Postmark security-server token if it is set (no longer used).
-5. Push `dev`, confirm deploy (`scripts/verify-backend-deploy.sh`), `scripts/deploy-frontend.sh staging`.
-6. Click-through on staging (test2@): add a backup email → sign in on another browser with the password → Recover by email → wait banner on the first browser → Cancel; start again, set `hold_ends_at` back by SQL to skip 3 days → finish → add passkey → frozen notice → Undo from the first browser.
-7. DMARC: check the current policy; aim for `p=reject` once SES DKIM aligns.
+| Step | Result |
+|---|---|
+| Migration `…13` | Applied by Boss; live SQL 27/27; both `database.types.ts` regenerated, `PENDING_MIGRATION_COLUMNS` emptied (`24d2476`) |
+| SES us-east-2 | Domain `authentic-materials.com` verified (Easy DKIM via Route 53). Still in the sandbox: production access to request before real users |
+| Sender | App Runner `SECURITY_MAIL_FROM` = `Authentic Materials <noreply@authentic-materials.com>` |
+| IAM | Inline policy `SesSecurityMail` (`ses:SendEmail` on `arn:aws:ses:us-east-2:904183418667:identity/*`) on user `auctionx-s3-access` (the App Runner `AKIA…` env key; S3 passes it explicitly) **and** role `am-backend-staging-instance` (default credential chain). Scoping to `identity/authentic-materials.com` alone gave AccessDenied: in the sandbox SES also checks the recipient identity. A `ses:FromAddress` condition was dropped too. Tighten after production access |
+| Deploys | Backend `99dfb6d` (23:54 EDT), staging frontend 22:41 EDT |
+| Added during rollout (Boss) | A sign-in with a passkey, authenticator code or backup code deletes the account's emailed codes (send limits back to 0, live codes void); waiting recovery / freeze / post-undo block untouched. `security_mail_failed` now logs AWS's reason with addresses stripped |
+
+## Staging click-through (2026-10-28, Boss; checked against DB + logs)
+
+| Check | Result |
+|---|---|
+| Code email via SES from `noreply@` | ✅ |
+| Start → 72 h hold → red notice on the owner's browser → Cancel | ✅ (test@, cancelled 03:45Z) |
+| Start → hold skipped by SQL → fresh code → finish → one method added → 7-day freeze | ✅ (test@, 04:00–04:01Z, freeze to 4 Nov) |
+| Undo with the old passkey: added method removed, new backup codes, other sessions ended | ✅ (04:02:46Z) |
+| Sign-in resets code counters | ✅ (test2@: code 04:10:16Z → passkey sign-in 04:10:35Z → 0 rows) |
+| Backup email add + confirm | ✅ (test2@, confirmed, nothing pending) |
+| Finding | The optional new-password box was filled (likely browser autofill), so test@'s password changed at finish (permit used 04:01:12Z). Update 1Password. Consider a "Set a new password" checkbox instead of a bare field (Ph4 copy pass) |
 
 ## Security review (2026-10-27, before merge)
 
@@ -63,6 +76,9 @@ exclusion list), no code / nonce / full address in logs, events or responses.
 
 | Item | Where |
 |---|---|
+| Admin console: "Reset code limits" + recovery status on the account page (Boss) | Feature Backlog |
+| SES production access request; then tighten `SesSecurityMail` | Boss |
+| Move the backend off the `auctionx-s3-access` env key onto its instance role (after an S3 permission audit) | Ph4 |
 | Reminder email 24 h before a hold ends | Later (needs a cron tick) |
 | City in the code email (only browser + OS today) | Later (needs IP geolocation) |
 | Granting a staff role to an account with a waiting / frozen recovery fails in the database (`recovery_in_progress`); the console shows a generic error | Map the error, S-ADMIN2 follow-up |
