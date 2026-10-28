@@ -1,7 +1,7 @@
 # S-MOB1 Phase B — Creator app sign-in second step: verification
 
 **Date:** 2026-10-28 · **Branch:** `feature/s-mob1-b` · **Plan:** `docs/plans/2026-10-28-s-mob1.md` (Phase B)
-**Status:** code + tests done; **device test pending** (needs the Boss actions below). No database change, no backend code change.
+**Status:** ✅ **verified on iPhone 2026-10-28** (TestFlight build 0.1.0+7, staging). Android deferred (no device). No database change, no backend code change.
 
 ## What shipped
 
@@ -59,17 +59,27 @@ from the page it's tapped on. Both domains are already in the app's Associated D
 3. Deploy: `scripts/deploy-frontend.sh staging` **and** `scripts/deploy-frontend.sh public` (`/app/open` on the public site).
 4. Apple: Associated Domains on App ID `com.authenticmaterials.tags` + new profile (phase A list).
 
-## Device test (Boss + Claude, no chips needed)
+## Device test (iPhone, TestFlight 0.1.0+7, 2026-10-28)
 
-- [ ] iPhone (TestFlight build 0.1.0+7): sign in as a Creator (`test@`) with password → Confirm it's you → passkey made on the staging website → home.
-- [ ] Android: same (needs action 1). **Deferred (Boss 2026-10-28: no Android phone).** Emulator possible for a basic run; one real-phone check required before launch (Phase C / Play internal testing).
-- [ ] Authenticator code (iOS Passwords fill / Android hint); wrong code wording; backup code + low-codes notice.
-- [ ] `test2@` (Collector) → second step → "This app is for creators".
-- [ ] Sign up from the app ("Create an account") → confirm email on the phone → **Open the Authentic Materials app**
-      opens the app at sign-in with the email filled. Same button absent when signing up on the website directly.
-- [ ] Kill the network on the second step → plain message; airplane mode at start → "We couldn't finish signing you in".
+Each result read back from the backend `auth.mfa` log (`sign-in/verify`) or the database, not only as reported.
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| 1 | Creator, passkey (iCloud Keychain, Face ID) → home | ✅ | 21:23 + 21:26 UTC `method passkey ok`, actor `d7c022a9` = **admin2@** (Creator; Boss used admin2@, not test@) |
+| 2 | Authenticator code: wrong → plain message, right → home | ✅ | 21:31:27 `totp invalid_code`, 21:31:44 `totp ok`, actor `d32619fb` = admin@ (only account with an authenticator app) |
+| 3 | Collector after second step → "This app is for creators" | ✅ | 21:35 `passkey ok`, actor `885d30e1` = test2@ (Collector) |
+| 4 | App → website sign-up → confirmation email → `/register/confirmed` → **Open the Authentic Materials app** → app at sign-in, email filled | ✅ | Boss; cross-domain link (staging page → authentic-materials.com/app/open) opened the app |
+| 5 | Airplane mode → plain message, Try again after reconnect | ✅ | Boss |
+| — | Backup code sign-in | not run on device (unit + widget tests only) | |
+| — | Android | **deferred** (Boss has no Android phone); one real-phone check before launch | |
+
+Notes:
+- Face ID ran inside the system passkey sheet; the app needs no `NSFaceIDUsageDescription` (it never calls LocalAuthentication). Server requires user verification (`userVerification: 'required'`).
+- **1Password does not fill the authenticator code** on the app's code screen (password fill works). Field is `oneTimeCode`. Follow-up in phase C: check the 1Password item (website + code in the same item), compare with iOS Passwords, decide if anything in the app can help.
+- Throwaway sign-up account created on staging during check 4 (Boss's +alias); delete from Admin → Accounts when convenient.
 
 ## Open
+- Android device check (above). 1Password code fill (above).
 - Production: the web app's host is not decided; `VITE_APP_OPEN_ORIGIN` must point at a domain other than the one
   serving the finish screens (S-LAUNCH1).
 - Home shell tabs (Seal / Security / Account) land with phase C's Security screen.

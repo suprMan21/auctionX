@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-28 (S-2FA Ph4 live on staging, all flags on, phones pending; S-ANCHOR1 on hold for the hardware wallet)
+**Last updated:** 2026-10-28 (S-MOB1 Ph B verified on iPhone; production backend = ECS Express Mode, launch-blocking)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -14,6 +14,16 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ---
 
 ## 🔴 BOSS ACTION
+
+### S-MOB1 Creator app (Ph B verified on iPhone 2026-10-28)
+- [ ] Android check on a real phone before launch (emulator OK for a basic run). Needs Play signing hash in `WEBAUTHN_ORIGINS` (Ph C).
+- [ ] 1Password doesn't fill the authenticator code on the app's code screen: check the item (website + code in one item) and iOS Passwords (Ph C).
+- [ ] Delete the throwaway app sign-up account (Boss's +alias) from Admin → Accounts.
+- [ ] Production: `VITE_APP_OPEN_ORIGIN` must be a different domain from the web app serving the finish screens (S-LAUNCH1).
+- Next: **Ph C** (in-app Security screen, add/remove methods, step-up sheet, Play internal testing).
+
+### Production backend hosting (Boss 2026-10-28)
+- [ ] Move to **ECS Express Mode** before launch (Locked decision now launch-blocking; backlog Module 19, High). Production never runs on App Runner.
 
 ### S-2FA (Ph1–Ph4 live on staging, 2026-10-28)
 Every flag is **on** in staging (Boss, 2026-10-28): `FEATURE_REQUIRE_2FA`, `_ADMIN_2FA`, `_CREATOR_2FA`, `_STEP_UP`,
