@@ -24,9 +24,10 @@ Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live o
 - [ ] **Ph3a (merged local dev `9b4acc3`)**: Boss pushes `dev`, runs `supabase db push --linked` (applies `…12`; `…11`
       already on staging), re-runs `supabase/tests/s_2fa_ph3a_approvals_live.sql` (expect 22/22), then
       `scripts/deploy-frontend.sh staging` and `public` (home copy). `docs/S_2FA_PH3A_VERIFICATION.md`.
-- [ ] **Ph3b**: email-code recovery (72 h hold, 7-day freeze, backup email). Security mail channel: Amazon SES (no
-      stored bodies) or a separate Postmark account at 7 d (Postmark can't keep zero; Boss's staging security
-      server token is already in App Runner).
+- [ ] **Ph3b**: email-code recovery (72 h hold, 7-day freeze, backup email). **Security mail = Amazon SES** (Boss
+      2026-10-27, Locked; Postmark keeps everything else). Boss can start now (AWS approval takes ~1 day):
+      SES us-east-2 → verify domain `authentic-materials.com` (Easy DKIM, custom MAIL FROM) → request production
+      access. The Postmark staging security server + its App Runner token are no longer needed.
 - [ ] **App Runner env var cap** (2 slots left, 2026-10-27): Boss deletes vars equal to defaults (`WEBAUTHN_RP_NAME`,
       `MFA_SESSION_TTL_HOURS`, every `FEATURE_*=false`). `WEBAUTHN_ORIGINS` can now be deleted (defaults to `https://<WEBAUTHN_RP_ID>`
       after the Ph3a deploy); move secrets into one Secrets Manager JSON secret read at boot by `am-backend-staging-instance` (one env var).
