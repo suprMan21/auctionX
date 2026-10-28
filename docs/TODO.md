@@ -24,6 +24,8 @@ Every flag is **on** in staging (Boss, 2026-10-28): `FEATURE_REQUIRE_2FA`, `_ADM
       method is sent to setup after the password. Checklist: `docs/S_2FA_PH4_VERIFICATION.md`.
 - [ ] Boss: test@'s password was changed by browser autofill in Ph3b; update 1Password.
 - [ ] Boss: break-glass account has keys `breakGlassKey2` + `Yubikey1` and new backup codes (2026-10-28); store the codes.
+- [ ] When the **Security Key C NFC pair** arrives: register both on the break-glass account, then remove
+      `breakGlassKey2` + `Yubikey1` (interim keys; Locked key-roles decision 3f33baf6, update 2026-10-28).
 - [ ] Ph3a: `scripts/deploy-frontend.sh public` for the home copy, if not done yet.
 - [ ] **App Runner env var cap**: delete vars equal to defaults (`WEBAUTHN_ORIGINS`, `WEBAUTHN_RP_NAME`,
       `MFA_SESSION_TTL_HOURS`); later one Secrets Manager JSON secret read at boot.
