@@ -25,7 +25,7 @@ Brief: Notion "S-SITE2 — Story-First Public Homepage (Draft 2.4 build)". Branc
 | 5 | SealBadge spins + pulses; stops under reduced motion | ✅ | Browser: `animationName` `am-sealspin` → `none` with reduced motion; CSS test |
 | 6 | tsc 0, vitest green, eslint 0 (new files) | ✅ | backend 1126 passed / 23 skipped; frontend 412; repo-wide eslint has the same 47 pre-existing problems as `dev` |
 | 7 | 1280 / 375 screenshots, nothing over the headline | ✅ | Overlap check: no element intersects the h1; no sideways scroll |
-| 8 | Signup writes one row, one welcome email, consent stored, unsubscribe works | ⏳ | Unit + route tests pass (27). Live run against staging App Runner pending the deploy (below) |
+| 8 | Signup writes one row, one welcome email, consent stored, unsubscribe works | ⏳ | Live on staging 2026-10-28 06:06 (deploy SUCCEEDED 02:06 ET): signup from origin authentic-materials.com → 202, CORS ok; repeat → identical 202, no second email; one row, source `home`, consent wording matches, `welcome_sent_at` set, log `early_access_welcome sent:true`. Unsubscribe link: Boss to click from the inbox |
 | 9 | This report | ✅ | |
 
 ## Early-access signup (G3)
