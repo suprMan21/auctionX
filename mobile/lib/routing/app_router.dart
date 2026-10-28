@@ -12,6 +12,7 @@ import '../features/home/home_screen.dart';
 import '../features/mfa/presentation/gate_screens.dart';
 import '../features/mfa/presentation/second_factor_screen.dart';
 import '../features/mfa/session_gate.dart';
+import '../features/security/security_screen.dart';
 import 'route_names.dart';
 
 /// Where the app must be, given the gates, or null to stay put.
@@ -91,6 +92,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: RouteNames.setupRequired, builder: (_, _) => const SetupRequiredScreen()),
       GoRoute(path: RouteNames.creatorsOnly, builder: (_, _) => const CreatorsOnlyScreen()),
       GoRoute(path: RouteNames.problem, builder: (_, _) => const SessionProblemScreen()),
+      // Fully signed in only: the redirect sends every other state elsewhere.
+      GoRoute(path: RouteNames.security, builder: (_, _) => const SecurityScreen()),
     ],
   );
   ref.onDispose(router.dispose);

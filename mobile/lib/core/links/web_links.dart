@@ -24,8 +24,8 @@ class WebLinks {
   Uri get becomeCreator => _web('/settings/account-type');
   Uri get recover => _web('/sign-in/recover');
 
-  /// Adding a passkey or authenticator app (in the app from phase C).
-  Uri get securitySetup => _web('/settings/security/setup');
+  /// Backup email and recovery (sign-in methods are managed in the app).
+  Uri get security => _web('/settings/security');
 }
 
 /// Result of reading an incoming link.

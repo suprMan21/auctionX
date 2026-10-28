@@ -6,6 +6,8 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../shared/widgets/open_link.dart';
 import '../../auth/presentation/widgets/gradient_button.dart';
+import '../../security/method_flows.dart';
+import '../data/mfa_models.dart';
 import '../session_gate.dart';
 
 /// Centered column used by every gate screen: heading, text, actions.
@@ -91,14 +93,36 @@ class _CheckAgainButtonState extends ConsumerState<_CheckAgainButton> {
       OutlinedButton(onPressed: _busy ? null : _run, child: Text(_busy ? 'Checking…' : widget.label));
 }
 
-/// A Creator with no sign-in method yet. Adding one moves into the app in
-/// phase C; until then it happens on the website.
-class SetupRequiredScreen extends ConsumerWidget {
+/// A Creator with no sign-in method yet: adds the first one here. The first
+/// method needs no confirm (there's nothing to confirm with yet), comes with
+/// backup codes, and completes this sign-in.
+class SetupRequiredScreen extends ConsumerStatefulWidget {
   const SetupRequiredScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final links = ref.watch(webLinksProvider);
+  ConsumerState<SetupRequiredScreen> createState() => _SetupRequiredScreenState();
+}
+
+class _SetupRequiredScreenState extends ConsumerState<SetupRequiredScreen> {
+  bool _busy = false;
+
+  Future<void> _add(Future<bool> Function(MethodFlows flows, MfaStatus status) flow) async {
+    final gate = ref.read(sessionGateProvider);
+    if (gate is! GateSetupRequired || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final added = await flow(MethodFlows(context, ref), gate.status);
+      // Backup codes were shown inside the flow; now the gate moves on.
+      if (added) await ref.read(sessionGateProvider.notifier).refresh(quiet: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gate = ref.watch(sessionGateProvider);
+    final breakGlass = gate is GateSetupRequired && gate.status.breakGlass;
     return GateScaffold(
       title: 'Add a second sign-in step',
       children: [
@@ -106,13 +130,26 @@ class SetupRequiredScreen extends ConsumerWidget {
           'Creator accounts need a passkey or an authenticator app as well as a password. '
           'It keeps your seals safe if someone else learns your password.',
         ),
-        const GateText('Set one up on our website, then come back here.'),
         GradientButton(
-          text: 'Set it up on the website',
-          onPressed: () => openExternal(context, links.securitySetup),
+          text: breakGlass ? 'Add a security key' : 'Add a passkey',
+          isLoading: _busy,
+          onPressed: _busy ? null : () => _add((f, s) => f.addPasskey(s)),
         ),
+        const SizedBox(height: 4),
+        if (!breakGlass) ...[
+          Text(
+            'Uses Face ID or your fingerprint. Recommended.',
+            style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton(
+            onPressed: _busy ? null : () => _add((f, s) => f.addAuthenticatorApp(s)),
+            child: const Text('Use an authenticator app'),
+          ),
+        ],
         const SizedBox(height: 12),
-        const _CheckAgainButton(label: 'I’ve set it up'),
+        const _CheckAgainButton(label: 'I set one up on the website'),
         const SizedBox(height: 8),
         const SignOutButton(),
       ],

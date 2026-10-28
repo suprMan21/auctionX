@@ -159,11 +159,12 @@ void main() {
     expect(find.text('Sign out'), findsOneWidget);
   });
 
-  testWidgets('set-up required: points to the website and can check again', (tester) async {
+  testWidgets('set-up required: adds a method in the app, or checks again after the website', (tester) async {
     final r = await pump(tester, status(enrol: true), screen: const SetupRequiredScreen());
     expect(find.text('Add a second sign-in step'), findsOneWidget);
-    expect(find.text('Set it up on the website'), findsOneWidget);
-    await tester.tap(find.text('I’ve set it up'));
+    expect(find.text('Add a passkey'), findsOneWidget);
+    expect(find.text('Use an authenticator app'), findsOneWidget);
+    await tester.tap(find.text('I set one up on the website'));
     await tester.pumpAndSettle();
     expect(r.gate.refreshes, 1);
   });
