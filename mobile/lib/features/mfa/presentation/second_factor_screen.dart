@@ -98,9 +98,9 @@ class _SecondFactorScreenState extends ConsumerState<SecondFactorScreen> {
           title: const Text('Backup codes running low'),
           content: Text(
             left == 0
-                ? 'That was your last backup code. Make new ones on our website under Security.'
+                ? 'That was your last backup code. Make new ones in Security.'
                 : 'You have $left backup ${left == 1 ? 'code' : 'codes'} left. '
-                    'Make new ones on our website under Security.',
+                    'Make new ones in Security.',
           ),
           actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
         ),

@@ -13,6 +13,15 @@ const _reasonCopy = <String, String>{
   'not_available': 'That option is not available for this account.',
   'second_factor_required': 'Confirm it is you with your passkey or code first.',
   'recovery_freeze': 'Your account was recovered recently, so this is paused for a few days to keep your seals safe.',
+  'last_factor': 'Add another way to sign in before removing this one.',
+  'already_set_up': 'That is already set up.',
+  'no_passkey': 'Use your passkey to confirm this.',
+  'passkey_required': 'Staff accounts confirm this with a passkey or security key.',
+  'backup_code_not_allowed': 'Backup codes can’t confirm this. Use your passkey or authenticator app.',
+  'new_method_waiting':
+      'A sign-in method added in the last 24 hours with a code can’t approve this yet. Use one you had before.',
+  'step_up_required': 'Confirm it’s you to continue.',
+  'recovery_not_available': 'The time to add a sign-in method after recovery is over.',
 };
 
 const _passkeyCopy = <PasskeyFailure, String>{
@@ -25,7 +34,23 @@ const _passkeyCopy = <PasskeyFailure, String>{
       'Passkeys aren’t working in this version of the app. Use your authenticator app or a backup code.',
   PasskeyFailure.timeout: 'The passkey prompt timed out. Try again.',
   PasskeyFailure.failed: 'That passkey check did not work. Try again.',
+  PasskeyFailure.alreadyOnThisDevice: 'This phone already has a passkey for your account.',
 };
+
+/// Making a passkey fails for different reasons than using one.
+const _createCopy = <PasskeyFailure, String>{
+  PasskeyFailure.noCredential: 'This phone couldn’t make a passkey. Set a screen lock, or use an authenticator app.',
+  PasskeyFailure.unsupported: 'This phone couldn’t make a passkey. Set a screen lock, or use an authenticator app.',
+  PasskeyFailure.notAssociated:
+      'Passkeys aren’t working in this version of the app. Use an authenticator app for now.',
+  PasskeyFailure.failed: 'The passkey wasn’t added. Try again.',
+};
+
+/// Message for a failure while making a new passkey.
+String passkeyCreateErrorCopy(Object error) {
+  if (error is PasskeyException && _createCopy.containsKey(error.failure)) return _createCopy[error.failure]!;
+  return mfaErrorCopy(error);
+}
 
 String mfaErrorCopy(Object error) {
   if (error is PasskeyException) return _passkeyCopy[error.failure]!;

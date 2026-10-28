@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app_providers.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
+import '../../routing/route_names.dart';
 import '../auth/data/auth_service.dart';
 
-/// Signed-in home. Sealing arrives in S-MOB2; security settings in phase C.
+/// Signed-in home. Sealing arrives in S-MOB2.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -47,6 +49,20 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                leading: const Icon(Icons.shield_outlined, color: AppColors.accent400),
+                title: Text('Security', style: AppTypography.titleMedium),
+                subtitle: Text(
+                  'Passkeys, authenticator app, backup codes',
+                  style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(RouteNames.security),
               ),
             ),
           ],

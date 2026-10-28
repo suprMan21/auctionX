@@ -66,12 +66,126 @@ MfaStatus status({
     ));
 
 /// Records calls; answers with [result] or throws [error].
+/// Phase C calls answer from the fields below; [failOn] makes one call throw.
 class FakeMfaApi implements MfaApi {
-  FakeMfaApi({this.result = const SignInResult(method: SignInMethod.passkey), this.error});
+  FakeMfaApi({
+    this.result = const SignInResult(method: SignInMethod.passkey),
+    this.error,
+    this.statusValue,
+    this.backupCodes,
+    this.usableFrom,
+    this.otherSessionsEnded = true,
+  });
 
   SignInResult result;
   Object? error;
   final calls = <String>[];
+
+  /// What status() returns (list = one per call, last repeats).
+  MfaStatus? statusValue;
+  List<String>? backupCodes;
+  DateTime? usableFrom;
+  bool otherSessionsEnded;
+  final failOn = <String, Object>{};
+
+  /// Step-up tokens received with each call, by call name.
+  final grants = <String, String?>{};
+
+  void _call(String name, [String? grant]) {
+    calls.add(name);
+    grants[name.split(':').first] = grant;
+    final f = failOn[name.split(':').first];
+    if (f != null) throw f;
+  }
+
+  @override
+  Future<AssertionOptions> stepUpOptions(StepUpAction action, String targetId) async {
+    _call('stepUpOptions:${action.wire}:$targetId');
+    return const AssertionOptions(challengeId: '33333333-3333-4333-8333-333333333333', options: {'challenge': 'c'});
+  }
+
+  @override
+  Future<StepUpGrant> stepUpWithPasskey(String challengeId, Map<String, dynamic> response) async {
+    _call('stepUpPasskey:$challengeId');
+    return StepUpGrant(token: 'grant-passkey', expiresAt: DateTime.utc(2030));
+  }
+
+  @override
+  Future<StepUpGrant> stepUpWithAuthenticatorCode(StepUpAction action, String targetId, String code) async {
+    _call('stepUpTotp:${action.wire}:$targetId:$code');
+    return StepUpGrant(token: 'grant-totp', expiresAt: DateTime.utc(2030));
+  }
+
+  @override
+  Future<StepUpGrant> stepUpWithBackupCode(StepUpAction action, String targetId, String code) async {
+    _call('stepUpBackup:${action.wire}:$targetId:$code');
+    return StepUpGrant(token: 'grant-backup', expiresAt: DateTime.utc(2030));
+  }
+
+  @override
+  Future<RegisterOptions> passkeyRegisterOptions({String? stepUpToken}) async {
+    _call('registerOptions', stepUpToken);
+    return const RegisterOptions(
+      challengeId: '44444444-4444-4444-8444-444444444444',
+      options: {'challenge': 'c', 'rp': {'id': 'web.example.com', 'name': 'AM'}},
+    );
+  }
+
+  @override
+  Future<PasskeyAdded> passkeyRegisterVerify({
+    required String challengeId,
+    required String nickname,
+    required Map<String, dynamic> response,
+  }) async {
+    _call('registerVerify:$nickname');
+    return PasskeyAdded(
+      passkey: PasskeySummary(
+        id: 'p2',
+        nickname: nickname,
+        synced: true,
+        createdAt: DateTime.utc(2026, 10, 28),
+        usableFrom: usableFrom,
+      ),
+      backupCodes: backupCodes,
+      otherSessionsEnded: otherSessionsEnded,
+    );
+  }
+
+  @override
+  Future<void> renamePasskey(String id, String nickname) async => _call('rename:$id:$nickname');
+
+  @override
+  Future<MethodRemoved> removePasskey(String id, String stepUpToken) async {
+    _call('removePasskey:$id', stepUpToken);
+    return MethodRemoved(otherSessionsEnded: otherSessionsEnded);
+  }
+
+  @override
+  Future<TotpSetup> totpSetup({String? stepUpToken}) async {
+    _call('totpSetup', stepUpToken);
+    return const TotpSetup(
+      secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+      otpauthUri: 'otpauth://totp/Authentic%20Materials:a%40b.co?secret=JBSWY3DPEHPK3PXP&issuer=Authentic%20Materials',
+    );
+  }
+
+  @override
+  Future<TotpConfirmed> totpConfirm(String code) async {
+    _call('totpConfirm:$code');
+    return TotpConfirmed(usableFrom: usableFrom, backupCodes: backupCodes, otherSessionsEnded: otherSessionsEnded);
+  }
+
+  @override
+  Future<MethodRemoved> removeTotp(String stepUpToken) async {
+    _call('removeTotp', stepUpToken);
+    return MethodRemoved(otherSessionsEnded: otherSessionsEnded);
+  }
+
+  @override
+  Future<NewBackupCodes> regenerateBackupCodes(String stepUpToken) async {
+    _call('regenerate', stepUpToken);
+    return NewBackupCodes(codes: backupCodes ?? const ['aaaa-bbbb'], otherSessionsEnded: otherSessionsEnded);
+  }
 
   Future<SignInResult> _answer(String call) async {
     calls.add(call);
@@ -80,7 +194,12 @@ class FakeMfaApi implements MfaApi {
   }
 
   @override
-  Future<MfaStatus> status() async => throw UnimplementedError();
+  Future<MfaStatus> status() async {
+    calls.add('status');
+    final f = failOn['status'];
+    if (f != null) throw f;
+    return statusValue ?? (throw UnimplementedError());
+  }
 
   @override
   Future<AssertionOptions> signInOptions() async {

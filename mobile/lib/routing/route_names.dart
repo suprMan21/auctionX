@@ -9,4 +9,5 @@ class RouteNames {
   static const setupRequired = '/setup-required';
   static const creatorsOnly = '/creators-only';
   static const problem = '/problem';
+  static const security = '/security';
 }

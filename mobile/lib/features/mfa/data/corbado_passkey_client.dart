@@ -37,6 +37,24 @@ class CorbadoPasskeyClient implements PasskeyClient {
       throw mapped;
     }
   }
+
+  @override
+  Future<Map<String, dynamic>> create(Map<String, dynamic> options) async {
+    final RegisterRequestType request;
+    try {
+      request = RegisterRequestType.fromJson(withTransports(options, key: 'excludeCredentials'));
+    } catch (e) {
+      throw PasskeyException(PasskeyFailure.failed, 'bad options: $e');
+    }
+    try {
+      final response = await _authenticator.register(request);
+      return withoutPadding(response.toJson());
+    } catch (e) {
+      final mapped = mapPasskeyError(e);
+      debugPrint('passkey create: ${mapped.failure.name} <- $e');
+      throw mapped;
+    }
+  }
 }
 
 /// Maps the package's and platform's errors onto [PasskeyFailure].
@@ -47,11 +65,13 @@ PasskeyException mapPasskeyError(Object e) {
     PasskeyException() => e,
     PasskeyAuthCancelledException() => PasskeyException(PasskeyFailure.cancelled, detail),
     NoCredentialsAvailableException() => PasskeyException(PasskeyFailure.noCredential, detail),
+    ExcludeCredentialsCanNotBeRegisteredException() => PasskeyException(PasskeyFailure.alreadyOnThisDevice, detail),
     DomainNotAssociatedException() => PasskeyException(PasskeyFailure.notAssociated, detail),
     DeviceNotSupportedException() ||
     PasskeyUnsupportedException() ||
     MissingGoogleSignInException() ||
-    SyncAccountNotAvailableException() =>
+    SyncAccountNotAvailableException() ||
+    NoCreateOptionException() =>
       PasskeyException(PasskeyFailure.unsupported, detail),
     TimeoutException() => PasskeyException(PasskeyFailure.timeout, detail),
     PlatformException(code: 'cancelled') => PasskeyException(PasskeyFailure.cancelled, detail),
