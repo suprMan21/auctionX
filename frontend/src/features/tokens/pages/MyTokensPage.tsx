@@ -5,6 +5,7 @@ import type { IncomingTransfer, MyToken } from '../api/schemas';
 import { TokenStatusBadge } from '../components/TokenStatusBadge';
 import { TransferProcessing } from '../components/TransferProcessing';
 import { tokenDisplayName } from '../lib/tokenName';
+import { OwnedSeal } from '../components/OwnedSeal';
 
 type Load =
   | { kind: 'loading' }
@@ -118,7 +119,10 @@ export const MyTokensPage = () => {
                         className="block glass rounded-2xl p-5 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <p className="text-white font-semibold">{tokenDisplayName(token)}</p>
+                          <div className="flex items-center gap-3">
+                            <OwnedSeal sealCode={token.sealCode} lifecycleStatus={token.lifecycleStatus} showCode={false} />
+                            <p className="text-white font-semibold">{tokenDisplayName(token)}</p>
+                          </div>
                           <TokenStatusBadge status={token.lifecycleStatus} />
                         </div>
                         {token.claimedAt && (

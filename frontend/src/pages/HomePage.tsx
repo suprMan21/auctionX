@@ -9,7 +9,7 @@ import {
 import { submitEarlyAccess } from '@/components/home/earlyAccess';
 import { EarlyAccessForm, type EarlyAccessSubmit } from '@/components/home/EarlyAccessForm';
 import { SceneWindow } from '@/components/home/SceneWindow';
-import { SealBadge } from '@/components/home/SealBadge';
+import { SealBadge } from '@/components/seal/SealBadge';
 
 /**
  * `/`: the story-first public homepage (S-SITE2, canvas Draft 2.4). The item is the hero, the

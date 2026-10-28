@@ -14,6 +14,7 @@ import { TransferInitiateDialog } from '../components/TransferInitiateDialog';
 import { ReleaseTokenDialog } from '../components/ReleaseTokenDialog';
 import { ReplacementSection } from '../components/ReplacementSection';
 import { tokenDisplayName } from '../lib/tokenName';
+import { OwnedSeal } from '../components/OwnedSeal';
 
 type Load =
   | { kind: 'loading' }
@@ -90,6 +91,14 @@ export const TokenDetailPage = () => {
                 <TokenStatusBadge status={load.token.lifecycleStatus} />
               </div>
               <p className="text-gray-400">{statusCopy(load.token.lifecycleStatus).detail}</p>
+              <div className="mt-4">
+                {/* Untitled seals are already named "Seal XXXX-XXXX". */}
+                <OwnedSeal
+                  sealCode={load.token.sealCode}
+                  lifecycleStatus={load.token.lifecycleStatus}
+                  showCode={Boolean(load.token.title)}
+                />
+              </div>
             </section>
 
             <TransferSection

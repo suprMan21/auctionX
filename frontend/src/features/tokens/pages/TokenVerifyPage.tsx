@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import './tapPage.css';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { tokenApi, TokenApiError } from '../api/tokenApi';
 import type { ClaimResult, TapResult, ValidTap } from '../api/schemas';
 import { hasSunParams, withoutSunParams } from '../lib/tapUrl';
 import { forgetTapSession, isSessionLive, loadTap, saveTap } from '../lib/tapCache';
-import { BUYER_WARNING, statusCopy, tapFailureCopy } from '../lib/copy';
-import { TokenStatusBadge } from '../components/TokenStatusBadge';
+import { BUYER_WARNING, TAP_COPY, tapFailureCopy } from '../lib/copy';
+import { useSealClock, type FreshTap } from '../lib/sealWindow';
+import { TapSealCard } from '../components/TapSealCard';
 import { ProvenanceCard } from '../components/ProvenanceCard';
 import { ClaimTokenPanel } from '../components/ClaimTokenPanel';
 import { TransferCompleteFlow } from '../components/TransferCompleteFlow';
@@ -20,11 +22,15 @@ type View =
   | { kind: 'result'; tap: TapResult };
 
 /**
- * `/verify/:tokenName` — where a chip tap lands.
+ * `/verify/:tokenName` — where a seal tap lands.
  *
  * One POST /nfc/tap per physical tap. The result is cached for this tab and the
  * one-time SUN parameters are stripped from the address bar, so a refresh or a
  * round trip through sign-in shows the same result instead of "already used".
+ *
+ * S-SEAL1 Ph1: Cinema theme on this page only (G4). The animated Verified seal shows
+ * for about 90 s after a tap made on this page load; a remembered tap shows the still
+ * Sealed seal (G3, no automatic re-check). Collector copy says "seal" (G1).
  */
 export const TokenVerifyPage = () => {
   const { tokenName = '' } = useParams();
@@ -33,6 +39,7 @@ export const TokenVerifyPage = () => {
   const { user } = useAuth();
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [claimed, setClaimed] = useState<ClaimResult | null>(null);
+  const [fresh, setFresh] = useState<FreshTap | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -47,6 +54,8 @@ export const TokenVerifyPage = () => {
         .then((tap) => {
           saveTap(tokenName, tap);
           if (cancelled) return;
+          // The Verified window is timed from this answer, on this page load only.
+          setFresh(tap.valid ? { tokenName, at: Date.now() } : null);
           setView({ kind: 'result', tap });
           // Strip the spent SUN params so a refresh reads the cache.
           navigate({ pathname: location.pathname, search: withoutSunParams(location.search) }, { replace: true });
@@ -112,54 +121,54 @@ export const TokenVerifyPage = () => {
   const returnTo = location.pathname;
 
   return (
-    <main id="main-content" className="min-h-screen bg-dark-800 py-10 px-4">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <main id="main-content" className="am-tap" data-theme="cinema">
+      <div className="am-tap-wrap">
         {view.kind === 'loading' && (
-          <div role="status" className="glass rounded-2xl p-10 text-center text-gray-300">
-            Checking this token…
+          <div role="status" className="am-tap-card am-tap-card--center">
+            {TAP_COPY.checking}
           </div>
         )}
 
+        {/* No seal is ever drawn on these views (no tap, unknown, error, failed). */}
         {view.kind === 'no-tap' && (
-          <section className="glass rounded-2xl p-8 text-center">
-            <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold text-white mb-3 focus:outline-none">
-              Tap the token to verify it.
+          <section className="am-tap-card am-tap-card--center">
+            <h1 ref={headingRef} tabIndex={-1}>
+              {TAP_COPY.noTapTitle}
             </h1>
-            <p className="text-gray-400">
-              Hold your phone near the Authentic Materials token. Each tap opens a fresh, one-time check.
-            </p>
+            <p className="am-tap-body">{TAP_COPY.noTapBody}</p>
           </section>
         )}
 
         {view.kind === 'unknown-tag' && (
-          <section className="glass rounded-2xl p-8 text-center" aria-live="polite">
-            <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold text-white mb-3 focus:outline-none">
-              This is not a registered token.
-            </h1>
-            <p className="text-gray-400">
-              We have no record of this chip. Do not buy an item on the strength of it.
+          <section className="am-tap-card am-tap-card--center" aria-live="polite">
+            <p className="am-tap-kicker am-tap-kicker--bad">
+              <span aria-hidden="true">✕ </span>{TAP_COPY.notVerified}
             </p>
+            <h1 ref={headingRef} tabIndex={-1}>
+              {TAP_COPY.unknownTitle}
+            </h1>
+            <p className="am-tap-body">{TAP_COPY.unknownBody}</p>
           </section>
         )}
 
         {view.kind === 'error' && (
-          <section className="glass rounded-2xl p-8 text-center" role="alert">
-            <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold text-white mb-3 focus:outline-none">
-              We could not check this token.
+          <section className="am-tap-card am-tap-card--center" role="alert">
+            <h1 ref={headingRef} tabIndex={-1}>
+              {TAP_COPY.errorTitle}
             </h1>
-            <p className="text-gray-400">{view.message}</p>
+            <p className="am-tap-body">{view.message}</p>
           </section>
         )}
 
         {view.kind === 'result' && !view.tap.valid && (
-          <section className="glass rounded-2xl p-8" aria-live="polite">
-            <p className="text-sm font-semibold text-red-300 mb-2">
-              <span aria-hidden="true">✕ </span>Not verified
+          <section className="am-tap-card" aria-live="polite">
+            <p className="am-tap-kicker am-tap-kicker--bad">
+              <span aria-hidden="true">✕ </span>{TAP_COPY.notVerified}
             </p>
-            <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold text-white mb-3 focus:outline-none">
+            <h1 ref={headingRef} tabIndex={-1}>
               {tapFailureCopy(view.tap.reason).title}
             </h1>
-            <p className="text-gray-400">{tapFailureCopy(view.tap.reason).body}</p>
+            <p className="am-tap-body">{tapFailureCopy(view.tap.reason).body}</p>
           </section>
         )}
 
@@ -167,6 +176,7 @@ export const TokenVerifyPage = () => {
           <ValidTapView
             tap={view.tap}
             tokenName={tokenName}
+            fresh={fresh}
             claimed={claimed}
             signedIn={Boolean(user)}
             pendingTransferId={view.tap.viewer?.pendingTransferId ?? incomingTransferId}
@@ -202,6 +212,8 @@ interface ValidTapViewProps {
   readonly tap: ValidTap;
   /** The chip's URL name: the tap cache key the replacement page reads. */
   readonly tokenName: string;
+  /** The tap this page load made, if any (Verified window). */
+  readonly fresh: FreshTap | null;
   readonly claimed: ClaimResult | null;
   readonly signedIn: boolean;
   /** A PENDING transfer of this token to the signed-in viewer. */
@@ -212,33 +224,32 @@ interface ValidTapViewProps {
   readonly onSessionSpent: () => void;
 }
 
-const ValidTapView = ({ tap, tokenName, claimed, signedIn, pendingTransferId, returnTo, headingRef, onClaimed, onSessionSpent }: ValidTapViewProps) => {
-  const status = statusCopy(tap.lifecycleStatus);
+const ValidTapView = ({ tap, tokenName, fresh, claimed, signedIn, pendingTransferId, returnTo, headingRef, onClaimed, onSessionSpent }: ValidTapViewProps) => {
   const claimable = tap.lifecycleStatus === 'ENROLLED' && !claimed;
   const youOwnThis = Boolean(claimed) || Boolean(tap.viewer?.youOwnThis);
+  const ownFresh = fresh !== null && fresh.tokenName === tokenName ? fresh : null;
+  const { now, state } = useSealClock(ownFresh, tokenName);
 
   return (
     <>
-      <section className="glass rounded-2xl p-8" aria-live="polite">
-        <div className="flex flex-wrap items-center gap-3 mb-3">
-          <p className="text-sm font-semibold text-emerald-300">
-            <span aria-hidden="true">✓ </span>Genuine Authentic Materials token
-          </p>
-          <TokenStatusBadge status={tap.lifecycleStatus} />
-        </div>
-        <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold text-white mb-2 focus:outline-none">
-          {youOwnThis ? 'You own this.' : status.label === 'Active' ? 'Verified.' : `${status.label}.`}
-        </h1>
-        <p className="text-gray-400">{status.detail}</p>
-      </section>
+      <TapSealCard
+        lifecycleStatus={tap.lifecycleStatus}
+        sealCode={tap.sealCode}
+        checkedAt={tap.checkedAt}
+        state={state}
+        freshAt={ownFresh?.at ?? null}
+        now={now}
+        youOwnThis={youOwnThis}
+        headingRef={headingRef}
+      />
 
       {claimed && (
         <section className="glass rounded-2xl p-6" role="status">
-          <h2 className="text-lg font-semibold text-white mb-2">Claimed. It is yours.</h2>
-          <p className="text-gray-400 text-sm mb-3">Your Ownership ID is your public fingerprint for this token.</p>
+          <h2 className="text-lg font-semibold text-white mb-2">{TAP_COPY.claimedTitle}</h2>
+          <p className="text-gray-400 text-sm mb-3">{TAP_COPY.claimedBody}</p>
           <p className="font-mono text-xs text-gray-300 break-all mb-4">{claimed.ownershipId}</p>
           <Link to={`/tokens/${claimed.tagId}`} className="text-primary-300 underline hover:text-primary-200">
-            View it in My Tokens
+            {TAP_COPY.viewInMyTokens}
           </Link>
         </section>
       )}
@@ -264,7 +275,7 @@ const ValidTapView = ({ tap, tokenName, claimed, signedIn, pendingTransferId, re
 
       {tap.lifecycleStatus === 'ACTIVE' && !signedIn && (
         <section className="glass rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-2">Is this token being transferred to you?</h2>
+          <h2 className="text-lg font-semibold text-white mb-2">{TAP_COPY.transferTitle}</h2>
           <p className="text-gray-400 text-sm mb-4">
             Sign in with the email address the owner used. You have 10 minutes from your tap.
           </p>
@@ -277,16 +288,13 @@ const ValidTapView = ({ tap, tokenName, claimed, signedIn, pendingTransferId, re
       {/* S-ADMIN1 Ph2: the owner's live tap is the proof a replacement request needs. */}
       {tap.lifecycleStatus === 'ACTIVE' && youOwnThis && signedIn && !claimed && isSessionLive(tap) && (
         <section className="glass rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-2">Chip coming loose?</h2>
-          <p className="text-gray-400 text-sm mb-4">
-            If the chip is lifting but still on the item, ask for a replacement now. We cannot replace a chip that has
-            already come off.
-          </p>
+          <h2 className="text-lg font-semibold text-white mb-2">{TAP_COPY.looseTitle}</h2>
+          <p className="text-gray-400 text-sm mb-4">{TAP_COPY.looseBody}</p>
           <Link
             to={`/tokens/${tap.tagId}/replace?tap=${encodeURIComponent(tokenName)}`}
             className="text-primary-300 underline hover:text-primary-200"
           >
-            Request a replacement chip
+            {TAP_COPY.looseLink}
           </Link>
         </section>
       )}

@@ -45,6 +45,9 @@ export const tapResultSchema = z.discriminatedUnion('valid', [
     valid: z.literal(true),
     tagId: z.string(),
     lifecycleStatus,
+    // S-SEAL1: optional so a tap cached before the deploy (or an older backend) still parses.
+    sealCode: z.string().nullable().optional(),
+    checkedAt: z.string().nullable().optional(),
     provenance: provenanceSchema.nullable(),
     tapSession: z.object({ token: z.string(), expiresAt: z.string() }).nullable(),
     viewer: z
@@ -74,6 +77,8 @@ export const myTokenSchema = z.object({
   // Fallback names for an untitled token. Optional so an older backend still parses.
   chipName: z.string().nullable().optional(),
   serialSuffix: z.string().nullable().optional(),
+  // S-SEAL1: the seal's public code (XXXX-XXXX). Optional so an older backend still parses.
+  sealCode: z.string().nullable().optional(),
   disclosure: z.record(z.boolean()),
   ownershipId: z.string().nullable(),
   // S-ANCHOR1: null while anchoring is pending. Optional so an older backend still parses.
