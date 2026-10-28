@@ -64,7 +64,7 @@ Source: Notion "OAuth Platform Approval Matrix v1.0" (https://app.notion.com/p/4
 - `Ownership Salt Key` (staging): 1Password is the only copy, and that's enough for staging (Boss, 2026-10-03).
   **Production:** the salt envelope moves to AWS KMS at launch, so there is no raw key to back up.
   See `docs/LAUNCH_CHECKLIST.md` §4.
-- [ ] **Optional: `Security/log-hmac-key`** (without it, `to_email_hash` is just omitted from logs). Piping into
+- [x] **`Security/log-hmac-key`** set on App Runner 2026-10-28; logs show `to_hash` (verified on an early-access signup). (Without it, `to_email_hash` is just omitted from logs.) Piping into
       `op item create` does NOT work (stdin is read as a JSON template), so use a variable:
       ```bash
       KEY="$(openssl rand -base64 32)" && op item create --category=password \
