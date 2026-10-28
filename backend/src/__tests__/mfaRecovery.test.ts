@@ -108,7 +108,7 @@ const codeFor = (secretB32: string, offsetSteps = 0) => {
   return hotp(Buffer.from(out), totpStep(Date.now()) + offsetSteps);
 };
 
-const enrolFirst = async (app: App, user = USER, session = S1) => {
+const enrolFirst = async (app: App, user = USER, session = S1, opts: { fresh?: boolean } = {}) => {
   const key = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN, attestation: user === ROOT ? testVendor() : undefined });
   const o = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(user, session));
   expect(o.status).toBe(200);
@@ -117,6 +117,8 @@ const enrolFirst = async (app: App, user = USER, session = S1) => {
     .set('Authorization', auth(user, session))
     .send({ challengeId: o.body.data.challengeId, nickname: 'My phone', response: key.register(o.body.data.options.challenge) });
   expect(v.status).toBe(201);
+  // The account's existing method: added well before any recovery (Ph4 7-day rule).
+  if (opts.fresh !== true) mfaState.passkeys[mfaState.passkeys.length - 1].created_at = new Date(Date.now() - 30 * 86_400_000).toISOString();
   return { key, backupCodes: v.body.data.backupCodes as string[] };
 };
 
@@ -163,8 +165,8 @@ const endHold = () => {
 };
 
 /** Passkey on S1, then a holding recovery started from password-only session S2. */
-const startRecovery = async (app: App) => {
-  const first = await enrolFirst(app);
+const startRecovery = async (app: App, opts: { fresh?: boolean } = {}) => {
+  const first = await enrolFirst(app, USER, S1, opts);
   const send = await post(app, '/recovery/code', { channel: 'primary' });
   expect(send.status).toBe(200);
   const start = await post(app, '/recovery/start', { codeId: send.body.data.codeId, code: lastCode() });
@@ -173,8 +175,8 @@ const startRecovery = async (app: App) => {
 };
 
 /** ... then the hold ends and S2 finishes. */
-const finishRecovery = async (app: App, body: object = {}) => {
-  const first = await startRecovery(app);
+const finishRecovery = async (app: App, body: object = {}, opts: { fresh?: boolean } = {}) => {
+  const first = await startRecovery(app, opts);
   endHold();
   ageCodes();
   const send = await post(app, '/recovery/code', {});
@@ -405,6 +407,25 @@ describe('hold → finish', () => {
     expect(send.body.data.purpose).toBe('recovery_start');
   });
 
+  it('Ph4: a method added less than 7 days before the recovery cannot cancel it (password thief adds the first method)', async () => {
+    const app = await loadApp();
+    await startRecovery(app, { fresh: true });
+    const thief = await post(app, '/recovery/cancel', {}, { session: S1, nonce: null });
+    expect(thief.status).toBe(403);
+    expect(thief.body.reason).toBe('recovery_method_not_allowed');
+    expect(mfaState.recoveries[0].status).toBe('holding');
+  });
+
+  it('Ph4: a method added exactly 7 days before still cancels; 6 days does not', async () => {
+    const app = await loadApp();
+    await startRecovery(app, { fresh: true });
+    const started = Date.parse(mfaState.recoveries[0].created_at);
+    mfaState.passkeys[0].created_at = new Date(started - 6 * 86_400_000).toISOString();
+    expect((await post(app, '/recovery/cancel', {}, { session: S1, nonce: null })).status).toBe(403);
+    mfaState.passkeys[0].created_at = new Date(started - 7 * 86_400_000).toISOString();
+    expect((await post(app, '/recovery/cancel', {}, { session: S1, nonce: null })).status).toBe(200);
+  });
+
   it('finish: fresh code, old backup codes void, session verified briefly, 7-day freeze, notice', async () => {
     const app = await loadApp();
     const { fin, backupCodes } = await finishRecovery(app);
@@ -511,6 +532,17 @@ describe('freeze and undo', () => {
     expect(change.body.reason).toBe('recovery_freeze');
     // A new recovery cannot start during the freeze.
     expect(events.named('auth.mfa').some((e) => e.action === 'recovery_freeze_block')).toBe(true);
+  });
+
+  it('Ph4: a method added less than 7 days before the recovery cannot undo it', async () => {
+    const app = await loadApp();
+    const { key } = await finishRecovery(app, {}, { fresh: true });
+    const recId = mfaState.recoveries[0].id;
+    await signInWithPasskey(app, key);
+    const su = await stepUp(app, key, 'recovery_undo', recId, USER, S3);
+    expect(su.status).toBe(403);
+    expect(su.body.reason).toBe('recovery_method_not_allowed');
+    expect(mfaState.recoveries[0].status).toBe('completed');
   });
 
   it('undo with an OLD passkey removes the added method, ends other sessions, gives the owner new codes', async () => {

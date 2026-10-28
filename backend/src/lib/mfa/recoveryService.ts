@@ -54,7 +54,7 @@ import {
   type Caller,
 } from './mfaService';
 import { generateRecoveryCodes, hashRecoveryCode } from './recoveryCodes';
-import { activeFreeze } from './recoveryState';
+import { activeFreeze, methodPredatesRecovery, OLD_METHOD_MESSAGE } from './recoveryState';
 import { getMfaStore, type RecoveryRow } from './store';
 
 /** What the controller adds to the caller for these routes. */
@@ -321,10 +321,30 @@ export const finishRecovery = async (
   };
 };
 
-/** Any session that passed an existing method may cancel a waiting recovery. */
+/**
+ * A session that passed a second factor may cancel a waiting recovery, if the
+ * account has a method added at least 7 days before the recovery started
+ * (Ph4; the marker does not say which method passed, so the account must hold
+ * one). Refused before anything changes.
+ */
 export const cancelRecovery = async (caller: Caller, ctx: RecoveryContext) => {
   await assertVerifiedSession(caller);
-  const id = await getMfaStore().cancelRecovery(caller.userId);
+  const store = getMfaStore();
+  const [rec, passkeys, totp] = await Promise.all([
+    store.latestRecovery(caller.userId),
+    store.listPasskeys(caller.userId),
+    store.getTotp(caller.userId),
+  ]);
+  if (rec && rec.status === 'holding') {
+    const old =
+      passkeys.some((p) => !p.added_by_recovery && methodPredatesRecovery(p.created_at, rec.created_at)) ||
+      Boolean(totp?.verified_at && !totp.added_by_recovery && methodPredatesRecovery(totp.verified_at, rec.created_at));
+    if (!old) {
+      emit(caller, 'recovery_cancel', null, 'forbidden', false);
+      refuse('permission_denied', OLD_METHOD_MESSAGE, 'recovery_method_not_allowed');
+    }
+  }
+  const id = await store.cancelRecovery(caller.userId);
   if (!id) throw new AppError('not_found', 'There is no recovery waiting');
   emit(caller, 'recovery_cancel', null, 'ok', false);
   await notifyAll(caller.userId, ctx.primaryEmail, { kind: 'recovery_cancelled' });

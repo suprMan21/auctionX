@@ -29,9 +29,19 @@ or release (Decisions DB "S-2FA Ph4: Creators must set up two-step sign-in at th
 Not changed: mobile (Flutter) calls only `/nfc/scan`, `/nfc/register`, `/nfc/tags`, `/nfc/proof` and the removed
 mint route, none of them gated.
 
+## Recovery: the 7-day rule (Boss, 2026-10-28)
+
+A method added **less than 7 days before** a recovery started cannot **cancel** it (the account must hold an
+older passkey or authenticator app; the session marker does not record which method passed) and cannot
+**undo** it (checked against the exact passkey or app used). Case it stops: someone with only the password
+adds the first method, then cancels or undoes the owner's email recovery forever. Trade-off: a brand-new
+account (all methods < 7 days) cannot cancel a recovery started by someone who has both the password and the
+email inbox; email is the root of trust in a method's first week. The recovery-started email and page say so.
+`lib/mfa/recoveryState.ts` (`methodPredatesRecovery`), `recoveryService.cancelRecovery`, `mfaService` undo step-up.
+
 ## Tests
 
-- Backend: tsc 0; vitest **1099 passed / 23 skipped** (new: policy status cases, creator gate + fail-closed,
+- Backend: tsc 0; vitest **1102 passed / 23 skipped** (new: policy status cases, creator gate + fail-closed,
   first-method email for passkey and TOTP, break-glass attestation via a soft authenticator with a test CA,
   13 chain-check unit tests incl. the pinned Yubico fingerprints). One run of the full suite had a single
   failure that did not repeat in 5 full runs + 15 runs of the touched files (pre-existing timing flake; not
@@ -49,7 +59,7 @@ open redirect from the new links.
 | Finding | Severity | Outcome |
 |---|---|---|
 | Passkeys added before Ph4 (or while not super_admin) still sign in to the break-glass account | Medium | **Fixed**: `user_passkeys.attested_vendor` (migration `20261028000001`); break-glass sign-in and step-up use only `yubico` passkeys; tests |
-| First-method email advises Recover by email, but the thief's method can cancel that recovery | Medium | **Open, Boss decision** (see Open) |
+| First-method email advises Recover by email, but the thief's method can cancel that recovery | Medium | **Fixed** (Boss 2026-10-28): only a method added at least 7 days before the recovery started can cancel or undo it |
 | Creator setup at sign-in is enforced by the browser only; the server still refuses every token action | Low | Accepted: token actions are what matter, and they are server-gated |
 | Yubico's newest root also issues PIV certificates | Low | **Fixed**: leaf must carry the FIDO model-ID extension and not be a CA; test with a PIV-style chain |
 | Older `fido-u2f` keys refused | Low | Accepted, documented in the module (every YubiKey 5 / Security Key uses `packed`) |
@@ -100,7 +110,6 @@ Rollback for any step: set the flag back to `false` (or delete it) and redeploy.
 
 | Item | Where |
 |---|---|
-| A thief who adds the first method can cancel the owner's email recovery with it ("any existing method cancels") | Boss decision: e.g. a method added in the last 72 h cannot cancel a recovery started after it |
 | super_admin TOTP is refused already; recovery for staff is refused (Ph3b) | none |
 | KMS for TOTP secrets; cross-environment origin test | S-2FAb remaining |
 | Admin "Reset code limits" + recovery status | Feature Backlog |

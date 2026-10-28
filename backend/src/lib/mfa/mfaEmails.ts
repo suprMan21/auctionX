@@ -133,7 +133,7 @@ export const mfaEmailContent = (email: MfaEmail): { subject: string; lines: stri
         lines: [
           `Someone proved they can read this inbox and asked to get into your account without your passkey or authenticator app. The request came from ${email.device}.`,
           `Nothing changes yet. From ${formatUtc(email.holdEndsAt) ?? 'in 3 days'} they can finish and add their own sign-in method.`,
-          "If this wasn't you, sign in with your passkey or authenticator app and cancel it in Security settings, then change your password and the password of this inbox.",
+          "If this wasn't you, sign in with your passkey or authenticator app and cancel it in Security settings, then change your password and the password of this inbox. A sign-in method added in the 7 days before this request can't cancel it.",
         ],
       };
     case 'recovery_cancelled':

@@ -38,3 +38,18 @@ export const recoveryEnrolment = async (
   if (!r || r.status !== 'completed' || r.finished_session_id !== sessionId || r.enrolled_at) return null;
   return r.enrol_until && Date.parse(r.enrol_until) > now ? r : null;
 };
+
+/**
+ * S-2FA Ph4 (Boss 2026-10-28): only a sign-in method added at least 7 days
+ * before a recovery started may cancel or undo it. Someone who only has the
+ * password can add an account's first method; without this, that method could
+ * cancel the owner's email recovery forever. Email is the root of trust for a
+ * new method's first week.
+ */
+export const METHOD_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+export const methodPredatesRecovery = (addedAt: string | null | undefined, recoveryStartedAt: string): boolean =>
+  Boolean(addedAt) && Date.parse(addedAt as string) <= Date.parse(recoveryStartedAt) - METHOD_MIN_AGE_MS;
+
+export const OLD_METHOD_MESSAGE =
+  'Use a passkey or authenticator app you added at least 7 days before the recovery started.';
