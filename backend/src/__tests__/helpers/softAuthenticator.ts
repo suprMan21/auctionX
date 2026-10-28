@@ -16,7 +16,15 @@ export interface SoftPasskeyOptions {
   origin: string;
   /** Synced passkey (iCloud / Google): sets the backup-eligible and backed-up flags. */
   synced?: boolean;
+  /**
+   * Packed full attestation (a hardware key proving its maker): the leaf's
+   * private key (PEM), the chain leaf-first (PEM), and the 16-byte model ID.
+   */
+  attestation?: { leafKeyPem: string; chainPem: string[]; aaguid: Buffer };
 }
+
+const pemToDer = (pem: string): Buffer =>
+  Buffer.from(pem.replace(/-----(BEGIN|END) CERTIFICATE-----/g, '').replace(/\s+/g, ''), 'base64');
 
 export class SoftPasskey {
   readonly credentialId = randomBytes(32);
@@ -65,11 +73,25 @@ export class SoftPasskey {
     count.writeUInt32BE(this.counter);
     const credLen = Buffer.alloc(2);
     credLen.writeUInt16BE(this.credentialId.length);
+    const att = this.opts.attestation;
     const authData = Buffer.concat([
-      rpIdHash, Buffer.from([this.flags(true)]), count, Buffer.alloc(16), credLen, this.credentialId, Buffer.from(this.coseKey()),
+      rpIdHash, Buffer.from([this.flags(true)]), count, att ? att.aaguid : Buffer.alloc(16), credLen, this.credentialId, Buffer.from(this.coseKey()),
     ]);
+    const clientDataJSON = this.clientData('webauthn.create', challenge, overrides.origin);
+    let fmt = 'none';
+    let attStmt = new Map<string, unknown>();
+    if (att) {
+      const signer = createSign('SHA256');
+      signer.update(Buffer.concat([authData, sha256(clientDataJSON)]));
+      fmt = 'packed';
+      attStmt = new Map<string, unknown>([
+        ['alg', -7],
+        ['sig', signer.sign(att.leafKeyPem)],
+        ['x5c', att.chainPem.map(pemToDer)],
+      ]);
+    }
     const attestationObject = isoCBOR.encode(new Map<string, unknown>([
-      ['fmt', 'none'], ['attStmt', new Map()], ['authData', authData],
+      ['fmt', fmt], ['attStmt', attStmt], ['authData', authData],
     ]) as never);
     return {
       id: this.id,
@@ -77,7 +99,7 @@ export class SoftPasskey {
       type: 'public-key' as const,
       clientExtensionResults: {},
       response: {
-        clientDataJSON: b64u(this.clientData('webauthn.create', challenge, overrides.origin)),
+        clientDataJSON: b64u(clientDataJSON),
         attestationObject: b64u(attestationObject),
         transports: ['internal'],
       },

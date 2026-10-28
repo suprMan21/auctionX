@@ -14,7 +14,8 @@ import { log } from '../logger';
 
 export type MfaEmail =
   /** `waitUntil` (ISO): the method was added with a code and cannot confirm a step-up before then. */
-  | { kind: 'factor_added'; method: 'passkey' | 'totp'; nickname?: string; waitUntil?: string }
+  /** `first`: the account's first sign-in method (S-2FA Ph4: trusted on sight, so the owner must hear about it). */
+  | { kind: 'factor_added'; method: 'passkey' | 'totp'; nickname?: string; waitUntil?: string; first?: boolean }
   | { kind: 'factor_removed'; method: 'passkey' | 'totp'; nickname?: string }
   | { kind: 'recovery_code_used'; left: number }
   | { kind: 'recovery_codes_new' }
@@ -53,6 +54,17 @@ export const mfaEmailContent = (email: MfaEmail): { subject: string; lines: stri
     case 'factor_added': {
       const added = `${methodName(email.method, email.nickname)[0].toUpperCase()}${methodName(email.method, email.nickname).slice(1)} can now be used to sign in to your account.`;
       const until = email.waitUntil ? formatUtc(email.waitUntil) : null;
+      if (email.first) {
+        // The owner has no method of their own yet, so "sign in and remove it" would not work.
+        return {
+          subject: 'A new sign-in method was added to your account',
+          lines: [
+            added,
+            'This is the first sign-in method on your account, so your account now asks for it after your password.',
+            "If this wasn't you, someone knows your password. Choose \"Recover by email\" on the sign-in page to get back in (it takes 72 hours), then change your password.",
+          ],
+        };
+      }
       return {
         subject: 'A new sign-in method was added to your account',
         lines: until

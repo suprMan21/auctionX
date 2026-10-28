@@ -37,6 +37,8 @@
  *     factor never waits; a grant with no recorded method counts as a code.
  */
 
+import type { TwoFactorPolicy } from './policy';
+import { checkHardwareKeyAttestation } from './hardwareKeyAttestation';
 import { createHash, randomBytes } from 'crypto';
 import {
   generateAuthenticationOptions,
@@ -118,6 +120,7 @@ export type MfaReason =
   | 'invalid_code'
   | 'passkey_invalid'
   | 'synced_passkey_not_allowed'
+  | 'hardware_key_required'
   | 'last_factor'
   | 'already_set_up'
   | 'no_passkey'
@@ -298,11 +301,14 @@ export const hasStaffSecondFactor = async (userId: string, sessionId: string | n
 
 /**
  * Public-safe status: never a public key, credential id, secret or hash.
- * `secondFactorRequired` (the caller's input) = the server refuses this
- * account's token / admin actions without a verified second factor.
- * `isStaff` tells the frontend to offer only a passkey for token step-ups.
+ * `secondFactorRequired` = the server refuses this account's token / admin
+ * actions without a verified second factor. `enrolmentRequired` = no method yet
+ * and this account must add one right after its password (staff, Creators;
+ * lib/mfa/policy.ts). `isStaff` tells the frontend to offer only a passkey for
+ * token step-ups.
  */
-export const getStatus = async (caller: Caller, secondFactorRequired: boolean) => {
+export const getStatus = async (caller: Caller, policy: TwoFactorPolicy) => {
+  const secondFactorRequired = policy.forTokenActions;
   const store = getMfaStore();
   const [summary, codesLeft, session, role, lockedUntil, recovery, backup] = await Promise.all([
     factorSummary(caller.userId),
@@ -337,7 +343,7 @@ export const getStatus = async (caller: Caller, secondFactorRequired: boolean) =
     backupCodesLeft: codesLeft,
     hasFactor: summary.total > 0,
     sessionVerified: verified,
-    enrolmentRequired: secondFactorRequired && summary.total === 0,
+    enrolmentRequired: policy.atSignIn && summary.total === 0,
     secondFactorRequired,
     breakGlass: role === 'super_admin',
     isStaff: role !== null,
@@ -444,7 +450,8 @@ export const passkeyRegisterOptions = async (caller: Caller, stepUpToken?: strin
     rpID: cfg.rpId,
     userName: caller.email ?? caller.userId,
     userID: userIdBytes(caller.userId),
-    attestationType: 'none',
+    // Ph4: the break-glass account must prove its key is a YubiKey (lib/mfa/hardwareKeyAttestation.ts).
+    attestationType: superAdmin ? 'direct' : 'none',
     excludeCredentials: existing.map((p) => ({ id: p.credential_id, transports: p.transports })),
     authenticatorSelection: {
       residentKey: 'preferred',
@@ -505,6 +512,14 @@ export const passkeyRegisterVerify = async (
     emit(caller, 'enrol', 'passkey', 'forbidden', true);
     refuse('invalid_argument', 'This account needs a hardware security key, not a synced passkey.', 'synced_passkey_not_allowed');
   }
+  if (superAdmin) {
+    const refusal = checkHardwareKeyAttestation(info.attestationObject, info.aaguid);
+    if (refusal) {
+      emit(caller, 'enrol', 'passkey', 'forbidden', true);
+      log.warn('break_glass_key_refused', { reason: refusal });
+      refuse('invalid_argument', 'This account needs a YubiKey. That key could not be confirmed as one.', 'hardware_key_required');
+    }
+  }
 
   // Ph3b: the finishing session's one add. Claimed before the insert (atomic,
   // so two parallel adds cannot both use it) and given back if the insert fails.
@@ -528,6 +543,7 @@ export const passkeyRegisterVerify = async (
     nickname: input.nickname.trim(),
     usable_from: usableFrom,
     added_by_recovery: claimed,
+    attested_vendor: superAdmin ? 'yubico' : null,
   });
   } finally {
     if (claimed && !inserted) await store.releaseRecoveryEnrolment(caller.userId, claimed);
@@ -540,6 +556,7 @@ export const passkeyRegisterVerify = async (
   emit(caller, claimed ? 'recovery_enrol' : 'enrol', 'passkey', 'ok', superAdmin);
   notify(caller, superAdmin, {
     kind: 'factor_added', method: 'passkey', nickname: row.nickname, ...(usableFrom ? { waitUntil: usableFrom } : {}),
+    ...(first ? { first: true } : {}),
   });
   // A first factor ends the other sessions too: harmless, and it signs out
   // anyone else who was already in with just the password.
@@ -556,8 +573,11 @@ export const passkeyRegisterVerify = async (
 
 // ── Passkey assertion (sign-in second step and step-up) ─────────────────────
 
+/** Ph4 review M1: the break-glass account uses only YubiKeys attested at registration. */
+const breakGlassUsable = (p: PasskeyRow): boolean => !p.backed_up && p.attested_vendor === 'yubico';
+
 const usablePasskeys = (passkeys: PasskeyRow[], superAdmin: boolean): PasskeyRow[] =>
-  superAdmin ? passkeys.filter((p) => !p.backed_up) : passkeys;
+  superAdmin ? passkeys.filter(breakGlassUsable) : passkeys;
 
 const assertionOptions = async (
   caller: Caller,
@@ -609,8 +629,8 @@ const verifyAssertion = async (
   if (!challenge) return null;
 
   const passkey = await store.getPasskeyByCredentialId(response.id);
-  // Another account's passkey, or a synced one on the break-glass account: no.
-  if (!passkey || passkey.user_id !== caller.userId || (superAdmin && passkey.backed_up)) return null;
+  // Another account's passkey, or a synced / unattested one on the break-glass account: no.
+  if (!passkey || passkey.user_id !== caller.userId || (superAdmin && !breakGlassUsable(passkey))) return null;
 
   const cfg = webAuthnConfig();
   try {
@@ -944,7 +964,7 @@ export const totpConfirm = async (caller: Caller, input: { code: string }) => {
   const backupCodes = first || claimed ? await finishFirstFactor(caller, 'totp', false) : null;
   emit(caller, claimed ? 'recovery_enrol' : 'enrol', 'totp', 'ok', false);
   const waitUntil = pendingUntil(totp!.usable_from);
-  sendMfaEmail(caller.email, { kind: 'factor_added', method: 'totp', ...(waitUntil ? { waitUntil } : {}) });
+  sendMfaEmail(caller.email, { kind: 'factor_added', method: 'totp', ...(waitUntil ? { waitUntil } : {}), ...(first ? { first: true } : {}) });
   const otherSessionsEnded = claimed ? false : await afterFactorChange(caller, 'mfa_factor_add', 'totp', waitUntil !== null);
   return { authenticatorApp: true, authenticatorAppUsableFrom: waitUntil, backupCodes, otherSessionsEnded };
 };

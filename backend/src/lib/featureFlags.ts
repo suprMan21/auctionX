@@ -44,6 +44,14 @@ export const isTwoFactorRequired = (): boolean => truthy(process.env.FEATURE_REQ
 export const isAdminTwoFactorRequired = (): boolean => truthy(process.env.FEATURE_REQUIRE_ADMIN_2FA);
 
 /**
+ * S-2FA Ph4 (Decisions DB, Locked 2026-10-27) — a Creator account must set up
+ * a second factor right after its password and cannot continue without one.
+ * `users.account_type` is trigger-derived, so the user cannot change it. Collectors
+ * are asked only at their first token action (FEATURE_REQUIRE_2FA). DEFAULT OFF.
+ */
+export const isCreatorTwoFactorRequired = (): boolean => truthy(process.env.FEATURE_REQUIRE_CREATOR_2FA);
+
+/**
  * S-2FA — release, transfer completion and price changes need a fresh,
  * single-use passkey check (`X-Step-Up`). DEFAULT OFF until the Ph2 screens
  * send it. Removing a sign-in method always needs one, flag or not.

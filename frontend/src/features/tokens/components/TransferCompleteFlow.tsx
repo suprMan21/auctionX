@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SecondFactorNeeded } from '@/features/security/components/SecondFactorNeeded';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import type { StripeElementsOptions } from '@stripe/stripe-js';
 import { Link } from 'react-router-dom';
@@ -30,7 +31,7 @@ type Phase =
   | { kind: 'processing' }
   /** S-2FA: the server wants a fresh passkey or authenticator check first. */
   | { kind: 'step-up' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; secondFactor?: boolean };
 
 /**
  * Recipient accepts a transfer: the tap that opened the page proves they hold
@@ -63,6 +64,7 @@ export const TransferCompleteFlow = ({ transferId, tagId, tapSession, onSessionS
       setPhase({
         kind: 'error',
         message: apiError ? transferErrorCopy(apiError) : 'Something went wrong. Please try again.',
+        secondFactor: isSecondFactorRefusal(err),
       });
     }
   };
@@ -86,6 +88,7 @@ export const TransferCompleteFlow = ({ transferId, tagId, tapSession, onSessionS
           {phase.message}
         </p>
       )}
+      {phase.kind === 'error' && phase.secondFactor && <SecondFactorNeeded />}
 
       {(phase.kind === 'idle' || phase.kind === 'starting') && !tapSession && (
         <p className="text-gray-400 text-sm">

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { isSecondFactorRefusal } from '@/features/security/lib/stepUp';
+import { SecondFactorNeeded } from '@/features/security/components/SecondFactorNeeded';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { tokenApi, TokenApiError } from '../api/tokenApi';
@@ -158,7 +160,7 @@ interface TransferSectionProps {
   readonly onChanged: () => void;
 }
 
-type CancelState = { kind: 'idle' } | { kind: 'confirming' } | { kind: 'cancelling' } | { kind: 'error'; message: string };
+type CancelState = { kind: 'idle' } | { kind: 'confirming' } | { kind: 'cancelling' } | { kind: 'error'; message: string; secondFactor?: boolean };
 
 const TransferSection = ({ token, onStartTransfer, onChanged }: TransferSectionProps) => {
   const [cancel, setCancel] = useState<CancelState>({ kind: 'idle' });
@@ -177,6 +179,7 @@ const TransferSection = ({ token, onStartTransfer, onChanged }: TransferSectionP
       setCancel({
         kind: 'error',
         message: err instanceof TokenApiError ? transferErrorCopy(err) : 'Something went wrong. Please try again.',
+        secondFactor: isSecondFactorRefusal(err),
       });
     }
   };
@@ -228,6 +231,7 @@ const TransferSection = ({ token, onStartTransfer, onChanged }: TransferSectionP
               {cancel.message}
             </p>
           )}
+          {cancel.kind === 'error' && cancel.secondFactor && <SecondFactorNeeded />}
         </>
       )}
     </section>

@@ -275,7 +275,8 @@ describe('status', () => {
 
     process.env.FEATURE_REQUIRE_2FA = 'true';
     const required = await request(app).get('/auth/mfa/status').set('Authorization', auth(USER, S1));
-    expect(required.body.data).toMatchObject({ secondFactorRequired: true, enrolmentRequired: true });
+    // Ph4: a collector is stopped at token actions, never sent to setup at sign-in.
+    expect(required.body.data).toMatchObject({ secondFactorRequired: true, enrolmentRequired: false });
     await enrolFirst(app);
     const enrolled = await request(app).get('/auth/mfa/status').set('Authorization', auth(USER, S1));
     // Still required for actions; no longer asked to enrol.
@@ -284,6 +285,34 @@ describe('status', () => {
       'authenticatorApp', 'authenticatorAppUsableFrom', 'backupCodesLeft', 'backupEmail', 'breakGlass', 'codeEntryLockedUntil', 'enrolmentRequired', 'hasFactor',
       'isStaff', 'passkeys', 'recovery', 'secondFactorRequired', 'sessionVerified',
     ]);
+  });
+});
+
+describe('status: who must set up at sign-in (Ph4)', () => {
+  afterEach(() => {
+    delete process.env.FEATURE_REQUIRE_CREATOR_2FA;
+    delete process.env.FEATURE_REQUIRE_ADMIN_2FA;
+  });
+
+  it('a Creator without a method is sent to setup under the creator flag; a collector is not', async () => {
+    mfaState.accountTypes.set(OTHER, 'creator');
+    const app = await loadApp();
+    const before = await request(app).get('/auth/mfa/status').set('Authorization', auth(OTHER, S1));
+    expect(before.body.data).toMatchObject({ secondFactorRequired: false, enrolmentRequired: false });
+
+    process.env.FEATURE_REQUIRE_CREATOR_2FA = 'true';
+    const creator = await request(app).get('/auth/mfa/status').set('Authorization', auth(OTHER, S1));
+    expect(creator.body.data).toMatchObject({ secondFactorRequired: true, enrolmentRequired: true });
+    const collector = await request(app).get('/auth/mfa/status').set('Authorization', auth(USER, S1));
+    expect(collector.body.data).toMatchObject({ secondFactorRequired: false, enrolmentRequired: false });
+  });
+
+  it('staff without a method is sent to setup under the admin flag', async () => {
+    mfaState.staff.set(ADMIN, 'admin');
+    process.env.FEATURE_REQUIRE_ADMIN_2FA = 'true';
+    const app = await loadApp();
+    const staff = await request(app).get('/auth/mfa/status').set('Authorization', auth(ADMIN, S1));
+    expect(staff.body.data).toMatchObject({ secondFactorRequired: true, enrolmentRequired: true });
   });
 });
 
