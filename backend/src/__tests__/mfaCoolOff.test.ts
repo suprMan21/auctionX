@@ -4,6 +4,7 @@ import express, { type Request, type Response } from 'express';
 import { randomBytes } from 'crypto';
 import { bearerWith, createMfaFakeState, createMfaStoreFake, type MfaFakeState } from './helpers/mfaStoreFake';
 import { SoftPasskey } from './helpers/softAuthenticator';
+import { testVendor, TEST_ROOT_PEM } from './helpers/attestationFixtures';
 import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEvents';
 import { hotp, totpStep } from '../lib/mfa/totp';
 
@@ -67,6 +68,7 @@ const auth = (user: string, session: string) => bearerWith({ sub: user, session_
 const loadApp = async () => {
   const { __setMfaStore } = await import('../lib/mfa/store');
   __setMfaStore(createMfaStoreFake(mfaState));
+  (await import('../lib/mfa/hardwareKeyAttestation')).__setHardwareKeyRoots([TEST_ROOT_PEM]);
   const { default: mfaRoutes } = await import('../routes/mfa');
   const { requireAuth } = await import('../middleware/auth');
   const { requireSecondFactor, requireStepUp } = await import('../middleware/mfaGates');
@@ -104,7 +106,7 @@ const codeFor = (secretB32: string, offsetSteps = 0) => {
 };
 
 const enrolFirst = async (app: App, user = USER, session = S1) => {
-  const key = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN });
+  const key = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN, attestation: user === ROOT ? testVendor() : undefined });
   const o = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(user, session));
   expect(o.status).toBe(200);
   const v = await request(app)
@@ -131,7 +133,7 @@ const codeStepUp = (app: App, user: string, action: string, targetId: string, bo
 
 /** Registers a new passkey with an already-spent-able factor_add token. */
 const registerWith = async (app: App, token: string, nickname: string, user = USER, session = S1) => {
-  const key = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN });
+  const key = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN, attestation: user === ROOT ? testVendor() : undefined });
   const o = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(user, session)).set('X-Step-Up', token);
   expect(o.status).toBe(200);
   const v = await request(app).post('/auth/mfa/passkeys/register/verify').set('Authorization', auth(user, session))

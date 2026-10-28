@@ -38,6 +38,7 @@
  */
 
 import type { TwoFactorPolicy } from './policy';
+import { checkHardwareKeyAttestation } from './hardwareKeyAttestation';
 import { createHash, randomBytes } from 'crypto';
 import {
   generateAuthenticationOptions,
@@ -119,6 +120,7 @@ export type MfaReason =
   | 'invalid_code'
   | 'passkey_invalid'
   | 'synced_passkey_not_allowed'
+  | 'hardware_key_required'
   | 'last_factor'
   | 'already_set_up'
   | 'no_passkey'
@@ -448,7 +450,8 @@ export const passkeyRegisterOptions = async (caller: Caller, stepUpToken?: strin
     rpID: cfg.rpId,
     userName: caller.email ?? caller.userId,
     userID: userIdBytes(caller.userId),
-    attestationType: 'none',
+    // Ph4: the break-glass account must prove its key is a YubiKey (lib/mfa/hardwareKeyAttestation.ts).
+    attestationType: superAdmin ? 'direct' : 'none',
     excludeCredentials: existing.map((p) => ({ id: p.credential_id, transports: p.transports })),
     authenticatorSelection: {
       residentKey: 'preferred',
@@ -508,6 +511,14 @@ export const passkeyRegisterVerify = async (
   if (superAdmin && info.credentialBackedUp) {
     emit(caller, 'enrol', 'passkey', 'forbidden', true);
     refuse('invalid_argument', 'This account needs a hardware security key, not a synced passkey.', 'synced_passkey_not_allowed');
+  }
+  if (superAdmin) {
+    const refusal = checkHardwareKeyAttestation(info.attestationObject, info.aaguid);
+    if (refusal) {
+      emit(caller, 'enrol', 'passkey', 'forbidden', true);
+      log.warn('break_glass_key_refused', { reason: refusal });
+      refuse('invalid_argument', 'This account needs a YubiKey. That key could not be confirmed as one.', 'hardware_key_required');
+    }
   }
 
   // Ph3b: the finishing session's one add. Claimed before the insert (atomic,

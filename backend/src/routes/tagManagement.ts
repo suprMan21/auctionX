@@ -68,6 +68,8 @@ const CLIENT_REASONS = new Set([
   'invalid_code',
   'passkey_invalid',
   'synced_passkey_not_allowed',
+  // S-2FA Ph4: the break-glass key could not be confirmed as a YubiKey.
+  'hardware_key_required',
   'last_factor',
   'already_set_up',
   'no_passkey',

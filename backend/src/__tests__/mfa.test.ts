@@ -4,6 +4,7 @@ import express, { type Request, type Response } from 'express';
 import { randomBytes } from 'crypto';
 import { bearerWith, createMfaFakeState, createMfaStoreFake, type MfaFakeState } from './helpers/mfaStoreFake';
 import { SoftPasskey } from './helpers/softAuthenticator';
+import { otherVendor, testVendor, TEST_ROOT_PEM } from './helpers/attestationFixtures';
 import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEvents';
 import { hotp, totpStep } from '../lib/mfa/totp';
 
@@ -70,6 +71,8 @@ const auth = (user: string, session: string, extra: Record<string, unknown> = {}
 const loadApp = async () => {
   const { __setMfaStore } = await import('../lib/mfa/store');
   __setMfaStore(createMfaStoreFake(mfaState));
+  // Ph4: trust the test CA in place of Yubico's roots.
+  (await import('../lib/mfa/hardwareKeyAttestation')).__setHardwareKeyRoots([TEST_ROOT_PEM]);
   const { default: mfaRoutes } = await import('../routes/mfa');
   const { requireAuth } = await import('../middleware/auth');
   const { requireSecondFactor, requireStepUp } = await import('../middleware/mfaGates');
@@ -92,8 +95,13 @@ type App = Awaited<ReturnType<typeof loadApp>>;
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 /** First passkey on an account with no factors; returns the codes shown once. */
-const enrolFirst = async (app: App, user = USER, session = S1, opts: { synced?: boolean } = {}) => {
-  const key = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN, synced: opts.synced });
+type Attestation = 'test_vendor' | 'other_vendor' | 'none';
+
+const enrolFirst = async (app: App, user = USER, session = S1, opts: { synced?: boolean; attestation?: Attestation } = {}) => {
+  // The break-glass account registers with a (test) hardware key attestation unless told otherwise.
+  const kind = opts.attestation ?? (user === ROOT ? 'test_vendor' : 'none');
+  const attestation = kind === 'test_vendor' ? testVendor() : kind === 'other_vendor' ? otherVendor() : undefined;
+  const key = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN, synced: opts.synced, attestation });
   const o = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(user, session));
   expect(o.status).toBe(200);
   const v = await request(app)
@@ -275,6 +283,40 @@ describe('super_admin (break-glass)', () => {
     const hardware = await enrolFirst(app, ROOT, S1);
     expect(hardware.res.status).toBe(201);
     expect(mfaState.passkeys).toHaveLength(1);
+  });
+
+  it('asks for direct attestation and a security key', async () => {
+    const app = await loadApp();
+    const root = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(ROOT, S1));
+    expect(root.body.data.options.attestation).toBe('direct');
+    expect(root.body.data.options.authenticatorSelection.authenticatorAttachment).toBe('cross-platform');
+    const user = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(USER, S1));
+    expect(user.body.data.options.attestation).toBe('none');
+  });
+
+  it('records the key model from the attestation', async () => {
+    const app = await loadApp();
+    const hardware = await enrolFirst(app, ROOT, S1);
+    expect(hardware.res.status).toBe(201);
+    expect(mfaState.passkeys[0].aaguid).toBe('11223344-5566-7788-99aa-bbccddeeff00');
+  });
+
+  it.each([
+    ['no attestation (or a browser that hid it)', 'none' as const],
+    ['a key from a vendor that is not trusted', 'other_vendor' as const],
+  ])('refuses %s', async (_label, attestation) => {
+    const app = await loadApp();
+    const res = await enrolFirst(app, ROOT, S1, { attestation });
+    expect(res.res.status).toBe(400);
+    expect(res.res.body).toMatchObject({ reason: 'hardware_key_required' });
+    expect(mfaState.passkeys).toHaveLength(0);
+    expect(events.named('auth.mfa').at(-1)).toMatchObject({ action: 'enrol', result: 'forbidden', break_glass: true });
+  });
+
+  it('everyone else may still register without attestation', async () => {
+    const app = await loadApp();
+    const res = await enrolFirst(app, USER, S1, { attestation: 'other_vendor' });
+    expect(res.res.status).toBe(201);
   });
 
   it('gets a 1-hour marker and an alert email on every sign-in', async () => {

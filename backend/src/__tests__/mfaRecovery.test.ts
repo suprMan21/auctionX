@@ -4,6 +4,7 @@ import express from 'express';
 import { randomBytes } from 'crypto';
 import { bearerWith, createMfaFakeState, createMfaStoreFake, type MfaFakeState } from './helpers/mfaStoreFake';
 import { SoftPasskey } from './helpers/softAuthenticator';
+import { testVendor, TEST_ROOT_PEM } from './helpers/attestationFixtures';
 import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEvents';
 import { hotp, totpStep } from '../lib/mfa/totp';
 
@@ -75,6 +76,7 @@ const auth = (user: string, session: string) => bearerWith({ sub: user, session_
 const loadApp = async () => {
   const { __setMfaStore } = await import('../lib/mfa/store');
   __setMfaStore(createMfaStoreFake(mfaState));
+  (await import('../lib/mfa/hardwareKeyAttestation')).__setHardwareKeyRoots([TEST_ROOT_PEM]);
   const { __setSesSend } = await import('../lib/notifications/securityMailSender');
   __setSesSend(async (m) => {
     ses.push(m);
@@ -107,7 +109,7 @@ const codeFor = (secretB32: string, offsetSteps = 0) => {
 };
 
 const enrolFirst = async (app: App, user = USER, session = S1) => {
-  const key = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN });
+  const key = new SoftPasskey({ rpId: RP_ID, origin: ORIGIN, attestation: user === ROOT ? testVendor() : undefined });
   const o = await request(app).post('/auth/mfa/passkeys/register/options').set('Authorization', auth(user, session));
   expect(o.status).toBe(200);
   const v = await request(app)
