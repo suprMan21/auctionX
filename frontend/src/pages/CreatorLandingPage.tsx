@@ -159,7 +159,7 @@ export const CreatorLandingPage = () => {
             The pieces you release. The story they carry.
           </p>
         </div>
-        <WaitlistCapture source="creator" />
+        <WaitlistCapture />
       </div>
     </div>
   );

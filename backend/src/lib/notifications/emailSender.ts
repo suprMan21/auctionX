@@ -6,6 +6,8 @@ export interface EmailPayload {
   subject: string;
   html: string;
   text?: string;
+  /** Extra mail headers (e.g. List-Unsubscribe). */
+  headers?: Array<{ Name: string; Value: string }>;
 }
 
 /**
@@ -34,6 +36,7 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
       HtmlBody: payload.html,
       TextBody: payload.text ?? payload.subject,
       MessageStream: 'outbound',
+      ...(payload.headers?.length ? { Headers: payload.headers } : {}),
     });
     return true;
   } catch (err) {

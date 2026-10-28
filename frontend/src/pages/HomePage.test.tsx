@@ -5,7 +5,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
 import { HomePage, CONTACT_EMAIL, SAMPLE_SEAL_CODE } from './HomePage';
-import { CONSENT_TEXT } from '@/components/home/EarlyAccessForm';
+import { CONSENT_TEXT, SignupProblem } from '@/components/home/EarlyAccessForm';
 import { SealBadge } from '@/components/home/SealBadge';
 
 /**
@@ -162,7 +162,26 @@ describe('early-access form', () => {
     expect(screen.getByText(CONSENT_TEXT)).toBeInTheDocument();
     fill('  fan@example.com ');
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("You're on the list"));
-    expect(onEarlyAccess).toHaveBeenCalledWith({ email: 'fan@example.com', consentText: CONSENT_TEXT });
+    expect(onEarlyAccess).toHaveBeenCalledWith({
+      email: 'fan@example.com',
+      consentText: CONSENT_TEXT,
+      website: '',
+      fillMs: expect.any(Number),
+    });
+  });
+
+  it('has a honeypot field people never see or reach', () => {
+    const { container } = renderHome({ onEarlyAccess: vi.fn() });
+    const hp = container.querySelector('input[name="website"]');
+    expect(hp).not.toBeNull();
+    expect(hp).toHaveAttribute('tabindex', '-1');
+    expect(hp?.closest('[aria-hidden="true"]')).not.toBeNull();
+  });
+
+  it("shows the server's explanation when the email itself is the problem", async () => {
+    renderHome({ onEarlyAccess: vi.fn().mockRejectedValue(new SignupProblem("That email can't receive mail. Check it and try again.")) });
+    fill('fan@nowhere.test');
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("That email can't receive mail"));
   });
 
   it('rejects a malformed email without calling out', () => {

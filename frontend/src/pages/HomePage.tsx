@@ -6,6 +6,7 @@ import {
   PieceGuitar, SceneCreator, SceneGloves, SceneMoment, SceneNope, ScenePass, SceneSeal, SceneSneak, SceneTap,
   SceneVideo, TagSealed, TagSoon,
 } from '@/components/home/art';
+import { submitEarlyAccess } from '@/components/home/earlyAccess';
 import { EarlyAccessForm, type EarlyAccessSubmit } from '@/components/home/EarlyAccessForm';
 import { SceneWindow } from '@/components/home/SceneWindow';
 import { SealBadge } from '@/components/home/SealBadge';
@@ -23,9 +24,6 @@ import { SealBadge } from '@/components/home/SealBadge';
 
 export const CONTACT_EMAIL = 'hello@authentic-materials.com';
 export const SAMPLE_SEAL_CODE = '7K3Q-9XWD';
-
-/** Until the early-access call is wired (S-SITE2 G3), a submit fails visibly rather than pretending. */
-const notConnected: EarlyAccessSubmit = () => Promise.reject(new Error('early access not connected'));
 
 const HERO_PIECES = [
   { cls: 'hi1', Art: HeroGuitar, title: 'Farewell-tour guitar', by: 'Sealed by the artist' },
@@ -88,7 +86,7 @@ const EarlyAccessCta = ({ size = 'md' }: { size?: 'md' | 'lg' }) => (
   </a>
 );
 
-export const HomePage = ({ onEarlyAccess = notConnected }: { onEarlyAccess?: EarlyAccessSubmit }) => (
+export const HomePage = ({ onEarlyAccess = submitEarlyAccess }: { onEarlyAccess?: EarlyAccessSubmit }) => (
   <div className="am-home" data-theme="cinema">
     <a className="skip-link" href="#main">Skip to content</a>
 

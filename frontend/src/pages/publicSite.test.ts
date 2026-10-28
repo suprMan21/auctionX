@@ -66,6 +66,29 @@ describe('public site bundle', () => {
     expect(leaked).toEqual([]);
   });
 
+  // Decisions DB (Locked 2026-10-28): exactly one network call, the early-access signup.
+  const NETWORK = /\bfetch\s*\(|XMLHttpRequest|sendBeacon|\bWebSocket\b|\bEventSource\b|\bimport\s*\(/;
+  const SIGNUP_FILE = resolve(SRC, 'components/home/earlyAccess.ts');
+  const SIGNUP_URL = 'https://vw7zy9mkyg.us-east-2.awsapprunner.com/api/v1/early-access';
+
+  it('makes exactly one network call: the early-access signup', () => {
+    const callers = files.filter((f) => !f.endsWith('.css') && NETWORK.test(readFileSync(f, 'utf8')));
+    expect(callers).toEqual([SIGNUP_FILE]);
+    const src = readFileSync(SIGNUP_FILE, 'utf8');
+    expect(src.match(/\bfetch\s*\(/g)).toHaveLength(1);
+    expect(src).toContain(`export const EARLY_ACCESS_URL = '${SIGNUP_URL}';`);
+    expect(src).toMatch(/fetch\(EARLY_ACCESS_URL,/);
+    expect(src).toContain("credentials: 'omit'");
+  });
+
+  it('names no other backend address', () => {
+    const hosts = files
+      .filter((f) => !f.endsWith('.css'))
+      .flatMap((f) => [...readFileSync(f, 'utf8').matchAll(/https?:\/\/([a-z0-9.-]+)/gi)].map((m) => m[1].toLowerCase()));
+    const backends = hosts.filter((h) => /awsapprunner|supabase|amazonaws|cloudfront/.test(h));
+    expect([...new Set(backends)]).toEqual(['vw7zy9mkyg.us-east-2.awsapprunner.com']);
+  });
+
   it('reads no build-time environment values', () => {
     const readers = files.filter((f) => !f.endsWith('.css') && /import\.meta\.env\.VITE_/.test(readFileSync(f, 'utf8')));
     expect(readers).toEqual([]);

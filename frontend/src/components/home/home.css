@@ -234,3 +234,6 @@
   .am-home .points li{grid-template-columns:1fr}
   .am-home .points .num{grid-row:auto}
 }
+
+/* Honeypot field: off-screen, not display:none (some bots skip hidden inputs) */
+.am-home .hp{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}

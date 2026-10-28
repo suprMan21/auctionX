@@ -1,10 +1,20 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 /** Shown under the field and stored with each signup as the consent wording (CASL). */
 export const CONSENT_TEXT =
   'By joining, you agree to get emails about Authentic Materials from The Craving Company Inc. Unsubscribe anytime.';
 
-export type EarlyAccessSubmit = (signup: { email: string; consentText: string }) => Promise<void>;
+export type EarlyAccessSubmit = (signup: {
+  email: string;
+  consentText: string;
+  /** Honeypot value: people never see the field, so it is empty unless a bot filled it. */
+  website: string;
+  /** How long the form was open before submit. */
+  fillMs: number;
+}) => Promise<void>;
+
+/** A failure the person can act on; its message is shown as-is. */
+export class SignupProblem extends Error {}
 
 type Status = { kind: 'idle' } | { kind: 'sending' } | { kind: 'done' } | { kind: 'error'; message: string };
 
@@ -17,6 +27,11 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const EarlyAccessForm = ({ onSubmit }: { onSubmit: EarlyAccessSubmit }) => {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  const [website, setWebsite] = useState('');
+  const openedAt = useRef(0);
+  useEffect(() => {
+    openedAt.current = Date.now();
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,10 +42,11 @@ export const EarlyAccessForm = ({ onSubmit }: { onSubmit: EarlyAccessSubmit }) =
     }
     setStatus({ kind: 'sending' });
     try {
-      await onSubmit({ email: value, consentText: CONSENT_TEXT });
+      await onSubmit({ email: value, consentText: CONSENT_TEXT, website, fillMs: Date.now() - openedAt.current });
       setStatus({ kind: 'done' });
-    } catch {
-      setStatus({ kind: 'error', message: 'Something went wrong on our side. Try again in a minute.' });
+    } catch (err) {
+      const message = err instanceof SignupProblem && err.message ? err.message.slice(0, 200) : null;
+      setStatus({ kind: 'error', message: message ?? 'Something went wrong on our side. Try again in a minute.' });
     }
   };
 
@@ -64,6 +80,19 @@ export const EarlyAccessForm = ({ onSubmit }: { onSubmit: EarlyAccessSubmit }) =
         <button className="am-btn am-btn--filled am-btn--lg state-layer focus-ring" type="submit" disabled={sending}>
           {sending ? 'Joining…' : 'Get early access'}
         </button>
+      </div>
+      {/* Honeypot: hidden from people and screen readers; bots that fill every field give themselves away. */}
+      <div className="hp" aria-hidden="true">
+        <label htmlFor="early-access-website">Website</label>
+        <input
+          id="early-access-website"
+          type="text"
+          name="website"
+          tabIndex={-1}
+          autoComplete="off"
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+        />
       </div>
       <p className="fine">A quick hello now, then one email when seals are ready. No spam. Pinky promise.</p>
       <p className="fine" id="early-access-consent">{CONSENT_TEXT}</p>

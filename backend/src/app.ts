@@ -17,6 +17,7 @@ import tokenFeeSweepRoutes from './routes/tokenFeeSweep';
 import anchorTickRoutes from './routes/anchorTick';
 import mfaRoutes from './routes/mfa';
 import { ownershipRoutes } from './routes/tagManagement';
+import { earlyAccessRoutes } from './routes/earlyAccess';
 
 // ── Parked marketplace routers (mounted only when FEATURE_MARKETPLACE=true) ──
 // Imported unconditionally so `tsc --noEmit` keeps typechecking the parked code.
@@ -64,6 +65,8 @@ export const TOKEN_MOUNTS: readonly Mount[] = [
   { path: '/api/v1/admin', router: adminRoutes },
   // S-2FA: passkeys, authenticator app, backup codes, step-up.
   { path: '/api/v1/auth/mfa', router: mfaRoutes },
+  // S-SITE2 G3: early-access signup, the one call the public site makes.
+  { path: '/api/v1/early-access', router: earlyAccessRoutes },
 ] as const;
 
 /**
@@ -101,6 +104,31 @@ export const MARKETPLACE_MOUNTS: readonly Mount[] = [
  */
 export const TRUSTED_PROXIES = ['loopback', 'linklocal', 'uniquelocal'] as const;
 
+const EARLY_ACCESS_PATH = '/api/v1/early-access';
+
+/** Origins allowed to call the early-access signup: the public site (+ www) and the app. */
+export const earlyAccessOrigins = (): string[] => {
+  const configured = (process.env.EARLY_ACCESS_ORIGINS ?? 'https://authentic-materials.com,https://www.authentic-materials.com')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  return [...configured, process.env.FRONTEND_URL || 'http://localhost:5173'];
+};
+
+/**
+ * CORS: the app origin everywhere, with credentials. The early-access path alone also
+ * accepts the public site, without credentials (it is anonymous).
+ */
+const corsFor: cors.CorsOptionsDelegate<cors.CorsRequest> = (req, cb) => {
+  const { originalUrl, url: rawUrl } = req as unknown as { originalUrl?: string; url?: string };
+  const url = originalUrl ?? rawUrl ?? '';
+  if (url === EARLY_ACCESS_PATH || url.startsWith(`${EARLY_ACCESS_PATH}/`) || url.startsWith(`${EARLY_ACCESS_PATH}?`)) {
+    cb(null, { origin: earlyAccessOrigins(), credentials: false, methods: ['POST'], maxAge: 600 });
+    return;
+  }
+  cb(null, { origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true });
+};
+
 /**
  * Builds the Express app.
  *
@@ -113,10 +141,7 @@ export const createApp = (): express.Express => {
   const marketplace = isMarketplaceEnabled();
 
   app.use(requestIdMiddleware as express.RequestHandler);
-  app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-    credentials: true,
-  }));
+  app.use(cors(corsFor));
 
   // Health before the body parsers and every downstream middleware, so a
   // liveness probe can never be blocked by them (Lesson: health endpoint must
