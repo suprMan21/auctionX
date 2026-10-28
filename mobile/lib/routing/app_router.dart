@@ -1,240 +1,63 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../features/auth/presentation/providers/auth_provider.dart';
-import '../features/auth/presentation/providers/auth_state.dart';
-import '../features/auth/presentation/screens/forgot_password_screen.dart';
-import '../features/auth/presentation/screens/login_screen.dart';
-import '../features/auth/presentation/screens/register_screen.dart';
+
+import '../app_providers.dart';
+import '../features/app_update/update_gate.dart';
+import '../features/app_update/update_required_screen.dart';
+import '../features/auth/data/auth_service.dart';
+import '../features/auth/presentation/screens/sign_in_screen.dart';
 import '../features/auth/presentation/screens/splash_screen.dart';
-import '../features/browse/presentation/screens/browse_screen.dart';
-import '../features/nfc/presentation/screens/nfc_scan_screen.dart';
-import '../features/nfc/presentation/screens/tag_detail_screen.dart';
-import '../features/nfc/presentation/screens/scan_history_screen.dart';
-import '../features/nfc/presentation/providers/nfc_scan_provider.dart';
-import '../features/video_proof/presentation/screens/video_record_screen.dart';
-import '../features/video_proof/presentation/screens/video_preview_screen.dart';
-import '../features/video_proof/presentation/screens/upload_progress_screen.dart';
-import '../features/minting/presentation/screens/mint_confirmation_screen.dart';
-import '../features/minting/presentation/screens/minting_progress_screen.dart';
-import '../features/minting/presentation/screens/mint_success_screen.dart';
-import '../features/activity/presentation/screens/activity_screen.dart';
-import '../features/profile/presentation/screens/profile_screen.dart';
-import '../features/onboarding/presentation/screens/onboarding_screen.dart';
-import '../features/seller/presentation/screens/seller_dashboard_screen.dart';
-import '../features/seller/presentation/screens/tag_registration_screen.dart';
-import '../features/seller/presentation/screens/batch_registration_screen.dart';
-import '../features/seller/presentation/screens/qr_generate_screen.dart';
-import '../features/seller/presentation/screens/legal_viewer_screen.dart';
-import '../shared/widgets/app_scaffold.dart';
+import '../features/home/home_screen.dart';
 import 'route_names.dart';
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
-final _shellNavigatorKey = GlobalKey<NavigatorState>();
+/// Where the app must be, given the gates, or null to stay put.
+///
+/// Order: update required → still loading → signed out → signed in.
+/// Phase B adds: second factor pending, method set-up required, not a Creator.
+String? gateRedirect({required UpdateState update, required AuthStatus auth, required String location}) {
+  String? to(String target) => location == target ? null : target;
+
+  if (update is UpdateRequired) return to(RouteNames.update);
+  if (update is UpdateChecking || auth is AuthUnknown) return to(RouteNames.splash);
+  if (auth is SignedOut) return to(RouteNames.signIn);
+  // Signed in: the auth screens and splash are no longer places to be.
+  if (location == RouteNames.signIn || location == RouteNames.splash || location == RouteNames.update) {
+    return RouteNames.home;
+  }
+  return null;
+}
+
+/// Re-runs the redirect whenever a gate changes.
+class _GateRefresh extends ChangeNotifier {
+  _GateRefresh(Ref ref) {
+    ref.listen(updateGateProvider, (_, _) => notifyListeners());
+    ref.listen(authControllerProvider, (_, _) => notifyListeners());
+  }
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authNotifierProvider);
+  final refresh = _GateRefresh(ref);
+  ref.onDispose(refresh.dispose);
 
-  return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+  final router = GoRouter(
     initialLocation: RouteNames.splash,
-    redirect: (context, state) {
-      final isAuthenticated = authState.maybeWhen(
-        authenticated: (_) => true,
-        orElse: () => false,
-      );
-      final isInitialOrLoading = authState.maybeWhen(
-        initial: () => true,
-        loading: () => true,
-        orElse: () => false,
-      );
-
-      final currentPath = state.uri.path;
-      final isAuthRoute = currentPath == RouteNames.login ||
-          currentPath == RouteNames.register ||
-          currentPath == RouteNames.forgotPassword;
-      final isSplash = currentPath == RouteNames.splash;
-      final isOnboarding = currentPath == RouteNames.onboarding;
-      final isVerify = currentPath == RouteNames.verify;
-
-      if (isInitialOrLoading) {
-        return isSplash ? null : RouteNames.splash;
-      }
-
-      if (isAuthenticated && (isAuthRoute || isSplash)) {
-        return RouteNames.browse;
-      }
-
-      // Once auth has resolved to unauthenticated, move OFF splash too —
-      // otherwise a fresh/logged-out install is stranded on the splash spinner
-      // forever (initialLocation is splash and nothing else redirects away from
-      // it). Splash is only a holding state while auth is initial/loading, which
-      // is handled above.
-      if (!isAuthenticated && !isAuthRoute && !isOnboarding && !isVerify) {
-        return RouteNames.login;
-      }
-
-      return null;
-    },
+    refreshListenable: refresh,
+    redirect: (context, state) => gateRedirect(
+      update: ref.read(updateGateProvider),
+      auth: ref.read(authControllerProvider),
+      location: state.uri.path,
+    ),
+    // Unknown paths (including any deep link the app doesn't handle) go home
+    // through the gates; incoming links are read by the link listener instead.
+    errorBuilder: (context, state) => const SplashScreen(),
     routes: [
-      GoRoute(
-        path: RouteNames.splash,
-        builder: (context, state) => const SplashScreen(),
-      ),
-      GoRoute(
-        path: RouteNames.onboarding,
-        builder: (context, state) => const OnboardingScreen(),
-      ),
-      GoRoute(
-        path: RouteNames.login,
-        builder: (context, state) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: RouteNames.register,
-        builder: (context, state) => const RegisterScreen(),
-      ),
-      GoRoute(
-        path: RouteNames.forgotPassword,
-        builder: (context, state) => const ForgotPasswordScreen(),
-      ),
-      // Deep link: /verify?picc_data=...&cmac=...
-      GoRoute(
-        path: RouteNames.verify,
-        builder: (context, state) {
-          final piccData = state.uri.queryParameters['picc_data'] ?? '';
-          final cmac = state.uri.queryParameters['cmac'] ?? '';
-          // Trigger auto-validation via provider
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (piccData.isNotEmpty && cmac.isNotEmpty) {
-              final container = ProviderScope.containerOf(context);
-              container
-                  .read(nfcScanNotifierProvider.notifier)
-                  .validateFromParams(piccData: piccData, cmac: cmac);
-            }
-          });
-          return const NfcScanScreen();
-        },
-      ),
-      ShellRoute(
-        navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) => AppScaffold(child: child),
-        routes: [
-          GoRoute(
-            path: RouteNames.browse,
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: BrowseScreen(),
-            ),
-          ),
-          GoRoute(
-            path: RouteNames.nfc,
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: NfcScanScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '${RouteNames.tagDetail}/:tagId',
-            builder: (context, state) => TagDetailScreen(
-              tagId: state.pathParameters['tagId']!,
-            ),
-          ),
-          GoRoute(
-            path: RouteNames.scanHistory,
-            builder: (context, state) => const ScanHistoryScreen(),
-          ),
-          GoRoute(
-            path: RouteNames.videoRecord,
-            builder: (context, state) {
-              final extra = state.extra as Map<String, String>;
-              return VideoRecordScreen(
-                tagId: extra['tagId']!,
-                tagUid: extra['tagUid']!,
-              );
-            },
-          ),
-          GoRoute(
-            path: RouteNames.videoPreview,
-            builder: (context, state) {
-              final extra = state.extra as Map<String, String>;
-              return VideoPreviewScreen(
-                tagId: extra['tagId']!,
-                tagUid: extra['tagUid']!,
-                filePath: extra['filePath']!,
-                durationSeconds: int.parse(extra['durationSeconds']!),
-              );
-            },
-          ),
-          GoRoute(
-            path: RouteNames.videoUpload,
-            builder: (context, state) {
-              final extra = state.extra as Map<String, String>;
-              return UploadProgressScreen(
-                tagId: extra['tagId']!,
-                tagUid: extra['tagUid']!,
-                filePath: extra['filePath']!,
-                durationSeconds: int.parse(extra['durationSeconds']!),
-              );
-            },
-          ),
-          GoRoute(
-            path: '${RouteNames.mintConfirm}/:tagId',
-            builder: (context, state) => MintConfirmationScreen(
-              tagId: state.pathParameters['tagId']!,
-            ),
-          ),
-          GoRoute(
-            path: '${RouteNames.minting}/:tagId',
-            builder: (context, state) => MintingProgressScreen(
-              tagId: state.pathParameters['tagId']!,
-            ),
-          ),
-          GoRoute(
-            path: '${RouteNames.mintSuccess}/:tagId',
-            builder: (context, state) => MintSuccessScreen(
-              tagId: state.pathParameters['tagId']!,
-            ),
-          ),
-          GoRoute(
-            path: RouteNames.activity,
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ActivityScreen(),
-            ),
-          ),
-          GoRoute(
-            path: RouteNames.profile,
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ProfileScreen(),
-            ),
-          ),
-          GoRoute(
-            path: RouteNames.seller,
-            builder: (context, state) => const SellerDashboardScreen(),
-          ),
-          GoRoute(
-            path: RouteNames.sellerRegister,
-            builder: (context, state) => const TagRegistrationScreen(),
-          ),
-          GoRoute(
-            path: RouteNames.sellerBatchRegister,
-            builder: (context, state) => const BatchRegistrationScreen(),
-          ),
-          GoRoute(
-            path: '${RouteNames.sellerQr}/:tagId',
-            builder: (context, state) => QrGenerateScreen(
-              tagId: state.pathParameters['tagId']!,
-            ),
-          ),
-          GoRoute(
-            path: RouteNames.legal,
-            builder: (context, state) {
-              final extra = state.extra as Map<String, String>;
-              return LegalViewerScreen(
-                title: extra['title']!,
-                assetPath: extra['assetPath']!,
-              );
-            },
-          ),
-        ],
-      ),
+      GoRoute(path: RouteNames.splash, builder: (_, _) => const SplashScreen()),
+      GoRoute(path: RouteNames.update, builder: (_, _) => const UpdateRequiredScreen()),
+      GoRoute(path: RouteNames.signIn, builder: (_, _) => const SignInScreen()),
+      GoRoute(path: RouteNames.home, builder: (_, _) => const HomeScreen()),
     ],
   );
+  ref.onDispose(router.dispose);
+  return router;
 });

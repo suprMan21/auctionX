@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.authenticmaterials.tags",
+      "sha256_cert_fingerprints": [
+        "76:F2:00:90:F2:85:E3:87:CB:EF:54:F2:49:42:8C:08:4E:60:CF:05:4D:B7:A5:05:17:4D:82:79:07:17:FF:26"
+      ]
+    }
+  }
+]

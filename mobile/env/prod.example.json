@@ -1,0 +1,8 @@
+{
+  "ENV": "prod",
+  "SUPABASE_URL": "https://<prod-project>.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "<prod publishable key>",
+  "API_BASE_URL": "https://<prod api host>/api/v1",
+  "WEB_BASE_URL": "https://<prod web app host>",
+  "RP_ID": "authentic-materials.com"
+}

@@ -4,7 +4,10 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
     <application
-        android:label="auctionx_mobile"
+        android:label="AM - Creator"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -28,18 +31,19 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- NDEF discovery for NTAG 424 DNA SUN URLs -->
-            <intent-filter>
-                <action android:name="android.nfc.action.NDEF_DISCOVERED"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <data android:scheme="https" android:host="authentic-materials.com" android:pathPrefix="/verify"/>
-            </intent-filter>
-            <!-- Deep link for auctionx://verify -->
+            <!-- Flutter's own deep linking is off: links are read by app_links and
+                 checked by parseIncomingLink (only /app/open on the web host). -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false" />
+            <!-- "Open the app" from the website after sign-up (S-MOB1). Verified
+                 against /.well-known/assetlinks.json on each host. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="auctionx" android:host="verify"/>
+                <data android:scheme="https"/>
+                <data android:host="authentic-materials.com"/>
+                <data android:host="d1bwev65w7rqzl.cloudfront.net"/>
+                <data android:path="/app/open"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

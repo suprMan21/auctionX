@@ -44,13 +44,40 @@ sync_site() {
 
 invalidate() { aws_ cloudfront create-invalidation --distribution-id "$1" --paths '/*' --query 'Invalidation.Id' --output text; }
 
+# S-MOB1: the Apple association file has no extension, so `s3 sync` would store
+# it as binary/octet-stream; iOS needs application/json. Re-upload it with the
+# right type after every sync (assetlinks.json is typed from its extension).
+put_well_known() {
+  local dir="$1" bucket="$2"
+  aws_ s3 cp "$dir/.well-known/apple-app-site-association" "s3://$bucket/.well-known/apple-app-site-association" \
+    --content-type application/json --cache-control "max-age=3600"
+}
+
+# Both files must come back as real JSON (HTTP 200, no redirect), not the site's
+# HTML fallback, or passkeys and "Open the app" silently stop working.
+check_well_known() {
+  local base="$1"
+  [ "$DRY_RUN" = "--dry-run" ] && { echo "  [dry-run] would check $base/.well-known/*"; return 0; }
+  for f in apple-app-site-association assetlinks.json; do
+    local status type
+    read -r status type < <(curl -s -o /dev/null -m 15 -w '%{http_code} %{content_type}' "$base/.well-known/$f")
+    if [ "$status" != "200" ] || [[ "$type" != application/json* ]]; then
+      echo "⚠ $base/.well-known/$f answered $status $type (want 200 application/json). Wait for the invalidation and re-check."
+    else
+      echo "✓ $base/.well-known/$f"
+    fi
+  done
+}
+
 case "$TARGET" in
   staging)
     npm run build
     grep -lq "pk_test_" dist/assets/*.js || { echo "✗ no Stripe test key in the build (frontend/.env.production missing?)"; exit 1; }
     sync_site dist "$STAGING_BUCKET"
+    put_well_known dist "$STAGING_BUCKET"
     invalidate "$STAGING_DIST_ID"
     echo "✓ staging deployed: https://d1bwev65w7rqzl.cloudfront.net"
+    check_well_known https://d1bwev65w7rqzl.cloudfront.net
     ;;
 
   public)
@@ -66,13 +93,14 @@ case "$TARGET" in
       echo "✗ unexpected backend address in the public build (only the signup is allowed):"; echo "$API_HOSTS"; exit 1
     fi
     sync_site dist-public "$PUBLIC_BUCKET"
+    put_well_known dist-public "$PUBLIC_BUCKET"
     invalidate "$PUBLIC_DIST_ID"
     if [ "$DRY_RUN" != "--dry-run" ]; then
       BUILT=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' dist-public/index.html)
       echo "✓ uploaded. Checking $PUBLIC_URL for $BUILT every 10s, up to 5 minutes (Ctrl-C is safe: the upload is done)"
       for i in $(seq 1 30); do
         LIVE=$(curl -fsS -m 10 "$PUBLIC_URL/" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' || true)
-        [ "$LIVE" = "$BUILT" ] && { echo "✓ public site live: $PUBLIC_URL"; exit 0; }
+        [ "$LIVE" = "$BUILT" ] && { echo "✓ public site live: $PUBLIC_URL"; check_well_known "$PUBLIC_URL"; exit 0; }
         echo "  $i/30: still serving ${LIVE:-nothing}"
         sleep 10
       done
