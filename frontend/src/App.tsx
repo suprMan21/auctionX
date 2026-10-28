@@ -8,6 +8,9 @@ import { SignupPage } from './features/auth/pages/SignupPage';
 import { AccountTypePage } from './features/profile/pages/AccountTypePage';
 import { ForgotPasswordPage } from './features/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './features/auth/pages/ResetPasswordPage';
+import { EmailConfirmedPage } from './features/auth/pages/EmailConfirmedPage';
+import { AppOpenPage } from '@/pages/AppOpenPage';
+import { FromAppCapture } from './features/app/OpenAppButton';
 import { ProfilePage } from './features/profile/pages/ProfilePage';
 import { SellerProfilePage } from './features/profile/pages/SellerProfilePage';
 import { CreateListing } from './pages/CreateListing';
@@ -140,6 +143,8 @@ function App() {
         </div>
         {/* Noise texture overlay */}
         <div className="noise-overlay" aria-hidden="true" />
+        {/* S-MOB1: remembers ?from=app (visit started in the Creator app) for this tab. */}
+        <FromAppCapture />
 
         <Routes>
           {/* Landing pages -- static routes, no app header */}
@@ -150,6 +155,12 @@ function App() {
 
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<SignupPage />} />
+          <Route path="/register/confirmed" element={<EmailConfirmedPage />} />
+          {/* S-MOB1: the phone hands this link to the Creator app; seeing the page means the app didn't open. */}
+          <Route
+            path="/app/open"
+            element={<AppOpenPage testFlightUrl={import.meta.env.VITE_TESTFLIGHT_URL} playTestingUrl={import.meta.env.VITE_PLAY_TESTING_URL} />}
+          />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           {/* S-2FA Ph2: the step after the password. Not behind the gate (it is the gate's target). */}

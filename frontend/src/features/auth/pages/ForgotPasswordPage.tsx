@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { isFromApp } from '@/features/app/fromApp'
 import { useAuth } from '../hooks/useAuth'
 
 export const ForgotPasswordPage = () => {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const { resetPassword, loading, error, clearError } = useAuth()
+  const { search } = useLocation()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,6 +33,11 @@ export const ForgotPasswordPage = () => {
             <p className="mt-2 text-sm text-green-400/80">
               Check your email for a link to reset your password. If it doesn't appear within a few minutes, check your spam folder.
             </p>
+            {isFromApp(search) && (
+              <p className="mt-2 text-sm text-green-400/80">
+                Open the link on this phone. After you set a new password, that page has a button back to the app.
+              </p>
+            )}
           </div>
           <div className="text-center">
             <Link to="/login" className="text-sm font-medium text-accent-500 hover:text-accent-400 transition-colors">

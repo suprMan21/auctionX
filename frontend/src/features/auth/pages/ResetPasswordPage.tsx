@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { ChangePasswordForm } from '@/features/security/components/ChangePasswordForm';
+import { OpenAppButton } from '@/features/app/OpenAppButton';
+import { isFromApp } from '@/features/app/fromApp';
 
 export const ResetPasswordPage = () => {
   const navigate = useNavigate();
+  const { search } = useLocation();
   const [done, setDone] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
   const [recoverySession, setRecoverySession] = useState<boolean | null>(null);
 
   // Supabase places the recovery session in the URL hash on redirect.
@@ -18,11 +22,13 @@ export const ResetPasswordPage = () => {
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       setRecoverySession(!!data.session);
+      setEmail(data.session?.user.email ?? null);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
         setRecoverySession(!!session);
+        setEmail(session?.user.email ?? null);
       }
     });
 
@@ -36,7 +42,8 @@ export const ResetPasswordPage = () => {
   // account has one; without it the database refuses the change.
   const finished = () => {
     setDone(true);
-    setTimeout(() => navigate('/login'), 2500);
+    // Started in the app: stay here so the way back to the app is offered.
+    if (!isFromApp(search)) setTimeout(() => navigate('/login'), 2500);
   };
 
   if (recoverySession === false) {
@@ -72,9 +79,12 @@ export const ResetPasswordPage = () => {
           <div className="glass rounded-xl border-green-500/30 p-4 mb-6">
             <h3 className="text-sm font-medium text-green-400">Password updated</h3>
             <p className="mt-2 text-sm text-green-400/80">
-              Your new password is set. Redirecting you to sign in…
+              {isFromApp(search)
+                ? 'Your new password is set. Sign in to the app with it.'
+                : 'Your new password is set. Redirecting you to sign in…'}
             </p>
           </div>
+          <OpenAppButton email={email} className="mb-4" />
           <div className="text-center">
             <Link to="/login" className="text-sm font-medium text-accent-500 hover:text-accent-400 transition-colors">
               Continue to sign in

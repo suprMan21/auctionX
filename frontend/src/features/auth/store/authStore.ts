@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { signInErrorMessage } from "../lib/signInError";
+import { isFromApp, withFromApp } from "@/features/app/fromApp";
 
 interface AuthState {
   user: User | null;
@@ -95,7 +96,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         password,
         // Read once by the handle_new_user trigger. User-controlled by design:
         // it only records the request, never makes the account a Creator.
-        options: { data: { account_intent: accountIntent } },
+        options: {
+          data: { account_intent: accountIntent },
+          // Started in the Creator app: the email link lands on a page that
+          // offers the way back. Otherwise Supabase's default (unchanged).
+          ...(isFromApp() ? { emailRedirectTo: withFromApp(`${window.location.origin}/register/confirmed`, true) } : {}),
+        },
       });
       if (error) throw error;
       set({ user: data.user, session: data.session });
@@ -124,7 +130,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: withFromApp(`${window.location.origin}/reset-password`),
       });
       if (error) throw error;
     } catch (error: any) {

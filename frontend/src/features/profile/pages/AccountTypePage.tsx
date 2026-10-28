@@ -12,6 +12,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { api, type YotiStatus } from '@/lib/api';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { OpenAppButton } from '@/features/app/OpenAppButton';
+import { withFromApp } from '@/features/app/fromApp';
 
 const POLL_MS = 2000;
 const MAX_POLLS = 15;
@@ -46,6 +49,7 @@ export const AccountTypePage = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [polls, setPolls] = useState(0);
+  const { user } = useAuth();
 
   const load = useCallback(async () => {
     try {
@@ -81,7 +85,8 @@ export const AccountTypePage = () => {
       }
       const { session_url } = await api.verification.startVerification(
         'seller_kyc',
-        `${window.location.origin}/settings/account-type?returned=1`,
+        // Keeps the app flag through the identity check.
+        withFromApp(`${window.location.origin}/settings/account-type?returned=1`),
       );
       window.location.assign(session_url);
     } catch {
@@ -112,6 +117,7 @@ export const AccountTypePage = () => {
             <>
               <h2 className="text-lg font-semibold text-white">You're a creator</h2>
               <p className="text-gray-300">Your identity check is complete. You can seal your own items.</p>
+              <OpenAppButton email={user?.email} />
             </>
           )}
 
@@ -145,6 +151,7 @@ export const AccountTypePage = () => {
                   ? 'This usually takes a few seconds. This page updates on its own.'
                   : 'This can take a few minutes. Refresh this page to see the result.'}
               </p>
+              <OpenAppButton email={user?.email} />
             </>
           )}
 
