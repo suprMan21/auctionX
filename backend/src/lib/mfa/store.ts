@@ -15,7 +15,13 @@ import { AppError } from '../errors';
 
 export type ChallengePurpose = 'register' | 'sign_in' | 'step_up';
 export type MfaMethod = 'passkey' | 'totp' | 'recovery_code';
+/** How a session's marker was earned: a method, or (Ph3b) finishing an email-code recovery. */
+export type SessionMethod = MfaMethod | 'email_recovery';
 export type StepUpAction =
+  /** Ph3b: undo a finished recovery during its freeze (target = recovery id). Old method only. */
+  | 'recovery_undo'
+  /** Ph3b: add / replace / remove the backup email (target 'backup_email'). */
+  | 'recovery_channel'
   | 'release'
   | 'transfer_complete'
   | 'price_change'
@@ -44,6 +50,8 @@ export interface PasskeyRow {
   last_used_at: string | null;
   /** NULL = usable now; otherwise it may sign in but not confirm a step-up before this time. */
   usable_from: string | null;
+  /** Ph3b: the recovery that added it (undo removes it). Optional so older fakes still type-check. */
+  added_by_recovery?: string | null;
 }
 
 export interface TotpRow {
@@ -53,6 +61,8 @@ export interface TotpRow {
   last_used_step: number;
   /** NULL = usable now; otherwise it may sign in but not confirm a step-up before this time. */
   usable_from: string | null;
+  /** Ph3b: the recovery that added it (undo removes it). */
+  added_by_recovery?: string | null;
 }
 
 export interface ChallengeRow {
@@ -71,7 +81,7 @@ export interface ChallengeRow {
 export interface MfaSessionRow {
   session_id: string;
   user_id: string;
-  method: MfaMethod;
+  method: SessionMethod;
   expires_at: string;
 }
 
@@ -86,7 +96,46 @@ export interface NewPasskey {
   nickname: string;
   /** Set when the passkey was added with a code-confirmed step-up (24 h wait). */
   usable_from?: string | null;
+  /** Ph3b: set when the finishing session of a recovery adds it. */
+  added_by_recovery?: string | null;
 }
+
+// ── Ph3b types ──────────────────────────────────────────────────────────────
+
+export interface BackupEmailRow {
+  email: string;
+  verified_at: string | null;
+}
+
+export type RecoveryStatus = 'holding' | 'cancelled' | 'completed' | 'undone';
+
+export interface RecoveryRow {
+  id: string;
+  channel: 'primary' | 'backup';
+  status: RecoveryStatus;
+  started_session_id: string;
+  hold_ends_at: string;
+  finished_at: string | null;
+  finished_session_id: string | null;
+  freeze_ends_at: string | null;
+  enrol_until: string | null;
+  enrolled_at: string | null;
+  created_at: string;
+}
+
+export interface NewEmailCode {
+  id: string;
+  user_id: string;
+  session_id: string;
+  nonce_hash: string;
+  purpose: 'recovery_start' | 'recovery_finish' | 'backup_email_verify';
+  channel: 'primary' | 'backup';
+  code_hash: string;
+  expires_at: string;
+}
+
+export type IssueCodeStatus = 'ok' | 'cooldown' | 'hour_limit' | 'day_limit';
+export type UseCodeResult = 'ok' | 'wrong' | 'locked' | 'expired' | 'invalid';
 
 /** A spent grant. `method` is NULL only for grants issued before migration 20261027000009. */
 export interface ConsumedGrant {
@@ -109,7 +158,7 @@ export interface MfaStore {
    * Replaces any unconfirmed setup; refuses (returns false) when a confirmed one exists.
    * `usableFrom` (or null) is stored as the app's step-up wait.
    */
-  startTotp(userId: string, secretEnc: string, usableFrom: string | null): Promise<boolean>;
+  startTotp(userId: string, secretEnc: string, usableFrom: string | null, addedByRecovery?: string | null): Promise<boolean>;
   /** Spends `step` only if it is newer than the last one used; optionally confirms setup. */
   useTotpStep(userId: string, step: number, confirm: boolean): Promise<boolean>;
 
@@ -162,6 +211,32 @@ export interface MfaStore {
    * The auth.users trigger guard_auth_change spends it (20261027000010).
    */
   createAuthChangePermit(userId: string, kind: AccountChangeKind, expiresAt: string): Promise<void>;
+
+  // ── Ph3b ──
+  getBackupEmail(userId: string): Promise<BackupEmailRow | null>;
+  /** Replaces any backup email with this one, unverified. */
+  setPendingBackupEmail(userId: string, email: string): Promise<void>;
+  /** Marks it verified only if it is still this address and unverified. */
+  verifyBackupEmail(userId: string, email: string): Promise<boolean>;
+  /** Returns the removed address (for the notice), or null when there was none. */
+  deleteBackupEmail(userId: string): Promise<string | null>;
+
+  /** issue_email_code: limits, voids older codes of the purpose, stores the HMAC. */
+  issueEmailCode(row: NewEmailCode): Promise<{ status: IssueCodeStatus; retryAfter: string | null }>;
+  /** use_email_code: one locked check; the attempt is counted before the compare. */
+  useEmailCode(p: {
+    id: string; userId: string; sessionId: string; nonceHash: string; purpose: NewEmailCode['purpose']; codeHash: string;
+  }): Promise<{ result: UseCodeResult; channel: 'primary' | 'backup' | null }>;
+
+  latestRecovery(userId: string): Promise<RecoveryRow | null>;
+  startRecovery(userId: string, sessionId: string, channel: 'primary' | 'backup', holdHours: number):
+    Promise<{ status: 'ok' | 'busy' | 'frozen'; id: string | null; holdEndsAt: string | null }>;
+  finishRecovery(userId: string, sessionId: string, freezeDays: number, enrolMinutes: number):
+    Promise<{ status: 'ok' | 'not_ready' | 'none'; id: string | null; freezeEndsAt: string | null; enrolUntil: string | null; holdEndsAt: string | null }>;
+  cancelRecovery(userId: string): Promise<string | null>;
+  claimRecoveryEnrolment(userId: string, sessionId: string): Promise<string | null>;
+  releaseRecoveryEnrolment(userId: string, recoveryId: string): Promise<void>;
+  undoRecovery(userId: string, recoveryId: string): Promise<{ status: 'ok' | 'none'; passkeysRemoved: number; totpRemoved: number }>;
 }
 
 export type StaffMfaAuditAction =
@@ -190,7 +265,17 @@ const fail = (op: string, error: { message?: string } | null): never => {
 };
 
 const PASSKEY_COLS =
-  'id, user_id, credential_id, public_key, sign_count, transports, aaguid, backed_up, nickname, created_at, last_used_at, usable_from';
+  'id, user_id, credential_id, public_key, sign_count, transports, aaguid, backed_up, nickname, created_at, last_used_at, usable_from, added_by_recovery';
+
+const RECOVERY_COLS =
+  'id, channel, status, started_session_id, hold_ends_at, finished_at, finished_session_id, freeze_ends_at, enrol_until, enrolled_at, created_at';
+
+const rpcJson = (op: string, data: unknown, error: { message?: string } | null): Record<string, unknown> => {
+  if (error || !data || typeof data !== 'object') fail(op, error);
+  return data as Record<string, unknown>;
+};
+
+const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
   async listPasskeys(userId) {
@@ -237,16 +322,18 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
   },
 
   async getTotp(userId) {
-    const { data, error } = await db.from('user_totp_factors').select('user_id, secret_enc, verified_at, last_used_step, usable_from').eq('user_id', userId).maybeSingle();
+    const { data, error } = await db.from('user_totp_factors').select('user_id, secret_enc, verified_at, last_used_step, usable_from, added_by_recovery').eq('user_id', userId).maybeSingle();
     if (error) fail('getTotp', error);
     return (data as TotpRow | null) ?? null;
   },
 
-  async startTotp(userId, secretEnc, usableFrom) {
+  async startTotp(userId, secretEnc, usableFrom, addedByRecovery = null) {
     // Only an unconfirmed setup may be replaced.
     const { error: delError } = await db.from('user_totp_factors').delete().eq('user_id', userId).is('verified_at', null);
     if (delError) fail('startTotp.delete', delError);
-    const { error } = await db.from('user_totp_factors').insert({ user_id: userId, secret_enc: secretEnc, usable_from: usableFrom });
+    const { error } = await db.from('user_totp_factors').insert({
+      user_id: userId, secret_enc: secretEnc, usable_from: usableFrom, added_by_recovery: addedByRecovery,
+    });
     if (error) {
       // 23505: a confirmed authenticator app already exists.
       if ((error as { code?: string }).code === '23505') return false;
@@ -429,6 +516,127 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
   async createAuthChangePermit(userId, kind, expiresAt) {
     const { error } = await db.from('auth_change_permits').insert({ user_id: userId, kind, expires_at: expiresAt });
     if (error) fail('createAuthChangePermit', error);
+  },
+
+  // ── Ph3b ──
+
+  async getBackupEmail(userId) {
+    const { data, error } = await db.from('user_backup_emails').select('email, verified_at').eq('user_id', userId).maybeSingle();
+    if (error) fail('getBackupEmail', error);
+    return (data as BackupEmailRow | null) ?? null;
+  },
+
+  async setPendingBackupEmail(userId, email) {
+    const { error } = await db.from('user_backup_emails').upsert(
+      { user_id: userId, email, verified_at: null, created_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
+    );
+    if (error) fail('setPendingBackupEmail', error);
+  },
+
+  async verifyBackupEmail(userId, email) {
+    const { data, error } = await db
+      .from('user_backup_emails')
+      .update({ verified_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('email', email)
+      .is('verified_at', null)
+      .select('user_id')
+      .maybeSingle();
+    if (error) fail('verifyBackupEmail', error);
+    return Boolean(data);
+  },
+
+  async deleteBackupEmail(userId) {
+    const { data, error } = await db.from('user_backup_emails').delete().eq('user_id', userId).select('email').maybeSingle();
+    if (error) fail('deleteBackupEmail', error);
+    return (data as { email: string } | null)?.email ?? null;
+  },
+
+  async issueEmailCode(row) {
+    const { data, error } = await db.rpc('issue_email_code', {
+      p_id: row.id, p_user: row.user_id, p_session: row.session_id, p_nonce_hash: row.nonce_hash,
+      p_purpose: row.purpose, p_channel: row.channel, p_code_hash: row.code_hash, p_expires_at: row.expires_at,
+    });
+    const out = rpcJson('issueEmailCode', data, error);
+    const status = out.status;
+    if (status !== 'ok' && status !== 'cooldown' && status !== 'hour_limit' && status !== 'day_limit') fail('issueEmailCode', null);
+    return { status: status as IssueCodeStatus, retryAfter: str(out.retry_after) };
+  },
+
+  async useEmailCode(p) {
+    const { data, error } = await db.rpc('use_email_code', {
+      p_id: p.id, p_user: p.userId, p_session: p.sessionId, p_nonce_hash: p.nonceHash, p_purpose: p.purpose, p_code_hash: p.codeHash,
+    });
+    const out = rpcJson('useEmailCode', data, error);
+    const result = out.result;
+    if (!['ok', 'wrong', 'locked', 'expired', 'invalid'].includes(result as string)) fail('useEmailCode', null);
+    const channel = out.channel === 'primary' || out.channel === 'backup' ? out.channel : null;
+    return { result: result as UseCodeResult, channel };
+  },
+
+  async latestRecovery(userId) {
+    const { data, error } = await db
+      .from('account_recoveries')
+      .select(RECOVERY_COLS)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) fail('latestRecovery', error);
+    return (data as RecoveryRow | null) ?? null;
+  },
+
+  async startRecovery(userId, sessionId, channel, holdHours) {
+    const { data, error } = await db.rpc('start_account_recovery', {
+      p_user: userId, p_session: sessionId, p_channel: channel, p_hold_hours: holdHours,
+    });
+    const out = rpcJson('startRecovery', data, error);
+    if (out.status !== 'ok' && out.status !== 'busy' && out.status !== 'frozen') fail('startRecovery', null);
+    return { status: out.status as 'ok' | 'busy' | 'frozen', id: str(out.id), holdEndsAt: str(out.hold_ends_at) };
+  },
+
+  async finishRecovery(userId, sessionId, freezeDays, enrolMinutes) {
+    const { data, error } = await db.rpc('finish_account_recovery', {
+      p_user: userId, p_session: sessionId, p_freeze_days: freezeDays, p_enrol_minutes: enrolMinutes,
+    });
+    const out = rpcJson('finishRecovery', data, error);
+    if (out.status !== 'ok' && out.status !== 'not_ready' && out.status !== 'none') fail('finishRecovery', null);
+    return {
+      status: out.status as 'ok' | 'not_ready' | 'none',
+      id: str(out.id),
+      freezeEndsAt: str(out.freeze_ends_at),
+      enrolUntil: str(out.enrol_until),
+      holdEndsAt: str(out.hold_ends_at),
+    };
+  },
+
+  async cancelRecovery(userId) {
+    const { data, error } = await db.rpc('cancel_account_recovery', { p_user: userId });
+    if (error) fail('cancelRecovery', error);
+    return str(data);
+  },
+
+  async claimRecoveryEnrolment(userId, sessionId) {
+    const { data, error } = await db.rpc('claim_recovery_enrolment', { p_user: userId, p_session: sessionId });
+    if (error) fail('claimRecoveryEnrolment', error);
+    return str(data);
+  },
+
+  async releaseRecoveryEnrolment(userId, recoveryId) {
+    const { error } = await db.rpc('release_recovery_enrolment', { p_user: userId, p_id: recoveryId });
+    if (error) fail('releaseRecoveryEnrolment', error);
+  },
+
+  async undoRecovery(userId, recoveryId) {
+    const { data, error } = await db.rpc('undo_account_recovery', { p_user: userId, p_id: recoveryId });
+    const out = rpcJson('undoRecovery', data, error);
+    if (out.status !== 'ok' && out.status !== 'none') fail('undoRecovery', null);
+    return {
+      status: out.status as 'ok' | 'none',
+      passkeysRemoved: Number(out.passkeys_removed ?? 0),
+      totpRemoved: Number(out.totp_removed ?? 0),
+    };
   },
 });
 

@@ -8,7 +8,7 @@
 import { Router, RequestHandler, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { requireAuth, optionalAuth } from '../middleware/auth';
-import { requireSecondFactor, requireStepUp } from '../middleware/mfaGates';
+import { refuseWhileFrozen, requireSecondFactor, requireStepUp } from '../middleware/mfaGates';
 import { AppError, toAppError } from '../lib/errors';
 import { log } from '../lib/logger';
 import {
@@ -79,6 +79,17 @@ const CLIENT_REASONS = new Set([
   // S-2FA review M1: a method added with a code waits 24 h before it can
   // confirm a step-up.
   'new_method_waiting',
+  // S-2FA Ph3b: email-code recovery (lib/mfa/mfaService.ts MfaReason).
+  'recovery_freeze',
+  'recovery_not_available',
+  'recovery_waiting',
+  'recovery_method_not_allowed',
+  'code_expired',
+  'code_locked',
+  'code_send_limit',
+  'mail_unavailable',
+  'nonce_required',
+  'same_as_account_email',
 ]);
 
 const sunReason = (details: unknown): string | null => {
@@ -173,6 +184,7 @@ tagManagementRoutes.post(
   requireAuth,
   mutationLimit,
   requireSecondFactor(),
+  refuseWhileFrozen,
   requireStepUp('release', (req) => (req.body as { tagId?: unknown } | undefined)?.tagId),
   handle(releaseTag),
 );
@@ -191,7 +203,7 @@ tagManagementRoutes.post('/replace', requireAuth, mutationLimit, (_req: Request,
 // cannot collide with `/:tagId/...` below: those need a second segment of
 // `disclosure` or `receipt`.
 tagManagementRoutes.post('/reissue-request/photo-url', requireAuth, mutationLimit, requireSecondFactor(), handle(reissuePhotoUrl));
-tagManagementRoutes.post('/reissue-request', requireAuth, mutationLimit, requireSecondFactor(), handle(requestReissue));
+tagManagementRoutes.post('/reissue-request', requireAuth, mutationLimit, requireSecondFactor(), refuseWhileFrozen, handle(requestReissue));
 tagManagementRoutes.get('/reissue-requests/mine', requireAuth, readLimit, handle(listMyReissueRequests));
 tagManagementRoutes.post('/reissue-requests/:id/pay', requireAuth, mutationLimit, requireSecondFactor(), handle(payReissue));
 tagManagementRoutes.post('/reissue-requests/:id/cancel', requireAuth, mutationLimit, requireSecondFactor(), handle(cancelReissue));
@@ -207,13 +219,14 @@ tagManagementRoutes.get('/transfers/incoming', requireAuth, readLimit, handle(li
 
 // `/transfer/initiate` MUST be registered before `/transfer/:id/...`, otherwise
 // Express matches "initiate" as an `:id`.
-tagManagementRoutes.post('/transfer/initiate', requireAuth, mutationLimit, requireSecondFactor(), handle(initiateTransfer));
+tagManagementRoutes.post('/transfer/initiate', requireAuth, mutationLimit, requireSecondFactor(), refuseWhileFrozen, handle(initiateTransfer));
 // The second-factor check for completion runs inside the controller (it emits
 // the transfer event); the passkey step-up is bound to this transfer id.
 tagManagementRoutes.post(
   '/transfer/:id/complete',
   requireAuth,
   mutationLimit,
+  refuseWhileFrozen,
   requireStepUp('transfer_complete', (req) => req.params.id),
   handle(completeTransfer),
 );

@@ -11,6 +11,9 @@ import { isAdminTwoFactorRequired, isTwoFactorRequired } from '../lib/featureFla
 import { callerFrom, STEP_UP_HEADER } from '../middleware/mfaGates';
 import * as mfa from '../lib/mfa/mfaService';
 import { getMfaStore } from '../lib/mfa/store';
+import * as recovery from '../lib/mfa/recoveryService';
+import { describeDevice } from '../lib/mfa/emailCodes';
+import { confirmedEmail } from '../lib/security/confirmedEmail';
 
 const base64url = z.string().min(1).max(4096).regex(/^[A-Za-z0-9_-]+$/);
 
@@ -51,7 +54,7 @@ const nickname = z.string().trim().min(1).max(40).regex(/^[^<>\u0000-\u001f]+$/,
 
 const stepUpAction = z.enum([
   'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen', 'admin_action', 'admin_approve',
-  'account_change',
+  'account_change', 'recovery_undo', 'recovery_channel',
 ]);
 const targetId = z.string().min(1).max(200).regex(/^[A-Za-z0-9_:.-]+$/);
 const totpCode = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict();
@@ -73,6 +76,13 @@ const schemas = {
   totpConfirm: z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict(),
   rename: z.object({ nickname }).strict(),
   accountChange: z.object({ kind: z.enum(['password', 'email']) }).strict(),
+  // Ph3b
+  recoveryCode: z.object({ channel: z.enum(['primary', 'backup']).optional() }).strict(),
+  emailCode: z.object({ codeId: uuid, code: z.string().trim().min(1).max(16) }).strict(),
+  recoveryFinish: z.object({ codeId: uuid, code: z.string().trim().min(1).max(16), setPassword: z.boolean().optional() }).strict(),
+  recoveryUndo: z.object({ recoveryId: uuid }).strict(),
+  backupEmail: z.object({ email: z.string().trim().min(3).max(254) }).strict(),
+  empty: z.object({}).strict(),
 };
 
 const parse = <T>(schema: z.ZodType<T>, body: unknown): T => {
@@ -167,4 +177,77 @@ export const preAccountChange = async (req: Request, _res: Response, next: NextF
 export const postAccountChange = async (req: Request, res: Response) => {
   const { kind } = parse(schemas.accountChange, req.body);
   ok(res, await mfa.startAccountChange(caller(req), kind));
+};
+
+// ── Ph3b: email-code recovery + backup email ────────────────────────────────
+
+export const RECOVERY_NONCE_HEADER = 'x-recovery-nonce';
+
+const recoveryCtx = (req: Request): recovery.RecoveryContext => {
+  const user = (req as Request & { user?: { email?: string | null; email_confirmed_at?: string | null } }).user;
+  return {
+    primaryEmail: user ? confirmedEmail({ email: user.email ?? undefined, email_confirmed_at: user.email_confirmed_at ?? undefined }) : null,
+    nonce: req.get(RECOVERY_NONCE_HEADER) ?? undefined,
+    device: describeDevice(req.get('user-agent')),
+  };
+};
+
+export const getRecovery = async (req: Request, res: Response) => {
+  ok(res, await recovery.recoveryOverview(caller(req), recoveryCtx(req)));
+};
+
+export const postRecoveryCode = async (req: Request, res: Response) => {
+  ok(res, await recovery.sendRecoveryCode(caller(req), recoveryCtx(req), parse(schemas.recoveryCode, req.body)));
+};
+
+export const postRecoveryStart = async (req: Request, res: Response) => {
+  ok(res, await recovery.startRecovery(caller(req), recoveryCtx(req), parse(schemas.emailCode, req.body)));
+};
+
+export const postRecoveryFinish = async (req: Request, res: Response) => {
+  ok(res, await recovery.finishRecovery(caller(req), recoveryCtx(req), parse(schemas.recoveryFinish, req.body)));
+};
+
+export const postRecoveryCancel = async (req: Request, res: Response) => {
+  parse(schemas.empty, req.body);
+  ok(res, await recovery.cancelRecovery(caller(req), recoveryCtx(req)));
+};
+
+/** Before the `recovery_undo` step-up is spent: valid body, verified session. */
+export const preRecoveryUndo = async (req: Request, _res: Response, next: NextFunction) => {
+  parse(schemas.recoveryUndo, req.body);
+  await mfa.assertSecondFactorDoneOnly(caller(req));
+  next();
+};
+
+export const postRecoveryUndo = async (req: Request, res: Response) => {
+  const { recoveryId } = parse(schemas.recoveryUndo, req.body);
+  ok(res, await recovery.undoRecovery(caller(req), recoveryCtx(req), recoveryId));
+};
+
+/** Before the `recovery_channel` step-up is spent: every refusal of the add. */
+export const preBackupEmailAdd = async (req: Request, _res: Response, next: NextFunction) => {
+  const { email } = parse(schemas.backupEmail, req.body);
+  await recovery.assertMayAddBackupEmail(caller(req), recoveryCtx(req), email);
+  next();
+};
+
+export const postBackupEmail = async (req: Request, res: Response) => {
+  const { email } = parse(schemas.backupEmail, req.body);
+  ok(res, await recovery.addBackupEmail(caller(req), recoveryCtx(req), email));
+};
+
+export const postBackupEmailVerify = async (req: Request, res: Response) => {
+  ok(res, await recovery.verifyBackupEmail(caller(req), recoveryCtx(req), parse(schemas.emailCode, req.body)));
+};
+
+export const preBackupEmailRemove = async (req: Request, _res: Response, next: NextFunction) => {
+  await mfa.assertSecondFactorDone(caller(req));
+  const backup = await getMfaStore().getBackupEmail(caller(req).userId);
+  if (!backup) throw new AppError('not_found', 'There is no backup email');
+  next();
+};
+
+export const deleteBackupEmail = async (req: Request, res: Response) => {
+  ok(res, await recovery.removeBackupEmail(caller(req), recoveryCtx(req)));
 };

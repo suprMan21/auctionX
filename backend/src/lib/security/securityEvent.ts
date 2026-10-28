@@ -65,6 +65,10 @@ export const securityResultSchema = z.enum([
   'step_up_required',
   'mfa_locked',
   'invalid_code',
+  // S-2FA Ph3b: send limits hit, a freeze refused the action, mail could not be sent.
+  'rate_limited',
+  'recovery_freeze',
+  'unavailable',
 ]);
 
 export type SecurityResult = z.infer<typeof securityResultSchema>;
@@ -256,11 +260,15 @@ const mfaSchema = envelopeSchema.extend({
     'enrol', 'remove', 'sign_in', 'step_up_issue', 'step_up_use', 'recovery_regen', 'lockout',
     // Ph2b: a permit for a password / email change was issued (never the kind's value beyond this).
     'account_change_permit',
+    // Ph3b: email-code recovery and the backup email. Never an address or a code.
+    'email_code_send', 'email_code_check', 'recovery_start', 'recovery_cancel', 'recovery_finish',
+    'recovery_enrol', 'recovery_undo', 'backup_email_add', 'backup_email_verify', 'backup_email_remove',
+    'recovery_freeze_block',
   ]),
-  method: z.enum(['passkey', 'totp', 'recovery_code']).nullable(),
+  method: z.enum(['passkey', 'totp', 'recovery_code', 'email_code']).nullable(),
   step_up_action: z.enum([
     'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
-    'admin_action', 'admin_approve', 'account_change',
+    'admin_action', 'admin_approve', 'account_change', 'recovery_undo', 'recovery_channel',
   ]).nullable(),
   break_glass: z.boolean(),
 }).strict();

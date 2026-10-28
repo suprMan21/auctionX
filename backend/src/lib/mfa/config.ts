@@ -88,3 +88,14 @@ export const mfaSecretKey = (): Buffer => {
 
 /** Server-side pepper for recovery-code hashes (a database read alone cannot test guesses). */
 export const recoveryPepper = (): string => required('MFA_RECOVERY_PEPPER');
+
+// ── Ph3b: email-code recovery (Boss, 2026-10-27) ────────────────────────────
+
+/** A recovery started with an emailed code waits this long before it can finish. */
+export const RECOVERY_HOLD_HOURS = 72;
+/** After a recovery finishes, token and sign-in changes are frozen this long. */
+export const RECOVERY_FREEZE_DAYS = 7;
+/** The finishing session must add its new passkey or authenticator app within this. */
+export const RECOVERY_ENROL_MINUTES = 30;
+/** Emailed codes: 10 minutes, single use, 5 attempts (use_email_code). */
+export const EMAIL_CODE_TTL_MS = 10 * 60 * 1000;

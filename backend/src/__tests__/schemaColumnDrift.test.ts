@@ -64,7 +64,15 @@ const TARGET_FILES = [
  * pending, and remove them at the next regen. Growing it to silence a failure
  * is the wrong move — the point of the test is that a wrong column name fails.
  */
-const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {};
+const PENDING_MIGRATION_COLUMNS: Record<string, readonly string[]> = {
+  // S-2FA Ph3b: 20261027000013 (dry run 24/24 on staging 2026-10-27, not yet
+  // applied). Remove these at the regen after `supabase db push --linked`.
+  user_backup_emails: ['*'],
+  email_codes: ['*'],
+  account_recoveries: ['*'],
+  user_passkeys: ['added_by_recovery'],
+  user_totp_factors: ['added_by_recovery'],
+};
 
 /** Parses `Row: { ... }` blocks out of database.types.ts, keyed by table name. */
 const parseKnownColumns = (): Map<string, Set<string>> => {
