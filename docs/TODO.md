@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-27 (S-2FA Ph2 + Ph2b live on staging, flags off; S-ANCHOR1 on hold for the hardware wallet)
+**Last updated:** 2026-10-27 (S-2FA Ph3a merged to local dev, not pushed; S-ANCHOR1 on hold for the hardware wallet)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -20,16 +20,20 @@ Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live o
 `docs/S_2FA_PH1_VERIFICATION.md`, `docs/S_2FA_PH2_VERIFICATION.md`. Supabase Secure password + email change: on.
 - [x] Frontend deployed; daily admins enrolled (2026-10-27). super_admin YubiKeys wait for Ph4 (attestation +
       AAGUID allowlist may need re-registering).
-- [ ] Regenerate `database.types.ts` (migrations `20261027000009/10` added columns + `auth_change_permits`).
-- [ ] **Ph3**: two-admin approval; email-code recovery (72 h hold, 7-day freeze, backup email); Postmark staging
-      security server (tracking off, retention 7 d, token in 1Password); release + transfer-completed owner emails.
+- [ ] Regenerate `database.types.ts` (migrations `…09/10/11/12`: columns, `auth_change_permits`, `admin_action_approvals`).
+- [ ] **Ph3a (merged local dev `9b4acc3`)**: Boss pushes `dev`, runs `supabase db push --linked` (applies `…12`; `…11`
+      already on staging), re-runs `supabase/tests/s_2fa_ph3a_approvals_live.sql` (expect 22/22), then
+      `scripts/deploy-frontend.sh staging` and `public` (home copy). `docs/S_2FA_PH3A_VERIFICATION.md`.
+- [ ] **Ph3b**: email-code recovery (72 h hold, 7-day freeze, backup email). Security mail channel: Amazon SES (no
+      stored bodies) or a separate Postmark account at 7 d (Postmark can't keep zero; Boss's staging security
+      server token is already in App Runner).
 - [ ] **App Runner env var cap** (2 slots left, 2026-10-27): Boss deletes vars equal to defaults (`WEBAUTHN_RP_NAME`,
-      `MFA_SESSION_TTL_HOURS`, every `FEATURE_*=false`). Ph3: `WEBAUTHN_ORIGINS` defaults to `https://<WEBAUTHN_RP_ID>`;
-      move secrets into one Secrets Manager JSON secret read at boot by `am-backend-staging-instance` (one env var).
+      `MFA_SESSION_TTL_HOURS`, every `FEATURE_*=false`). `WEBAUTHN_ORIGINS` can now be deleted (defaults to `https://<WEBAUTHN_RP_ID>`
+      after the Ph3a deploy); move secrets into one Secrets Manager JSON secret read at boot by `am-backend-staging-instance` (one env var).
 - [x] 2026-10-27: `admin@` has authenticator app + passkey "adminkey1" (synced; waits until 2026-10-28 18:46 EDT).
       Fix was a leading space in the `WEBAUTHN_RP_ID` name. `admin2@`: passkey (no wait) + 10 backup codes.
-- [ ] Ph3 tidy-up: why App Runner has `AWS_ACCESS_KEY_ID` (should be the instance role); confirm NFT vars are gone;
-      delete the dead NFT mint code (`services/nfc/nftMinting.ts`, `pinataService.ts`, `/nfc/mint`).
+- [ ] Boss, console: why App Runner has `AWS_ACCESS_KEY_ID` (should be the instance role); delete any NFT / Pinata
+      env vars (the mint code was deleted in Ph3a).
 - [ ] Ph4: **Creators must enrol at next login** (Boss 2026-10-27, Decisions DB): new `FEATURE_REQUIRE_CREATOR_2FA`;
       `secondFactorRequired` = global OR staff (admin flag) OR `users.account_type = 'creator'`. Collectors: at first
       claim / transfer / release. super_admin YubiKeys enrolled by Boss on staging 2026-10-27 (likely re-register for
@@ -127,7 +131,7 @@ never shared with staging. Decide **multi-Region vs single-Region at creation**,
 keys cannot be re-derived without the master. Multi-Region is needed if prod must survive a us-east-2 outage.
 
 **S-2FA** (in-house passkeys + authenticator app + backup codes, step-up, two-admin approval): Ph1 backend + Ph2 screens + Ph2b ✅ live
-2026-10-27 (flags off) → Ph3 two-admin approval → Ph4 phones + flags. Must land before any real token sale.
+2026-10-27 (flags off) → Ph3a two-admin approval (merged local dev) → Ph3b email recovery → Ph4 phones + flags. Must land before any real token sale.
 
 ---
 
