@@ -1,6 +1,11 @@
 # S-2FA Ph4 — rollout: verification
 
-**Branch:** `feature/s-2fa-ph4` (worktree `.claude/worktrees/s-2fa-ph4`). **Date:** 2026-10-28.
+**Branch:** `feature/s-2fa-ph4` (worktree `.claude/worktrees/s-2fa-ph4`), merged to `dev` and pushed. **Date:** 2026-10-28.
+
+**Status (2026-10-28, 02:15 EDT):** backend deploy SUCCEEDED 02:01, staging frontend has the Ph4 screens, migration
+`20261028000001` applied, **all five flags on** (Boss). Break-glass verified from the records: passkey sign-in
+02:09, `breakGlassKey2` used 02:11, `Yubikey1` added, backup codes regenerated (all `ok` in the logs).
+**Phone click-through: not yet.**
 Plan: `docs/plans/2026-10-27-s-2fa.md` (Ph4 row). Ships with every flag still off; the flags are turned on
 in staging during the rollout below.
 
