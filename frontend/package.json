@@ -20,6 +20,7 @@
     "test:all": "npm run test:preflight && npm run test:unit && npm run test:integration && npm run test:e2e"
   },
   "dependencies": {
+    "@authentic-materials/ui": "file:vendor/authentic-materials-ui-0.1.0.tgz",
     "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.2.0",
     "@simplewebauthn/browser": "14.0.0",
