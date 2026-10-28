@@ -321,6 +321,8 @@ export const getStatus = async (caller: Caller, secondFactorRequired: boolean) =
       lastUsedAt: p.last_used_at,
       // Set while a passkey added with a code may not confirm a step-up yet.
       usableFrom: pendingUntil(p.usable_from),
+      // Ph3b: added by the account recovery (cannot confirm Undo).
+      fromRecovery: Boolean(p.added_by_recovery),
     })),
     authenticatorApp: summary.totpConfirmed,
     authenticatorAppUsableFrom: pendingUntil(summary.totpUsableFrom),
@@ -551,7 +553,10 @@ const assertionOptions = async (
   const [passkeys, superAdmin] = await Promise.all([store.listPasskeys(caller.userId), isSuperAdmin(caller.userId)]);
   const allowed = usablePasskeys(passkeys, superAdmin);
   // A passkey still in its new-method wait may sign in, but not confirm a step-up.
-  const usable = purpose === 'step_up' ? allowed.filter((p) => !isCooling(p.usable_from)) : allowed;
+  // Undoing a recovery: only the passkeys the account had before it.
+  const usable = purpose === 'step_up'
+    ? allowed.filter((p) => !isCooling(p.usable_from) && !(stepUp?.action === 'recovery_undo' && p.added_by_recovery))
+    : allowed;
   if (usable.length === 0) {
     if (allowed.length > 0) refuseWaiting();
     refuse('failed_precondition', 'Add a passkey first', 'no_passkey');

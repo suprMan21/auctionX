@@ -5,6 +5,8 @@
  *   - Release, transfer complete and password / email change: passkey or authenticator code. Staff
  *     accounts: passkey only.
  *   - Price changes and other admin actions: passkey only.
+ *   - Backup email changes: like sign-in methods. Undoing a recovery: passkey or
+ *     authenticator app the account had before it.
  * The server enforces the same rules; this only decides what the screen shows.
  */
 
@@ -12,11 +14,13 @@ import type { StepUpAction } from '../api/mfaApi';
 
 export type StepUpMethod = 'passkey' | 'totp' | 'recovery_code';
 
-const FACTOR_ACTIONS: readonly StepUpAction[] = ['factor_add', 'factor_remove', 'recovery_regen'];
+const FACTOR_ACTIONS: readonly StepUpAction[] = ['factor_add', 'factor_remove', 'recovery_regen', 'recovery_channel'];
 const TOKEN_ACTIONS: readonly StepUpAction[] = ['release', 'transfer_complete', 'account_change'];
 
 export const allowedStepUpMethods = (action: StepUpAction, isStaff: boolean): StepUpMethod[] => {
   if (FACTOR_ACTIONS.includes(action)) return ['passkey', 'totp', 'recovery_code'];
+  // Undo a recovery: a passkey or authenticator app the account had before it (never a backup code).
+  if (action === 'recovery_undo') return ['passkey', 'totp'];
   if (TOKEN_ACTIONS.includes(action) && !isStaff) return ['passkey', 'totp'];
   return ['passkey'];
 };

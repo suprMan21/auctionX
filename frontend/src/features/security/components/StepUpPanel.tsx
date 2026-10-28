@@ -40,7 +40,9 @@ export const StepUpPanel = ({ action, targetId, purpose, onConfirmed, onCancel }
 
   const allowed = allowedStepUpMethods(action, status?.isStaff ?? true);
   // A method added with a code waits 24 h before it can confirm anything (review M1).
-  const usablePasskeys = (status?.passkeys ?? []).filter((p) => !(status?.breakGlass && p.synced) && !isWaiting(p.usableFrom));
+  // Undoing a recovery: only passkeys the account had before it.
+  const usablePasskeys = (status?.passkeys ?? []).filter((p) => !(status?.breakGlass && p.synced) && !isWaiting(p.usableFrom)
+    && !(action === 'recovery_undo' && p.fromRecovery));
   const waitingPasskeys = (status?.passkeys ?? []).filter((p) => isWaiting(p.usableFrom));
   const canPasskey = allowed.includes('passkey') && usablePasskeys.length > 0;
   const canTotp = allowed.includes('totp') && Boolean(status?.authenticatorApp) && !status?.breakGlass

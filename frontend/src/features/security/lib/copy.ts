@@ -21,6 +21,15 @@ const REASON_COPY: Record<string, string> = {
   not_available: 'That option is not available for this account.',
   second_factor_required: 'Confirm it is you with your passkey or code first.',
   step_up_required: 'Confirm it is you to continue.',
+  // Ph3b: email-code recovery
+  recovery_freeze: 'Your account was recovered recently, so this is paused for a few days to keep your tokens safe.',
+  recovery_waiting: 'Your recovery is waiting. You can finish it when the wait ends.',
+  recovery_method_not_allowed: 'Use a passkey or authenticator app you had before the recovery.',
+  code_expired: 'This code has expired or was replaced. Ask for a new one.',
+  code_locked: 'Too many tries. Ask for a new code.',
+  mail_unavailable: 'We can’t send codes right now. Try again in a few minutes.',
+  nonce_required: 'Refresh the page and try again.',
+  same_as_account_email: 'Use a different address from the one you sign in with.',
 };
 
 export const mfaErrorCopy = (err: unknown): string => {

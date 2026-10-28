@@ -16,6 +16,8 @@ import { AddPasskeyFlow } from '../components/AddPasskeyFlow';
 import { AuthenticatorAppSetup } from '../components/AuthenticatorAppSetup';
 import { BackupCodesPanel } from '../components/BackupCodesPanel';
 import { ChangePasswordForm } from '../components/ChangePasswordForm';
+import { EmailCodeForm } from '../components/EmailCodeForm';
+import type { CodeSent } from '../api/mfaApi';
 import { mfaErrorCopy } from '../lib/copy';
 import { isWaiting, secondFactorPathFor } from '../lib/stepUp';
 
@@ -73,6 +75,22 @@ export const SecurityPage = () => {
       await done(`Authenticator app removed.${signedOut(r.otherSessionsEnded)}`);
     });
 
+  const cancelRecovery = () =>
+    run(async () => {
+      await mfaApi.cancelRecovery();
+      await done('Recovery cancelled. Change your password and your email password too.');
+    });
+
+  const undoRecovery = (recoveryId: string) =>
+    run(async () => {
+      const token = await stepUp('recovery_undo', recoveryId, 'undo the account recovery');
+      if (!token) return;
+      const r = await mfaApi.undoRecovery(recoveryId, token);
+      await refresh();
+      setOpen({ codes: r.backupCodes });
+      toast.success(`Recovery undone.${signedOut(r.otherSessionsEnded)}`);
+    });
+
   const newCodes = () =>
     run(async () => {
       const token = await stepUp('recovery_regen', 'recovery_codes', 'make new backup codes');
@@ -101,8 +119,11 @@ export const SecurityPage = () => {
     );
   }
 
-  const isFirst = !status.hasFactor;
+  const recovery = status.recovery;
+  // The session that just finished a recovery adds its one method without a step-up.
+  const isFirst = !status.hasFactor || Boolean(recovery?.mustAddMethod);
   const locked = status.hasFactor && !status.sessionVerified;
+  const frozen = Boolean(recovery?.freezeEndsAt) && !recovery?.mustAddMethod;
   // Adding a method after the first needs a fresh check of an existing one.
   const addStepUp = (target: 'passkey' | 'totp') => () =>
     stepUp('factor_add', target, target === 'passkey' ? 'add a passkey' : 'add an authenticator app');
@@ -133,6 +154,42 @@ export const SecurityPage = () => {
         </div>
       )}
 
+      {recovery?.status === 'holding' && recovery.holdEndsAt && (
+        <div className="glass rounded-2xl p-4 border border-red-400/40 space-y-3" role="alert">
+          <p className="text-sm text-gray-100">
+            Someone started recovering this account by email. They can finish on {fmtTime(recovery.holdEndsAt)}.
+            If it wasn&apos;t you, cancel it now, then change your password and your email password.
+          </p>
+          <Button variant="secondary" onClick={() => void cancelRecovery()} disabled={busy || locked}>Cancel recovery</Button>
+        </div>
+      )}
+
+      {recovery?.mustAddMethod && (
+        <div className="glass rounded-2xl p-4 border border-amber-400/30" role="status">
+          <p className="text-sm text-gray-200">
+            Your account is recovered. Add a passkey or authenticator app below before {fmtTime(recovery.addMethodBefore)}.
+          </p>
+        </div>
+      )}
+
+      {frozen && recovery?.freezeEndsAt && (
+        <div className="glass rounded-2xl p-4 border border-amber-400/30 space-y-3" role="status">
+          <p className="text-sm text-gray-200">
+            This account was recovered by email. Until {fmtTime(recovery.freezeEndsAt)}, transfers, releases and sign-in
+            changes are paused to keep your tokens safe.
+          </p>
+          {recovery.canUndo && (
+            <>
+              <p className="text-sm text-gray-400">
+                Wasn&apos;t you? Undo it with a passkey or authenticator app you had before. Whatever the recovery added is
+                removed and every other device is signed out.
+              </p>
+              <Button variant="secondary" onClick={() => void undoRecovery(recovery.id)} disabled={busy}>Undo recovery</Button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Passkeys */}
       <section aria-labelledby="passkeys-heading" className="glass rounded-2xl p-6 space-y-4">
         <h2 id="passkeys-heading" className="text-lg font-semibold text-white">Passkeys</h2>
@@ -145,7 +202,7 @@ export const SecurityPage = () => {
               <PasskeyRow
                 key={p.id}
                 passkey={p}
-                disabled={busy || locked}
+                disabled={busy || locked || frozen}
                 canRemove={status.passkeys.length + (status.authenticatorApp ? 1 : 0) > 1}
                 onRemove={() => void removePasskey(p)}
                 onRenamed={() => void refresh()}
@@ -162,7 +219,7 @@ export const SecurityPage = () => {
             onCancel={() => setOpen(null)}
           />
         ) : (
-          <Button variant={status.passkeys.length ? 'secondary' : 'primary'} onClick={() => setOpen('add_passkey')} disabled={busy || locked}>
+          <Button variant={status.passkeys.length ? 'secondary' : 'primary'} onClick={() => setOpen('add_passkey')} disabled={busy || locked || frozen}>
             Add a passkey
           </Button>
         )}
@@ -185,7 +242,7 @@ export const SecurityPage = () => {
               <Button
                 variant="secondary"
                 onClick={() => void removeTotp()}
-                disabled={busy || locked || status.passkeys.length === 0}
+                disabled={busy || locked || frozen || status.passkeys.length === 0}
                 title={status.passkeys.length === 0 ? 'Add a passkey before removing your authenticator app' : undefined}
               >
                 Remove
@@ -201,7 +258,7 @@ export const SecurityPage = () => {
           ) : (
             <>
               <p className="text-sm text-gray-400">A backup for when your passkey is not to hand.</p>
-              <Button variant="secondary" onClick={() => setOpen('totp')} disabled={busy || locked}>Set up</Button>
+              <Button variant="secondary" onClick={() => setOpen('totp')} disabled={busy || locked || frozen}>Set up</Button>
             </>
           )}
         </section>
@@ -222,12 +279,22 @@ export const SecurityPage = () => {
               <p className="text-sm text-gray-400">
                 If you lose every passkey{status.breakGlass ? '' : ' and your authenticator app'}, a backup code is the only way back in.
               </p>
-              <Button variant="secondary" onClick={() => void newCodes()} disabled={busy || locked}>
+              <Button variant="secondary" onClick={() => void newCodes()} disabled={busy || locked || frozen}>
                 Make new backup codes
               </Button>
             </>
           )}
         </section>
+      )}
+
+      {/* Backup email (Ph3b): a second address for email-code recovery. Not for staff. */}
+      {status.hasFactor && !status.isStaff && (
+        <BackupEmailSection
+          backupEmail={status.backupEmail}
+          disabled={busy || locked || frozen}
+          confirmStepUp={(purpose) => stepUp('recovery_channel', 'backup_email', purpose)}
+          onChanged={(message) => void done(message)}
+        />
       )}
 
       {/* Password: needs the second factor and a one-time permit (S-2FA, review follow-up) */}
@@ -320,5 +387,111 @@ const PasskeyRow = ({ passkey, disabled, canRemove, onRemove, onRenamed }: Passk
         </div>
       )}
     </li>
+  );
+};
+
+interface BackupEmailSectionProps {
+  readonly backupEmail: { masked: string; verified: boolean } | null;
+  readonly disabled: boolean;
+  readonly confirmStepUp: (purpose: string) => Promise<string | null>;
+  readonly onChanged: (message: string) => void;
+}
+
+const BackupEmailSection = ({ backupEmail, disabled, confirmStepUp, onChanged }: BackupEmailSectionProps) => {
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState<CodeSent | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputId = useId();
+  const valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
+
+  const act = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setError(mfaErrorCopy(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const add = () =>
+    act(async () => {
+      const token = await confirmStepUp(backupEmail?.verified ? 'replace your backup email' : 'add a backup email');
+      if (!token) return;
+      setSent(await mfaApi.addBackupEmail(email.trim(), token));
+    });
+
+  const verify = (code: string) =>
+    act(async () => {
+      if (!sent) return;
+      await mfaApi.verifyBackupEmail(sent.codeId, code);
+      setSent(null);
+      setEmail('');
+      onChanged('Backup email confirmed.');
+    });
+
+  const remove = () =>
+    act(async () => {
+      const token = await confirmStepUp('remove your backup email');
+      if (!token) return;
+      await mfaApi.removeBackupEmail(token);
+      onChanged('Backup email removed.');
+    });
+
+  return (
+    <section aria-labelledby="backup-email-heading" className="glass rounded-2xl p-6 space-y-4">
+      <h2 id="backup-email-heading" className="text-lg font-semibold text-white">Backup email</h2>
+      <p className="text-sm text-gray-400">
+        If you lose every passkey and code, you can recover your account with a code sent to your account email or this
+        address. Use one that someone with your main inbox can&apos;t get into.
+      </p>
+      {backupEmail && !sent && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-gray-300">
+            {backupEmail.masked}{' '}
+            {!backupEmail.verified && <span className="text-amber-200">(not confirmed: add it again to get a new code)</span>}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => void remove()} disabled={disabled || busy}>Remove</Button>
+        </div>
+      )}
+      {sent ? (
+        <EmailCodeForm
+          sentTo={sent.sentTo}
+          busy={busy}
+          resendAfter={sent.resendAfter}
+          submitLabel="Confirm"
+          onSubmit={(c) => void verify(c)}
+          onResend={() => void add()}
+          onBack={() => { setSent(null); setError(null); }}
+        />
+      ) : (
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(e) => { e.preventDefault(); if (valid) void add(); }}
+        >
+          <div className="flex-1 min-w-[12rem]">
+            <label htmlFor={inputId} className="block text-sm text-gray-300 mb-1">
+              {backupEmail?.verified ? 'Replace with' : 'Email address'}
+            </label>
+            <input
+              id={inputId}
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={disabled || busy}
+              className="w-full rounded-xl bg-dark-700 border border-white/10 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <Button type="submit" variant="secondary" disabled={disabled || busy || !valid} aria-busy={busy}>
+            {busy ? 'Sending…' : backupEmail?.verified ? 'Replace' : 'Add'}
+          </Button>
+        </form>
+      )}
+      {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+    </section>
   );
 };
