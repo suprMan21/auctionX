@@ -37,8 +37,8 @@ Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live o
       after the Ph3a deploy); move secrets into one Secrets Manager JSON secret read at boot by `am-backend-staging-instance` (one env var).
 - [x] 2026-10-27: `admin@` has authenticator app + passkey "adminkey1" (synced; waits until 2026-10-28 18:46 EDT).
       Fix was a leading space in the `WEBAUTHN_RP_ID` name. `admin2@`: passkey (no wait) + 10 backup codes.
-- [ ] Boss, console: delete App Runner's leftover `AWS_ACCESS_KEY_ID` (no secret, unused: the backend uses the
-      instance role) and any NFT / Pinata env vars (the mint code was deleted in Ph3a). Frees env slots.
+- [x] 2026-10-28: App Runner's leftover `AWS_ACCESS_KEY_ID` (no secret) deleted; redeploy SUCCEEDED 00:50 EDT, healthy,
+      no credential errors. Backend AWS access is the instance role only.
 - [ ] Ph4: **Creators must enrol at next login** (Boss 2026-10-27, Decisions DB): new `FEATURE_REQUIRE_CREATOR_2FA`;
       `secondFactorRequired` = global OR staff (admin flag) OR `users.account_type = 'creator'`. Collectors: at first
       claim / transfer / release. super_admin YubiKeys enrolled by Boss on staging 2026-10-27 (likely re-register for
