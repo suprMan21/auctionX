@@ -6,7 +6,8 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useAuth } from '../hooks/useAuth';
 import { BRAND_LABEL } from '@/constants/branding';
 import { afterProfileLanding } from '@/features/profile/lib/landing';
-import type { AccountIntent } from '../store/authStore';
+import { useAuthStore, type AccountIntent } from '../store/authStore';
+import { isFromApp } from '@/features/app/fromApp';
 
 const ACCOUNT_CHOICES: ReadonlyArray<{ value: AccountIntent; label: string; hint: string }> = [
   { value: 'collector', label: 'A collector', hint: 'Verify seals and keep a record of the items you own.' },
@@ -19,16 +20,20 @@ export function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState('');
   const [accountIntent, setAccountIntent] = useState<AccountIntent>('collector');
-  const { signUp, loading, error, clearError, user, initialized } = useAuth();
+  const { signUp, loading, error, clearError, user, session, initialized } = useAuth();
   const navigate = useNavigate();
+  // Started in the Creator app and the account needs its email confirmed:
+  // say so here instead of sending them to a page they can't open yet.
+  const [checkEmail, setCheckEmail] = useState(false);
 
   // Already authenticated → no reason to show a signup form. Send them to their
   // authenticated landing instead.
   useEffect(() => {
-    if (initialized && user) {
+    // A user with no session is a sign-up waiting for its email confirmation.
+    if (initialized && user && session && !checkEmail) {
       navigate(afterProfileLanding(), { replace: true });
     }
-  }, [initialized, user, navigate]);
+  }, [initialized, user, session, navigate, checkEmail]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +52,10 @@ export function SignupPage() {
 
     try {
       await signUp(email, password, accountIntent);
+      if (isFromApp() && !useAuthStore.getState().session) {
+        setCheckEmail(true);
+        return;
+      }
       // A creator goes straight to the identity check; a collector to their profile.
       navigate(accountIntent === 'creator' ? '/settings/account-type' : '/profile');
     } catch (err) {
@@ -55,6 +64,23 @@ export function SignupPage() {
   };
 
   const displayError = error || localError;
+
+  if (checkEmail) {
+    return (
+      <div className="min-h-screen bg-dark-800 flex items-center justify-center p-4">
+        <main id="main-content" className="glass rounded-2xl p-8 max-w-md w-full space-y-4">
+          <h1 className="text-2xl font-bold text-white">Check your email</h1>
+          <p className="text-gray-300">
+            We sent a link to <span className="text-white font-medium">{email}</span>. Open it on this phone to
+            confirm your email. That page has a button back to the app.
+          </p>
+          <p className="text-sm text-gray-400">
+            Nothing there after a few minutes? Check your spam folder.
+          </p>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>

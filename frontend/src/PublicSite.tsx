@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { AppOpenPage } from '@/pages/AppOpenPage';
 import { HomePage } from '@/pages/HomePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
@@ -16,6 +17,8 @@ export const PublicSite = () => (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        {/* S-MOB1: target of the staging site's "Open the app" link (static, no API call). */}
+        <Route path="/app/open" element={<AppOpenPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>

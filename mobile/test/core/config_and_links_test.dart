@@ -88,6 +88,13 @@ void main() {
       expect(parse('https://web.example.com/app/open/'), isNotNull);
     });
 
+    test('also accepts the public site (the web app links there to open the app)', () {
+      expect(parse('https://authentic-materials.com/app/open?email=a%40b.co')!.emailHint, 'a@b.co');
+      expect(parse('https://evil.authentic-materials.com/app/open'), isNull);
+      expect(parse('https://authentic-materials.com.evil.com/app/open'), isNull);
+      expect(parse('https://authentic-materials.com/'), isNull);
+    });
+
     test('takes a valid email hint and nothing else', () {
       expect(parse('https://web.example.com/app/open?email=a%40b.co')!.emailHint, 'a@b.co');
       expect(parse('https://web.example.com/app/open?email=not-an-email')!.emailHint, isNull);

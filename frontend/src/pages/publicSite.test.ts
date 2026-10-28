@@ -56,6 +56,10 @@ describe('public site bundle', () => {
     expect(files).toContain(resolve(SRC, 'pages/HomePage.tsx'));
   });
 
+  it('serves /app/open (the staging site links here to open the Creator app)', () => {
+    expect(files).toContain(resolve(SRC, 'pages/AppOpenPage.tsx'));
+  });
+
   it('imports no app code', () => {
     const leaked = files.filter((f) => FORBIDDEN_PATHS.some((p) => p.test(f)));
     expect(leaked).toEqual([]);

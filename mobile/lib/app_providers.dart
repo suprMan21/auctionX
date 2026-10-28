@@ -7,7 +7,12 @@ import 'core/config/app_config.dart';
 import 'core/links/web_links.dart';
 import 'core/network/api_client.dart';
 import 'features/app_update/update_gate.dart';
+import 'features/account/data/account_type_reader.dart';
 import 'features/auth/data/auth_service.dart';
+import 'features/mfa/data/corbado_passkey_client.dart';
+import 'features/mfa/data/mfa_api.dart';
+import 'features/mfa/data/passkey_client.dart';
+import 'features/mfa/session_gate.dart';
 
 /// Overridden in main() with the values compiled into this build.
 final appConfigProvider = Provider<AppConfig>((_) => throw UnimplementedError('appConfigProvider'));
@@ -69,3 +74,21 @@ final authControllerProvider = NotifierProvider<AuthController, AuthStatus>(Auth
 
 /// Email to prefill on the sign-in screen (from the website's "Open the app" link).
 final emailHintProvider = StateProvider<String?>((_) => null);
+
+final mfaApiProvider = Provider<MfaApi>((ref) => MfaApi(ref.watch(apiClientProvider)));
+
+/// The OS passkey sheet, behind our own interface (tests use a fake).
+final passkeyClientProvider = Provider<PasskeyClient>((_) => CorbadoPasskeyClient());
+
+final accountTypeReaderProvider =
+    Provider<AccountTypeReader>((_) => SupabaseAccountTypeReader(Supabase.instance.client));
+
+/// Second step, method set-up and Creator check for the signed-in person.
+final sessionGateProvider = NotifierProvider<SessionGateController, SessionGate>(
+  () => SessionGateController(
+    auth: authControllerProvider,
+    loadStatus: (ref) => ref.read(mfaApiProvider).status,
+    accountTypes: (ref) => ref.read(accountTypeReaderProvider),
+    signOut: (ref) => ref.read(authControllerProvider.notifier).signOut(),
+  ),
+);
