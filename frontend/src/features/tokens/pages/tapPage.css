@@ -11,8 +11,8 @@
 .am-tap .am-tap-kicker--sealed{color:rgb(var(--md-sys-color-on-surface-variant))}
 .am-tap .am-tap-kicker--bad{color:rgb(var(--md-sys-color-error))}
 .am-tap h1{margin:0;font-size:var(--md-sys-typescale-headline-s-size);line-height:var(--md-sys-typescale-headline-s-line-height);font-weight:800;color:rgb(var(--md-sys-color-on-surface))}
+/* The heading takes focus only so screen readers announce the result; it is not a control. */
 .am-tap h1:focus{outline:none}
-.am-tap h1:focus-visible{outline:2px solid rgb(var(--md-sys-color-primary));outline-offset:4px;border-radius:var(--md-sys-shape-corner-xs)}
 .am-tap .am-tap-code{margin:.375rem 0 0;font-size:var(--md-sys-typescale-label-l-size);color:rgb(var(--md-sys-color-on-surface-variant))}
 .am-tap .am-tap-cue{margin:.375rem 0 0;font-size:var(--md-sys-typescale-body-m-size);color:rgb(var(--md-sys-color-on-surface-variant));font-variant-numeric:tabular-nums}
 .am-tap .am-tap-cue--live{color:rgb(var(--md-sys-color-success))}
