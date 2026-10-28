@@ -61,8 +61,8 @@ from the page it's tapped on. Both domains are already in the app's Associated D
 
 ## Device test (Boss + Claude, no chips needed)
 
-- [ ] iPhone: sign in as a Creator (`test@`) with password → Confirm it's you → passkey made on the staging website → home.
-- [ ] Android: same (needs action 1).
+- [ ] iPhone (TestFlight build 0.1.0+7): sign in as a Creator (`test@`) with password → Confirm it's you → passkey made on the staging website → home.
+- [ ] Android: same (needs action 1). **Deferred (Boss 2026-10-28: no Android phone).** Emulator possible for a basic run; one real-phone check required before launch (Phase C / Play internal testing).
 - [ ] Authenticator code (iOS Passwords fill / Android hint); wrong code wording; backup code + low-codes notice.
 - [ ] `test2@` (Collector) → second step → "This app is for creators".
 - [ ] Sign up from the app ("Create an account") → confirm email on the phone → **Open the Authentic Materials app**
