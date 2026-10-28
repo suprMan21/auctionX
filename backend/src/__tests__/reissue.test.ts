@@ -710,7 +710,7 @@ describe('admin: fulfil', () => {
     expect(args).toMatchObject({ p_request: REQ_ID, p_new_tag: NEW_TAG, p_admin: ADMIN, p_reason: REASON });
     expect(args.p_ownership_id).toMatch(/^0x[0-9a-f]{64}$/);
     expect(JSON.stringify(out.body)).not.toContain(args.p_ownership_id as string);
-    expect((sendEmail.mock.calls[0][0] as { subject: string }).subject).toMatch(/replacement chip is active/i);
+    expect((sendEmail.mock.calls[0][0] as { subject: string }).subject).toMatch(/replacement seal is active/i);
     expect(events('admin.reissue_action')[0]).toMatchObject({ action: 'fulfil', result: 'ok', new_tag_id: NEW_TAG });
   });
 

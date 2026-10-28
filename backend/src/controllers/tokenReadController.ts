@@ -240,7 +240,7 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
     .from('nfc_tags')
     .select('id, lifecycle_status, activated_at, disclosure, linked_item_id, chip_name, chip_serial, seal_code')
     .eq('current_owner_id', user.id);
-  if (error) throw new AppError('internal', 'Could not load your tokens');
+  if (error) throw new AppError('internal', 'Could not load your seals');
 
   const tags = (tagRows ?? []) as OwnedTagRow[];
   const tagIds = tags.map((t) => t.id);

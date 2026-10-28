@@ -26,23 +26,23 @@ export const isOpenReissue = (r: OwnerReissue): boolean => {
 export const REISSUE_STAGE_COPY: Record<ReissueStage, { title: string; body: string }> = {
   review: {
     title: 'Replacement requested.',
-    body: 'We are reviewing your photos. You will get an email when we decide. Keep the chip on the item.',
+    body: 'We are reviewing your photos. You will get an email when we decide. Keep the seal on the item.',
   },
   pay: {
     title: 'Approved. Payment needed.',
-    body: 'Pay the replacement fee and we will prepare your new chip. Keep the old chip on the item until it arrives.',
+    body: 'Pay the replacement fee and we will prepare your new seal. Keep the old seal on the item until it arrives.',
   },
   preparing: {
-    title: 'We are preparing your new chip.',
-    body: 'Keep the old chip on the item until the new one arrives. Your token moves to it when we activate it.',
+    title: 'We are preparing your new seal.',
+    body: 'Keep the old seal on the item until the new one arrives. Your ownership and story move to it when we activate it.',
   },
   done: {
-    title: 'Your replacement chip is active.',
-    body: 'The old chip is retired and no longer verifies. Your token has a new Ownership ID.',
+    title: 'Your replacement seal is active.',
+    body: 'The old seal is retired and no longer verifies. You have a new Ownership ID.',
   },
   rejected: {
     title: 'Replacement not approved.',
-    body: 'Nothing was charged. Your token and its current chip are unchanged.',
+    body: 'Nothing was charged. Your seal is unchanged.',
   },
   cancelled: {
     title: 'Request cancelled.',

@@ -57,12 +57,12 @@ export const TokenDetailPage = () => {
     <main id="main-content" className="min-h-screen bg-dark-800 py-10 px-4">
       <div className="max-w-2xl mx-auto space-y-6">
         <Link to="/tokens" className="text-sm text-gray-400 hover:text-white">
-          <span aria-hidden="true">← </span>My Tokens
+          <span aria-hidden="true">← </span>My Seals
         </Link>
 
         {load.kind === 'loading' && (
           <div role="status" className="glass rounded-2xl p-8 text-center text-gray-300">
-            Loading token…
+            Loading seal…
           </div>
         )}
         {load.kind === 'error' && (
@@ -73,13 +73,13 @@ export const TokenDetailPage = () => {
         {load.kind === 'missing' && (
           <div className="glass rounded-2xl p-8 text-center">
             <h1 className="text-2xl font-bold text-white mb-2">Not in your collection.</h1>
-            <p className="text-gray-400">This token is not owned by your account.</p>
+            <p className="text-gray-400">This seal is not owned by your account.</p>
           </div>
         )}
         {load.kind === 'released' && (
           <div className="glass rounded-2xl p-8 text-center" role="status">
             <h1 className="text-2xl font-bold text-white mb-2">Released.</h1>
-            <p className="text-gray-400">This token is no longer valid. Every future tap will show it as released.</p>
+            <p className="text-gray-400">This seal is no longer valid. Every future tap will show it as released.</p>
           </div>
         )}
 
@@ -123,16 +123,16 @@ export const TokenDetailPage = () => {
             {load.token.lifecycleStatus === 'ACTIVE' && (
               <section aria-labelledby="release-heading" className="rounded-2xl border border-red-500/30 p-6">
                 <h2 id="release-heading" className="text-lg font-semibold text-white mb-2">
-                  Release this token
+                  Release this seal
                 </h2>
                 <p className="text-gray-400 text-sm mb-4">
-                  Permanently retire the token. Nobody can claim it again. This cannot be undone.
+                  Permanently retire the seal. Nobody can claim it again. This cannot be undone.
                 </p>
                 {load.token.pendingTransfer ? (
-                  <p className="text-amber-300 text-sm">Cancel the pending transfer before you release this token.</p>
+                  <p className="text-amber-300 text-sm">Cancel the pending transfer before you release this seal.</p>
                 ) : (
                   <Button variant="secondary" onClick={() => setDialog('release')}>
-                    Release token…
+                    Release seal…
                   </Button>
                 )}
               </section>
@@ -201,10 +201,10 @@ const TransferSection = ({ token, onStartTransfer, onChanged }: TransferSectionP
       {!pending ? (
         <>
           <p className="text-gray-400 text-sm mb-4">
-            Sold it or giving it away? Start a transfer. Ownership moves when the recipient taps the token and pays the
+            Sold it or giving it away? Start a transfer. Ownership moves when the recipient taps the seal and pays the
             fee.
           </p>
-          <Button onClick={onStartTransfer}>Transfer token…</Button>
+          <Button onClick={onStartTransfer}>Transfer seal…</Button>
         </>
       ) : (
         <>
@@ -212,7 +212,7 @@ const TransferSection = ({ token, onStartTransfer, onChanged }: TransferSectionP
             A {pending.transferType} to {pending.toEmail ?? 'another account'} is pending.
           </p>
           <p className="text-gray-400 text-sm mb-4">
-            It completes when they tap the token and pay. Until then you can cancel it.
+            It completes when they tap the seal and pay. Until then you can cancel it.
           </p>
           {cancel.kind === 'idle' && (
             <Button variant="secondary" onClick={() => setCancel({ kind: 'confirming' })}>

@@ -21,7 +21,7 @@
  *   6. No NFT, IPFS or chain call anywhere in this module.
  */
 
-import { sendTokenActivityEmail, tokenLabel } from '../lib/notifications/tokenActivityEmails';
+import { notifyReleased } from '../lib/notifications/tokenActivityEmails';
 import { Response } from 'express';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { RequestWithId } from '../middleware/requestId';
@@ -139,15 +139,15 @@ const errorFor = (code: SecurityResult): AppError => {
     new AppError(status, message, { reason: code });
   switch (code) {
     case 'already_claimed':
-      return withReason('conflict', 'This token has already been claimed');
+      return withReason('conflict', 'This seal has already been claimed');
     case 'token_released':
-      return withReason('failed_precondition', 'This token has been released and is no longer valid');
+      return withReason('failed_precondition', 'This seal has been released and is no longer valid');
     case 'token_retired':
-      return withReason('failed_precondition', 'This token has been retired');
+      return withReason('failed_precondition', 'This seal has been retired');
     case 'token_suspended':
-      return withReason('failed_precondition', 'This token is suspended');
+      return withReason('failed_precondition', 'This seal is on hold');
     case 'transfer_pending':
-      return withReason('conflict', 'A transfer is already pending for this token');
+      return withReason('conflict', 'A transfer is already pending for this seal');
     case '2fa_required':
       return withReason('permission_denied', 'Two-factor authentication is required');
     case 'forbidden':
@@ -1236,7 +1236,7 @@ export const releaseTag = async (req: TagRequest, res: Response) => {
 
   if (!updated) {
     emitRelease('conflict');
-    throw new AppError('conflict', 'Token could not be released');
+    throw new AppError('conflict', 'Seal could not be released');
   }
 
   // The proof goes stale with the token: there is no current owner any more.
@@ -1248,11 +1248,7 @@ export const releaseTag = async (req: TagRequest, res: Response) => {
 
   emitRelease('ok');
   // S-2FA Ph3a: the owner always hears about a release (fire and forget).
-  sendTokenActivityEmail(req.user?.email, {
-    kind: 'token_released',
-    token: tokenLabel(tag as { chip_name?: string | null; chip_serial?: string | null }),
-    at: new Date().toISOString(),
-  });
+  void notifyReleased(supabase, req.user?.email, tag.id);
 
   return ok(res, { tagId: tag.id, lifecycleStatus: 'RELEASED', irreversible: true });
 };

@@ -76,12 +76,12 @@ export const ReleaseTokenDialog = ({ isOpen, tagId, onClose, onReleased }: Relea
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={close} title="Release this token?">
+    <Modal isOpen={isOpen} onClose={close} title="Release this seal?">
       {step.kind === 'warning' && (
         <div className="space-y-4">
           <p className="text-white font-semibold">This cannot be undone.</p>
           <ul className="list-disc pl-5 space-y-1 text-sm text-gray-300">
-            <li>The token stops being valid. Every future tap shows it as released.</li>
+            <li>The seal stops being valid. Every future tap shows it as released.</li>
             <li>Nobody can claim it again, including you.</li>
             <li>Release is not a way to give the item away. To pass it on, start a transfer instead.</li>
           </ul>
@@ -89,7 +89,7 @@ export const ReleaseTokenDialog = ({ isOpen, tagId, onClose, onReleased }: Relea
             <Button variant="secondary" onClick={() => setStep({ kind: 'confirm' })}>
               I understand, continue
             </Button>
-            <Button onClick={close}>Keep my token</Button>
+            <Button onClick={close}>Keep my seal</Button>
           </div>
         </div>
       )}
@@ -98,7 +98,7 @@ export const ReleaseTokenDialog = ({ isOpen, tagId, onClose, onReleased }: Relea
         <StepUpPanel
           action="release"
           targetId={tagId}
-          purpose="release this token"
+          purpose="release this seal"
           onConfirmed={(token) => void send(token)}
           onCancel={close}
         />
@@ -107,7 +107,7 @@ export const ReleaseTokenDialog = ({ isOpen, tagId, onClose, onReleased }: Relea
       {step.kind !== 'warning' && step.kind !== 'step-up' && (
         <form onSubmit={submit} className="space-y-4">
           <label htmlFor={phraseId} className="block text-sm text-gray-300">
-            Type <span className="font-mono text-white">{RELEASE_PHRASE}</span> to release this token forever.
+            Type <span className="font-mono text-white">{RELEASE_PHRASE}</span> to release this seal forever.
           </label>
           <input
             id={phraseId}
@@ -141,7 +141,7 @@ export const ReleaseTokenDialog = ({ isOpen, tagId, onClose, onReleased }: Relea
               {submitting ? 'Releasing…' : 'Release forever'}
             </button>
             <Button type="button" variant="secondary" onClick={close} disabled={submitting}>
-              Keep my token
+              Keep my seal
             </Button>
           </div>
         </form>

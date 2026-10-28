@@ -135,7 +135,7 @@ export const SecurityPage = () => {
         <p className="text-gray-400 mt-1">
           {status.hasFactor
             ? 'Two-step sign-in is on. You confirm it is you with a passkey or a code after your password.'
-            : 'Add a passkey so a stolen password is not enough to get into your account or move your tokens.'}
+            : 'Add a passkey so a stolen password is not enough to get into your account or move your seals.'}
         </p>
         {status.breakGlass && (
           <p className="mt-3 text-sm text-amber-200">
@@ -176,7 +176,7 @@ export const SecurityPage = () => {
         <div className="glass rounded-2xl p-4 border border-amber-400/30 space-y-3" role="status">
           <p className="text-sm text-gray-200">
             This account was recovered by email. Until {fmtTime(recovery.freezeEndsAt)}, transfers, releases and sign-in
-            changes are paused to keep your tokens safe.
+            changes are paused to keep your seals safe.
           </p>
           {recovery.canUndo && (
             <>

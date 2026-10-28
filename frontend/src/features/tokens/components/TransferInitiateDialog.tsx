@@ -69,7 +69,7 @@ export const TransferInitiateDialog = ({ isOpen, tagId, onClose, onStarted }: Tr
     if (submitting) return;
     const parsed = emailSchema.safeParse(email);
     if (!parsed.success) {
-      setEmailError('Enter the email address of the person receiving the token.');
+      setEmailError('Enter the email address of the person receiving the seal.');
       return;
     }
     setEmailError(null);
@@ -92,7 +92,7 @@ export const TransferInitiateDialog = ({ isOpen, tagId, onClose, onStarted }: Tr
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={close} title="Transfer this token">
+    <Modal isOpen={isOpen} onClose={close} title="Transfer this seal">
       <form onSubmit={submit} noValidate className="space-y-5">
         <fieldset>
           <legend className="text-sm font-semibold text-white mb-2">What kind of transfer?</legend>
@@ -156,10 +156,10 @@ export const TransferInitiateDialog = ({ isOpen, tagId, onClose, onStarted }: Tr
             <p>The recipient pays a transfer fee when they accept. They see the exact amount before they pay.</p>
           )}
           <p className="text-gray-400">
-            To accept, they tap the token with their phone. Hand over the item first. Ownership moves only when they
+            To accept, they tap the seal with their phone. Hand over the item first. Ownership moves only when they
             tap and pay.
           </p>
-          <p className="text-gray-400">You cannot release the token while the transfer is pending. You can cancel it.</p>
+          <p className="text-gray-400">You cannot release the seal while the transfer is pending. You can cancel it.</p>
         </div>
 
         {phase.kind === 'error' && (

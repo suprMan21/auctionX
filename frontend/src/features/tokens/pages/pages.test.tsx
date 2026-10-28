@@ -402,7 +402,7 @@ describe('MyTokensPage', () => {
     api.incomingTransfers.mockResolvedValue([]);
     renderAt('/tokens', '/tokens', <MyTokensPage />);
 
-    expect(await screen.findByText('No tokens yet.')).toBeInTheDocument();
+    expect(await screen.findByText('No seals yet.')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Waiting for you' })).not.toBeInTheDocument();
   });
 
@@ -432,11 +432,11 @@ describe('MyTokensPage', () => {
     ]);
     renderAt('/tokens', '/tokens', <MyTokensPage />);
 
-    const link = await screen.findByRole('link', { name: /Token ABCDEF12/ });
+    const link = await screen.findByRole('link', { name: /Seal ABCDEF12/ });
     expect(link).toHaveAttribute('href', '/tokens/abcdef12-0000-4000-8000-000000000000');
-    expect(screen.getByText('A token is being gifted to you.')).toBeInTheDocument();
+    expect(screen.getByText('A seal is being gifted to you.')).toBeInTheDocument();
     expect(screen.getByText(/Transfer fee: .*2\.50, paid when you accept/)).toBeInTheDocument();
-    expect(screen.getByText(/To accept, tap the token with your phone/)).toBeInTheDocument();
+    expect(screen.getByText(/To accept, tap the seal with your phone/)).toBeInTheDocument();
   });
 
   it('waits for a transfer when Stripe returns from a redirect payment', async () => {
@@ -511,8 +511,8 @@ describe('TokenDetailPage', () => {
     renderDetail();
 
     expect(await screen.findByRole('heading', { name: 'Signed jersey' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Transfer token…' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Release token…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Transfer seal…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Release seal…' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download Receipt' })).toBeInTheDocument();
   });
 
@@ -526,15 +526,15 @@ describe('TokenDetailPage', () => {
     renderDetail();
 
     expect(await screen.findByText(/A sale to buyer@example.com is pending/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Release token…' })).not.toBeInTheDocument();
-    expect(screen.getByText('Cancel the pending transfer before you release this token.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Release seal…' })).not.toBeInTheDocument();
+    expect(screen.getByText('Cancel the pending transfer before you release this seal.')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Cancel transfer' }));
     expect(api.cancelTransfer).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Yes, cancel it' }));
 
     await waitFor(() => expect(api.cancelTransfer).toHaveBeenCalledWith('tr-1'));
-    expect(await screen.findByRole('button', { name: 'Release token…' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Release seal…' })).toBeInTheDocument();
   });
 
   it('shows the released state after a release', async () => {
@@ -543,7 +543,7 @@ describe('TokenDetailPage', () => {
     const user = userEvent.setup();
     renderDetail();
 
-    await user.click(await screen.findByRole('button', { name: 'Release token…' }));
+    await user.click(await screen.findByRole('button', { name: 'Release seal…' }));
     await user.click(screen.getByRole('button', { name: 'I understand, continue' }));
     await user.type(screen.getByLabelText(/Type RELEASE/), 'RELEASE');
     await user.click(screen.getByRole('button', { name: 'Release forever' }));

@@ -95,7 +95,7 @@ export const TAP_COPY = {
   youOwnThis: 'You own this.',
   claimedTitle: 'Claimed. It is yours.',
   claimedBody: 'Your Ownership ID is your public fingerprint for this seal.',
-  viewInMyTokens: 'View it in My Tokens', // page name stays until the My Seals rename
+  viewInMyTokens: 'View it in My Seals',
   transferTitle: 'Is this seal being transferred to you?',
   looseTitle: 'Seal coming loose?',
   looseBody:

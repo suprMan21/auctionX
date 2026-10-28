@@ -94,7 +94,7 @@ export const OwnershipPanel = ({ tagId, ownershipId, anchor }: OwnershipPanelPro
       <h3 className="text-white font-semibold mb-1">Receipt</h3>
       <p className="text-gray-400 text-sm mb-3">
         Your private proof that you held this ownership. Anyone with it can check the ID above, so keep it to
-        yourself. It cannot move or claim the token.
+        yourself. It cannot move or claim the seal.
       </p>
       <div className="flex flex-wrap items-center gap-4">
         <Button variant="secondary" onClick={download} disabled={receipt.kind === 'loading'} aria-busy={receipt.kind === 'loading'}>

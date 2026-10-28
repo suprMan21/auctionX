@@ -75,7 +75,7 @@ export const TransferProcessing = ({ transferId, tagId, onCompleted }: TransferP
           <h2 className="text-lg font-semibold text-white mb-2">It is yours.</h2>
           <p className="text-gray-400 text-sm mb-3">The transfer is complete and you are the owner on record.</p>
           <Link to={tagId ? `/tokens/${tagId}` : '/tokens'} className="text-primary-300 underline hover:text-primary-200">
-            View it in My Tokens
+            View it in My Seals
           </Link>
         </>
       )}
@@ -95,7 +95,7 @@ export const TransferProcessing = ({ transferId, tagId, onCompleted }: TransferP
           <h2 className="text-lg font-semibold text-white mb-2">Still finishing up.</h2>
           <p className="text-gray-400 text-sm">
             Your payment went through, but the transfer is taking longer than usual. Check{' '}
-            <Link to="/tokens" className="text-primary-300 underline hover:text-primary-200">My Tokens</Link> in a few
+            <Link to="/tokens" className="text-primary-300 underline hover:text-primary-200">My Seals</Link> in a few
             minutes. You do not need to pay again.
           </p>
         </>

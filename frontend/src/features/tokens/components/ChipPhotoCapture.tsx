@@ -151,7 +151,7 @@ export const ChipPhotoCapture = ({ photos, onChange, disabled = false }: ChipPho
             <li key={p.id} className="relative">
               <img
                 src={p.previewUrl}
-                alt={`Photo ${i + 1} of the chip on the item`}
+                alt={`Photo ${i + 1} of the seal on the item`}
                 className="h-28 w-28 rounded-xl object-cover border border-white/10"
               />
               <button
