@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-28 (S-2FA Ph3a + Ph3b live on staging, Ph3b verified; S-ANCHOR1 on hold for the hardware wallet)
+**Last updated:** 2026-10-28 (S-2FA Ph4 live on staging, all flags on, phones pending; S-ANCHOR1 on hold for the hardware wallet)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -15,35 +15,20 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ## 🔴 BOSS ACTION
 
-### S-2FA (2026-10-27)
-Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live on staging, all three flags off.
-`docs/S_2FA_PH1_VERIFICATION.md`, `docs/S_2FA_PH2_VERIFICATION.md`. Supabase Secure password + email change: on.
-- [x] Frontend deployed; daily admins enrolled (2026-10-27). super_admin YubiKeys wait for Ph4 (attestation +
-      AAGUID allowlist may need re-registering).
-- [x] `database.types.ts` regenerated 2026-10-28 (through `…13`).
-- [x] **Ph3a** pushed; `…12` applied; staging frontend deployed 2026-10-27. `docs/S_2FA_PH3A_VERIFICATION.md`.
-- [ ] Ph3a: `scripts/deploy-frontend.sh public` for the home copy ("Every seal tells a story."), if not done yet.
-- [x] **Ph3b** live + click-through verified 2026-10-28 (`docs/S_2FA_PH3B_VERIFICATION.md`). SES us-east-2 domain
-      verified, sender `noreply@` (`SECURITY_MAIL_FROM`), IAM `SesSecurityMail` (`ses:SendEmail` on `identity/*`).
-- [x] Ph3b: SES production access approved 2026-10-28; `SesSecurityMail` (role) scoped to `identity/authentic-materials.com`; code to a Gmail address delivered.
-- [x] Ph3b, Boss: removed `SesSecurityMail` from the user `auctionx-s3-access` (2026-10-28). Not needed: App Runner's
-      `AWS_ACCESS_KEY_ID` has no secret, so the SDK uses the instance role `am-backend-staging-instance` (which has it).
-      That user's key is the local-dev key and should not be able to send mail.
-- [ ] Ph3b, Boss: test@'s password was changed by browser autofill when finishing a recovery; update 1Password.
-- [ ] Ph3b follow-ups: explicit "Set a new password" toggle on `/sign-in/recover` (autofill lesson); admin
-      "Reset code limits" + recovery status (Feature Backlog); SES errors now log AWS's reason.
-- [ ] **App Runner env var cap** (2 slots left, 2026-10-27): Boss deletes vars equal to defaults (`WEBAUTHN_RP_NAME`,
-      `MFA_SESSION_TTL_HOURS`, every `FEATURE_*=false`). `WEBAUTHN_ORIGINS` can now be deleted (defaults to `https://<WEBAUTHN_RP_ID>`
-      after the Ph3a deploy); move secrets into one Secrets Manager JSON secret read at boot by `am-backend-staging-instance` (one env var).
-- [x] 2026-10-27: `admin@` has authenticator app + passkey "adminkey1" (synced; waits until 2026-10-28 18:46 EDT).
-      Fix was a leading space in the `WEBAUTHN_RP_ID` name. `admin2@`: passkey (no wait) + 10 backup codes.
-- [x] 2026-10-28: App Runner's leftover `AWS_ACCESS_KEY_ID` (no secret) deleted; redeploy SUCCEEDED 00:50 EDT, healthy,
-      no credential errors. Backend AWS access is the instance role only.
-- [ ] Ph4: **Creators must enrol at next login** (Boss 2026-10-27, Decisions DB): new `FEATURE_REQUIRE_CREATOR_2FA`;
-      `secondFactorRequired` = global OR staff (admin flag) OR `users.account_type = 'creator'`. Collectors: at first
-      claim / transfer / release. super_admin YubiKeys enrolled by Boss on staging 2026-10-27 (likely re-register for
-      attestation + AAGUID allowlist).
-- [ ] Ph4: phones (iOS Safari, Android Chrome), then flags in order: `FEATURE_REQUIRE_2FA` → `FEATURE_REQUIRE_ADMIN_2FA` → `FEATURE_REQUIRE_STEP_UP`.
+### S-2FA (Ph1–Ph4 live on staging, 2026-10-28)
+Every flag is **on** in staging (Boss, 2026-10-28): `FEATURE_REQUIRE_2FA`, `_ADMIN_2FA`, `_CREATOR_2FA`, `_STEP_UP`,
+`FEATURE_ADMIN_TWO_PERSON`. Docs: `docs/S_2FA_PH1…PH4_VERIFICATION.md`.
+- [ ] **Ph4 phones** (Boss): passkey on iPhone Safari + Android Chrome; sign out / in; authenticator app; a backup
+      code; release a spare token (never `chip_001`); transfer test@ → test2@; price change; admin@ suspends test2@ →
+      admin2@ approves. Plus: a collector with no method sees "Set up two-step sign-in" on claim; a Creator with no
+      method is sent to setup after the password. Checklist: `docs/S_2FA_PH4_VERIFICATION.md`.
+- [ ] Boss: test@'s password was changed by browser autofill in Ph3b; update 1Password.
+- [ ] Boss: break-glass account has keys `breakGlassKey2` + `Yubikey1` and new backup codes (2026-10-28); store the codes.
+- [ ] Ph3a: `scripts/deploy-frontend.sh public` for the home copy, if not done yet.
+- [ ] **App Runner env var cap**: delete vars equal to defaults (`WEBAUTHN_ORIGINS`, `WEBAUTHN_RP_NAME`,
+      `MFA_SESSION_TTL_HOURS`); later one Secrets Manager JSON secret read at boot.
+- [ ] Follow-ups (Feature Backlog): admin "Reset code limits" + recovery status; KMS for TOTP secrets;
+      cross-environment origin test; attested break-glass keys (Ideas DB, Parked).
 
 ### Account types (2026-10-27)
 - [ ] `scripts/deploy-frontend.sh staging`, then click through: sign up a throwaway as **A creator** (lands on
