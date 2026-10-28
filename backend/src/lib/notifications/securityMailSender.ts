@@ -61,8 +61,13 @@ export const sendViaSes = async (payload: EmailPayload & { kind: string }): Prom
     await sesSend({ from, to: payload.to, subject: payload.subject, html: payload.html, text: payload.text ?? payload.subject });
     return true;
   } catch (err) {
-    // Error name only: an SES message can echo the recipient.
-    log.error('security_mail_failed', { kind: payload.kind, error: err instanceof Error ? err.name : 'unknown' });
+    // AWS's reason (e.g. which identity or policy refused), with any email
+    // address stripped: an SES message can echo the recipient.
+    log.error('security_mail_failed', {
+      kind: payload.kind,
+      error: err instanceof Error ? err.name : 'unknown',
+      reason: err instanceof Error ? err.message.replace(/[^\s@<>"']+@[^\s@<>"']+/g, '[email]').slice(0, 300) : null,
+    });
     return false;
   }
 };

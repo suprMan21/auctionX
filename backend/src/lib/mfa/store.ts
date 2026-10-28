@@ -233,6 +233,9 @@ export interface MfaStore {
     id: string; userId: string; sessionId: string; nonceHash: string; purpose: NewEmailCode['purpose']; codeHash: string;
   }): Promise<{ result: UseCodeResult; channel: 'primary' | 'backup' | null }>;
 
+  /** Deletes every emailed code of the account (send counters back to 0, live codes void). */
+  clearEmailCodes(userId: string): Promise<void>;
+
   latestRecovery(userId: string): Promise<RecoveryRow | null>;
   startRecovery(userId: string, sessionId: string, channel: 'primary' | 'backup', holdHours: number):
     Promise<{ status: 'ok' | 'busy' | 'frozen'; id: string | null; holdEndsAt: string | null }>;
@@ -600,6 +603,11 @@ export const createSupabaseMfaStore = (db: SupabaseClient): MfaStore => ({
     if (!['ok', 'wrong', 'locked', 'expired', 'invalid'].includes(result as string)) fail('useEmailCode', null);
     const channel = out.channel === 'primary' || out.channel === 'backup' ? out.channel : null;
     return { result: result as UseCodeResult, channel };
+  },
+
+  async clearEmailCodes(userId) {
+    const { error } = await db.from('email_codes').delete().eq('user_id', userId);
+    if (error) fail('clearEmailCodes', error);
   },
 
   async latestRecovery(userId) {

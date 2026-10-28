@@ -612,6 +612,17 @@ describe('review fixes', () => {
     expect(mfaState.grants.find((g) => g.action === 'recovery_undo')?.used_at).toBeNull();
   });
 
+  it('a sign-in with a method resets the code counters and voids live codes; the waiting recovery stays', async () => {
+    const app = await loadApp();
+    const { key } = await startRecovery(app);
+    ageCodes();
+    await post(app, '/recovery/code', {}, { session: S3 }).catch(() => undefined);
+    expect(mfaState.emailCodes.length).toBeGreaterThan(0);
+    await signInWithPasskey(app, key);
+    expect(mfaState.emailCodes).toHaveLength(0);
+    expect(mfaState.recoveries[0].status).toBe('holding');
+  });
+
   it('L4: an email-recovery marker never passes the staff second-factor check', async () => {
     const { __setMfaStore } = await import('../lib/mfa/store');
     __setMfaStore(createMfaStoreFake(mfaState));

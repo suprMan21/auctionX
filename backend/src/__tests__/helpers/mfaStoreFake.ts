@@ -304,6 +304,10 @@ export const createMfaStoreFake = (st: MfaFakeState): MfaStore => {
       }
       return { result: c.attempts >= 5 ? 'locked' : 'wrong', channel: null };
     },
+    async clearEmailCodes(userId) {
+      guard('clearEmailCodes');
+      st.emailCodes = st.emailCodes.filter((c) => c.user_id !== userId);
+    },
     async latestRecovery(userId) {
       guard('latestRecovery');
       const mine = st.recoveries.filter((r) => r.user_id === userId);

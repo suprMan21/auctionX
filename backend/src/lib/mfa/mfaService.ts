@@ -705,6 +705,20 @@ const checkCode = async (
   return { method: 'recovery_code', left };
 };
 
+/**
+ * Boss 2026-10-27: signing in with a method proves it is the owner, so the
+ * emailed-code counters go back to 0 and any live code (e.g. one someone with
+ * only the password asked for) stops working. A waiting recovery, the freeze
+ * and the post-undo block are untouched. Never fails the sign-in.
+ */
+const resetEmailCodes = async (caller: Caller): Promise<void> => {
+  try {
+    await getMfaStore().clearEmailCodes(caller.userId);
+  } catch (err) {
+    log.error('mfa_email_codes_reset_failed', { requestId: caller.log.requestId, error: errText(err) });
+  }
+};
+
 export const signInVerify = async (caller: Caller, input: SignInInput) => {
   requireSessionId(caller);
   const superAdmin = await isSuperAdmin(caller.userId);
@@ -716,6 +730,7 @@ export const signInVerify = async (caller: Caller, input: SignInInput) => {
       refuse('invalid_argument', 'That passkey check did not work. Try again.', 'passkey_invalid');
     }
     await markVerified(caller, 'passkey', superAdmin);
+    await resetEmailCodes(caller);
     emit(caller, 'sign_in', 'passkey', 'ok', superAdmin);
     if (superAdmin) sendMfaEmail(breakGlassAlertTo(caller), { kind: 'break_glass_sign_in', method: 'passkey' });
     return { method: 'passkey' as const, backupCodesLeft: null };
@@ -723,6 +738,7 @@ export const signInVerify = async (caller: Caller, input: SignInInput) => {
 
   const { method, left } = await checkCode(caller, input, superAdmin, 'sign_in');
   await markVerified(caller, method, superAdmin);
+  await resetEmailCodes(caller);
   emit(caller, 'sign_in', method, 'ok', superAdmin);
   if (superAdmin) sendMfaEmail(breakGlassAlertTo(caller), { kind: 'break_glass_sign_in', method: 'recovery_code' });
   return { method, backupCodesLeft: left };
