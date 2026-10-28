@@ -1381,7 +1381,6 @@ export type Database = {
           activated_at: string | null
           aes_key_enc: string | null
           chip_name: string | null
-          seal_code: string | null
           chip_serial: string | null
           created_at: string
           current_owner_id: string | null
@@ -1400,6 +1399,7 @@ export type Database = {
           retired_at: string | null
           retired_reason: string | null
           sdm_key_version: number | null
+          seal_code: string | null
           seller_id: string
           status: string
           sun_counter: number
@@ -1414,7 +1414,6 @@ export type Database = {
           activated_at?: string | null
           aes_key_enc?: string | null
           chip_name?: string | null
-          seal_code?: string | null
           chip_serial?: string | null
           created_at?: string
           current_owner_id?: string | null
@@ -1433,6 +1432,7 @@ export type Database = {
           retired_at?: string | null
           retired_reason?: string | null
           sdm_key_version?: number | null
+          seal_code?: string | null
           seller_id: string
           status?: string
           sun_counter?: number
@@ -1447,7 +1447,6 @@ export type Database = {
           activated_at?: string | null
           aes_key_enc?: string | null
           chip_name?: string | null
-          seal_code?: string | null
           chip_serial?: string | null
           created_at?: string
           current_owner_id?: string | null
@@ -1466,6 +1465,7 @@ export type Database = {
           retired_at?: string | null
           retired_reason?: string | null
           sdm_key_version?: number | null
+          seal_code?: string | null
           seller_id?: string
           status?: string
           sun_counter?: number
@@ -3362,6 +3362,7 @@ export type Database = {
         Row: {
           aaguid: string | null
           added_by_recovery: string | null
+          attested_vendor: string | null
           backed_up: boolean
           created_at: string
           credential_id: string
@@ -3377,6 +3378,7 @@ export type Database = {
         Insert: {
           aaguid?: string | null
           added_by_recovery?: string | null
+          attested_vendor?: string | null
           backed_up?: boolean
           created_at?: string
           credential_id: string
@@ -3392,6 +3394,7 @@ export type Database = {
         Update: {
           aaguid?: string | null
           added_by_recovery?: string | null
+          attested_vendor?: string | null
           backed_up?: boolean
           created_at?: string
           credential_id?: string
@@ -3736,22 +3739,34 @@ export type Database = {
       }
       waitlist_signups: {
         Row: {
+          consent_at: string | null
+          consent_text: string | null
           created_at: string | null
           email: string
           id: string
           source: string
+          unsubscribed_at: string | null
+          welcome_sent_at: string | null
         }
         Insert: {
+          consent_at?: string | null
+          consent_text?: string | null
           created_at?: string | null
           email: string
           id?: string
           source?: string
+          unsubscribed_at?: string | null
+          welcome_sent_at?: string | null
         }
         Update: {
+          consent_at?: string | null
+          consent_text?: string | null
           created_at?: string | null
           email?: string
           id?: string
           source?: string
+          unsubscribed_at?: string | null
+          welcome_sent_at?: string | null
         }
         Relationships: []
       }
@@ -4106,6 +4121,7 @@ export type Database = {
         }
         Returns: Json
       }
+      gen_seal_code: { Args: never; Returns: string }
       generate_token_name: { Args: { p_user_id: string }; Returns: string }
       get_minimum_next_bid: { Args: { auction_uuid: string }; Returns: number }
       get_next_eligible_bidder: {
@@ -4142,6 +4158,7 @@ export type Database = {
         Args: { p_keep_session: string; p_user: string }
         Returns: number
       }
+      new_unused_seal_code: { Args: never; Returns: string }
       payment_admin_actor_email: {
         Args: { p_admin: string; p_need_admin: boolean }
         Returns: string
@@ -4213,7 +4230,10 @@ export type Database = {
       request_creator_account: { Args: { p_user: string }; Returns: Json }
       reserve_chip_identity: {
         Args: { p_actor?: string; p_name?: string; p_sig_sha256: string }
-        Returns: { name: string; seal_code: string }[]
+        Returns: {
+          name: string
+          seal_code: string
+        }[]
       }
       reserve_chip_name: {
         Args: { p_actor?: string; p_name?: string; p_sig_sha256: string }
