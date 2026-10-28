@@ -25,8 +25,8 @@ Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live o
 - [ ] Ph3a: `scripts/deploy-frontend.sh public` for the home copy ("Every seal tells a story."), if not done yet.
 - [x] **Ph3b** live + click-through verified 2026-10-28 (`docs/S_2FA_PH3B_VERIFICATION.md`). SES us-east-2 domain
       verified, sender `noreply@` (`SECURITY_MAIL_FROM`), IAM `SesSecurityMail` (`ses:SendEmail` on `identity/*`).
-- [ ] Ph3b, Boss: **request SES production access**; then scope `SesSecurityMail` back to the domain identity.
-- [ ] Ph3b, Boss: **remove `SesSecurityMail` from the user `auctionx-s3-access`.** Not needed: App Runner's
+- [x] Ph3b: SES production access approved 2026-10-28; `SesSecurityMail` (role) scoped to `identity/authentic-materials.com`; code to a Gmail address delivered.
+- [x] Ph3b, Boss: removed `SesSecurityMail` from the user `auctionx-s3-access` (2026-10-28). Not needed: App Runner's
       `AWS_ACCESS_KEY_ID` has no secret, so the SDK uses the instance role `am-backend-staging-instance` (which has it).
       That user's key is the local-dev key and should not be able to send mail.
 - [ ] Ph3b, Boss: test@'s password was changed by browser autofill when finishing a recovery; update 1Password.

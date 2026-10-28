@@ -37,7 +37,7 @@
 | Step | Result |
 |---|---|
 | Migration `…13` | Applied by Boss; live SQL 27/27; both `database.types.ts` regenerated, `PENDING_MIGRATION_COLUMNS` emptied (`24d2476`) |
-| SES us-east-2 | Domain `authentic-materials.com` verified (Easy DKIM via Route 53). Still in the sandbox: production access to request before real users |
+| SES us-east-2 | Domain `authentic-materials.com` verified (Easy DKIM via Route 53). **Production access approved 2026-10-28**; role policy then scoped to the domain identity; a backup-email code to a Gmail address delivered (04:43Z) |
 | Sender | App Runner `SECURITY_MAIL_FROM` = `Authentic Materials <noreply@authentic-materials.com>` |
 | IAM | Inline policy `SesSecurityMail` (`ses:SendEmail` on `arn:aws:ses:us-east-2:904183418667:identity/*`) on the role `am-backend-staging-instance`, which the backend actually uses (App Runner's `AWS_ACCESS_KEY_ID` has no secret, so the SDK ignores it; the S3 code also falls back). Scoping to `identity/authentic-materials.com` alone gave AccessDenied: in the sandbox SES also checks the recipient identity. It was also added to the user `auctionx-s3-access` while debugging: not needed, remove it (that key is the local-dev key). Tighten to the domain identity after production access |
 | Deploys | Backend `99dfb6d` (23:54 EDT), staging frontend 22:41 EDT |
