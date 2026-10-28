@@ -55,9 +55,15 @@ case "$TARGET" in
 
   public)
     npm run build:public
-    # The public bundle must hold no app code, backend URL or key of any kind.
-    if LEAKS=$(grep -rlE 'supabase|pk_test_|pk_live_|awsapprunner|stripe' dist-public); then
+    # The public bundle must hold no app code or key of any kind, and only ONE backend
+    # address: the early-access signup (Decisions DB, Locked 2026-10-28; publicSite.test.ts).
+    if LEAKS=$(grep -rlE 'supabase|pk_test_|pk_live_|stripe' dist-public); then
       echo "✗ app code or keys found in the public build:"; echo "$LEAKS"; exit 1
+    fi
+    ALLOWED_API='vw7zy9mkyg.us-east-2.awsapprunner.com'
+    API_HOSTS=$(grep -rhoE '[A-Za-z0-9.-]*awsapprunner\.com[A-Za-z0-9/._-]*' dist-public | sort -u)
+    if [ -n "$API_HOSTS" ] && [ "$API_HOSTS" != "$ALLOWED_API/api/v1/early-access" ]; then
+      echo "✗ unexpected backend address in the public build (only the signup is allowed):"; echo "$API_HOSTS"; exit 1
     fi
     sync_site dist-public "$PUBLIC_BUCKET"
     invalidate "$PUBLIC_DIST_ID"
