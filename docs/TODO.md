@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-27 (S-2FA Ph3a merged to local dev, not pushed; S-ANCHOR1 on hold for the hardware wallet)
+**Last updated:** 2026-10-28 (S-2FA Ph3a + Ph3b live on staging, Ph3b verified; S-ANCHOR1 on hold for the hardware wallet)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -20,21 +20,25 @@ Ph1 backend, Ph2 screens and Ph2b (24 h cool-off, password/email DB lock) live o
 `docs/S_2FA_PH1_VERIFICATION.md`, `docs/S_2FA_PH2_VERIFICATION.md`. Supabase Secure password + email change: on.
 - [x] Frontend deployed; daily admins enrolled (2026-10-27). super_admin YubiKeys wait for Ph4 (attestation +
       AAGUID allowlist may need re-registering).
-- [ ] Regenerate `database.types.ts` (migrations `…09/10/11/12`: columns, `auth_change_permits`, `admin_action_approvals`).
-- [ ] **Ph3a (merged local dev `9b4acc3`)**: Boss pushes `dev`, runs `supabase db push --linked` (applies `…12`; `…11`
-      already on staging), re-runs `supabase/tests/s_2fa_ph3a_approvals_live.sql` (expect 22/22), then
-      `scripts/deploy-frontend.sh staging` and `public` (home copy). `docs/S_2FA_PH3A_VERIFICATION.md`.
-- [ ] **Ph3b**: email-code recovery (72 h hold, 7-day freeze, backup email). **Security mail = Amazon SES** (Boss
-      2026-10-27, Locked; Postmark keeps everything else). Boss can start now (AWS approval takes ~1 day):
-      SES us-east-2 → verify domain `authentic-materials.com` (Easy DKIM, custom MAIL FROM) → request production
-      access. The Postmark staging security server + its App Runner token are no longer needed.
+- [x] `database.types.ts` regenerated 2026-10-28 (through `…13`).
+- [x] **Ph3a** pushed; `…12` applied; staging frontend deployed 2026-10-27. `docs/S_2FA_PH3A_VERIFICATION.md`.
+- [ ] Ph3a: `scripts/deploy-frontend.sh public` for the home copy ("Every seal tells a story."), if not done yet.
+- [x] **Ph3b** live + click-through verified 2026-10-28 (`docs/S_2FA_PH3B_VERIFICATION.md`). SES us-east-2 domain
+      verified, sender `noreply@` (`SECURITY_MAIL_FROM`), IAM `SesSecurityMail` (`ses:SendEmail` on `identity/*`).
+- [ ] Ph3b, Boss: **request SES production access**; then scope `SesSecurityMail` back to the domain identity.
+- [ ] Ph3b, Boss: **remove `SesSecurityMail` from the user `auctionx-s3-access`.** Not needed: App Runner's
+      `AWS_ACCESS_KEY_ID` has no secret, so the SDK uses the instance role `am-backend-staging-instance` (which has it).
+      That user's key is the local-dev key and should not be able to send mail.
+- [ ] Ph3b, Boss: test@'s password was changed by browser autofill when finishing a recovery; update 1Password.
+- [ ] Ph3b follow-ups: explicit "Set a new password" toggle on `/sign-in/recover` (autofill lesson); admin
+      "Reset code limits" + recovery status (Feature Backlog); SES errors now log AWS's reason.
 - [ ] **App Runner env var cap** (2 slots left, 2026-10-27): Boss deletes vars equal to defaults (`WEBAUTHN_RP_NAME`,
       `MFA_SESSION_TTL_HOURS`, every `FEATURE_*=false`). `WEBAUTHN_ORIGINS` can now be deleted (defaults to `https://<WEBAUTHN_RP_ID>`
       after the Ph3a deploy); move secrets into one Secrets Manager JSON secret read at boot by `am-backend-staging-instance` (one env var).
 - [x] 2026-10-27: `admin@` has authenticator app + passkey "adminkey1" (synced; waits until 2026-10-28 18:46 EDT).
       Fix was a leading space in the `WEBAUTHN_RP_ID` name. `admin2@`: passkey (no wait) + 10 backup codes.
-- [ ] Boss, console: why App Runner has `AWS_ACCESS_KEY_ID` (should be the instance role); delete any NFT / Pinata
-      env vars (the mint code was deleted in Ph3a).
+- [ ] Boss, console: delete App Runner's leftover `AWS_ACCESS_KEY_ID` (no secret, unused: the backend uses the
+      instance role) and any NFT / Pinata env vars (the mint code was deleted in Ph3a). Frees env slots.
 - [ ] Ph4: **Creators must enrol at next login** (Boss 2026-10-27, Decisions DB): new `FEATURE_REQUIRE_CREATOR_2FA`;
       `secondFactorRequired` = global OR staff (admin flag) OR `users.account_type = 'creator'`. Collectors: at first
       claim / transfer / release. super_admin YubiKeys enrolled by Boss on staging 2026-10-27 (likely re-register for
