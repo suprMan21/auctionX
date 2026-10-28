@@ -38,7 +38,6 @@
  */
 
 import type { TwoFactorPolicy } from './policy';
-import { checkHardwareKeyAttestation } from './hardwareKeyAttestation';
 import { createHash, randomBytes } from 'crypto';
 import {
   generateAuthenticationOptions,
@@ -120,7 +119,6 @@ export type MfaReason =
   | 'invalid_code'
   | 'passkey_invalid'
   | 'synced_passkey_not_allowed'
-  | 'hardware_key_required'
   | 'last_factor'
   | 'already_set_up'
   | 'no_passkey'
@@ -450,8 +448,7 @@ export const passkeyRegisterOptions = async (caller: Caller, stepUpToken?: strin
     rpID: cfg.rpId,
     userName: caller.email ?? caller.userId,
     userID: userIdBytes(caller.userId),
-    // Ph4: the break-glass account must prove its key is a YubiKey (lib/mfa/hardwareKeyAttestation.ts).
-    attestationType: superAdmin ? 'direct' : 'none',
+    attestationType: 'none',
     excludeCredentials: existing.map((p) => ({ id: p.credential_id, transports: p.transports })),
     authenticatorSelection: {
       residentKey: 'preferred',
@@ -512,14 +509,6 @@ export const passkeyRegisterVerify = async (
     emit(caller, 'enrol', 'passkey', 'forbidden', true);
     refuse('invalid_argument', 'This account needs a hardware security key, not a synced passkey.', 'synced_passkey_not_allowed');
   }
-  if (superAdmin) {
-    const refusal = checkHardwareKeyAttestation(info.attestationObject, info.aaguid);
-    if (refusal) {
-      emit(caller, 'enrol', 'passkey', 'forbidden', true);
-      log.warn('break_glass_key_refused', { reason: refusal });
-      refuse('invalid_argument', 'This account needs a YubiKey. That key could not be confirmed as one.', 'hardware_key_required');
-    }
-  }
 
   // Ph3b: the finishing session's one add. Claimed before the insert (atomic,
   // so two parallel adds cannot both use it) and given back if the insert fails.
@@ -543,7 +532,6 @@ export const passkeyRegisterVerify = async (
     nickname: input.nickname.trim(),
     usable_from: usableFrom,
     added_by_recovery: claimed,
-    attested_vendor: superAdmin ? 'yubico' : null,
   });
   } finally {
     if (claimed && !inserted) await store.releaseRecoveryEnrolment(caller.userId, claimed);
@@ -573,8 +561,8 @@ export const passkeyRegisterVerify = async (
 
 // ── Passkey assertion (sign-in second step and step-up) ─────────────────────
 
-/** Ph4 review M1: the break-glass account uses only YubiKeys attested at registration. */
-const breakGlassUsable = (p: PasskeyRow): boolean => !p.backed_up && p.attested_vendor === 'yubico';
+/** The break-glass account uses only hardware keys, not synced passkeys (YubiKey-only dropped, Boss 2026-10-28). */
+const breakGlassUsable = (p: PasskeyRow): boolean => !p.backed_up;
 
 const usablePasskeys = (passkeys: PasskeyRow[], superAdmin: boolean): PasskeyRow[] =>
   superAdmin ? passkeys.filter(breakGlassUsable) : passkeys;
@@ -633,7 +621,7 @@ const verifyAssertion = async (
   if (!challenge) return null;
 
   const passkey = await store.getPasskeyByCredentialId(response.id);
-  // Another account's passkey, or a synced / unattested one on the break-glass account: no.
+  // Another account's passkey, or a synced one on the break-glass account: no.
   if (!passkey || passkey.user_id !== caller.userId || (superAdmin && !breakGlassUsable(passkey))) return null;
 
   const cfg = webAuthnConfig();
