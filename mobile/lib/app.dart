@@ -46,7 +46,7 @@ class _AuthenticMaterialsAppState extends ConsumerState<AuthenticMaterialsApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Authentic Materials',
+      title: 'AM - Creator',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       routerConfig: ref.watch(routerProvider),
