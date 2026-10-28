@@ -25,7 +25,7 @@ Brief: Notion "S-SITE2 — Story-First Public Homepage (Draft 2.4 build)". Branc
 | 5 | SealBadge spins + pulses; stops under reduced motion | ✅ | Browser: `animationName` `am-sealspin` → `none` with reduced motion; CSS test |
 | 6 | tsc 0, vitest green, eslint 0 (new files) | ✅ | backend 1126 passed / 23 skipped; frontend 412; repo-wide eslint has the same 47 pre-existing problems as `dev` |
 | 7 | 1280 / 375 screenshots, nothing over the headline | ✅ | Overlap check: no element intersects the h1; no sideways scroll |
-| 8 | Signup writes one row, one welcome email, consent stored, unsubscribe works | ⏳ | Live on staging 2026-10-28 06:06 (deploy SUCCEEDED 02:06 ET): signup from origin authentic-materials.com → 202, CORS ok; repeat → identical 202, no second email; one row, source `home`, consent wording matches, `welcome_sent_at` set, log `early_access_welcome sent:true`. Unsubscribe link: Boss to click from the inbox |
+| 8 | Signup writes one row, one welcome email, consent stored, unsubscribe works | ✅ | Live on staging 2026-10-28 06:06 (deploy SUCCEEDED 02:06 ET): signup from origin authentic-materials.com → 202, CORS ok; repeat → identical 202, no second email; one row, source `home`, consent wording matches, `welcome_sent_at` set, log `early_access_welcome sent:true`. Boss signed up on the live public site 06:30 (welcome delivered, Gmail Promotions); unsubscribed from the email link 06:41:23 (`changed:true`), second press `changed:false` |
 | 9 | This report | ✅ | |
 
 ## Early-access signup (G3)
@@ -59,6 +59,11 @@ Brief: Notion "S-SITE2 — Story-First Public Homepage (Draft 2.4 build)". Branc
    checks the row, consent, `welcome_sent_at`, then unsubscribes via the link.
 4. `scripts/deploy-frontend.sh public --dry-run`, then without the flag; confirm `/robots.txt`, then
    `/email/hero.png`, then the page on a phone.
+
+## Live on the public site
+
+Public deploy 2026-10-28 (bundle `index-Cc1yfG5V.js`). Note: an earlier public deploy shipped the
+pre-signup homepage build (`index-BfLLNTOt.js`, form always failing) for a short time; fixed by this deploy.
 
 ## Follow-ups
 
