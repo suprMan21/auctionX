@@ -199,7 +199,7 @@ describe('TransferInitiateDialog', () => {
     await user.type(screen.getByLabelText('Recipient email'), 'a@b.co');
     await user.click(screen.getByRole('button', { name: 'Start transfer' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('A transfer of this token is already in progress.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('A transfer of this seal is already in progress.');
   });
 
   it('has no axe violations', async () => {

@@ -356,11 +356,11 @@ describe('TokenVerifyPage entry point', () => {
   const renderVerify = () =>
     renderAt('/verify/chip_003', '/verify/:tokenName', <TokenVerifyPage />);
 
-  it('offers "Chip coming loose?" to the signed-in owner with a live tap', async () => {
+  it('offers "Seal coming loose?" to the signed-in owner with a live tap', async () => {
     saveTap('chip_003', ownerTap());
     renderVerify();
 
-    const link = await screen.findByRole('link', { name: 'Request a replacement chip' });
+    const link = await screen.findByRole('link', { name: 'Request a replacement seal' });
     expect(link).toHaveAttribute('href', '/tokens/tag-1/replace?tap=chip_003');
   });
 
@@ -369,8 +369,9 @@ describe('TokenVerifyPage entry point', () => {
     api.incomingTransfers.mockResolvedValue([]);
     renderVerify();
 
-    await screen.findByRole('heading', { name: 'Verified.' });
-    expect(screen.queryByRole('link', { name: 'Request a replacement chip' })).not.toBeInTheDocument();
+    // A remembered tap of someone else's seal: still seal, "Owned", never Verified.
+    await screen.findByRole('heading', { name: 'Owned.' });
+    expect(screen.queryByRole('link', { name: 'Request a replacement seal' })).not.toBeInTheDocument();
   });
 
   it('does not offer it once the tap has expired', async () => {
@@ -378,6 +379,6 @@ describe('TokenVerifyPage entry point', () => {
     renderVerify();
 
     await screen.findByRole('heading', { name: 'You own this.' });
-    await waitFor(() => expect(screen.queryByRole('link', { name: 'Request a replacement chip' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Request a replacement seal' })).not.toBeInTheDocument());
   });
 });

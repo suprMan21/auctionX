@@ -21,7 +21,7 @@ from tag_encoder.keyprovider import LocalKeyProvider
 from tag_encoder.ntag424 import apdu as A
 from tag_encoder.ntag424.emulator import EmulatedNtag424
 from tag_encoder.personalise import EncodeFailed, EncodeJob, Refused, personalise
-from tag_encoder.registry import BackendRegistry, MemoryRegistry, NameTaken, RegistryError
+from tag_encoder.registry import SEAL_CODE, BackendRegistry, MemoryRegistry, NameTaken, RegistryError, Reservation
 
 AUTO = EncodeJob(item=None, token=None, base_url="https://staging.example")
 KEYS = LocalKeyProvider(bytes.fromhex("11" * 32), bytes.fromhex("22" * 32), allow_local_keys=True)
@@ -200,7 +200,7 @@ def _backend(status: int, payload: dict) -> tuple[BackendRegistry, list]:
 
 
 def test_backend_reserve_asks_for_the_next_name():
-    reg, calls = _backend(200, {"success": True, "data": {"name": "chip_005", "auto": True}})
+    reg, calls = _backend(200, {"success": True, "data": {"name": "chip_005", "auto": True, "sealCode": "7K3Q-9XWD"}})
     assert reg.reserve_name("c" * 64) == "chip_005"
     assert calls == [("POST", "/api/v1/nfc/enroll/reserve-name", {"sigSha256": "c" * 64})]
 
@@ -241,3 +241,46 @@ def test_enroll_sends_the_chip_name():
     reg, calls = _backend(201, {"success": True, "data": {"tagId": "t-1"}})
     assert reg.enroll("04A27E02936980", None, "00" * 8, "c" * 64, 2, "chip_005") == "t-1"
     assert calls[0][2]["chipName"] == "chip_005"
+
+
+# --- S-SEAL1: the seal code is reserved with the name --------------------------
+
+
+def test_backend_reserve_identity_returns_the_seal_code():
+    reg, _ = _backend(200, {"success": True, "data": {"name": "chip_005", "auto": True, "sealCode": "7K3Q-9XWD"}})
+    assert reg.reserve_identity("c" * 64) == Reservation("chip_005", "7K3Q-9XWD")
+
+
+def test_backend_before_s_seal1_gives_no_seal_code_and_the_encode_goes_on():
+    # The database still gives the tag its code at enroll.
+    reg, _ = _backend(200, {"success": True, "data": {"name": "chip_005", "auto": True}})
+    assert reg.reserve_identity("c" * 64) == Reservation("chip_005", None)
+
+
+@pytest.mark.parametrize("bad", ["7K3Q9XWD", "ILOU-1234", "7k3q-9xwd", 12345678, ""])
+def test_backend_malformed_seal_code_fails_closed(bad):
+    reg, _ = _backend(200, {"success": True, "data": {"name": "chip_005", "sealCode": bad}})
+    with pytest.raises(RegistryError):
+        reg.reserve_identity("c" * 64)
+
+
+def test_memory_registry_rerun_keeps_its_seal_code():
+    reg = MemoryRegistry()
+    first = reg.reserve_identity("a" * 64)
+    again = reg.reserve_identity("a" * 64)
+    other = reg.reserve_identity("b" * 64)
+    assert first == again
+    assert first.seal_code and SEAL_CODE.match(first.seal_code)
+    assert other.seal_code != first.seal_code
+
+
+def test_encode_records_the_seal_code_in_the_ledger_and_outcome():
+    reg, card = MemoryRegistry(), _chip()
+    audit = AuditLog(None)
+    out = _run(card, reg, audit=audit)
+    assert out.seal_code and SEAL_CODE.match(out.seal_code)
+    assert out.as_dict()["sealCode"] == out.seal_code
+    encoded = [r for r in audit.records if r.get("result") == "encoded"]
+    assert encoded and encoded[-1]["seal_code"] == out.seal_code
+    # Digital only: the code never lands on the chip.
+    assert out.seal_code not in out.readback_url and out.seal_code.replace("-", "") not in out.readback_url

@@ -1,0 +1,21 @@
+/*
+ * Genuine Seal Badge (Design System, DR-22 v1.1). One source for the homepage and the app.
+ * Glow 3.0 s, ring turns once every 12 s; both stop under reduced motion.
+ * Colours fall back to the brand purple where no theme tokens are set (App theme pages).
+ */
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:600;font-display:swap;src:url('./fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:700;font-display:swap;src:url('./fonts/ibm-plex-mono-latin-700-normal.woff2') format('woff2')}
+
+.sealbadge{width:88px;height:88px;flex:none;overflow:visible;filter:drop-shadow(0 0 10px rgb(var(--md-sys-color-brand, 124 58 237) / .55));animation:am-sealglow 3s ease-in-out infinite}
+.sealbadge--sm{width:44px;height:44px}
+.sealbadge--hero{width:48px;height:48px}
+.sealspin{transform-origin:60px 60px;transform-box:view-box;will-change:transform;animation:am-sealspin 12s linear infinite}
+/* Owned / Sealed: still, slightly muted, no glow. Never the Verified look. */
+.sealbadge--sealed{filter:saturate(.6) brightness(.82);animation:none}
+.sealbadge--sealed .sealspin{animation:none;will-change:auto}
+@keyframes am-sealspin{to{transform:rotate(360deg)}}
+@keyframes am-sealglow{50%{filter:drop-shadow(0 0 18px rgb(var(--md-sys-color-brand, 124 58 237) / .85))}}
+@media (prefers-reduced-motion:reduce){.sealbadge,.sealspin{animation:none}}
+
+/* The seal code as text next to the seal. */
+.sealcode-mono{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;letter-spacing:.08em}

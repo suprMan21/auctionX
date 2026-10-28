@@ -1337,6 +1337,7 @@ export type Database = {
           name: string
           reserved_at: string
           reserved_by: string | null
+          seal_code: string | null
           sig_sha256: string | null
           tag_id: string | null
         }
@@ -1345,6 +1346,7 @@ export type Database = {
           name: string
           reserved_at?: string
           reserved_by?: string | null
+          seal_code?: string | null
           sig_sha256?: string | null
           tag_id?: string | null
         }
@@ -1353,6 +1355,7 @@ export type Database = {
           name?: string
           reserved_at?: string
           reserved_by?: string | null
+          seal_code?: string | null
           sig_sha256?: string | null
           tag_id?: string | null
         }
@@ -1378,6 +1381,7 @@ export type Database = {
           activated_at: string | null
           aes_key_enc: string | null
           chip_name: string | null
+          seal_code: string | null
           chip_serial: string | null
           created_at: string
           current_owner_id: string | null
@@ -1410,6 +1414,7 @@ export type Database = {
           activated_at?: string | null
           aes_key_enc?: string | null
           chip_name?: string | null
+          seal_code?: string | null
           chip_serial?: string | null
           created_at?: string
           current_owner_id?: string | null
@@ -1442,6 +1447,7 @@ export type Database = {
           activated_at?: string | null
           aes_key_enc?: string | null
           chip_name?: string | null
+          seal_code?: string | null
           chip_serial?: string | null
           created_at?: string
           current_owner_id?: string | null
@@ -4208,6 +4214,10 @@ export type Database = {
         Returns: number
       }
       request_creator_account: { Args: { p_user: string }; Returns: Json }
+      reserve_chip_identity: {
+        Args: { p_actor?: string; p_name?: string; p_sig_sha256: string }
+        Returns: { name: string; seal_code: string }[]
+      }
       reserve_chip_name: {
         Args: { p_actor?: string; p_name?: string; p_sig_sha256: string }
         Returns: string

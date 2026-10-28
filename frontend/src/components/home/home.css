@@ -39,15 +39,8 @@
 .am-home .win{position:relative;border-radius:var(--md-sys-shape-corner-xl);background:rgb(var(--md-sys-color-surface-container-lowest));border:1px solid var(--am-glass-2-border);padding:2.25rem .75rem .75rem;box-shadow:var(--md-sys-elevation-level2);overflow:hidden}
 .am-home .win::before{content:'';position:absolute;left:14px;top:13px;width:8px;height:8px;border-radius:50%;background:rgb(var(--md-sys-color-outline));box-shadow:14px 0 0 rgb(var(--md-sys-color-outline)),28px 0 0 rgb(var(--md-sys-color-outline))}
 
-/* ---------- Seal badge ---------- */
-.am-home .sealbadge{width:88px;height:88px;flex:none;overflow:visible;filter:drop-shadow(0 0 10px rgb(var(--md-sys-color-brand) / .55));animation:am-sealglow 3.2s ease-in-out infinite}
-.am-home .sealbadge--sm{width:44px;height:44px}
-.am-home .sealbadge--hero{width:48px;height:48px}
-.am-home .sealspin{transform-origin:60px 60px;transform-box:view-box;will-change:transform;animation:am-sealspin 12s linear infinite}
-@keyframes am-sealspin{to{transform:rotate(360deg)}}
-@keyframes am-sealglow{50%{filter:drop-shadow(0 0 18px rgb(var(--md-sys-color-brand) / .85))}}
-@media (prefers-reduced-motion:reduce){.am-home .sealbadge,.am-home .sealspin{animation:none}}
-.am-home .sealcode{display:block;font-style:normal;font-family:var(--am-font-mono);font-size:var(--md-sys-typescale-label-m-size);font-weight:600;letter-spacing:.08em;color:rgb(var(--md-sys-color-on-surface-variant))}
+/* ---------- Seal badge: components/seal/seal.css (shared with the app) ---------- */
+.am-home .sealcode{display:block;font-style:normal;font-family:'IBM Plex Mono',var(--am-font-mono);font-size:var(--md-sys-typescale-label-m-size);font-weight:600;letter-spacing:.08em;color:rgb(var(--md-sys-color-on-surface-variant))}
 
 /* ---------- Buttons, chips, field (mirror the package Button / Chip / TextField) ---------- */
 .am-home .am-btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;white-space:nowrap;min-height:var(--am-target-min);padding:0 1.5rem;border-radius:var(--md-sys-shape-corner-md);font-family:var(--am-font-brand);font-size:var(--md-sys-typescale-label-l-size);line-height:var(--md-sys-typescale-label-l-line-height);font-weight:var(--md-sys-typescale-label-l-weight);letter-spacing:var(--md-sys-typescale-label-l-tracking);text-decoration:none;cursor:pointer;border:1px solid transparent;transition:box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),transform var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)}

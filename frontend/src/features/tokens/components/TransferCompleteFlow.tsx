@@ -92,14 +92,14 @@ export const TransferCompleteFlow = ({ transferId, tagId, tapSession, onSessionS
 
       {(phase.kind === 'idle' || phase.kind === 'starting') && !tapSession && (
         <p className="text-gray-400 text-sm">
-          Your tap has expired. Tap the token again with your phone to accept.
+          Your tap has expired. Tap the seal again with your phone to accept.
         </p>
       )}
 
       {(phase.kind === 'idle' || phase.kind === 'starting') && tapSession && (
         <>
           <p className="text-gray-400 text-sm mb-2">
-            The owner is transferring this token to you. Accept only if the item is in your hands.
+            The owner is transferring this seal to you. Accept only if the item is in your hands.
           </p>
           <p className="text-gray-400 text-sm mb-5">
             You pay a small transfer fee. You will see the exact amount before you pay.

@@ -321,6 +321,8 @@ def cmd_personalise(args: argparse.Namespace) -> int:
                 card.close()
         print(f"  ✓ ENCODED  {out.name}  tag {out.tag_id}  UID {out.uid_hex}  read-back ctr {out.readback_counter}"
               f"{'  (resumed)' if out.resumed else ''}")
+        if out.seal_code:
+            print(f"    seal code: {out.seal_code}  (digital only, not on the chip)")
         print(f"    read-back URL: {out.readback_url}")
         if not args.emulator and not args.yes and len(jobs) > 1:
             input("  Remove the chip, then Enter: ")

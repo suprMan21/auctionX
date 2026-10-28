@@ -6,7 +6,7 @@ import { resolve } from 'path';
 
 import { HomePage, CONTACT_EMAIL, SAMPLE_SEAL_CODE } from './HomePage';
 import { CONSENT_TEXT, SignupProblem } from '@/components/home/EarlyAccessForm';
-import { SealBadge } from '@/components/home/SealBadge';
+import { SealBadge } from '@/components/seal/SealBadge';
 
 /**
  * The public homepage is the first thing anyone sees. These tests hold it to the Locked
@@ -110,7 +110,7 @@ describe('HomePage', () => {
   });
 
   it('turns off the seal animations under reduced motion', () => {
-    const css = readFileSync(resolve(__dirname, '../components/home/home.css'), 'utf8');
+    const css = readFileSync(resolve(__dirname, '../components/seal/seal.css'), 'utf8');
     const rule = css.match(/@media \(prefers-reduced-motion:\s*reduce\)\{([^}]*\})\}/);
     expect(rule?.[1]).toMatch(/\.sealbadge/);
     expect(rule?.[1]).toMatch(/\.sealspin/);

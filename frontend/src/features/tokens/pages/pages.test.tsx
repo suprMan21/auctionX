@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StrictMode } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import type { ClaimResult, IncomingTransfer, MyToken, OwnershipLookup, TapResult, TransferStatus } from '../api/schemas';
@@ -78,6 +78,8 @@ const enrolledTap = (overrides: Partial<Extract<TapResult, { valid: true }>> = {
   valid: true,
   tagId: 'tag-1',
   lifecycleStatus: 'ENROLLED',
+  sealCode: '7K3Q-9XWD',
+  checkedAt: new Date().toISOString(),
   provenance: provenance(),
   tapSession: { token: SESSION, expiresAt: new Date(Date.now() + 600_000).toISOString() },
   viewer: null,
@@ -110,6 +112,95 @@ beforeEach(() => {
   api.myReissueRequests.mockResolvedValue([]);
 });
 
+// ── S-SEAL1 Ph1: the seal on the tap page ───────────────────────────────────
+
+describe('TokenVerifyPage seal (S-SEAL1 Ph1)', () => {
+  const seals = () => document.querySelectorAll('[data-seal-badge]');
+
+  it('shows the Verified seal with live cues, then the still seal after 90 s, asking for a new tap', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval', 'Date'] });
+    try {
+      api.tap.mockResolvedValue(enrolledTap());
+      renderVerify(TAP_PATH);
+
+      expect(await screen.findByRole('heading', { name: 'Verified just now.' })).toBeInTheDocument();
+      expect(seals()[0]).toHaveAttribute('data-seal-state', 'verified');
+      expect(screen.getByText('7K3Q-9XWD', { selector: 'span' })).toHaveClass('sealcode-mono');
+      expect(screen.getAllByRole('status').some((el) => el.textContent === 'Verified just now')).toBe(true);
+
+      act(() => vi.advanceTimersByTime(5_000));
+      expect(screen.getByText(/Checked by tap · [5-6] s ago/)).toBeInTheDocument();
+      // The ticking line is not a live region (it would be read out every second).
+      expect(screen.getByText(/Checked by tap/).closest('[aria-live]')).toHaveAttribute('aria-live', 'off');
+
+      act(() => vi.advanceTimersByTime(90_000));
+      expect(screen.getByRole('heading', { name: 'Unclaimed.' })).toBeInTheDocument();
+      expect(seals()[0]).toHaveAttribute('data-seal-state', 'sealed');
+      expect(screen.getByText('Tap the seal again to check', { selector: '.am-tap-cue' })).toBeInTheDocument();
+      expect(screen.getAllByRole('status').some((el) => el.textContent === 'Tap the seal again to check')).toBe(true);
+      expect(screen.queryByText(/Checked by tap/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Verified/)).not.toBeInTheDocument();
+      // G3: nothing re-checks without a tap.
+      expect(api.tap).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never puts the chip name, tag id or tap session next to the seal', async () => {
+    api.tap.mockResolvedValue(enrolledTap());
+    renderVerify(TAP_PATH);
+    await screen.findByRole('heading', { name: 'Verified just now.' });
+
+    const card = seals()[0].closest('section')!;
+    expect(card.textContent).not.toMatch(/chip_001|tag-1|serial|UID/i);
+    expect(card.innerHTML).not.toContain(SESSION);
+    expect(document.body.textContent).not.toMatch(/\btoken\b/i);
+  });
+
+  it.each(['RELEASED', 'RETIRED', 'SUSPENDED'])('draws no seal for a %s seal', async (status) => {
+    api.tap.mockResolvedValue(enrolledTap({ lifecycleStatus: status, tapSession: null }));
+    renderVerify(TAP_PATH);
+    await screen.findByRole('heading', { level: 1 });
+    expect(seals()).toHaveLength(0);
+    expect(screen.queryByText('7K3Q-9XWD')).not.toBeInTheDocument();
+  });
+
+  it('draws no seal for a failed, unknown or errored tap', async () => {
+    api.tap.mockResolvedValue({ valid: false, reason: 'replay_detected' });
+    const failed = renderVerify(TAP_PATH);
+    await screen.findByRole('heading', { name: 'This tap was already used.' });
+    expect(seals()).toHaveLength(0);
+    failed.unmount();
+
+    sessionStorage.clear();
+    api.tap.mockRejectedValue(new TokenApiError('No NFC tag matched the scan', 404, 'not_found', null));
+    const unknown = renderVerify(TAP_PATH);
+    await screen.findByRole('heading', { name: 'This seal isn’t registered.' });
+    expect(seals()).toHaveLength(0);
+    unknown.unmount();
+
+    api.tap.mockRejectedValue(new Error('boom'));
+    renderVerify(TAP_PATH);
+    await screen.findByRole('heading', { name: 'We could not check this seal.' });
+    expect(seals()).toHaveLength(0);
+  });
+
+  it('shows no seal (but still the result) when an older backend sends no seal code', async () => {
+    api.tap.mockResolvedValue(enrolledTap({ sealCode: undefined, checkedAt: undefined }));
+    renderVerify(TAP_PATH);
+    expect(await screen.findByRole('heading', { name: 'Verified just now.' })).toBeInTheDocument();
+    expect(seals()).toHaveLength(0);
+  });
+
+  it('uses the Cinema theme on the tap page only', async () => {
+    api.tap.mockResolvedValue(enrolledTap());
+    renderVerify(TAP_PATH);
+    await screen.findByRole('heading', { name: 'Verified just now.' });
+    expect(document.querySelector('main')).toHaveAttribute('data-theme', 'cinema');
+  });
+});
+
 // ── Verify page ─────────────────────────────────────────────────────────────
 
 describe('TokenVerifyPage', () => {
@@ -118,8 +209,9 @@ describe('TokenVerifyPage', () => {
 
     renderVerify(TAP_PATH, { strict: true });
 
-    expect(await screen.findByRole('heading', { name: 'Unclaimed.' })).toBeInTheDocument();
-    expect(screen.getByText(/Genuine Authentic Materials token/)).toBeInTheDocument();
+    // A tap made on this page load: the Verified seal (S-SEAL1).
+    expect(await screen.findByRole('heading', { name: 'Verified just now.' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Genuine seal, seal 7K3Q-9XWD' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/verify\/chip_001$/));
     // The full tapped URL is what the backend verifies.
     expect(api.tap.mock.calls[0][0]).toContain(`picc_data=${PICC}`);
@@ -140,7 +232,7 @@ describe('TokenVerifyPage', () => {
     const user = userEvent.setup();
 
     renderVerify(TAP_PATH);
-    await user.click(await screen.findByRole('button', { name: 'Claim token' }));
+    await user.click(await screen.findByRole('button', { name: 'Claim seal' }));
     expect(api.claimWithTapSession).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Confirm claim' }));
 
@@ -159,7 +251,7 @@ describe('TokenVerifyPage', () => {
     const user = userEvent.setup();
 
     renderVerify(TAP_PATH);
-    await user.click(await screen.findByRole('button', { name: 'Claim token' }));
+    await user.click(await screen.findByRole('button', { name: 'Claim seal' }));
     await user.click(screen.getByRole('button', { name: 'Confirm claim' }));
 
     expect(await screen.findByText(/Your tap has expired or was already used/)).toBeInTheDocument();
@@ -174,7 +266,7 @@ describe('TokenVerifyPage', () => {
     const user = userEvent.setup();
 
     renderVerify(TAP_PATH);
-    await user.click(await screen.findByRole('button', { name: 'Claim token' }));
+    await user.click(await screen.findByRole('button', { name: 'Claim seal' }));
     await user.click(screen.getByRole('button', { name: 'Confirm claim' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/two-step sign-in/i);
@@ -185,8 +277,8 @@ describe('TokenVerifyPage', () => {
     api.tap.mockRejectedValue(new TokenApiError('Not found', 404, null, null));
     renderVerify(TAP_PATH);
 
-    expect(await screen.findByRole('heading', { name: 'We could not check this token.' })).toBeInTheDocument();
-    expect(screen.queryByText('This is not a registered token.')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'We could not check this seal.' })).toBeInTheDocument();
+    expect(screen.queryByText('This seal isn’t registered.')).not.toBeInTheDocument();
   });
 
   it('shows "already used" for a replayed tap', async () => {
@@ -201,7 +293,7 @@ describe('TokenVerifyPage', () => {
     api.tap.mockRejectedValue(new TokenApiError('No NFC tag matched the scan', 404, 'not_found', null));
     renderVerify(TAP_PATH);
 
-    expect(await screen.findByRole('heading', { name: 'This is not a registered token.' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'This seal isn’t registered.' })).toBeInTheDocument();
   });
 
   it('shows the buyer warning on an active token the visitor does not own', async () => {
@@ -214,10 +306,10 @@ describe('TokenVerifyPage', () => {
     );
     renderVerify(TAP_PATH);
 
-    expect(await screen.findByRole('heading', { name: 'Verified.' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Verified just now.' })).toBeInTheDocument();
     expect(screen.getByText(/Do not pay until the owner starts a transfer to you/)).toBeInTheDocument();
     expect(screen.getByText('Disclosed Creator')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Claim token' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Claim seal' })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -229,18 +321,21 @@ describe('TokenVerifyPage', () => {
     renderVerify(TAP_PATH);
 
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Claim token' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Claim seal' })).not.toBeInTheDocument();
   });
 
   it('reads a refreshed page from the tab cache without re-sending the tap', async () => {
     api.tap.mockResolvedValue(enrolledTap());
     const first = renderVerify(TAP_PATH);
-    await screen.findByRole('heading', { name: 'Unclaimed.' });
+    await screen.findByRole('heading', { name: 'Verified just now.' });
     first.unmount();
 
     renderVerify('/verify/chip_001');
 
+    // A remembered tap is never Verified: the still Sealed seal (DR-22).
     expect(await screen.findByRole('heading', { name: 'Unclaimed.' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Sealed, seal 7K3Q-9XWD' })).toBeInTheDocument();
+    expect(screen.getByText('Tap the seal to check')).toBeInTheDocument();
     expect(api.tap).toHaveBeenCalledTimes(1);
   });
 
@@ -285,7 +380,7 @@ describe('TokenVerifyPage', () => {
   it('asks for a tap when there is nothing to verify', async () => {
     renderVerify('/verify/chip_001');
 
-    expect(await screen.findByRole('heading', { name: 'Tap the token to verify it.' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tap the seal to check it.' })).toBeInTheDocument();
     expect(api.tap).not.toHaveBeenCalled();
   });
 });
@@ -384,6 +479,32 @@ const ownedToken = (overrides: Partial<MyToken> = {}): MyToken => ({
 
 describe('TokenDetailPage', () => {
   const renderDetail = () => renderAt('/tokens/tag-1', '/tokens/:tagId', <TokenDetailPage />);
+
+  it('S-SEAL1: shows the still Sealed seal with its code, never Verified', async () => {
+    api.myTokens.mockResolvedValue([ownedToken({ sealCode: '7K3Q-9XWD' })]);
+    renderDetail();
+
+    await screen.findByRole('heading', { name: 'Signed jersey' });
+    const seal = document.querySelector('[data-seal-badge]');
+    expect(seal).toHaveAttribute('data-seal-state', 'sealed');
+    expect(screen.getByText('7K3Q-9XWD', { selector: 'span' })).toHaveClass('sealcode-mono');
+    expect(screen.queryByText(/Verified/)).not.toBeInTheDocument();
+  });
+
+  it('S-SEAL1: an untitled seal is named by its code, not its chip name', async () => {
+    api.myTokens.mockResolvedValue([ownedToken({ title: null, sealCode: '7K3Q-9XWD', chipName: 'chip_004' })]);
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: 'Seal 7K3Q-9XWD' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('chip_004');
+  });
+
+  it('S-SEAL1: no seal on a seal that is on hold', async () => {
+    api.myTokens.mockResolvedValue([ownedToken({ sealCode: '7K3Q-9XWD', lifecycleStatus: 'SUSPENDED' })]);
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Signed jersey' });
+    expect(document.querySelector('[data-seal-badge]')).toBeNull();
+  });
 
   it('offers transfer and release on an active token', async () => {
     api.myTokens.mockResolvedValue([ownedToken()]);

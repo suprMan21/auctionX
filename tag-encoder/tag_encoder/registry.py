@@ -4,7 +4,7 @@ Three calls, all staff-only on the backend:
     GET  /api/v1/nfc/enroll/precheck/:tagUid?serial=&sigSha256=
          -> { exists, lifecycleStatus, uidMatches }
     POST /api/v1/nfc/enroll/reserve-name  { sigSha256, name? }
-         -> { name, auto }   (no name = the next chip_NNN; 409 = name in use)
+         -> { name, auto, sealCode }   (no name = the next chip_NNN; 409 = name in use)
     POST /api/v1/nfc/enroll  { tagUid, itemId?, chipSerial?, sigSha256?, sdmKeyVersion?, chipName? }
          -> { tagId, lifecycleStatus: ENROLLED }
 
@@ -15,7 +15,9 @@ with another chip is reported in `uidMatches` but is not a refusal.
 precheck and reserve-name run BEFORE any write to the chip (a RETIRED UID is never
 re-personalised, Locked 2026-10-02; a chip name is unique, Locked 2026-10-09). The
 name is held against the chip's fingerprint, so re-running a chip that failed
-mid-encode gets the same name back. enroll runs only AFTER the read-back verified. No key
+mid-encode gets the same name back. S-SEAL1: the seal code (XXXX-XXXX) is reserved in
+the same step; it is digital only (never written to the chip) and only recorded in the
+local audit ledger. enroll runs only AFTER the read-back verified. No key
 material ever crosses this API: the backend derives the chip keys itself.
 
 stdlib only (urllib) so the encoder keeps zero runtime dependencies.
@@ -47,6 +49,33 @@ class NameTaken(RegistryError):
     """The requested chip name belongs to another chip."""
 
 
+SEAL_CODE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$")
+
+
+@dataclass(frozen=True)
+class Reservation:
+    name: str
+    # None only while the backend predates S-SEAL1; the database still gives the
+    # tag its code at enroll, so the encode does not depend on it.
+    seal_code: str | None
+
+
+_CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+
+def _random_seal_code() -> str:
+    raw = "".join(_CROCKFORD[b & 31] for b in os.urandom(8))
+    return f"{raw[:4]}-{raw[4:]}"
+
+
+def _seal_code_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not SEAL_CODE.match(value):
+        raise RegistryError("name reservation failed: the backend returned a malformed seal code")
+    return value
+
+
 @dataclass(frozen=True)
 class Precheck:
     exists: bool
@@ -59,6 +88,10 @@ class Registry(Protocol):
 
     def reserve_name(self, sig_sha256: str, name: str | None = None) -> str:
         """Reserve `name` (or the next chip_NNN) for this chip. Raises NameTaken on a clash."""
+        ...
+
+    def reserve_identity(self, sig_sha256: str, name: str | None = None) -> Reservation:
+        """reserve_name plus the chip's seal code (S-SEAL1), in one step."""
         ...
 
     def enroll(
@@ -119,6 +152,9 @@ class BackendRegistry:
         return Precheck(bool(data["exists"]), data.get("lifecycleStatus"), int(data.get("uidMatches") or 0))
 
     def reserve_name(self, sig_sha256: str, name: str | None = None) -> str:
+        return self.reserve_identity(sig_sha256, name).name
+
+    def reserve_identity(self, sig_sha256: str, name: str | None = None) -> Reservation:
         body: dict = {"sigSha256": sig_sha256}
         if name is not None:
             body["name"] = name
@@ -131,7 +167,7 @@ class BackendRegistry:
             raise RegistryError(f"name reservation failed (HTTP {status}): {payload.get('error', 'no detail')}")
         if name is not None and reserved.lower() != name.lower():
             raise RegistryError("name reservation failed: the backend returned a different name")
-        return reserved
+        return Reservation(reserved, _seal_code_or_none((payload.get("data") or {}).get("sealCode")))
 
     def enroll(
         self,
@@ -195,7 +231,7 @@ class MemoryRegistry:
 
     rows: dict[str, str] = field(default_factory=dict)  # v1 rows: uid -> lifecycle status
     chips: list[dict] = field(default_factory=list)  # v2 rows: {uid, serial, sig, status}
-    names: dict[str, dict] = field(default_factory=dict)  # lower(name) -> {name, sig, enrolled}
+    names: dict[str, dict] = field(default_factory=dict)  # lower(name) -> {name, sig, enrolled, seal_code}
     fail_enroll: bool = False
     fail_reserve: bool = False
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
@@ -221,6 +257,19 @@ class MemoryRegistry:
         with self._lock:  # the backend takes an advisory lock for the same reason
             return self._reserve(sig_sha256, name)
 
+    def reserve_identity(self, sig_sha256: str, name: str | None = None) -> Reservation:
+        """Same rules as the backend's reserve_chip_identity(): a re-run keeps its seal code."""
+        reserved = self.reserve_name(sig_sha256, name)
+        with self._lock:
+            held = self.names[reserved.lower()]
+            if held.get("seal_code") is None:
+                used = {r.get("seal_code") for r in self.names.values()}
+                code = _random_seal_code()
+                while code in used:
+                    code = _random_seal_code()
+                held["seal_code"] = code
+            return Reservation(reserved, held["seal_code"])
+
     def _reserve(self, sig_sha256: str, name: str | None) -> str:
         held = next((k for k, r in self.names.items() if r["sig"] == sig_sha256), None)
         if held is not None:
@@ -238,7 +287,7 @@ class MemoryRegistry:
             raise NameTaken(f"names starting with chip_ are assigned in sequence (next is {auto})")
         elif name.lower() in self.names:
             raise NameTaken(f"chip name {name!r} is not available: in use")
-        self.names[name.lower()] = {"name": name, "sig": sig_sha256, "enrolled": False}
+        self.names[name.lower()] = {"name": name, "sig": sig_sha256, "enrolled": False, "seal_code": None}
         return name
 
     def enroll(

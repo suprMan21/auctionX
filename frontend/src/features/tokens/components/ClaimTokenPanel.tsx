@@ -37,7 +37,7 @@ export const ClaimTokenPanel = ({ returnTo, signedIn, tapSession, onClaimed, onS
     return (
       <section aria-labelledby="claim-heading" className="glass rounded-2xl p-6">
         <h2 id="claim-heading" className="text-lg font-semibold text-white mb-2">
-          Claim this token
+          Claim this seal
         </h2>
         <p role="alert" className="text-red-300 text-sm">
           {phase.message}
@@ -51,10 +51,10 @@ export const ClaimTokenPanel = ({ returnTo, signedIn, tapSession, onClaimed, onS
     return (
       <section aria-labelledby="claim-heading" className="glass rounded-2xl p-6">
         <h2 id="claim-heading" className="text-lg font-semibold text-white mb-2">
-          Claim this token
+          Claim this seal
         </h2>
         <p className="text-gray-400 text-sm">
-          Your tap has expired. Tap the token again with your phone to claim it.
+          Your tap has expired. Tap the seal again with your phone to claim it.
         </p>
       </section>
     );
@@ -64,10 +64,10 @@ export const ClaimTokenPanel = ({ returnTo, signedIn, tapSession, onClaimed, onS
     return (
       <section aria-labelledby="claim-heading" className="glass rounded-2xl p-6">
         <h2 id="claim-heading" className="text-lg font-semibold text-white mb-2">
-          Claim this token
+          Claim this seal
         </h2>
         <p className="text-gray-400 text-sm mb-5">
-          This token has no owner yet. Sign in to claim it. You have 10 minutes from your tap.
+          This seal has no owner yet. Sign in to claim it. You have 10 minutes from your tap.
         </p>
         <Link
           to={loginPathFor(returnTo)}
@@ -100,25 +100,25 @@ export const ClaimTokenPanel = ({ returnTo, signedIn, tapSession, onClaimed, onS
   return (
     <section aria-labelledby="claim-heading" className="glass rounded-2xl p-6">
       <h2 id="claim-heading" className="text-lg font-semibold text-white mb-2">
-        Claim this token
+        Claim this seal
       </h2>
 
       {phase.kind === 'idle' && (
         <>
           <p className="text-gray-400 text-sm mb-5">
-            This token has no owner yet. Claiming it records you as its first owner.
+            This seal has no owner yet. Claiming it records you as its first owner.
           </p>
-          <Button onClick={() => setPhase({ kind: 'confirming' })}>Claim token</Button>
+          <Button onClick={() => setPhase({ kind: 'confirming' })}>Claim seal</Button>
         </>
       )}
 
       {(phase.kind === 'confirming' || phase.kind === 'submitting') && (
         <>
           <p className="text-gray-300 text-sm mb-2">
-            You are about to become this token&apos;s owner.
+            You are about to become this seal&apos;s owner.
           </p>
           <ul className="text-gray-400 text-sm mb-5 list-disc pl-5 space-y-1">
-            <li>Your account stays private. The public page never shows who owns a token.</li>
+            <li>Your account stays private. The public page never shows who owns a seal.</li>
             <li>A claim cannot be undone. Ownership only moves by transfer.</li>
           </ul>
           <div className="flex flex-wrap gap-3">

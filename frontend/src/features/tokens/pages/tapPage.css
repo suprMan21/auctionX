@@ -1,0 +1,20 @@
+/*
+ * Tap page in the Cinema theme (S-SEAL1 Ph1, gate G4). Scoped to .am-tap so the rest of
+ * the app keeps the App theme. Every value comes from @authentic-materials/ui tokens.
+ */
+.am-tap{min-height:100vh;background:rgb(var(--md-sys-color-surface));color:rgb(var(--md-sys-color-on-surface));font-family:var(--am-font-brand);padding:2.5rem 1rem}
+.am-tap .am-tap-wrap{max-width:42rem;margin:0 auto;display:grid;gap:1.5rem}
+.am-tap .am-tap-card{border-radius:var(--md-sys-shape-corner-xl);border:1px solid var(--am-glass-2-border);background:var(--am-glass-2-bg);padding:2rem;box-shadow:var(--md-sys-elevation-level2)}
+.am-tap .am-tap-card--center{text-align:center}
+.am-tap .am-tap-verdict{display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap}
+.am-tap .am-tap-kicker{margin:0 0 .25rem;font-size:var(--md-sys-typescale-label-l-size);line-height:var(--md-sys-typescale-label-l-line-height);font-weight:700;letter-spacing:.02em;color:rgb(var(--md-sys-color-success))}
+.am-tap .am-tap-kicker--sealed{color:rgb(var(--md-sys-color-on-surface-variant))}
+.am-tap .am-tap-kicker--bad{color:rgb(var(--md-sys-color-error))}
+.am-tap h1{margin:0;font-size:var(--md-sys-typescale-headline-s-size);line-height:var(--md-sys-typescale-headline-s-line-height);font-weight:800;color:rgb(var(--md-sys-color-on-surface))}
+/* The heading takes focus only so screen readers announce the result; it is not a control. */
+.am-tap h1:focus{outline:none}
+.am-tap .am-tap-code{margin:.375rem 0 0;font-size:var(--md-sys-typescale-label-l-size);color:rgb(var(--md-sys-color-on-surface-variant))}
+.am-tap .am-tap-cue{margin:.375rem 0 0;font-size:var(--md-sys-typescale-body-m-size);color:rgb(var(--md-sys-color-on-surface-variant));font-variant-numeric:tabular-nums}
+.am-tap .am-tap-cue--live{color:rgb(var(--md-sys-color-success))}
+.am-tap .am-tap-body{margin:1rem 0 0;color:rgb(var(--md-sys-color-on-surface-variant))}
+.am-tap .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}

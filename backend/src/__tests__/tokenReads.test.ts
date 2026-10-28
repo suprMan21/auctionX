@@ -75,6 +75,8 @@ const baseTag = (overrides: Row = {}): Row => ({
   linked_item_id: null,
   verification_id: null,
   status: 'registered',
+  chip_name: 'chip_777',
+  seal_code: '7K3Q9XWD',
   ...overrides,
 });
 
@@ -253,6 +255,30 @@ describe('POST /nfc/tap', () => {
     expect(blob).not.toContain(OWNER);
     expect(blob).not.toContain(TAG_UID);
     expect(blob).not.toContain('owner@example.com');
+    // S-SEAL1: never the chip name next to the seal (the serial is covered by the keys check below).
+    expect(blob).not.toContain('chip_777');
+  });
+
+  it('S-SEAL1: a valid tap carries the seal code (display form) and the server check time', async () => {
+    const before = Date.now();
+    const { tapTag } = await reads();
+    const out = await call(tapTag, makeReq(null, { sunMessage: sunFor(2) }));
+
+    expect(data(out).sealCode).toBe('7K3Q-9XWD');
+    const checkedAt = Date.parse(data(out).checkedAt as string);
+    expect(checkedAt).toBeGreaterThanOrEqual(before - 1000);
+    expect(checkedAt).toBeLessThanOrEqual(Date.now() + 1000);
+    // Exactly the documented public keys: anything new must be reviewed here first.
+    expect(Object.keys(data(out)).sort()).toEqual(
+      ['checkedAt', 'lifecycleStatus', 'provenance', 'sealCode', 'tagId', 'tapSession', 'valid', 'viewer'].sort(),
+    );
+  });
+
+  it('S-SEAL1: a malformed stored seal code is never sent', async () => {
+    tables.nfc_tags[0] = baseTag({ seal_code: 'bad' });
+    const { tapTag } = await reads();
+    const out = await call(tapTag, makeReq(null, { sunMessage: sunFor(2) }));
+    expect(data(out).sealCode).toBeNull();
   });
 
   it('reports a replayed tap as invalid and mints no session', async () => {
@@ -493,6 +519,8 @@ describe('GET /nfc/mine', () => {
       title: 'Signed jersey',
       ownershipId: '0x' + 'a'.repeat(64),
       pendingTransfer: { transferId: TRANSFER_ID, transferType: 'gift', toEmail: 'friend@example.com' },
+      // S-SEAL1: the owner sees their seal's code.
+      sealCode: '7K3Q-9XWD',
     });
   });
 

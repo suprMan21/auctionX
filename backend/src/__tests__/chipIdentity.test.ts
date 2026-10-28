@@ -342,20 +342,21 @@ describe('reserve chip name', () => {
   };
 
   it('with no name asks the database for the next chip_NNN', async () => {
-    answer({ data: 'chip_005', error: null });
+    answer({ data: [{ name: 'chip_005', seal_code: '7K3Q9XWD' }], error: null });
     const out = await reserve({ sigSha256: NEW_SIG });
 
-    expect(data(out)).toEqual({ name: 'chip_005', auto: true });
+    // S-SEAL1: the seal code comes back in the same step, in display form.
+    expect(data(out)).toEqual({ name: 'chip_005', auto: true, sealCode: '7K3Q-9XWD' });
     expect(rpcCalls).toEqual([
-      { fn: 'reserve_chip_name', args: { p_sig_sha256: NEW_SIG, p_name: undefined, p_actor: STAFF } },
+      { fn: 'reserve_chip_identity', args: { p_sig_sha256: NEW_SIG, p_name: undefined, p_actor: STAFF } },
     ]);
   });
 
   it('passes a manual name through the same check', async () => {
-    answer({ data: 'gold_run_01', error: null });
+    answer({ data: [{ name: 'gold_run_01', seal_code: 'B12626JS' }], error: null });
     const out = await reserve({ sigSha256: NEW_SIG, name: 'gold_run_01' });
 
-    expect(data(out)).toEqual({ name: 'gold_run_01', auto: false });
+    expect(data(out)).toEqual({ name: 'gold_run_01', auto: false, sealCode: 'B126-26JS' });
     expect(rpcCalls[0].args.p_name).toBe('gold_run_01');
   });
 
@@ -369,14 +370,23 @@ describe('reserve chip name', () => {
   });
 
   it('fails closed when the database gives no definite name', async () => {
-    for (const result of [{ data: null, error: { message: 'connection reset' } }, { data: null, error: null }, { data: '', error: null }]) {
+    for (const result of [
+      { data: null, error: { message: 'connection reset' } },
+      { data: null, error: null },
+      { data: [], error: null },
+      { data: [{ name: '', seal_code: '7K3Q9XWD' }], error: null },
+      // A name without a well-formed seal code is not a definite reservation either.
+      { data: [{ name: 'chip_005', seal_code: null }], error: null },
+      { data: [{ name: 'chip_005', seal_code: 'ILOU1234' }], error: null },
+      { data: 'chip_005', error: null },
+    ]) {
       answer(result);
       expect((await reserve({ sigSha256: NEW_SIG })).threw?.code).toBe('unavailable');
     }
   });
 
   it('rejects a bad fingerprint or name before touching the database', async () => {
-    answer({ data: 'chip_005', error: null });
+    answer({ data: [{ name: 'chip_005', seal_code: '7K3Q9XWD' }], error: null });
     for (const body of [
       {}, { sigSha256: 'C'.repeat(64) }, { sigSha256: NEW_SIG, name: '' }, { sigSha256: NEW_SIG, name: 'has space' },
       { sigSha256: NEW_SIG, name: '../x' }, { sigSha256: NEW_SIG, name: 'a'.repeat(65) }, { sigSha256: NEW_SIG, other: 1 },
@@ -387,7 +397,7 @@ describe('reserve chip name', () => {
   });
 
   it('is refused without manage_nfc', async () => {
-    answer({ data: 'chip_005', error: null });
+    answer({ data: [{ name: 'chip_005', seal_code: '7K3Q9XWD' }], error: null });
     expect((await reserve({ sigSha256: NEW_SIG }, OWNER)).threw?.code).toBe('permission_denied');
     expect((await reserve({ sigSha256: NEW_SIG }, null)).threw?.code).toBe('unauthenticated');
     expect(rpcCalls).toEqual([]);
