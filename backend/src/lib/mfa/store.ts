@@ -52,8 +52,6 @@ export interface PasskeyRow {
   usable_from: string | null;
   /** Ph3b: the recovery that added it (undo removes it). Optional so older fakes still type-check. */
   added_by_recovery?: string | null;
-  /** Ph4: maker proven by attestation at registration ('yubico'), else null. */
-  attested_vendor?: string | null;
 }
 
 export interface TotpRow {
@@ -100,8 +98,6 @@ export interface NewPasskey {
   usable_from?: string | null;
   /** Ph3b: set when the finishing session of a recovery adds it. */
   added_by_recovery?: string | null;
-  /** Ph4: set when the attestation chained to a pinned root (break-glass account). */
-  attested_vendor?: string | null;
 }
 
 // ── Ph3b types ──────────────────────────────────────────────────────────────
@@ -281,7 +277,7 @@ const fail = (op: string, error: { message?: string } | null): never => {
 };
 
 const PASSKEY_COLS =
-  'id, user_id, credential_id, public_key, sign_count, transports, aaguid, backed_up, nickname, created_at, last_used_at, usable_from, added_by_recovery, attested_vendor';
+  'id, user_id, credential_id, public_key, sign_count, transports, aaguid, backed_up, nickname, created_at, last_used_at, usable_from, added_by_recovery';
 
 const RECOVERY_COLS =
   'id, channel, status, started_session_id, hold_ends_at, finished_at, finished_session_id, freeze_ends_at, enrol_until, enrolled_at, created_at';
