@@ -162,7 +162,7 @@ export const CollectorLandingPage = () => {
             Some collections are just stuff. Build something else.
           </p>
         </div>
-        <WaitlistCapture source="collector" />
+        <WaitlistCapture />
       </div>
     </div>
   );
