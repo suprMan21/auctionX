@@ -149,7 +149,7 @@ export const mfaEmailContent = (email: MfaEmail): { subject: string; lines: stri
         subject: 'Your account was recovered',
         lines: [
           'Your account was recovered with a code sent by email. Your old backup codes no longer work.',
-          `Until ${formatUtc(email.freezeEndsAt) ?? 'a week from now'}, transfers, releases and sign-in changes are paused to keep your tokens safe.`,
+          `Until ${formatUtc(email.freezeEndsAt) ?? 'a week from now'}, transfers, releases and sign-in changes are paused to keep your seals safe.`,
           "If this wasn't you, sign in with your old passkey or authenticator app and choose Undo recovery in Security settings.",
         ],
       };

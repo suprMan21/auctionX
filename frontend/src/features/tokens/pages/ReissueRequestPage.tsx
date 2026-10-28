@@ -22,8 +22,8 @@ type Submit =
 
 const requestErrorCopy = (err: unknown): string => {
   if (!(err instanceof TokenApiError)) return 'Something went wrong. Please try again.';
-  if (err.reason === 'tap_session_invalid') return 'Your tap has expired or was already used. Tap the chip again, then come back to this page.';
-  if (err.code === 'conflict') return 'A replacement request is already open for this token.';
+  if (err.reason === 'tap_session_invalid') return 'Your tap has expired or was already used. Tap the seal again, then come back to this page.';
+  if (err.code === 'conflict') return 'A replacement request is already open for this seal.';
   return err.message;
 };
 
@@ -96,7 +96,7 @@ export const ReissueRequestPage = () => {
     <main id="main-content" className="min-h-screen bg-dark-800 py-10 px-4">
       <div className="max-w-2xl mx-auto space-y-6">
         <Link to={`/tokens/${tagId}`} className="text-sm text-gray-400 hover:text-white">
-          <span aria-hidden="true">← </span>Back to the token
+          <span aria-hidden="true">← </span>Back to the seal
         </Link>
 
         {load.kind === 'loading' && (
@@ -108,7 +108,7 @@ export const ReissueRequestPage = () => {
         {load.kind === 'not-owner' && (
           <div className="glass rounded-2xl p-8 text-center">
             <h1 className="text-2xl font-bold text-white mb-2">Not in your collection.</h1>
-            <p className="text-gray-400">Only the registered owner can ask for a replacement chip.</p>
+            <p className="text-gray-400">Only the registered owner can ask for a replacement seal.</p>
           </div>
         )}
 
@@ -117,7 +117,7 @@ export const ReissueRequestPage = () => {
             <h1 className="text-2xl font-bold text-white mb-2">{REISSUE_STAGE_COPY.review.title}</h1>
             <p className="text-gray-400 mb-4">{REISSUE_STAGE_COPY.review.body}</p>
             <Link to={`/tokens/${tagId}`} className="text-primary-300 underline hover:text-primary-200">
-              Back to the token
+              Back to the seal
             </Link>
           </section>
         )}
@@ -127,7 +127,7 @@ export const ReissueRequestPage = () => {
             <h1 className="text-2xl font-bold text-white mb-2">{REISSUE_STAGE_COPY[reissueStage(load.open)].title}</h1>
             <p className="text-gray-400 mb-4">{REISSUE_STAGE_COPY[reissueStage(load.open)].body}</p>
             <Link to={`/tokens/${tagId}`} className="text-primary-300 underline hover:text-primary-200">
-              Back to the token
+              Back to the seal
             </Link>
           </section>
         )}
@@ -135,38 +135,38 @@ export const ReissueRequestPage = () => {
         {load.kind === 'ready' && submit.kind !== 'sent' && !load.open && (
           <>
             <section className="glass rounded-2xl p-8">
-              <h1 className="text-2xl font-bold text-white mb-2">Replace a chip that is coming loose</h1>
+              <h1 className="text-2xl font-bold text-white mb-2">Replace a seal that is coming loose</h1>
               <p className="text-gray-400 mb-3">
-                For {tokenDisplayName(load.token)}. Ask now, while the chip is still on the item. We move your token to
-                a new chip and retire the old one.
+                For {tokenDisplayName(load.token)}. Ask now, while the seal is still on the item. We send you a new seal,
+                move your ownership and story to it, and retire the old one.
               </p>
               <ul className="list-disc pl-5 space-y-1 text-sm text-gray-300">
-                <li>We can only replace a chip that is still attached. If it has already come off, we cannot replace it.</li>
-                <li>Leave the chip where it is until the new one arrives.</li>
+                <li>We can only replace a seal that is still attached. If it has already come off, we cannot replace it.</li>
+                <li>Leave the seal where it is until the new one arrives.</li>
                 <li>Nothing is charged now. If we approve, you pay a replacement fee on this website.</li>
               </ul>
             </section>
 
             {/* Outside the form: a rejected tap is forgotten, which swaps the form for
-                "Tap the chip first", and the owner still needs to read why. */}
+                "Tap the seal first", and the owner still needs to read why. */}
             {submit.kind === 'error' && (
               <p role="alert" className="text-red-300 text-sm">{submit.message}</p>
             )}
 
             {!liveTap ? (
               <section className="glass rounded-2xl p-6" aria-labelledby="tap-first">
-                <h2 id="tap-first" className="text-lg font-semibold text-white mb-2">Tap the chip first</h2>
+                <h2 id="tap-first" className="text-lg font-semibold text-white mb-2">Tap the seal first</h2>
                 <p className="text-gray-400 text-sm">
-                  Hold your phone to the chip on the item. On the page that opens, choose “Chip coming loose?”. You
+                  Hold your phone to the seal on the item. On the page that opens, choose “Seal coming loose?”. You
                   then have 10 minutes to take the photos and send the request.
                 </p>
               </section>
             ) : (
               <section className="glass rounded-2xl p-6 space-y-5" aria-labelledby="photos-heading">
                 <div>
-                  <h2 id="photos-heading" className="text-lg font-semibold text-white mb-1">Take photos of the chip</h2>
+                  <h2 id="photos-heading" className="text-lg font-semibold text-white mb-1">Take photos of the seal</h2>
                   <p className="text-gray-400 text-sm">
-                    Take 1 to 3 photos that show the chip on the item and where it is lifting. Use good light.
+                    Take 1 to 3 photos that show the seal on the item and where it is lifting. Use good light.
                   </p>
                 </div>
 
@@ -182,7 +182,7 @@ export const ReissueRequestPage = () => {
                     className="mt-1 h-4 w-4 rounded accent-primary-500 focus:ring-2 focus:ring-primary-500"
                   />
                   <label htmlFor={attachedId} className="text-sm text-gray-300">
-                    The chip is still attached to the item.
+                    The seal is still attached to the item.
                   </label>
                 </div>
 

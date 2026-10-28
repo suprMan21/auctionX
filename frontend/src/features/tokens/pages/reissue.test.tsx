@@ -154,7 +154,7 @@ describe('ReissueRequestPage', () => {
   it('asks for a tap first when there is no live tap of this chip', async () => {
     renderRequest();
 
-    expect(await screen.findByRole('heading', { name: 'Tap the chip first' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tap the seal first' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Open camera/ })).not.toBeInTheDocument();
     expect(screen.getByText(/If it has already come off, we cannot replace it/)).toBeInTheDocument();
   });
@@ -163,7 +163,7 @@ describe('ReissueRequestPage', () => {
     saveTap('chip_003', ownerTap({ tagId: 'other-tag' }));
     renderRequest();
 
-    expect(await screen.findByRole('heading', { name: 'Tap the chip first' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tap the seal first' })).toBeInTheDocument();
   });
 
   it('needs at least one live photo and the "still attached" confirmation, then sends tap + photo keys', async () => {
@@ -183,10 +183,10 @@ describe('ReissueRequestPage', () => {
     await user.click(screen.getByRole('button', { name: 'Open camera' }));
     expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith({ video: { facingMode: 'environment' }, audio: false });
     await user.click(await screen.findByRole('button', { name: /Take photo/ }));
-    expect(await screen.findByRole('img', { name: /Photo 1 of the chip/ })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: /Photo 1 of the seal/ })).toBeInTheDocument();
     expect(send).toBeDisabled();
 
-    await user.click(screen.getByRole('checkbox', { name: 'The chip is still attached to the item.' }));
+    await user.click(screen.getByRole('checkbox', { name: 'The seal is still attached to the item.' }));
     expect(send).toBeEnabled();
     await user.click(send);
 
@@ -207,7 +207,7 @@ describe('ReissueRequestPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Open camera' }));
     for (let i = 0; i < 3; i += 1) await user.click(await screen.findByRole('button', { name: /Take photo/ }));
 
-    expect(screen.getAllByRole('img', { name: /of the chip on the item/ })).toHaveLength(3);
+    expect(screen.getAllByRole('img', { name: /of the seal on the item/ })).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Take photo/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Open camera|Take another photo/ })).not.toBeInTheDocument();
     expect(stopTrack).toHaveBeenCalled();
@@ -222,10 +222,10 @@ describe('ReissueRequestPage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Open camera' }));
     await user.click(await screen.findByRole('button', { name: /Take photo/ }));
-    await user.click(screen.getByRole('checkbox', { name: 'The chip is still attached to the item.' }));
+    await user.click(screen.getByRole('checkbox', { name: 'The seal is still attached to the item.' }));
     await user.click(screen.getByRole('button', { name: 'Send replacement request' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Tap the chip again/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Tap the seal again/);
   });
 
   it('shows the open request instead of a second form', async () => {
@@ -276,8 +276,8 @@ describe('ReissuePayPage', () => {
     expect(await screen.findByText('Confirming your payment…')).toBeInTheDocument();
 
     // Stripe confirming is not "paid": the page polls until the webhook has run.
-    expect(screen.queryByRole('heading', { name: 'We are preparing your new chip.' })).not.toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'We are preparing your new chip.' }, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'We are preparing your new seal.' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'We are preparing your new seal.' }, { timeout: 5000 })).toBeInTheDocument();
   });
 
   it('keeps the card form open and shows the decline', async () => {
@@ -326,8 +326,8 @@ describe('ReplacementSection', () => {
 
   it('explains how to start when nothing is open', async () => {
     renderSection();
-    expect(await screen.findByRole('heading', { name: 'Chip coming loose?' })).toBeInTheDocument();
-    expect(screen.getByText(/cannot replace a chip that has already come off/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Seal coming loose?' })).toBeInTheDocument();
+    expect(screen.getByText(/cannot replace a seal that has already come off/)).toBeInTheDocument();
   });
 
   it('links to the web pay page and lets the owner cancel', async () => {
@@ -340,14 +340,14 @@ describe('ReplacementSection', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel request' }));
 
     expect(api.cancelReissue).toHaveBeenCalledWith(REQ);
-    expect(await screen.findByRole('heading', { name: 'Chip coming loose?' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Seal coming loose?' })).toBeInTheDocument();
   });
 
   it('offers no cancel once paid', async () => {
     api.myReissueRequests.mockResolvedValue([reissue({ paymentStatus: 'PAID' })]);
     renderSection();
 
-    expect(await screen.findByRole('heading', { name: 'We are preparing your new chip.' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'We are preparing your new seal.' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancel request' })).not.toBeInTheDocument();
   });
 });

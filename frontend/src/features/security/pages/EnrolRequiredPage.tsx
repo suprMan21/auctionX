@@ -44,7 +44,7 @@ export const EnrolRequiredPage = () => {
       <div className="glass rounded-2xl p-8 space-y-5">
         <h1 className="text-2xl font-bold text-white">Protect your account</h1>
         <p className="text-gray-300 text-sm">
-          Before you can claim, transfer or release tokens, add a second way to confirm it&apos;s you. It takes a minute.
+          Before you can claim, transfer or release seals, add a second way to confirm it&apos;s you. It takes a minute.
         </p>
 
         {!status && <p className="text-gray-400 text-sm" role="status">Loading…</p>}

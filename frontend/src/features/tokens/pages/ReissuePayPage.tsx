@@ -97,7 +97,7 @@ export const ReissuePayPage = () => {
     <main id="main-content" className="min-h-screen bg-dark-800 py-10 px-4">
       <div className="max-w-2xl mx-auto space-y-6">
         <Link to={request ? `/tokens/${request.tagId}` : '/tokens'} className="text-sm text-gray-400 hover:text-white">
-          <span aria-hidden="true">← </span>{request ? 'Back to the token' : 'My Tokens'}
+          <span aria-hidden="true">← </span>{request ? 'Back to the seal' : 'My Seals'}
         </Link>
 
         {phase.kind === 'loading' && (

@@ -42,13 +42,13 @@ export const MyTokensPage = () => {
     <main id="main-content" className="min-h-screen bg-dark-800 py-10 px-4">
       <div className="max-w-3xl mx-auto space-y-8">
         <header>
-          <h1 className="text-3xl font-bold text-white">My Tokens</h1>
+          <h1 className="text-3xl font-bold text-white">My Seals</h1>
           <p className="text-gray-400 mt-1">Your collection. Only you can see who owns these.</p>
         </header>
 
         {returningTransferId && redirectFailed && (
           <div role="alert" className="glass rounded-2xl p-6 text-red-300">
-            Your payment did not go through. Tap the token again to retry.
+            Your payment did not go through. Tap the seal again to retry.
           </div>
         )}
         {returningTransferId && !redirectFailed && (
@@ -61,7 +61,7 @@ export const MyTokensPage = () => {
 
         {load.kind === 'loading' && (
           <div role="status" className="glass rounded-2xl p-8 text-center text-gray-300">
-            Loading your tokens…
+            Loading your seals…
           </div>
         )}
 
@@ -82,13 +82,13 @@ export const MyTokensPage = () => {
                   {load.incoming.map((t) => (
                     <li key={t.transferId} className="glass rounded-2xl p-5">
                       <p className="text-white font-semibold">
-                        {t.transferType === 'gift' ? 'A token is being gifted to you.' : 'A token is being transferred to you.'}
+                        {t.transferType === 'gift' ? 'A seal is being gifted to you.' : 'A seal is being transferred to you.'}
                       </p>
                       <p className="text-gray-400 text-sm mt-1">
                         {/* fee_payer SELLER does not yet charge the sender (the recipient's
                             browser confirms the PaymentIntent), so never claim the sender pays. */}
                         {`Transfer fee: ${formatUsd(t.listAmountUsdCents)}, paid when you accept.`}{' '}
-                        To accept, tap the token with your phone. Have the item in hand first.
+                        To accept, tap the seal with your phone. Have the item in hand first.
                       </p>
                       {t.provenance?.creator_name && (
                         <p className="text-gray-300 text-sm mt-2">Creator: {t.provenance.creator_name}</p>
@@ -105,9 +105,9 @@ export const MyTokensPage = () => {
               </h2>
               {load.tokens.length === 0 ? (
                 <div className="glass rounded-2xl p-8 text-center">
-                  <p className="text-white font-semibold mb-1">No tokens yet.</p>
+                  <p className="text-white font-semibold mb-1">No seals yet.</p>
                   <p className="text-gray-400 text-sm">
-                    Tap an unclaimed token with your phone to claim it. It will show up here.
+                    Tap an unclaimed seal with your phone to claim it. It will show up here.
                   </p>
                 </div>
               ) : (

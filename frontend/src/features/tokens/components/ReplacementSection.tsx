@@ -55,7 +55,7 @@ export const ReplacementSection = ({ tagId, lifecycleStatus }: ReplacementSectio
   return (
     <section aria-labelledby="replacement-heading" className="glass rounded-2xl p-6">
       <h2 id="replacement-heading" className="text-lg font-semibold text-white mb-2">
-        {open ? REISSUE_STAGE_COPY[reissueStage(open)].title : 'Chip coming loose?'}
+        {open ? REISSUE_STAGE_COPY[reissueStage(open)].title : 'Seal coming loose?'}
       </h2>
       {open ? (
         <>
@@ -79,8 +79,8 @@ export const ReplacementSection = ({ tagId, lifecycleStatus }: ReplacementSectio
         </>
       ) : (
         <p className="text-gray-400 text-sm">
-          If the chip is lifting but still on the item, we can move your token to a new chip. Tap the chip with your
-          phone and choose “Chip coming loose?” on the page that opens. We cannot replace a chip that has already come
+          If the seal is lifting but still on the item, we can replace it with a new seal. Tap the seal with your phone
+          and choose “Seal coming loose?” on the page that opens. We cannot replace a seal that has already come
           off.
         </p>
       )}

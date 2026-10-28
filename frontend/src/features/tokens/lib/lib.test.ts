@@ -93,13 +93,14 @@ describe('safeNextPath', () => {
 describe('tokenDisplayName', () => {
   const tagId = '7c9960df-0000-4000-8000-000000000000';
 
-  it('prefers the item title, then the chip name, then the serial suffix, then the tag id', () => {
+  it('prefers the item title, then the seal code, then the serial suffix, then the tag id; never the chip name', () => {
     expect(tokenDisplayName({ tagId, title: 'Signed jersey', chipName: 'chip_004', serialSuffix: 'AE6CA9' })).toBe('Signed jersey');
-    expect(tokenDisplayName({ tagId, title: null, chipName: 'chip_004', serialSuffix: 'AE6CA9' })).toBe('chip_004');
+    expect(tokenDisplayName({ tagId, title: null, chipName: 'chip_004', serialSuffix: 'AE6CA9' })).toBe('Seal …AE6CA9');
+    expect(tokenDisplayName({ tagId, title: null, chipName: 'chip_004' })).toBe('Seal 7C9960DF');
     // S-SEAL1: the seal code wins over the internal chip name.
     expect(tokenDisplayName({ tagId, title: null, sealCode: '7K3Q-9XWD', chipName: 'chip_004' })).toBe('Seal 7K3Q-9XWD');
     expect(tokenDisplayName({ tagId, title: 'Signed jersey', sealCode: '7K3Q-9XWD' })).toBe('Signed jersey');
-    expect(tokenDisplayName({ tagId, title: null, chipName: null, serialSuffix: 'AE6CA9' })).toBe('Token …AE6CA9');
-    expect(tokenDisplayName({ tagId, title: null })).toBe('Token 7C9960DF');
+    expect(tokenDisplayName({ tagId, title: null, chipName: null, serialSuffix: 'AE6CA9' })).toBe('Seal …AE6CA9');
+    expect(tokenDisplayName({ tagId, title: null })).toBe('Seal 7C9960DF');
   });
 });

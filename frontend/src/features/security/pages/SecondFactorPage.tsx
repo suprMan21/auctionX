@@ -85,7 +85,7 @@ export const SecondFactorPage = () => {
       <main id="main-content" className="glass rounded-2xl p-8 max-w-md w-full space-y-5">
         <h1 className="text-2xl font-bold text-white">Confirm it&apos;s you</h1>
         <p className="text-gray-400 text-sm">
-          Your password was right. One more step keeps your tokens safe if someone else learns it.
+          Your password was right. One more step keeps your seals safe if someone else learns it.
         </p>
 
         {!status && state !== 'error' && <p className="text-gray-400 text-sm" role="status">Loading…</p>}

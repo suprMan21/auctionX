@@ -38,7 +38,7 @@ const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial
  * that matters has a plain-colour fallback underneath it.
  */
 const TRANSFER_FOOTER =
-  "You're receiving this because someone entered this address for a token transfer. If you weren't expecting it, you can ignore this email. Nothing happens unless you accept.";
+  "You're receiving this because someone entered this address for a seal transfer. If you weren't expecting it, you can ignore this email. Nothing happens unless you accept.";
 
 export function shell(opts: { title: string; preheader: string; body: string; footer?: string }): string {
   const site = frontendBaseUrl();
@@ -130,11 +130,11 @@ export function transferInitiatedEmail(opts: {
   tokensUrl: string;
 }): { subject: string; html: string; text: string } {
   const gift = opts.transferType === 'GIFT';
-  const subject = gift ? 'A token is being gifted to you' : 'A token is being transferred to you';
+  const subject = gift ? 'A seal is being gifted to you' : 'A seal is being transferred to you';
   const fee = usd(opts.feeCents);
   const stepList = [
     `Sign in to Authentic Materials with this email address, or create an account with it.`,
-    `Open My Tokens. The transfer is waiting there.`,
+    `Open My Seals. The transfer is waiting there.`,
     `Have the item in hand and tap its seal with your phone. The transfer fee is ${fee}, paid when you accept.`,
   ];
   const text = [
@@ -144,7 +144,7 @@ export function transferInitiatedEmail(opts: {
     '',
     ...stepList.map((s, i) => `${i + 1}. ${s}`),
     '',
-    `My Tokens: ${opts.tokensUrl}`,
+    `My Seals: ${opts.tokensUrl}`,
     '',
     "If you weren't expecting this, you can ignore it. Nothing happens unless you accept.",
   ].join('\n');
@@ -159,7 +159,7 @@ export function transferInitiatedEmail(opts: {
         ${heading(`${subject}.`)}
         ${para("Ownership moves to you once you accept. Here's how.")}
         ${steps(stepList)}
-        ${btn(opts.tokensUrl, 'Open My Tokens')}
+        ${btn(opts.tokensUrl, 'Open My Seals')}
       `,
     }),
   };
@@ -167,7 +167,7 @@ export function transferInitiatedEmail(opts: {
 
 /** Sent when the owner cancels a transfer that was waiting on this address. */
 export function transferCancelledEmail(): { subject: string; html: string; text: string } {
-  const subject = 'A token transfer to you was cancelled';
+  const subject = 'A seal transfer to you was cancelled';
   const line = 'The owner cancelled this transfer before it was accepted. Nothing was charged, and there is nothing you need to do.';
   return {
     subject,

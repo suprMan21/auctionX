@@ -65,7 +65,7 @@ export const DisclosureSettings = ({ tagId, disclosure, provenance, onSaved }: D
         What the public page shows
       </h2>
       <p className="text-gray-400 text-sm mb-4">
-        Anyone who taps this token sees the details you switch on. Your name and account are never shown.
+        Anyone who taps this seal sees the details you switch on. Your name and account are never shown.
       </p>
 
       <ul className="space-y-2 mb-5">

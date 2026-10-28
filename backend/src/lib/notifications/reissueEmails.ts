@@ -20,7 +20,7 @@ import { shell, btn, heading, para, usd, frontendBaseUrl } from './transferEmail
 export type ReissueEmailKind = 'approved' | 'waived' | 'paid' | 'rejected' | 'fulfilled';
 
 const FOOTER =
-  "You're receiving this because a replacement chip was requested for a token on your Authentic Materials account.";
+  "You're receiving this because a replacement seal was requested for a seal on your Authentic Materials account.";
 
 type Message = { subject: string; html: string; text: string };
 
@@ -48,36 +48,36 @@ export function reissueEmail(
   switch (kind) {
     case 'approved':
       return message(
-        'Your replacement chip was approved',
+        'Your replacement seal was approved',
         [
-          `The replacement fee is ${fee}. Pay on the Authentic Materials website and we will prepare your new chip.`,
-          'Keep the old chip on the item until the new one arrives.',
+          `The replacement fee is ${fee}. Pay on the Authentic Materials website and we will prepare your new seal.`,
+          'Keep the old seal on the item until the new one arrives.',
         ],
         { href: `${site}/tokens/reissue/${opts.requestId}/pay`, label: 'Pay on the website' },
       );
     case 'waived':
-      return message('Your replacement chip was approved', [
-        'There is no fee for this replacement. We are preparing your new chip.',
-        'Keep the old chip on the item until the new one arrives.',
+      return message('Your replacement seal was approved', [
+        'There is no fee for this replacement. We are preparing your new seal.',
+        'Keep the old seal on the item until the new one arrives.',
       ]);
     case 'paid':
-      return message('Payment received for your replacement chip', [
-        `We received your ${fee} payment. We are preparing your new chip.`,
-        'Keep the old chip on the item until the new one arrives.',
+      return message('Payment received for your replacement seal', [
+        `We received your ${fee} payment. We are preparing your new seal.`,
+        'Keep the old seal on the item until the new one arrives.',
       ]);
     case 'rejected':
-      return message('Your replacement chip request was not approved', [
+      return message('Your replacement seal request was not approved', [
         'We reviewed your request and could not approve it. Nothing was charged.',
-        'Your token and its current chip are unchanged.',
+        'Your seal is unchanged.',
       ]);
     case 'fulfilled':
       return message(
-        'Your replacement chip is active',
+        'Your replacement seal is active',
         [
-          'Your token now lives on the new chip. The old chip has been retired and will no longer verify.',
-          'Your token has a new Ownership ID. You can find it in My Tokens.',
+          'Your ownership and story now live on the new seal. The old seal has been retired and will no longer verify.',
+          'You have a new Ownership ID. You can find it in My Seals.',
         ],
-        { href: `${site}/tokens`, label: 'Open My Tokens' },
+        { href: `${site}/tokens`, label: 'Open My Seals' },
       );
   }
 }

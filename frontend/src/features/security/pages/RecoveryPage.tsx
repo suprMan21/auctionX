@@ -275,7 +275,7 @@ export const RecoveryPage = () => {
           <div className="space-y-3">
             <p className="text-white">You&apos;re back in.</p>
             <p className="text-sm text-gray-300">
-              Until {when(step.freezeEndsAt)}, transfers, releases and sign-in changes are paused to keep your tokens safe.
+              Until {when(step.freezeEndsAt)}, transfers, releases and sign-in changes are paused to keep your seals safe.
             </p>
             <Button onClick={() => navigate('/settings/security', { replace: true })}>Go to Security settings</Button>
           </div>

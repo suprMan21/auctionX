@@ -15,55 +15,58 @@ import { btn, frontendBaseUrl, heading, para, shell } from './transferEmails';
 import { formatUtc } from '../mfa/mfaEmails';
 import { hashEmailForLog } from '../security/securityEvent';
 import { log } from '../logger';
+import { displaySealCode } from '../nfc/sealCode';
 
 export type TokenActivityEmail =
-  | { kind: 'token_released'; token: string; at: string }
-  | { kind: 'transfer_sent'; token: string; at: string }
-  | { kind: 'transfer_received'; token: string; at: string };
+  | { kind: 'token_released'; token: string | null; at: string }
+  | { kind: 'transfer_sent'; token: string | null; at: string }
+  | { kind: 'transfer_received'; token: string | null; at: string };
 
-const FOOTER = "You're receiving this because it's about a token in your Authentic Materials account. These emails can't be turned off.";
+const FOOTER = "You're receiving this because it's about a seal in your Authentic Materials account. These emails can't be turned off.";
 
 const IF_NOT_YOU = "If this wasn't you, sign in now, change your password and check Security settings.";
 
 const escapeHtml = (s: string): string =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
-/** How a token is named in an email: its chip name, else the end of its serial. */
-export const tokenLabel = (tag: { chip_name?: string | null; chip_serial?: string | null } | null): string => {
-  if (tag?.chip_name) return tag.chip_name;
-  if (tag?.chip_serial) return `ending ${tag.chip_serial.slice(-6).toUpperCase()}`;
-  return 'from your account';
-};
+/**
+ * How a seal is named in an email: its public seal code (XXXX-XXXX), else
+ * nothing. Never the chip name or serial: those are staff-only.
+ */
+export const tokenLabel = (tag: { seal_code?: string | null } | null): string | null =>
+  displaySealCode(tag?.seal_code ?? null);
+
+const named = (label: string | null): string => (label ? `seal ${label}` : 'seal');
 
 export const tokenActivityEmailContent = (email: TokenActivityEmail): { subject: string; lines: string[]; cta: { path: string; text: string } } => {
   const when = formatUtc(email.at) ?? 'just now';
   switch (email.kind) {
     case 'token_released':
       return {
-        subject: 'You released a token',
+        subject: 'You released a seal',
         lines: [
-          `Your token ${email.token} was released from your account on ${when}. A release can't be undone.`,
+          `Your ${named(email.token)} was released from your account on ${when}. A release can't be undone.`,
           IF_NOT_YOU,
         ],
         cta: { path: '/settings/security', text: 'Open Security settings' },
       };
     case 'transfer_sent':
       return {
-        subject: 'Your token has moved to its new owner',
+        subject: 'Your seal has moved to its new owner',
         lines: [
-          `The transfer of your token ${email.token} finished on ${when}. It is no longer in your account.`,
+          `The transfer of your ${named(email.token)} finished on ${when}. It is no longer in your account.`,
           "If you didn't start this transfer, sign in now, change your password and check Security settings.",
         ],
         cta: { path: '/settings/security', text: 'Open Security settings' },
       };
     case 'transfer_received':
       return {
-        subject: 'A token is now in your account',
+        subject: 'A seal is now in your account',
         lines: [
-          `The transfer of token ${email.token} to your account finished on ${when}. You can see it in My Tokens.`,
+          `${email.token ? `Seal ${email.token}` : 'A seal'} moved into your account on ${when}. You can see it in My Seals.`,
           "If you didn't accept this transfer, sign in now, change your password and check Security settings.",
         ],
-        cta: { path: '/tokens', text: 'Open My Tokens' },
+        cta: { path: '/tokens', text: 'Open My Seals' },
       };
   }
 };
@@ -113,12 +116,12 @@ export const notifyTransferCompleted = async (supabase: SupabaseClient, transfer
     const ids = [t.from_user_id, t.to_user_id].filter((id): id is string => !!id);
     const [{ data: tag }, { data: users }] = await Promise.all([
       t.tag_id
-        ? supabase.from('nfc_tags').select('chip_name, chip_serial').eq('id', t.tag_id).maybeSingle()
+        ? supabase.from('nfc_tags').select('seal_code').eq('id', t.tag_id).maybeSingle()
         : Promise.resolve({ data: null }),
       ids.length > 0 ? supabase.from('users').select('id, email').in('id', ids) : Promise.resolve({ data: [] }),
     ]);
     const emails = new Map(((users ?? []) as { id: string; email: string | null }[]).map((u) => [u.id, u.email]));
-    const token = tokenLabel(tag as { chip_name?: string | null; chip_serial?: string | null } | null);
+    const token = tokenLabel(tag as { seal_code?: string | null } | null);
     const at = t.completed_at ?? new Date().toISOString();
 
     if (t.from_user_id) sendTokenActivityEmail(emails.get(t.from_user_id), { kind: 'transfer_sent', token, at });
@@ -127,5 +130,19 @@ export const notifyTransferCompleted = async (supabase: SupabaseClient, transfer
     }
   } catch {
     log.warn('transfer_completed_notice_failed', { transferId });
+  }
+};
+
+/** After a release: tells the owner, naming the seal by its code. Never throws. */
+export const notifyReleased = async (supabase: SupabaseClient, to: string | null | undefined, tagId: string): Promise<void> => {
+  try {
+    const { data: tag } = await supabase.from('nfc_tags').select('seal_code').eq('id', tagId).maybeSingle();
+    sendTokenActivityEmail(to, {
+      kind: 'token_released',
+      token: tokenLabel(tag as { seal_code?: string | null } | null),
+      at: new Date().toISOString(),
+    });
+  } catch {
+    log.warn('release_notice_failed', { tagId });
   }
 };

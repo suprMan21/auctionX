@@ -539,7 +539,7 @@ describe('TransferCompleteFlow', () => {
 
     expect(await screen.findByText('It is yours.')).toBeInTheDocument();
     expect(screen.getByText(/You used a free transfer, so there was nothing to pay/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'View it in My Tokens' })).toHaveAttribute('href', `/tokens/${TAG}`);
+    expect(screen.getByRole('link', { name: 'View it in My Seals' })).toHaveAttribute('href', `/tokens/${TAG}`);
     expect(onSessionSpent).toHaveBeenCalled();
     expect(stripe.elementsMounted).not.toHaveBeenCalled();
     expect(screen.queryByTestId('payment-element')).not.toBeInTheDocument();

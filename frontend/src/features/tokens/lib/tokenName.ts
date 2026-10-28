@@ -1,9 +1,8 @@
 /**
- * What an owner calls a seal: its item title, else its seal code (S-SEAL1), else
- * the chip name, else the end of the chip serial. The tag id is the last resort (a
- * chip enrolled before names and serials were recorded). The seal code comes before
- * the chip name so collectors see "Seal 7K3Q-9XWD", never an internal chip name, once
- * the backend sends codes.
+ * What an owner calls a seal: its item title, else "Seal <seal code>" (S-SEAL1),
+ * else the end of the chip serial, else the tag id. Never the internal chip name:
+ * customers only ever see "seal" (Decision Locked 2026-10-28). chipName is still
+ * accepted so callers don't change, but it is not shown.
  */
 export const tokenDisplayName = (token: {
   title: string | null;
@@ -14,5 +13,4 @@ export const tokenDisplayName = (token: {
 }): string =>
   token.title ??
   (token.sealCode ? `Seal ${token.sealCode}` : null) ??
-  token.chipName ??
-  (token.serialSuffix ? `Token …${token.serialSuffix}` : `Token ${token.tagId.slice(0, 8).toUpperCase()}`);
+  (token.serialSuffix ? `Seal …${token.serialSuffix}` : `Seal ${token.tagId.slice(0, 8).toUpperCase()}`);

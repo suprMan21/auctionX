@@ -13,7 +13,7 @@ export const receiptDocument = (tagId: string, receipt: Receipt) => ({
   version: 1,
   tagId,
   ...receipt,
-  note: 'Keep this private. It proves you held this ownership. It cannot be used to transfer or claim the token.',
+  note: 'Keep this private. It proves you held this ownership. It cannot be used to transfer or claim the seal.',
   howToVerify: receipt.anchor?.status === 'anchored'
     ? [
         'Recompute keccak256 of the preimage described in "algorithm" and check it equals ownershipId.',

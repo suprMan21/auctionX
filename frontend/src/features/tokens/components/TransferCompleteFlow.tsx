@@ -142,7 +142,7 @@ const FreeTransferDone = ({ tagId, onCompleted }: { readonly tagId: string; read
       <p className="text-gray-400 text-sm mb-1">The transfer is complete and you are the owner on record.</p>
       <p className="text-gray-400 text-sm mb-3">You used a free transfer, so there was nothing to pay.</p>
       <Link to={`/tokens/${tagId}`} className="text-primary-300 underline hover:text-primary-200">
-        View it in My Tokens
+        View it in My Seals
       </Link>
     </section>
   );

@@ -109,7 +109,7 @@ const renderPanel = (action: 'release' | 'factor_remove' = 'release') => {
   const onConfirmed = vi.fn();
   render(
     <MemoryRouter>
-      <StepUpPanel action={action} targetId="tag-1" purpose="release this token" onConfirmed={onConfirmed} onCancel={vi.fn()} />
+      <StepUpPanel action={action} targetId="tag-1" purpose="release this seal" onConfirmed={onConfirmed} onCancel={vi.fn()} />
     </MemoryRouter>,
   );
   return { onConfirmed };
