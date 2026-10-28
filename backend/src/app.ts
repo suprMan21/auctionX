@@ -33,6 +33,8 @@ import searchRoutes from './routes/search';
 import { verificationRoutes } from './routes/verifications';
 import { sellerVerificationRoutes } from './routes/sellerVerification';
 import messageRoutes from './routes/messages';
+import { appConfigRoutes } from './routes/appConfig';
+import { appVersionGate } from './middleware/appVersionGate';
 
 /**
  * A router mount. `raw: true` means the router needs the unparsed request body
@@ -67,6 +69,8 @@ export const TOKEN_MOUNTS: readonly Mount[] = [
   { path: '/api/v1/auth/mfa', router: mfaRoutes },
   // S-SITE2 G3: early-access signup, the one call the public site makes.
   { path: '/api/v1/early-access', router: earlyAccessRoutes },
+  // S-MOB1: the Creator app's minimum version + store links (public).
+  { path: '/api/v1/app-config', router: appConfigRoutes },
 ] as const;
 
 /**
@@ -147,6 +151,10 @@ export const createApp = (): express.Express => {
   // liveness probe can never be blocked by them (Lesson: health endpoint must
   // come before all middleware).
   app.use('/api/v1', healthRoutes);
+
+  // S-MOB1: refuse Creator-app builds below the minimum version. Requests
+  // without the app's headers (website, webhooks, cron) pass untouched.
+  app.use('/api/v1', appVersionGate);
 
   const mounts = marketplace ? [...TOKEN_MOUNTS, ...MARKETPLACE_MOUNTS] : TOKEN_MOUNTS;
 

@@ -6,5 +6,12 @@
 	<array>
 		<string>TAG</string>
 	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>webcredentials:authentic-materials.com</string>
+		<string>applinks:authentic-materials.com</string>
+		<string>webcredentials:d1bwev65w7rqzl.cloudfront.net</string>
+		<string>applinks:d1bwev65w7rqzl.cloudfront.net</string>
+	</array>
 </dict>
 </plist>

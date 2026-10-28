@@ -1,40 +1,28 @@
 PODS:
   - Flutter (1.0.0)
-  - flutter_secure_storage (6.0.0):
-    - Flutter
   - nfc_manager (0.0.1):
     - Flutter
   - permission_handler_apple (9.3.0):
     - Flutter
-  - video_compress (0.3.0):
-    - Flutter
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
-  - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
   - nfc_manager (from `.symlinks/plugins/nfc_manager/ios`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
-  - video_compress (from `.symlinks/plugins/video_compress/ios`)
 
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
-  flutter_secure_storage:
-    :path: ".symlinks/plugins/flutter_secure_storage/ios"
   nfc_manager:
     :path: ".symlinks/plugins/nfc_manager/ios"
   permission_handler_apple:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
-  video_compress:
-    :path: ".symlinks/plugins/video_compress/ios"
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13
   nfc_manager: f6d5609c09b4640b914a3dc67479a2e392965fd0
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
-  video_compress: f2133a07762889d67f0711ac831faa26f956980e
 
-PODFILE CHECKSUM: 0925ef5989e1c59181f43241e7711b4bc50c791f
+PODFILE CHECKSUM: 20f5bf8376d94a3ac3d20c5f45a42e8a3784828a
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.17.0

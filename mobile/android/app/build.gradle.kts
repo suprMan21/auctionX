@@ -30,8 +30,9 @@ android {
 
     defaultConfig {
         applicationId = "com.authenticmaterials.tags"
-        minSdk = 26
-        targetSdk = 34
+        // Android 9: passkeys via Credential Manager need API 28 (DR-21).
+        minSdk = 28
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

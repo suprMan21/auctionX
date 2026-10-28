@@ -27,6 +27,8 @@ class AppColors {
   // Semantic
   static const success = Color(0xFF10B981);
   static const error = Color(0xFFEF4444);
+  /// Error text on the dark background (red-400, 6.6:1 on background).
+  static const errorText = Color(0xFFF87171);
   static const warning = Color(0xFFF59E0B);
 
   // Glass

@@ -1,0 +1,8 @@
+{
+  "ENV": "staging",
+  "SUPABASE_URL": "https://pmlofthmobglcfkqjtru.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_FsmQqvlpSgCAkBDPaR-bOQ_8V4869QD",
+  "API_BASE_URL": "https://vw7zy9mkyg.us-east-2.awsapprunner.com/api/v1",
+  "WEB_BASE_URL": "https://d1bwev65w7rqzl.cloudfront.net",
+  "RP_ID": "d1bwev65w7rqzl.cloudfront.net"
+}

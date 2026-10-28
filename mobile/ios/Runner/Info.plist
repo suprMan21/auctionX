@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>AM Tagger</string>
+	<string>Authentic Materials</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>auctionx_mobile</string>
+	<string>authentic_materials</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -62,28 +62,17 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Authentic Materials needs camera access to record video proof of item authenticity.</string>
+	<string>Authentic Materials uses the camera to record your seal video.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Authentic Materials records audio as part of the video proof.</string>
+	<string>Authentic Materials records sound with your seal video.</string>
 	<key>NFCReaderUsageDescription</key>
-	<string>Authentic Materials uses NFC to verify the authenticity of physical items.</string>
+	<string>Authentic Materials reads your seal when you tap it with your phone.</string>
 	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
 	<array>
 		<string>D2760000850101</string>
 	</array>
 	<key>FlutterDeepLinkingEnabled</key>
-	<true/>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>auctionx</string>
-			</array>
-			<key>CFBundleURLName</key>
-			<string>com.authenticmaterials.app</string>
-		</dict>
-	</array>
+	<false/>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

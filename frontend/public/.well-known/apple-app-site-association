@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["F5F52345D2.com.authenticmaterials.tags"],
+        "components": [
+          { "/": "/app/open", "comment": "Open the app after sign-up on the website (S-MOB1)" },
+          { "/": "/app/open/" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["F5F52345D2.com.authenticmaterials.tags"]
+  }
+}

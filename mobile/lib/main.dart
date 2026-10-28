@@ -1,32 +1,50 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
-import 'core/constants/api_constants.dart';
-import 'features/nfc/domain/entities/pending_scan.dart';
+import 'app_providers.dart';
+import 'core/config/app_config.dart';
+import 'core/network/api_client.dart';
+import 'core/storage/secure_session_storage.dart';
+import 'features/auth/data/auth_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Disable runtime font fetching — bundle fonts for offline reliability
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  // Initialize Hive for offline scan queue
-  await Hive.initFlutter();
-  Hive.registerAdapter(PendingScanAdapter());
-  await Hive.openBox<PendingScan>('pending_scans');
+  final config = AppConfig.fromEnvironment();
+  final info = await PackageInfo.fromPlatform();
+  final client = ClientInfo(
+    version: info.version,
+    build: info.buildNumber,
+    platform: Platform.isIOS ? 'ios' : 'android',
+  );
+
+  final store = PlatformSecureStore();
+  await FirstLaunchCleanup(store).run();
 
   await Supabase.initialize(
-    url: ApiConstants.supabaseUrl,
-    anonKey: ApiConstants.supabaseAnonKey,
+    url: config.supabaseUrl,
+    publishableKey: config.supabasePublishableKey,
+    authOptions: FlutterAuthClientOptions(
+      localStorage: SecureSessionStorage(store),
+      pkceAsyncStorage: SecurePkceStorage(store),
+    ),
   );
 
   runApp(
-    const ProviderScope(
-      child: AuctionXApp(),
+    ProviderScope(
+      overrides: [
+        appConfigProvider.overrideWithValue(config),
+        clientInfoProvider.overrideWithValue(client),
+        authServiceProvider.overrideWithValue(AuthService(Supabase.instance.client.auth)),
+      ],
+      child: const AuthenticMaterialsApp(),
     ),
   );
 }
