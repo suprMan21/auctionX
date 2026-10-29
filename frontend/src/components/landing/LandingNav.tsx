@@ -59,14 +59,14 @@ export const LandingNav = () => {
           {showAuthChrome && initialized && (
             user ? (
               <Link
-                to="/my-listings"
+                to="/tokens"
                 className="ml-2 flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-900 rounded-btn"
-                aria-label={`Open dashboard for ${user.email ?? 'your account'}`}
+                aria-label={`Open My Seals for ${user.email ?? 'your account'}`}
               >
                 <span className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center text-white text-xs font-semibold border border-white/10">
                   {initial}
                 </span>
-                Dashboard
+                My Seals
               </Link>
             ) : (
               <>
@@ -91,9 +91,9 @@ export const LandingNav = () => {
         <div className="flex md:hidden items-center gap-3">
           {showAuthChrome && initialized && user ? (
             <Link
-              to="/my-listings"
+              to="/tokens"
               className="w-9 h-9 rounded-full bg-gradient-primary flex items-center justify-center text-white text-xs font-semibold border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              aria-label="Open dashboard"
+              aria-label="Open My Seals"
             >
               {initial}
             </Link>

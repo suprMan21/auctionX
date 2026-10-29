@@ -247,12 +247,17 @@ function App() {
             }
           />
           </>)}
+          {/* The old dashboard is the auction home (listings, bids). With the marketplace parked it goes to My Seals. */}
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
+              marketplaceEnabled ? (
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              ) : (
+                <Navigate to="/tokens" replace />
+              )
             }
           />
 
