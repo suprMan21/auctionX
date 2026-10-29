@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-29 (S-SEAL1 Ph3 Flutter seal widget verified on iPhone; app icon 1.1; S-MOB1 Ph C merged, device test pending; S-SEAL1 Ph2a live, Shimmer seal; frangible set time + no metal; production backend = ECS Express Mode, launch-blocking)
+**Last updated:** 2026-10-29 (S-MOB2 Ph B app sealing flow pushed, device test pending; /dashboard auction leak fixed; S-SEAL1 Ph3 Flutter seal widget verified on iPhone; app icon 1.1; S-MOB1 Ph C merged, device test pending; S-SEAL1 Ph2a live, Shimmer seal; frangible set time + no metal; production backend = ECS Express Mode, launch-blocking)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -15,9 +15,14 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ## 🔴 BOSS ACTION
 
-### S-MOB2 recorded sealing (Ph A backend merged to local dev 2026-10-29; plan `docs/plans/2026-10-29-s-mob2.md`)
-- [x] Migration `20261029000002` applied + live SQL 18/18 (Boss 2026-10-29); `dev` pushed, deploy SUCCEEDED 17:13, `/nfc/seal` live (401 unauthenticated); `database.types.ts` regenerated.
-- Next: **Ph B** Flutter sealing flow. First iPhone check: one app read raises the chip counter by exactly 1. A successful seal uses a chip for sealing for good (reuse failed-path tests on one chip; 1000 chips arrived 2026-10-29).
+### S-MOB2 recorded sealing (Ph A live 2026-10-29; Ph B pushed 2026-10-29; plan `docs/plans/2026-10-29-s-mob2.md`)
+- [x] Ph A: migration `20261029000002` applied + live SQL 18/18; deploy SUCCEEDED 17:13; types regenerated.
+- [x] Ph B app flow merged + pushed (`b086eea`, build 0.1.0+11; `docs/S_MOB2_B_VERIFICATION.md`).
+- [ ] Boss: archive + upload build **0.1.0+11** to TestFlight.
+- [ ] Boss: **Read check** (test build) on any v2 chip → Mac `verify --kms --url` ×2 → counters must differ by exactly 1. Send the numbers.
+- [ ] Boss: one fresh unclaimed v2 chip (encode with no name → expect `chip_005`): gap take → Record it again → airplane mode at Seal it → Try now → Sealed → tap page → "already claimed".
+- [ ] Boss: confirm the 2 Proposed decisions (offline seal finishes online; redo labelling).
+- Next: **Ph C** video upload (resumable, hash match) + admin review queue + tap page video states; keep redone takes' taps as audit; exclude seal videos from iCloud backup.
 
 ### S-MOB1 Creator app (Ph B verified on iPhone; Ph C merged to local dev 2026-10-28)
 - [ ] Push `dev`, archive build **0.1.0+9** (now also carries the seal widget) to TestFlight, run the 9 checks in `docs/S_MOB1_C_VERIFICATION.md` (Claude reads results back from the logs).
