@@ -13,9 +13,14 @@
 /* Owned / Sealed: still, slightly muted, no glow. Never the Verified look. */
 .sealbadge--sealed{filter:saturate(.6) brightness(.82);animation:none}
 .sealbadge--sealed .sealspin{animation:none;will-change:auto}
+/* S-SEAL1 Ph2a pattern v1: outer ring turns the other way every 48 s, inner ring with the words every 30 s. Verified only. */
+.sealrot-out,.sealrot-in{transform-origin:60px 60px;transform-box:view-box}
+.sealrot-out{animation:am-sealspin 48s linear infinite reverse}
+.sealrot-in{animation:am-sealspin 30s linear infinite}
+.sealbadge--sealed .sealrot-out,.sealbadge--sealed .sealrot-in{animation:none}
 @keyframes am-sealspin{to{transform:rotate(360deg)}}
 @keyframes am-sealglow{50%{filter:drop-shadow(0 0 18px rgb(var(--md-sys-color-brand, 124 58 237) / .85))}}
-@media (prefers-reduced-motion:reduce){.sealbadge,.sealspin{animation:none}}
+@media (prefers-reduced-motion:reduce){.sealbadge,.sealspin,.sealrot-out,.sealrot-in{animation:none}}
 
 /* The seal code as text next to the seal. */
 .sealcode-mono{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;letter-spacing:.08em}

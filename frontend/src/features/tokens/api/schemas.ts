@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod';
+import { SEAL_PATH } from '@/components/seal/sealSpec';
 
 export const LIFECYCLE_STATUSES = [
   'ENROLLED',
@@ -36,6 +37,21 @@ export const provenanceSchema = z.object({
 });
 export type Provenance = z.infer<typeof provenanceSchema>;
 
+// S-SEAL1 Ph2a: how to draw a seal. Optional so an older backend still parses; a bad one is dropped, never fatal.
+const sealSpecSchema = z
+  .object({
+    v: z.literal(1),
+    colors: z.string(),
+    pattern: z.object({
+      kind: z.literal('hypotrochoid'),
+      version: z.literal(1),
+      paths: z.array(z.string().max(8000).regex(SEAL_PATH)).min(2).max(4),
+    }),
+  })
+  .nullable()
+  .optional()
+  .catch(null);
+
 export const tapResultSchema = z.discriminatedUnion('valid', [
   z.object({
     valid: z.literal(false),
@@ -47,6 +63,7 @@ export const tapResultSchema = z.discriminatedUnion('valid', [
     lifecycleStatus,
     // S-SEAL1: optional so a tap cached before the deploy (or an older backend) still parses.
     sealCode: z.string().nullable().optional(),
+    sealSpec: sealSpecSchema,
     checkedAt: z.string().nullable().optional(),
     provenance: provenanceSchema.nullable(),
     tapSession: z.object({ token: z.string(), expiresAt: z.string() }).nullable(),
@@ -79,6 +96,7 @@ export const myTokenSchema = z.object({
   serialSuffix: z.string().nullable().optional(),
   // S-SEAL1: the seal's public code (XXXX-XXXX). Optional so an older backend still parses.
   sealCode: z.string().nullable().optional(),
+  sealSpec: sealSpecSchema,
   disclosure: z.record(z.boolean()),
   ownershipId: z.string().nullable(),
   // S-ANCHOR1: null while anchoring is pending. Optional so an older backend still parses.

@@ -38,10 +38,11 @@ export type ResolvedTagRow = {
   current_owner_id: string | null;
   /** S-SEAL1: public seal code (stored form). Null only if the migration has not run. */
   seal_code?: string | null;
+  seal_spec?: unknown;
 };
 
 const RESOLVE_COLUMNS =
-  'id, tag_uid, chip_serial, sun_counter, sdm_key_version, verification_id, status, lifecycle_status, current_owner_id, seal_code';
+  'id, tag_uid, chip_serial, sun_counter, sdm_key_version, verification_id, status, lifecycle_status, current_owner_id, seal_code, seal_spec';
 
 export interface ResolvedTap {
   readonly tag: ResolvedTagRow;

@@ -73,6 +73,7 @@ import { notifyTransferRecipient } from '../lib/notifications/transferEmails';
 import { confirmedEmail } from '../lib/security/confirmedEmail';
 import { hasManageNfc } from '../lib/admin/tokenAdmin';
 import { displaySealCode } from '../lib/nfc/sealCode';
+import { ensureSealSpec } from '../lib/seal/ensureSealSpec';
 
 interface TagRequest extends RequestWithId, AuthRequest {}
 
@@ -340,7 +341,7 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
       lifecycle_status: 'ENROLLED',
       status: 'registered',
     })
-    .select('id')
+    .select('id, seal_code')
     .single();
 
   if (error || !data) {
@@ -357,6 +358,13 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
     event: 'nfc.enroll', tag_id: data.id, result: 'ok',
     request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'staff',
     ip: ctx.ip, route: ctx.route,
+  });
+
+  // S-SEAL1 Ph2a: store the seal's spec now. Never blocks the enroll (a failed store is
+  // logged, and the first read of the seal stores it instead).
+  await ensureSealSpec(supabase, { id: data.id, seal_code: data.seal_code, seal_spec: null }, {
+    requestId: ctx.requestId,
+    route: ctx.route,
   });
 
   return ok(res, { tagId: data.id, lifecycleStatus: 'ENROLLED' }, 201);

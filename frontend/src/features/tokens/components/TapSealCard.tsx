@@ -1,6 +1,7 @@
 import type { RefObject } from 'react';
 import { SealBadge } from '@/components/seal/SealBadge';
 import { isSealCode } from '@/components/seal/sealCode';
+import type { SealSpecView } from '@/components/seal/sealSpec';
 import { TAP_COPY, statusCopy } from '../lib/copy';
 import { secondsSince, showsSeal, type SealState } from '../lib/sealWindow';
 import { TokenStatusBadge } from './TokenStatusBadge';
@@ -10,6 +11,8 @@ interface TapSealCardProps {
   /** XXXX-XXXX, or null when the backend has none yet (no seal is drawn then). */
   readonly sealCode: string | null | undefined;
   readonly checkedAt: string | null | undefined;
+  /** S-SEAL1 Ph2a: the seal's pattern. Moves only while Verified. */
+  readonly sealSpec?: SealSpecView | null;
   readonly state: SealState;
   /** When the server's answer arrived on this phone (ms), for "checked N s ago". */
   readonly freshAt: number | null;
@@ -30,6 +33,7 @@ const clockFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute
 export const TapSealCard = ({
   lifecycleStatus,
   sealCode,
+  sealSpec,
   checkedAt,
   state,
   freshAt,
@@ -59,6 +63,7 @@ export const TapSealCard = ({
           <SealBadge
             code={code}
             state={verified ? 'verified' : 'sealed'}
+            spec={sealSpec}
             label={verified ? `${TAP_COPY.genuine}, ${TAP_COPY.sealCodeLabel.toLowerCase()} ${code}` : `${TAP_COPY.sealed}, ${TAP_COPY.sealCodeLabel.toLowerCase()} ${code}`}
           />
         )}

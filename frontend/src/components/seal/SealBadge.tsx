@@ -1,14 +1,9 @@
 import { useId } from 'react';
 import './seal.css';
+import { SEAL_GEOMETRY as G } from './geometry';
 import { SEAL_CODE } from './sealCode';
-
-
-
-const SCALLOP =
-  'M60.00 6.00Q66.08 2.12 71.23 7.18Q77.98 4.65 81.96 10.67Q89.10 9.60 91.74 16.31Q98.94 16.75 100.13 23.87Q107.08 25.79 106.77 33.00Q113.17 36.33 111.36 43.31Q116.93 47.90 113.70 54.36Q118.20 60.00 113.70 65.64Q116.93 72.10 111.36 76.69Q113.17 83.67 106.77 87.00Q107.08 94.21 100.13 96.13Q98.94 103.25 91.74 103.69Q89.10 110.40 81.96 109.33Q77.98 115.35 71.23 112.82Q66.08 117.88 60.00 114.00Q53.92 117.88 48.77 112.82Q42.02 115.35 38.04 109.33Q30.90 110.40 28.26 103.69Q21.06 103.25 19.87 96.13Q12.92 94.21 13.23 87.00Q6.83 83.67 8.64 76.69Q3.07 72.10 6.30 65.64Q1.80 60.00 6.30 54.36Q3.07 47.90 8.64 43.31Q6.83 36.33 13.23 33.00Q12.92 25.79 19.87 23.87Q21.06 16.75 28.26 16.31Q30.90 9.60 38.04 10.67Q42.02 4.65 48.77 7.18Q53.92 2.12 60.00 6.00Z';
-
-const AM_MARK =
-  'M51.63 64.00L42.84 64.00L42.72 55.53L29.76 55.53L24.22 64.00L16.12 64.00L43.55 24.00L55.64 24.00L63.80 50.10L63.90 50.10L72.11 24.00L83.88 24.00L83.88 64.00L76.07 64.00L76.07 33.32L75.97 33.32L66.66 64.00L60.70 64.00L51.73 33.32L51.63 33.32L51.63 64.00ZM42.59 35.64L34.49 48.07L42.65 48.07L42.59 35.64Z';
+import { SEAL_PATH, sealColors, type SealSpecView } from './sealSpec';
+import { useReducedMotion } from './useReducedMotion';
 
 type SealBadgeProps = {
   /** Seal code to print in the centre. Never a chip serial or UID. */
@@ -21,34 +16,108 @@ type SealBadgeProps = {
   state?: 'verified' | 'sealed';
   /** Accessible name. Omit for decorative instances (rendered aria-hidden). */
   label?: string;
+  /**
+   * S-SEAL1 Ph2a: this seal's stored spec (pattern v1). Without one (older backend, homepage demo)
+   * the badge draws exactly what it drew before.
+   */
+  spec?: SealSpecView | null;
+};
+
+/** One electron: a bright dot, a 4-dot fading tail and a faint halo, tracing a ring's loops. */
+type ElectronProps = { pathId: string; dur: number; offset: number; radius: number; reverse?: boolean };
+
+const TAIL = [
+  { scale: 1, opacity: 1 },
+  { scale: 0.8, opacity: 0.55 },
+  { scale: 0.6, opacity: 0.3 },
+  { scale: 0.4, opacity: 0.15 },
+] as const;
+const TAIL_STEP_S = 0.12;
+
+const Electron = ({ pathId, dur, offset, radius, reverse = false }: ElectronProps) => {
+  const motion = (begin: number) => (
+    <animateMotion
+      dur={`${dur}s`}
+      begin={`${-(offset + begin)}s`}
+      repeatCount="indefinite"
+      {...(reverse ? { keyPoints: '1;0', keyTimes: '0;1', calcMode: 'linear' } : {})}
+    >
+      <mpath href={`#${pathId}`} />
+    </animateMotion>
+  );
+  return (
+    <>
+      {TAIL.map((t, i) => (
+        <circle key={i} r={radius * t.scale} fill="#ffffff" opacity={t.opacity}>
+          {motion(i * TAIL_STEP_S)}
+        </circle>
+      ))}
+      <circle r={radius * 1.6} fill="#ffffff" opacity=".18">
+        {motion(0)}
+      </circle>
+    </>
+  );
 };
 
 /**
  * The genuine AM seal: scalloped badge, AM mark, seal code, and a text ring that turns
- * once every 12 s with a soft 3 s glow pulse. Both animations stop under prefers-reduced-motion
- * and in the still `sealed` state.
+ * once every 12 s with a soft 3 s glow pulse. With a spec, its two pattern rings sit inside
+ * the badge; in the Verified state they turn and electrons trace their loops.
+ * All motion stops under prefers-reduced-motion and in the still `sealed` state.
  */
-export const SealBadge = ({ code, size = 'md', state = 'verified', label }: SealBadgeProps) => {
+export const SealBadge = ({ code, size = 'md', state = 'verified', label, spec }: SealBadgeProps) => {
+  const reducedMotion = useReducedMotion();
   if (!SEAL_CODE.test(code)) throw new Error('SealBadge: code must be a seal code (XXXX-XXXX, Crockford base32)');
   // useId returns characters that break url(#…) references; keep it to safe ones.
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const grad = `seal-grad-${uid}`;
   const ring = `seal-ring-${uid}`;
+  const clip = `seal-clip-${uid}`;
+  const outerId = `seal-po-${uid}`;
+  const innerId = `seal-pi-${uid}`;
   const className = `sealbadge${size === 'md' ? '' : ` sealbadge--${size}`}${state === 'sealed' ? ' sealbadge--sealed' : ''}`;
   const a11y = label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true as const };
 
+  const [outer, inner] = spec?.v === 1 ? spec.pattern.paths : [];
+  const drawPattern = typeof outer === 'string' && SEAL_PATH.test(outer) && typeof inner === 'string' && SEAL_PATH.test(inner);
+  // Electrons exist only while Verified: leaving them out of the DOM is what stops them.
+  const electrons = drawPattern && state === 'verified' && !reducedMotion;
+  const [c0, c1, c2] = sealColors(spec?.colors);
+
   return (
-    <svg className={className} viewBox="0 0 120 120" data-seal-badge="" data-seal-state={state} {...a11y}>
+    <svg className={className} viewBox={`0 0 ${G.viewBox} ${G.viewBox}`} data-seal-badge="" data-seal-state={state} data-seal-pattern={drawPattern ? 'v1' : undefined} {...a11y}>
       <defs>
         <linearGradient id={grad} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#a78bfa" />
-          <stop offset=".55" stopColor="#7c3aed" />
-          <stop offset="1" stopColor="#3b82f6" />
+          <stop offset="0" stopColor={c0} />
+          <stop offset=".55" stopColor={c1} />
+          <stop offset="1" stopColor={c2} />
         </linearGradient>
-        <path id={ring} d="M60 60m-40 0a40 40 0 1 1 80 0a40 40 0 1 1 -80 0" />
+        <path id={ring} d={G.ringPath} />
+        {drawPattern && (
+          <clipPath id={clip}>
+            <circle cx="60" cy="60" r={G.patternClipR} />
+          </clipPath>
+        )}
       </defs>
-      <path d={SCALLOP} fill={`url(#${grad})`} />
-      <circle cx="60" cy="60" r="31" fill="none" stroke="#ffffff" strokeOpacity=".45" strokeWidth="1" />
+      <path d={G.scallop} fill={`url(#${grad})`} />
+      {drawPattern && (
+        <g clipPath={`url(#${clip})`} fill="none" stroke="#ffffff" strokeWidth=".35" strokeLinejoin="round" data-seal-rings="">
+          <g className="sealrot-out">
+            <path id={outerId} d={outer} strokeOpacity=".2" />
+            {electrons && (
+              <>
+                <Electron pathId={outerId} dur={30} offset={0} radius={0.9} />
+                <Electron pathId={outerId} dur={30} offset={15} radius={0.9} />
+              </>
+            )}
+          </g>
+          <g className="sealrot-in">
+            <path id={innerId} d={inner} strokeOpacity=".14" />
+            {electrons && <Electron pathId={innerId} dur={20} offset={0} radius={0.75} reverse />}
+          </g>
+        </g>
+      )}
+      <circle cx="60" cy="60" r={G.innerCircleR} fill="none" stroke="#ffffff" strokeOpacity=".45" strokeWidth="1" />
       <g className="sealspin">
         <text fill="#ffffff" fontFamily="Plus Jakarta Sans, sans-serif" fontSize="8" fontWeight="800" letterSpacing="1.6">
           <textPath href={`#${ring}`} textLength="248" lengthAdjust="spacing">
@@ -56,7 +125,7 @@ export const SealBadge = ({ code, size = 'md', state = 'verified', label }: Seal
           </textPath>
         </text>
       </g>
-      <path fillRule="evenodd" fill="#ffffff" transform="translate(60 55) scale(.44) translate(-50 -44)" d={AM_MARK} />
+      <path fillRule="evenodd" fill="#ffffff" transform={G.amMarkTransform} d={G.amMark} />
       <text
         x="60"
         y="80"

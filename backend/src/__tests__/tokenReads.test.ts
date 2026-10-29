@@ -11,6 +11,7 @@ import { createLocalTagKeyProvider } from '../services/nfc/keys/tagKeyProvider';
 import { createMockSupabase, resetMockIds, type Tables, type Row } from './helpers/supabaseMock';
 import { spyOnSecurityEvents, type SecurityEventSpy } from './helpers/securityEvents';
 import { buildDailyTree, randomLeaf, verifyInRoot } from '../lib/anchoring/merkle';
+import { buildSealSpec } from '../lib/seal/sealSpec';
 
 /**
  * S-NFC3-FE Ph1 — tap sessions and the token read endpoints.
@@ -270,8 +271,35 @@ describe('POST /nfc/tap', () => {
     expect(checkedAt).toBeLessThanOrEqual(Date.now() + 1000);
     // Exactly the documented public keys: anything new must be reviewed here first.
     expect(Object.keys(data(out)).sort()).toEqual(
-      ['checkedAt', 'lifecycleStatus', 'provenance', 'sealCode', 'tagId', 'tapSession', 'valid', 'viewer'].sort(),
+      ['checkedAt', 'lifecycleStatus', 'provenance', 'sealCode', 'sealSpec', 'tagId', 'tapSession', 'valid', 'viewer'].sort(),
     );
+  });
+
+  it('S-SEAL1 Ph2a: a valid tap sends the seal spec (no code inside) and stores it on first read', async () => {
+    const { tapTag } = await reads();
+    const out = await call(tapTag, makeReq(null, { sunMessage: sunFor(2) }));
+    const built = buildSealSpec('7K3Q9XWD');
+
+    expect(data(out).sealSpec).toEqual({ v: built.v, colors: built.colors, pattern: built.pattern });
+    expect(Object.keys(data(out).sealSpec as Row).sort()).toEqual(['colors', 'pattern', 'v']);
+    expect(tag().seal_spec).toEqual(built);
+  });
+
+  it('S-SEAL1 Ph2a: a stored spec is sent as stored and never rewritten', async () => {
+    const stored = buildSealSpec('7K3Q9XWD');
+    tables.nfc_tags[0] = baseTag({ seal_spec: stored });
+    const { tapTag } = await reads();
+    const out = await call(tapTag, makeReq(null, { sunMessage: sunFor(2) }));
+    expect((data(out).sealSpec as Row).pattern).toEqual(stored.pattern);
+    expect(tag().seal_spec).toBe(stored);
+  });
+
+  it('S-SEAL1 Ph2a: no spec without a well-formed seal code', async () => {
+    tables.nfc_tags[0] = baseTag({ seal_code: 'bad' });
+    const { tapTag } = await reads();
+    const out = await call(tapTag, makeReq(null, { sunMessage: sunFor(2) }));
+    expect(data(out).sealSpec).toBeNull();
+    expect(tag().seal_spec ?? null).toBeNull();
   });
 
   it('S-SEAL1: a malformed stored seal code is never sent', async () => {
@@ -521,7 +549,9 @@ describe('GET /nfc/mine', () => {
       pendingTransfer: { transferId: TRANSFER_ID, transferType: 'gift', toEmail: 'friend@example.com' },
       // S-SEAL1: the owner sees their seal's code.
       sealCode: '7K3Q-9XWD',
+      sealSpec: { v: 1, colors: 'am-default', pattern: buildSealSpec('7K3Q9XWD').pattern },
     });
+    expect(tag().seal_spec).toEqual(buildSealSpec('7K3Q9XWD'));
   });
 
   it('returns the chip name and serial suffix (fallback names), never the full serial', async () => {
