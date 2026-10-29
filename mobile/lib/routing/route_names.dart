@@ -11,6 +11,12 @@ class RouteNames {
   static const problem = '/problem';
   static const security = '/security';
 
+  /// S-MOB2 recorded sealing.
+  static const sealPrep = '/seal';
+  static const sealTake = '/seal/take';
+  static const sealResult = '/seal/result';
+
   /// Test builds only.
   static const sealPreview = '/seal-preview';
+  static const readCheck = '/read-check';
 }

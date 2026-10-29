@@ -17,9 +17,10 @@ enum StepUpMethod { passkey, authenticatorCode, backupCode }
 /// Which ways of confirming are offered (same rules as the website's
 /// `lib/stepUp.ts`; the server enforces them). Changing sign-in methods takes
 /// any of the three, so someone who lost their phone can still fix their
-/// account. S-MOB2 adds sealing here.
+/// account. Sealing never takes a backup code (Locked 2026-10-28).
 List<StepUpMethod> allowedStepUpMethods(StepUpAction action) => switch (action) {
       StepUpAction.factorAdd || StepUpAction.factorRemove || StepUpAction.recoveryRegen => StepUpMethod.values,
+      StepUpAction.seal => const [StepUpMethod.passkey, StepUpMethod.authenticatorCode],
     };
 
 /// Asks the person to confirm it's them for one [action] on one [targetId].

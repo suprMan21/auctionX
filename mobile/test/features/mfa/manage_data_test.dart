@@ -208,9 +208,14 @@ void main() {
 
   group('rules', () {
     test('changing sign-in methods accepts every way of confirming', () {
-      for (final a in StepUpAction.values) {
+      for (final a in [StepUpAction.factorAdd, StepUpAction.factorRemove, StepUpAction.recoveryRegen]) {
         expect(allowedStepUpMethods(a), StepUpMethod.values);
       }
+    });
+
+    test('sealing never takes a backup code', () {
+      expect(allowedStepUpMethods(StepUpAction.seal), [StepUpMethod.passkey, StepUpMethod.authenticatorCode]);
+      expect(StepUpAction.seal.wire, 'seal');
     });
 
     test('nickname check matches the backend', () {

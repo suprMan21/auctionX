@@ -10,7 +10,7 @@ Commands:
     read --ndef HEX
         Parse an NDEF file image back to its URI, reusing tag-hq's parser.
 
-    verify --picc HEX --cmac HEX [--uid HEX] [--last-counter N]
+    verify (--picc HEX --cmac HEX [--serial HEX] | --url URL) [--uid HEX] [--last-counter N] [--kms]
         Run the backend's validateSunScan logic: decrypt PICCData under the
         META key, check the claimed UID, verify the SDMMAC, check the counter.
 
@@ -44,6 +44,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # tag-hq's read-only parsers + originality check are reused; make the sibling
@@ -219,8 +220,32 @@ def _serial_arg(args: argparse.Namespace) -> bytes | None:
     return os.urandom(8)
 
 
+def _verify_inputs_from_url(args: argparse.Namespace) -> None:
+    """`--url` fills --picc / --cmac / --serial from a phone-read SUN URL (S-MOB2 counter check)."""
+    if args.url:
+        if args.picc or args.cmac or args.serial:
+            raise SystemExit("error: give --url or --picc/--cmac/--serial, not both")
+        q = urllib.parse.parse_qs(urllib.parse.urlsplit(args.url).query)
+        args.picc = (q.get("picc_data") or q.get("e") or [None])[0]
+        args.cmac = (q.get("cmac") or q.get("c") or [None])[0]
+        args.serial = (q.get("sn") or [None])[0]
+    if not args.picc or not args.cmac:
+        raise SystemExit("error: --picc and --cmac (or --url) are required")
+
+
+def _verify_provider(args: argparse.Namespace) -> KeyProvider:
+    if getattr(args, "kms", False):
+        if args.dev_roots:
+            raise SystemExit("error: --kms and --dev-roots are exclusive")
+        from providers.kms_key_provider import KmsKeyProvider
+
+        return KmsKeyProvider()
+    return _provider(args)
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
-    provider = _provider(args)
+    _verify_inputs_from_url(args)
+    provider = _verify_provider(args)
     serial = _serial_arg(args)
     meta_key = provider.derive_key(ROLE_META, args.key_version)
     res = verify_sun(
@@ -380,8 +405,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     vf = sub.add_parser("verify", help="verify a SUN PICC+CMAC against backend logic")
     vf.add_argument("--uid", help="claimed 7-byte UID hex (optional)")
-    vf.add_argument("--picc", required=True, help="ENCPICCData hex (32 chars)")
-    vf.add_argument("--cmac", required=True, help="SDMMAC hex (16 chars)")
+    vf.add_argument("--url", help="a full SUN URL (fills --picc, --cmac and --serial)")
+    vf.add_argument("--kms", action="store_true", help="derive keys in KMS (real chips; profile am-encoder)")
+    vf.add_argument("--picc", help="ENCPICCData hex (32 chars)")
+    vf.add_argument("--cmac", help="SDMMAC hex (16 chars)")
     vf.add_argument("--last-counter", type=int, default=-1, help="last accepted counter (replay gate)")
     vf.add_argument("--serial", help="v2 chip serial: the sn= value from the URL (16 hex chars)")
     key_args(vf)

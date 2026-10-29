@@ -12,6 +12,10 @@ import '../features/home/home_screen.dart';
 import '../features/mfa/presentation/gate_screens.dart';
 import '../features/mfa/presentation/second_factor_screen.dart';
 import '../features/mfa/session_gate.dart';
+import '../features/seal/presentation/read_check_screen.dart';
+import '../features/seal/presentation/seal_prep_screen.dart';
+import '../features/seal/presentation/seal_result_screen.dart';
+import '../features/seal/presentation/seal_take_screen.dart';
 import '../features/seal_preview/seal_preview_screen.dart';
 import '../features/security/security_screen.dart';
 import 'route_names.dart';
@@ -95,9 +99,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: RouteNames.problem, builder: (_, _) => const SessionProblemScreen()),
       // Fully signed in only: the redirect sends every other state elsewhere.
       GoRoute(path: RouteNames.security, builder: (_, _) => const SecurityScreen()),
+      GoRoute(path: RouteNames.sealPrep, builder: (_, _) => const SealPrepScreen()),
+      // Take and result need their arguments: opened any other way (a link), they go home.
+      GoRoute(
+        path: RouteNames.sealTake,
+        redirect: (_, state) => state.extra is TakeArgs ? null : RouteNames.home,
+        builder: (_, state) => SealTakeScreen(args: state.extra! as TakeArgs),
+      ),
+      GoRoute(
+        path: RouteNames.sealResult,
+        redirect: (_, state) => state.extra is String ? null : RouteNames.home,
+        builder: (_, state) => SealResultScreen(sealId: state.extra! as String),
+      ),
       // Test builds only: a prod build has no such route.
-      if (!ref.read(appConfigProvider).isProd)
+      if (!ref.read(appConfigProvider).isProd) ...[
         GoRoute(path: RouteNames.sealPreview, builder: (_, _) => const SealPreviewScreen()),
+        GoRoute(path: RouteNames.readCheck, builder: (_, _) => const ReadCheckScreen()),
+      ],
     ],
   );
   ref.onDispose(router.dispose);
