@@ -1,7 +1,7 @@
 name: authentic_materials
 description: "Authentic Materials Creator app"
 publish_to: 'none'
-version: 0.1.0+8
+version: 0.1.0+9
 
 environment:
   sdk: ^3.11.1
@@ -56,6 +56,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  crypto: ^3.0.6
   flutter_launcher_icons: ^0.14.3
   flutter_native_splash: ^2.4.5
 
@@ -75,3 +76,13 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/
+  # The seal's own fonts, bundled (same files the server draws seal pictures with). Never fetched at runtime.
+  fonts:
+    - family: AMSealSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800
+    - family: AMSealMono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Bold.ttf
+          weight: 700

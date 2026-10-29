@@ -12,6 +12,7 @@ import '../features/home/home_screen.dart';
 import '../features/mfa/presentation/gate_screens.dart';
 import '../features/mfa/presentation/second_factor_screen.dart';
 import '../features/mfa/session_gate.dart';
+import '../features/seal_preview/seal_preview_screen.dart';
 import '../features/security/security_screen.dart';
 import 'route_names.dart';
 
@@ -94,6 +95,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: RouteNames.problem, builder: (_, _) => const SessionProblemScreen()),
       // Fully signed in only: the redirect sends every other state elsewhere.
       GoRoute(path: RouteNames.security, builder: (_, _) => const SecurityScreen()),
+      // Test builds only: a prod build has no such route.
+      if (!ref.read(appConfigProvider).isProd)
+        GoRoute(path: RouteNames.sealPreview, builder: (_, _) => const SealPreviewScreen()),
     ],
   );
   ref.onDispose(router.dispose);
