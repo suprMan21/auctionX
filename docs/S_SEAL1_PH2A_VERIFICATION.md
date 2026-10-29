@@ -1,7 +1,7 @@
 # S-SEAL1 Ph2a — seal spec + pattern v1 — verification
 
 Plan: `docs/plans/2026-10-28-s-seal1-ph2.md` (Ph2a). Branch `feature/s-seal1-ph2a`, worktree `.claude/worktrees/s-seal1-ph2a`, off `dev` `0c38e41`.
-Date: 2026-10-28 (Toronto). Status: **code done, tests green; migration, backfill, deploys and phone check pending Boss.**
+Date: 2026-10-28 (Toronto). Status: **✅ live on staging + verified on iPhone 2026-10-28.**
 
 ## What shipped
 
@@ -38,4 +38,19 @@ SMIL parts (colour turn, glint) exist in the page only while Verified with motio
 
 - 2026-10-28: dry run (BEGIN … ROLLBACK) 12/12 ok.
 - 2026-10-28: `supabase db push --linked` applied `20261028000004_seal_spec.sql` only; live SQL `seal_spec_live.sql` **12/12 ok**.
-- Backfill, backend deploy, frontend deploy, iPhone check: pending.
+- 2026-10-28: backfill `--write` done; read-only check: 8/8 tags have a spec, 0 missing.
+- 2026-10-28: backend deploy SUCCEEDED 22:20 (health 200). `backend/.env.op` fixed (`30e5d3a`).
+- 2026-10-28: Shimmer (`62d12ff`, sweep fix `b960c89`) pushed; frontend staging deployed.
+- 2026-10-28: iPhone tap of `chip_004` (WAV4-F6TT): Shimmer works, the sweep crosses the whole badge (Boss: "yup works").
+- Open: Reduce Motion check and My Seals small seal were not reported separately; Android not tested.
+
+## Side finding: frangible sticker on plastic (Boss, 2026-10-28)
+
+Boss tested the frangible antenna on plastic. It tore as intended, **but only after the sticker had sat on the item for at least 10 minutes**. Before that it can be lifted whole.
+
+This matches the adhesive. The sticker is believed to use 3M 467MP (DR-14 §4; part not confirmed with Shunxin). Pressure-sensitive acrylics like this keep building their bond for days. From 3M's general guidance (not checked against the 467MP data sheet this session), that is roughly half the final bond after about 20 minutes, about 90% after 24 hours and full bond after 72 hours at room temperature. DR-14 also found 467MP grips about four times less on ABS plastic than on steel.
+
+What it means for sealing:
+- A freshly applied seal is not yet tamper-evident. Someone could lift it and move it in the first minutes.
+- The sealing flow (S-MOB2) should tell the creator to press it down firmly and **not ship or hand over the item until it has set** (24 h recommended; confirm with the peel test).
+- Still open: the DR-14 peel test at 10 min / 1 h / 24 h / 72 h on the real seal-flag plastic, and Shunxin's part number and peel data.
