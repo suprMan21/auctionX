@@ -58,40 +58,45 @@ const mockReducedMotion = (reduce: boolean) =>
 describe('SealBadge pattern v1 (S-SEAL1 Ph2a)', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('without a spec draws exactly what it drew before (no rings, no electrons)', () => {
+  it('without a spec draws exactly what it drew before (no rings, no shimmer)', () => {
     const { container } = render(<SealBadge code="7K3Q-9XWD" />);
     expect(container.querySelector('[data-seal-rings]')).toBeNull();
-    expect(container.querySelector('animateMotion')).toBeNull();
+    expect(container.querySelector('[data-seal-sheen]')).toBeNull();
+    expect(container.querySelector('animateTransform')).toBeNull();
     expect(container.querySelector('svg')).not.toHaveAttribute('data-seal-pattern');
   });
 
-  it('Verified: both rings, two outer electrons and one inner electron going the other way', () => {
+  it('Verified: holographic rings, rainbow sheen and a glint sweeping every 30 s; no dots or chasing segments', () => {
     mockReducedMotion(false);
     const { container } = render(<SealBadge code="7K3Q-9XWD" spec={SPEC} />);
     const rings = container.querySelector('[data-seal-rings]');
+    expect(rings?.getAttribute('stroke')).toMatch(/^url\(#seal-holo-/);
     expect(rings?.querySelector('.sealrot-out > path')?.getAttribute('d')).toBe(SPEC.pattern.paths[0]);
     expect(rings?.querySelector('.sealrot-in > path')?.getAttribute('d')).toBe(SPEC.pattern.paths[1]);
-    // Each electron = 4 tail dots + 1 halo.
-    expect(container.querySelectorAll('.sealrot-out animateMotion')).toHaveLength(10);
-    const inner = [...container.querySelectorAll('.sealrot-in animateMotion')];
-    expect(inner).toHaveLength(5);
-    expect(inner.every((m) => m.getAttribute('keyPoints') === '1;0' && m.getAttribute('dur') === '20s')).toBe(true);
-    const outerBegins = [...container.querySelectorAll('.sealrot-out animateMotion')].map((m) => m.getAttribute('begin'));
-    expect(outerBegins).toContain('-15s'); // second electron half a lap behind
+    expect(container.querySelector('[data-seal-sheen]')).not.toBeNull();
+    expect(container.querySelector('[data-seal-glint]')).not.toBeNull();
+    const sweep = [...container.querySelectorAll('mask animateTransform')];
+    expect(sweep).toHaveLength(1);
+    expect(sweep[0].getAttribute('dur')).toBe('30s');
+    expect(sweep[0].getAttribute('begin')).toBe('indefinite');
+    expect(container.querySelector('animateMotion')).toBeNull();
+    expect(container.querySelector('[pathLength]')).toBeNull();
   });
 
-  it('Sealed: the pattern is drawn still, with no electrons', () => {
+  it('Sealed: white still rings, no sheen, nothing animated', () => {
     mockReducedMotion(false);
     const { container } = render(<SealBadge code="7K3Q-9XWD" spec={SPEC} state="sealed" />);
-    expect(container.querySelector('[data-seal-rings]')).not.toBeNull();
-    expect(container.querySelector('animateMotion')).toBeNull();
+    expect(container.querySelector('[data-seal-rings]')?.getAttribute('stroke')).toBe('#ffffff');
+    expect(container.querySelector('[data-seal-sheen]')).toBeNull();
+    expect(container.querySelector('animateTransform, animate, animateMotion')).toBeNull();
   });
 
-  it('Reduce Motion: no electrons even while Verified, and the rings do not turn', () => {
+  it('Reduce Motion: the holographic look stays still (no sweep, no colour turn) and the rings do not turn', () => {
     mockReducedMotion(true);
     const { container } = render(<SealBadge code="7K3Q-9XWD" spec={SPEC} />);
     expect(container.querySelector('[data-seal-rings]')).not.toBeNull();
-    expect(container.querySelector('animateMotion')).toBeNull();
+    expect(container.querySelector('[data-seal-glint]')).toBeNull();
+    expect(container.querySelector('animateTransform, animate, animateMotion')).toBeNull();
     expect(css).toMatch(/@media \(prefers-reduced-motion:reduce\)\{[^}]*\.sealrot-out,\.sealrot-in\{animation:none\}/);
     expect(css).toMatch(/\.sealbadge--sealed \.sealrot-out,\.sealbadge--sealed \.sealrot-in\{animation:none\}/);
   });
