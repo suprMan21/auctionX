@@ -16,8 +16,7 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ## 🔴 BOSS ACTION
 
 ### S-MOB2 recorded sealing (Ph A backend merged to local dev 2026-10-29; plan `docs/plans/2026-10-29-s-mob2.md`)
-- [ ] Apply migration `20261029000002`: `supabase db push --linked`, then `supabase db query --linked -f supabase/tests/s_mob2_seal_live.sql` → 18 × ok.
-- [ ] Push `dev`, run `scripts/verify-backend-deploy.sh`. Then Claude regenerates `database.types.ts`.
+- [x] Migration `20261029000002` applied + live SQL 18/18 (Boss 2026-10-29); `dev` pushed, deploy SUCCEEDED 17:13, `/nfc/seal` live (401 unauthenticated); `database.types.ts` regenerated.
 - Next: **Ph B** Flutter sealing flow. First iPhone check: one app read raises the chip counter by exactly 1. A successful seal uses a chip for sealing for good (reuse failed-path tests on one chip; 1000 chips arrived 2026-10-29).
 
 ### S-MOB1 Creator app (Ph B verified on iPhone; Ph C merged to local dev 2026-10-28)
@@ -39,7 +38,7 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [ ] Before launch: CloudFront / WAF rate rule for `/s/*` (backend limit is only a backstop behind CloudFront).
 - [ ] Boss: disclosure settings wording should say the chosen story is visible to anyone with the seal code (no tap needed).
 - [ ] ECS / domain cutover: align the web Share link origin with `PUBLIC_SEAL_BASE_URL`; production needs its own bucket + `/s/*` App Runner/ECS origin (origin request policy None).
-- [ ] Regenerate `database.types.ts` (backend + frontend) for `seal_images_at` (hand-added).
+- [x] Regenerated `database.types.ts` 2026-10-29: the hand-added `seal_images_at` matched.
 - [ ] Before launch: counsel on the `/s/` page sentence ("This code names a seal. It doesn't prove the item in front of you. Tap the seal.").
 - [x] **Ph2a** live + iPhone-verified 2026-10-28 (`docs/S_SEAL1_PH2A_VERIFICATION.md`). Reduce Motion + My Seals ✅. Open: regenerate `database.types.ts`.
 - [ ] Frangible seal: peel test at 10 min / 1 h / 24 h / 72 h on seal-flag plastic (tears only after ≥10 min; sets the S-MOB2 'wait before shipping' number). Ask Shunxin for part no. + peel data + an on-metal frangible option (current seal does not read on metal).

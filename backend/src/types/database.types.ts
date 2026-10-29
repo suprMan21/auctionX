@@ -1376,6 +1376,119 @@ export type Database = {
           },
         ]
       }
+      nfc_counter_ledger: {
+        Row: {
+          accepted_at: string
+          counter: number
+          source: string
+          tag_id: string
+        }
+        Insert: {
+          accepted_at?: string
+          counter: number
+          source: string
+          tag_id: string
+        }
+        Update: {
+          accepted_at?: string
+          counter?: number
+          source?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfc_counter_ledger_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfc_counter_ledger_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
+          },
+        ]
+      }
+      nfc_seals: {
+        Row: {
+          applied_before_recording: boolean
+          created_at: string
+          creator_id: string
+          id: string
+          server_started_at: string | null
+          session_id: string | null
+          tag_id: string
+          tap1_counter: number
+          tap1_device_at: string
+          tap2_counter: number
+          tap2_device_at: string
+          video_sha256: string
+          video_status: string
+        }
+        Insert: {
+          applied_before_recording?: boolean
+          created_at?: string
+          creator_id: string
+          id?: string
+          server_started_at?: string | null
+          session_id?: string | null
+          tag_id: string
+          tap1_counter: number
+          tap1_device_at: string
+          tap2_counter: number
+          tap2_device_at: string
+          video_sha256: string
+          video_status?: string
+        }
+        Update: {
+          applied_before_recording?: boolean
+          created_at?: string
+          creator_id?: string
+          id?: string
+          server_started_at?: string | null
+          session_id?: string | null
+          tag_id?: string
+          tap1_counter?: number
+          tap1_device_at?: string
+          tap2_counter?: number
+          tap2_device_at?: string
+          video_sha256?: string
+          video_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfc_seals_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfc_seals_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "seal_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfc_seals_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: true
+            referencedRelation: "nfc_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfc_seals_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: true
+            referencedRelation: "public_tag_provenance"
+            referencedColumns: ["tag_id"]
+          },
+        ]
+      }
       nfc_tags: {
         Row: {
           activated_at: string | null
@@ -1399,6 +1512,7 @@ export type Database = {
           retired_at: string | null
           retired_reason: string | null
           sdm_key_version: number | null
+          seal_baseline_counter: number | null
           seal_code: string | null
           seal_design_version_id: string | null
           seal_images_at: string | null
@@ -1435,6 +1549,7 @@ export type Database = {
           retired_at?: string | null
           retired_reason?: string | null
           sdm_key_version?: number | null
+          seal_baseline_counter?: number | null
           seal_code?: string | null
           seal_design_version_id?: string | null
           seal_images_at?: string | null
@@ -1471,6 +1586,7 @@ export type Database = {
           retired_at?: string | null
           retired_reason?: string | null
           sdm_key_version?: number | null
+          seal_baseline_counter?: number | null
           seal_code?: string | null
           seal_design_version_id?: string | null
           seal_images_at?: string | null
@@ -2645,6 +2761,41 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      seal_sessions: {
+        Row: {
+          chip_serial: string
+          creator_id: string
+          expires_at: string
+          id: string
+          started_at: string
+          used_at: string | null
+        }
+        Insert: {
+          chip_serial: string
+          creator_id: string
+          expires_at?: string
+          id?: string
+          started_at?: string
+          used_at?: string | null
+        }
+        Update: {
+          chip_serial?: string
+          creator_id?: string
+          expires_at?: string
+          id?: string
+          started_at?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seal_sessions_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       seller_verification_documents: {
         Row: {
@@ -4106,6 +4257,20 @@ export type Database = {
       claim_recovery_enrolment: {
         Args: { p_session: string; p_user: string }
         Returns: string
+      }
+      commit_seal: {
+        Args: {
+          p_applied_before_recording: boolean
+          p_creator_id: string
+          p_session_id: string
+          p_tag_id: string
+          p_tap1_counter: number
+          p_tap1_device_at: string
+          p_tap2_counter: number
+          p_tap2_device_at: string
+          p_video_sha256: string
+        }
+        Returns: Json
       }
       confirm_anchor_batch: {
         Args: {
