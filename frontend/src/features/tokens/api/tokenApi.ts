@@ -242,6 +242,31 @@ export const tokenApi = {
     return request(`/nfc/${encodeURIComponent(tagId)}/receipt`, receiptSchema, { auth: 'required' });
   },
 
+  /**
+   * S-SEAL1 Ph2b: the current owner's share picture (PNG). Errors come back in the usual
+   * envelope; the picture itself is never cached by the browser (server sends no-store).
+   */
+  async shareImage(tagId: string): Promise<Blob> {
+    const headers = await authHeader(true);
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}/nfc/${encodeURIComponent(tagId)}/share-image`, { headers, cache: 'no-store' });
+    } catch {
+      throw new TokenApiError('We could not reach Authentic Materials. Check your connection and try again.', 0, 'network', null);
+    }
+    if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image/png')) {
+      const json: unknown = await res.json().catch(() => null);
+      const body = envelopeSchema.safeParse(json);
+      throw new TokenApiError(
+        (body.success ? body.data.error : null) ?? 'We could not make the picture. Please try again.',
+        res.status,
+        body.success ? (body.data.code ?? null) : null,
+        null,
+      );
+    }
+    return res.blob();
+  },
+
   // ── Re-issue (S-ADMIN1 Ph2) ──────────────────────────────────────────────
 
   /**

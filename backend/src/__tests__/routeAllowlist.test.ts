@@ -130,7 +130,7 @@ describe('S-ISO1 route allowlist — FEATURE_MARKETPLACE off (default)', () => {
     const internal = [...TOKEN_MOUNTS, ...MARKETPLACE_MOUNTS]
       .map((m) => m.path)
       .filter((p) => p.startsWith('/api/v1/internal/'));
-    expect(internal.sort()).toEqual(['/api/v1/internal/anchor-tick', '/api/v1/internal/token-fee-sweep']);
+    expect(internal.sort()).toEqual(['/api/v1/internal/anchor-tick', '/api/v1/internal/seal-images', '/api/v1/internal/token-fee-sweep']);
   });
 
   it('mounts every raw-body webhook before the JSON parser', async () => {

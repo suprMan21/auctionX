@@ -29,6 +29,7 @@ import {
 } from '../controllers/tagManagementController';
 import { ownershipAuthProbeDetector, resolveOwnershipId } from '../controllers/ownershipController';
 import { getMyVouchers, getPrices } from '../controllers/tokenPricesController';
+import { getShareImage } from '../controllers/sealShareController';
 import {
   tapTag,
   listMyTokens,
@@ -237,6 +238,8 @@ tagManagementRoutes.get('/transfer/:id', requireAuth, readLimit, handle(getTrans
 tagManagementRoutes.patch('/:tagId/disclosure', requireAuth, mutationLimit, requireSecondFactor(), refuseWhileFrozen, handle(updateDisclosure));
 // Two segments, so it cannot collide with routes/nfc.ts `GET /:tagId`.
 tagManagementRoutes.get('/:tagId/receipt', requireAuth, readLimit, handle(getReceipt));
+// S-SEAL1 Ph2b: the current owner's share picture (PNG, no-store). No step-up: sharing needs none (DR-22).
+tagManagementRoutes.get('/:tagId/share-image', requireAuth, readLimit, handle(getShareImage));
 
 // ── Ownership lookup (mounted separately at /api/v1/ownership) ───────────────
 export const ownershipRoutes = Router();

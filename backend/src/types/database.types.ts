@@ -1401,6 +1401,7 @@ export type Database = {
           sdm_key_version: number | null
           seal_code: string | null
           seal_design_version_id: string | null
+          seal_images_at: string | null
           seal_spec: Json | null
           seller_id: string
           status: string
@@ -1436,6 +1437,7 @@ export type Database = {
           sdm_key_version?: number | null
           seal_code?: string | null
           seal_design_version_id?: string | null
+          seal_images_at?: string | null
           seal_spec?: Json | null
           seller_id: string
           status?: string
@@ -1471,6 +1473,7 @@ export type Database = {
           sdm_key_version?: number | null
           seal_code?: string | null
           seal_design_version_id?: string | null
+          seal_images_at?: string | null
           seal_spec?: Json | null
           seller_id?: string
           status?: string
