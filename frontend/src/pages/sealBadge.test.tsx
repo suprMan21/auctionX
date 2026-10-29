@@ -79,6 +79,10 @@ describe('SealBadge pattern v1 (S-SEAL1 Ph2a)', () => {
     expect(sweep).toHaveLength(1);
     expect(sweep[0].getAttribute('dur')).toBe('30s');
     expect(sweep[0].getAttribute('begin')).toBe('indefinite');
+    // Crosses the whole badge: starts and ends with the band fully outside it.
+    const [from, , to] = (sweep[0].getAttribute('values') ?? '').split(';').map((v) => Number(v.split(' ')[0]));
+    expect(from).toBeLessThanOrEqual(-45);
+    expect(to).toBeGreaterThanOrEqual(165);
     expect(container.querySelector('animateMotion')).toBeNull();
     expect(container.querySelector('[pathLength]')).toBeNull();
   });

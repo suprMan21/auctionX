@@ -34,7 +34,9 @@ const HOLO_STOPS = [
 ] as const;
 
 /** Sweep: crosses in 3 s, first 1 s after the seal appears, then every 30 s. */
-const SWEEP = { dur: '30s', keyTimes: '0;.033;.133;1', values: '-90 0;-90 0;90 0;90 0' } as const;
+// The band (centre at x 0, 38 wide, tilted 25° about the centre) starts fully off one side
+// and ends fully off the other, so it crosses the whole badge.
+const SWEEP = { dur: '30s', keyTimes: '0;.033;.133;1', values: '-50 0;-50 0;170 0;170 0', start: 'translate(-50 0)' } as const;
 
 const HoloGradient = ({ id, turnSeconds, startAngle, animate }: { id: string; turnSeconds: number; startAngle: number; animate: boolean }) => (
   <linearGradient
@@ -134,7 +136,7 @@ export const SealBadge = ({ code, size = 'md', state = 'verified', label, spec }
             </linearGradient>
             <mask id={sweep} maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120">
               <g transform="rotate(25 60 60)">
-                <rect x="-120" y="-30" width="240" height="180" fill={`url(#${band})`} transform="translate(-90 0)">
+                <rect x="-120" y="-30" width="240" height="180" fill={`url(#${band})`} transform={SWEEP.start}>
                   <animateTransform
                     ref={sweepRef}
                     attributeName="transform"
