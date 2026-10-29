@@ -2,7 +2,7 @@
 
 Plan: `docs/plans/2026-10-28-s-seal1-ph2.md` (Ph2b + "Ph2b infra check"). Branch `feature/s-seal1-ph2b`, worktree
 `.claude/worktrees/s-seal1-ph2b`, off `dev` `4e04d9b`.
-Date: 2026-10-29 (Toronto). Status: **code done, merged to local `dev`; not yet live** (Boss steps below).
+Date: 2026-10-29 (Toronto). Status: **✅ live on staging + verified on iPhone 2026-10-29** (`dev` `5c36619`, backend deploy SUCCEEDED 13:11).
 
 ## What shipped
 
@@ -44,6 +44,10 @@ The code is safe to deploy before any setting exists: no bucket → no pictures 
    - `curl -sI https://d1bwev65w7rqzl.cloudfront.net/s/wav4f6tt` → 301 to `/s/WAV4-F6TT`.
    - `curl -sI https://d1bwev65w7rqzl.cloudfront.net/seal-img/WAV4-F6TT/preview-v1.png` → 200 `image/png`.
    - `curl -s https://d1bwev65w7rqzl.cloudfront.net/s/ZZZZ-ZZZZ | grep "can't show"` → the shared page.
+   - **CloudFront needs an App Runner origin** (missed at first): origin `vw7zy9mkyg.us-east-2.awsapprunner.com`, HTTPS only,
+     TLSv1.2, Origin Shield us-east-2; `/s/*` behaviour → that origin, origin request policy **None** (App Runner answers 404
+     to the viewer Host header, so never AllViewer); then invalidate `/s/*`. Symptom when wrong: 200 `text/html`,
+     `server: AmazonS3`, `x-cache: Error from cloudfront` (the 404 → `/index.html` rewrite hides the miss).
 6. Frontend staging deploy: `scripts/deploy-frontend.sh staging`.
 7. iPhone: paste `https://d1bwev65w7rqzl.cloudfront.net/s/WAV4-F6TT` into iMessage and WhatsApp → preview shows the seal picture and title. Signed in as test@: token page → Share → **Share link** (share sheet) and **Share picture** (share sheet with the PNG; save it, scan the QR, it opens the seal page). Open an unknown code → "We can't show this seal."
 
@@ -60,3 +64,10 @@ No High. Fixed: shared-shield rate limit (now a high backstop; per-viewer limit 
 ## Live results
 
 - 2026-10-29: dry run on staging (BEGIN … migration … `seal_images_live.sql` … ROLLBACK): **9/9 ok**.
+- 2026-10-29 13:0x: `supabase db push --linked` applied `20261029000001` (Boss); `seal_images_live.sql` on the live DB **9/9 ok**; cron `seal-images-tick` `3-59/10 * * * *`.
+- 13:11 backend deploy SUCCEEDED; App Runner direct: `/s/WAV4-F6TT` 200 + CSP + noindex, `/s/wav4f6tt` 301, tick 503 before the secret.
+- 13:33 first tick: `generic: "stored"`, `drawn: 5`, `drawFailed: 0`. Tick with a wrong secret → 403.
+- 13:35 CloudFront `/s/*` fell back to the app page: the behaviour pointed at the frontend bucket (no App Runner origin on the distribution). Boss added the origin and switched the behaviour (see step 3).
+- 13:59 through CloudFront: page 200 `text/html; charset=utf-8`, CSP, `public, max-age=60, stale-if-error=3600`, noindex, Miss then Hit; `og:image` = `/seal-img/WAV4-F6TT/preview-v1.png`; reliance sentence present; `/s/wav4f6tt` 301 → `/s/WAV4-F6TT`; `ZZZZ-ZZZZ` → "We can't show this seal" + noindex; no owner email / account ID / chip name / serial / UID in the page. Generic picture 200 (214 KB), WAV4-F6TT preview 200 (242 KB), checked by eye.
+- iPhone (Boss, test@): iMessage + WhatsApp previews show the seal picture; Share link and Share picture work; QR opens the seal page. ✅
+- Still open: (a) WAF / CloudFront rate rule for `/s/*` before launch; (b) Share link origin vs `PUBLIC_SEAL_BASE_URL` at the ECS / domain cutover; (c) disclosure settings wording (Boss to decide).
