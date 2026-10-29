@@ -1,7 +1,7 @@
 name: authentic_materials
 description: "Authentic Materials Creator app"
 publish_to: 'none'
-version: 0.1.0+9
+version: 0.1.0+10
 
 environment:
   sdk: ^3.11.1
@@ -60,12 +60,17 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.3
   flutter_native_splash: ^2.4.5
 
+# App icon 1.1 (artAssets/aM_appIcon_1.1, 2026-10-28). Regenerate with: dart run flutter_launcher_icons
 flutter_launcher_icons:
   android: true
   ios: true
+  remove_alpha_ios: true
   image_path: "assets/icon/app_icon.png"
-  adaptive_icon_background: "#13131A"
-  adaptive_icon_foreground: "assets/icon/app_icon.png"
+  adaptive_icon_background: "assets/icon/ic_launcher_background.png"
+  adaptive_icon_foreground: "assets/icon/ic_launcher_foreground.png"
+  adaptive_icon_monochrome: "assets/icon/ic_launcher_monochrome.png"
+  # The art already places the mark in the 66% safe zone, so no extra shrink.
+  adaptive_icon_foreground_inset: 0
 
 flutter_native_splash:
   color: "#13131A"
