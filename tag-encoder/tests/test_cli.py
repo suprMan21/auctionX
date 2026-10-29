@@ -208,3 +208,20 @@ def test_personalise_batch_does_not_mix_with_item(tmp_path):
         main(["personalise", "--batch", str(manifest), "--item", "x", "--emulator", "--dev-roots",
               "--audit-log", str(tmp_path / "a.jsonl")])
     assert "--batch" in str(exc.value)
+
+def test_verify_from_url(capsys):
+    """S-MOB2 counter check: --url fills picc / cmac / serial from a phone read."""
+    assert main(["encode", "--item", "x", "--uid", UID, "--counter", "9", "--dev-roots"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    url = f"https://example.test/verify/x?sn={out['serial']}&picc_data={out['encPiccHex']}&cmac={out['cmacHex']}"
+    assert main(["verify", "--url", url, "--dev-roots"]) == 0
+    assert json.loads(capsys.readouterr().out)["counterValue"] == 9
+
+
+def test_verify_url_and_parts_are_exclusive(capsys):
+    with pytest.raises(SystemExit):
+        main(["verify", "--url", "https://x.test/v?picc_data=AA&cmac=BB", "--picc", "AA", "--dev-roots"])
+    with pytest.raises(SystemExit):
+        main(["verify", "--dev-roots"])
+    with pytest.raises(SystemExit):
+        main(["verify", "--url", "https://x.test/v?picc_data=AA&cmac=BB", "--kms", "--dev-roots"])

@@ -35,4 +35,28 @@ void main() {
     expect(pathsFor('staging'), contains(RouteNames.sealPreview));
     expect(pathsFor('prod'), isNot(contains(RouteNames.sealPreview)));
   });
+
+  test('the read check exists in test builds only; sealing exists in both', () {
+    expect(pathsFor('staging'), contains(RouteNames.readCheck));
+    expect(pathsFor('prod'), isNot(contains(RouteNames.readCheck)));
+    for (final env in ['staging', 'prod']) {
+      expect(pathsFor(env), containsAll([RouteNames.sealPrep, RouteNames.sealTake, RouteNames.sealResult]));
+    }
+  });
+
+  test('take and result opened without their arguments (a link) go home', () {
+    final container = ProviderContainer(
+      overrides: [
+        appConfigProvider.overrideWithValue(configFor('prod')),
+        clientInfoProvider.overrideWithValue(const ClientInfo(version: '0.1.0', build: '1', platform: 'ios')),
+        authServiceProvider.overrideWithValue(FakeAuthService()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final routes = container.read(routerProvider).configuration.routes.cast<GoRoute>();
+    for (final path in [RouteNames.sealTake, RouteNames.sealResult]) {
+      final route = routes.firstWhere((r) => r.path == path);
+      expect(route.redirect, isNotNull, reason: path);
+    }
+  });
 }

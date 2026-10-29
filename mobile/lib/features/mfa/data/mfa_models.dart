@@ -253,11 +253,13 @@ class MethodRemoved {
 }
 
 /// Actions a step-up can be asked for from the app (backend StepUpAction).
-/// S-MOB2 adds sealing.
 enum StepUpAction {
   factorAdd('factor_add'),
   factorRemove('factor_remove'),
-  recoveryRegen('recovery_regen');
+  recoveryRegen('recovery_regen'),
+
+  /// S-MOB2: committing a seal, bound to the chip serial. Passkey or authenticator code, never a backup code.
+  seal('seal');
 
   const StepUpAction(this.wire);
   final String wire;
