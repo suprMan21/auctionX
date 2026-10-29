@@ -43,8 +43,49 @@ Goldens are drawn on macOS; regenerate with `flutter test --update-goldens test/
 
 ## Boss: iPhone check (build 0.1.0+9)
 
-Push `dev`, archive 0.1.0+9 to TestFlight (it also carries the pending Ph C checks), sign in as test@, Home → **Seal
-preview**.
+The preview only exists in staging builds (`ENV` = `staging`): Home → **Seal preview**, below Security. Sign in as any
+Creator (test@, admin@ or admin2@) and finish the second step first; Collectors never reach Home.
+
+### Option A — TestFlight (same route as builds 7 and 8)
+
+Run in your own terminal (not with a `!` prefix):
+
+```bash
+# 1. Push dev (also carries S-MOB1 Ph C; no backend change in this phase)
+cd ~/devProjects/Dev/dev/projectClaude/unmentionables/Unmen
+git checkout dev && git push origin dev
+
+# 2. Build the signed archive + IPA, staging settings
+cd mobile
+flutter clean && flutter pub get
+flutter build ipa --release \
+  --dart-define-from-file=env/staging.json \
+  --export-options-plist=ios/ExportOptions.plist
+
+# 3. Upload: opens the archive in Xcode's Organizer
+open build/ios/archive/Runner.xcarchive
+```
+
+In Organizer: select **Runner 0.1.0 (9)** → **Distribute App** → **TestFlight & App Store** → Distribute.
+(Or drag `build/ios/ipa/*.ipa` into Apple's **Transporter** app and press Deliver.) After App Store Connect finishes
+processing (usually 5 to 15 min), update the app from TestFlight on the iPhone.
+
+Tester notes: *"New: Seal preview on Home (test builds only). Also carries the Security screen from build 8."*
+
+### Option B — straight to the iPhone over the cable (no TestFlight, no push)
+
+Plug the iPhone into the Mac, unlock it, trust the Mac, then:
+
+```bash
+cd ~/devProjects/Dev/dev/projectClaude/unmentionables/Unmen/mobile
+flutter devices                      # copy the iPhone's id from the list
+flutter run --release -d <iphone-id> --dart-define-from-file=env/staging.json
+```
+
+This replaces the TestFlight copy on the phone until the next TestFlight install. Developer Mode must be on
+(Settings → Privacy & Security → Developer Mode) the first time.
+
+### Checks
 
 1. Verified seal (WAV4-F6TT): rings turn, colours shift, a glint crosses about 1 s after the screen opens. **Show
    again** restarts it.
