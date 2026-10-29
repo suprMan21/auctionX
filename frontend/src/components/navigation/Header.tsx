@@ -188,7 +188,7 @@ export function Header() {
                 </Link>
                 </li>
               )}
-              {user && (
+              {user && marketplaceEnabled && (
                 <li>
                   <Link to="/dashboard" className={navLinkClass}>
                     Dashboard
@@ -484,11 +484,13 @@ export function Header() {
             )}
             {user && (
               <>
-                <li>
-                  <Link to="/dashboard" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
-                    Dashboard
-                  </Link>
-                </li>
+                {marketplaceEnabled && (
+                  <li>
+                    <Link to="/dashboard" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
+                      Dashboard
+                    </Link>
+                  </li>
+                )}
                 {marketplaceEnabled && (
                   <li>
                   <Link to="/my-listings" className={mobileNavLinkClass} onClick={handleMobileNavClick}>
