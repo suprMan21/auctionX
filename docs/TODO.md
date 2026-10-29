@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-28 (S-MOB1 Ph B verified on iPhone; production backend = ECS Express Mode, launch-blocking)
+**Last updated:** 2026-10-28 (S-SEAL1 Ph2 planned, pattern v1 Locked; S-MOB1 Ph B verified on iPhone; production backend = ECS Express Mode, launch-blocking)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -21,6 +21,11 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [ ] Delete the throwaway app sign-up account (Boss's +alias) from Admin → Accounts.
 - [ ] Production: `VITE_APP_OPEN_ORIGIN` must be a different domain from the web app serving the finish screens (S-LAUNCH1).
 - Next: **Ph C** (in-app Security screen, add/remove methods, step-up sheet, Play internal testing).
+
+### S-SEAL1 Ph2 (planned 2026-10-28; plan `docs/plans/2026-10-28-s-seal1-ph2.md`)
+- [ ] At Ph2b: S3 bucket `am-seal-images-staging` (private, OAC), `s3:PutObject`/`DeleteObject` for `am-backend-staging-instance`; CloudFront `/s/*` → backend and `/seal-img/*` → bucket on the staging distribution, Origin Shield on.
+- [ ] Before launch: counsel on the `/s/` page sentence ("This code names a seal. It doesn't prove the item in front of you. Tap the seal.").
+- Next: **Ph2a** build (spec column, store specs, moving pattern on the tap page). Pattern v1 Locked (`docs/design/seal-pattern-v1-motion-preview.html`).
 
 ### Production backend hosting (Boss 2026-10-28)
 - [ ] Move to **ECS Express Mode** before launch (Locked decision now launch-blocking; backlog Module 19, High). Production never runs on App Runner.
