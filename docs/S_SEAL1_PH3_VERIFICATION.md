@@ -1,6 +1,7 @@
 # S-SEAL1 Ph3 — Flutter seal widget — Verification
 
-**Date:** 2026-10-29 · **Branch:** `feature/s-seal1-ph3` (merged to local `dev`, not pushed) · **Build:** 0.1.0+9
+**Date:** 2026-10-29 · **Branch:** `feature/s-seal1-ph3` (merged to `dev` `32abcd0`, pushed) · **Build:** 0.1.0+9
+**Status:** ✅ **verified on iPhone 2026-10-29** (TestFlight 0.1.0+9, all 5 checks passed, Boss). Android 9 check deferred (no device).
 
 The Creator app can now draw the seal: the same geometry, seal spec, colours and fonts as the website's
 `SealBadge` and the server's seal pictures. S-MOB2 uses it for the "Sealed" moment after recording. No backend,
@@ -85,7 +86,7 @@ flutter run --release -d <iphone-id> --dart-define-from-file=env/staging.json
 This replaces the TestFlight copy on the phone until the next TestFlight install. Developer Mode must be on
 (Settings → Privacy & Security → Developer Mode) the first time.
 
-### Checks
+### Checks — ✅ all passed on iPhone 2026-10-29 (Boss)
 
 1. Verified seal (WAV4-F6TT): rings turn, colours shift, a glint crosses about 1 s after the screen opens. **Show
    again** restarts it.
@@ -101,3 +102,9 @@ Android 9 check (AC 7) waits for an Android phone (S-MOB1 Android is deferred, n
 
 Seal in a real app screen (S-MOB2: the "Sealed" moment, then Verified after the server confirms), tilt shine (G2),
 creator colours (S-SEAL2).
+
+## Follow-up (same day)
+
+App icon 1.1 (`artAssets/aM_appIcon_1.1`, dark, gradient AM) replaces the placeholder on iOS and Android (adaptive +
+monochrome); build **0.1.0+10** (`dev` `6d346e1`). Regenerate with `dart run flutter_launcher_icons`, then revert the
+tool's `project.pbxproj` change (it sets `ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon`).

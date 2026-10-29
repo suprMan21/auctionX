@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-29 (S-SEAL1 Ph3 Flutter seal widget merged to local dev, iPhone check pending; S-MOB1 Ph C merged, device test pending; S-SEAL1 Ph2a live, Shimmer seal; frangible set time + no metal; production backend = ECS Express Mode, launch-blocking)
+**Last updated:** 2026-10-29 (S-SEAL1 Ph3 Flutter seal widget verified on iPhone; app icon 1.1; S-MOB1 Ph C merged, device test pending; S-SEAL1 Ph2a live, Shimmer seal; frangible set time + no metal; production backend = ECS Express Mode, launch-blocking)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -25,9 +25,9 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [ ] Production: `VITE_APP_OPEN_ORIGIN` must be a different domain from the web app serving the finish screens (S-LAUNCH1).
 - Next: S-SEAL1 seal spec → **S-MOB2** (recorded sealing + `seal` step-up, reuses the Confirm it's you sheet).
 
-### S-SEAL1 Ph3 Flutter seal widget (merged to local dev 2026-10-29, build 0.1.0+9)
-- [ ] Push `dev`, archive **0.1.0+9** to TestFlight, Home → **Seal preview** (test builds only): the 5 checks in `docs/S_SEAL1_PH3_VERIFICATION.md`.
+### S-SEAL1 Ph3 Flutter seal widget (✅ verified on iPhone 2026-10-29, build 0.1.0+9)
 - [ ] Android 9 check of the seal (AC 7) when an Android phone is available.
+- [ ] Push `dev` (app icon 1.1, build **0.1.0+10**); next TestFlight upload shows the new icon.
 
 ### S-SEAL1 Ph2 (planned 2026-10-28; plan `docs/plans/2026-10-28-s-seal1-ph2.md`)
 - [x] **Ph2b** live + iPhone-verified 2026-10-29 (`docs/S_SEAL1_PH2B_VERIFICATION.md`): `/s/<code>` page, preview + share pictures (S3 `am-seal-images-staging`, tick every 10 min), Share link / Share picture.
