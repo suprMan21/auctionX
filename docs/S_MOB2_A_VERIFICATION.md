@@ -32,7 +32,13 @@ D4 App Attest / Play Integrity deferred to S-SEC1.
 
 One unrelated flake seen once: `mfa.test.ts` "accepts null authenticatorAttachment…" (supertest `Parse Error: Expected HTTP/`); passes 3/3 alone and in the rerun.
 
-## Boss steps
+## Live on staging (2026-10-29)
+
+- Migration applied; live SQL `s_mob2_seal_live.sql` 18/18 (Boss). `supabase migration list --linked` shows `20261029000002` remote.
+- `dev` pushed (`206a6e2`); App Runner START_DEPLOYMENT SUCCEEDED 17:13 EDT; `POST /api/v1/nfc/seal` and `/seal/session` answer 401 unauthenticated (unknown route 404).
+- `database.types.ts` regenerated (backend + frontend, additions only); tsc both sides 0, backend 1228 passed.
+
+## Boss steps (done)
 
 1. Apply the migration: `supabase db push --linked` (Claude can't write the staging DB).
 2. Run `supabase db query --linked -f supabase/tests/s_mob2_seal_live.sql` → expect `RESULTS` with 18 × "ok".
