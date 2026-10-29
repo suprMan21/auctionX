@@ -36,4 +36,6 @@ Electrons use SMIL `animateMotion` but exist in the page only while Verified, so
 
 ## Live results
 
-_Pending._
+- 2026-10-28: dry run (BEGIN … ROLLBACK) 12/12 ok.
+- 2026-10-28: `supabase db push --linked` applied `20261028000004_seal_spec.sql` only; live SQL `seal_spec_live.sql` **12/12 ok**.
+- Backfill, backend deploy, frontend deploy, iPhone check: pending.
