@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-28 (S-MOB1 Ph C merged, device test pending; S-SEAL1 Ph2 planned, pattern v1 Locked; production backend = ECS Express Mode, launch-blocking)
+**Last updated:** 2026-10-28 (S-MOB1 Ph C merged, device test pending; S-SEAL1 Ph2a live, Shimmer seal; frangible set time + no metal; production backend = ECS Express Mode, launch-blocking)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -28,7 +28,8 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ### S-SEAL1 Ph2 (planned 2026-10-28; plan `docs/plans/2026-10-28-s-seal1-ph2.md`)
 - [ ] At Ph2b: S3 bucket `am-seal-images-staging` (private, OAC), `s3:PutObject`/`DeleteObject` for `am-backend-staging-instance`; CloudFront `/s/*` → backend and `/seal-img/*` → bucket on the staging distribution, Origin Shield on.
 - [ ] Before launch: counsel on the `/s/` page sentence ("This code names a seal. It doesn't prove the item in front of you. Tap the seal.").
-- [ ] **Ph2a** code merged to local `dev` 2026-10-28 (`docs/S_SEAL1_PH2A_VERIFICATION.md`): Boss runs migration `20261028000004` dry run + push + live SQL (12 checks), pushes `dev`, backfill script, frontend staging deploy, iPhone tap of chip_004.
+- [x] **Ph2a** live + iPhone-verified 2026-10-28 (`docs/S_SEAL1_PH2A_VERIFICATION.md`). Open: Reduce Motion + My Seals check; regenerate `database.types.ts`.
+- [ ] Frangible seal: peel test at 10 min / 1 h / 24 h / 72 h on seal-flag plastic (tears only after ≥10 min; sets the S-MOB2 'wait before shipping' number). Ask Shunxin for part no. + peel data + an on-metal frangible option (current seal does not read on metal).
 - Next: **Ph2b** (server SVG + `/s/<code>` page + images + Share), needs the S3 bucket + CloudFront behaviours above.
 
 ### Production backend hosting (Boss 2026-10-28)
