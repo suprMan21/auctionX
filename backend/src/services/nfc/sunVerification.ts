@@ -22,7 +22,7 @@ import type { SdmFailure } from './types';
 import { emitSecurityEvent, type SecurityResult } from '../../lib/security/securityEvent';
 import type { SecurityLogContext } from '../../lib/ownership/ownershipProof';
 
-export type SunContext = 'verify' | 'claim' | 'transfer_complete';
+export type SunContext = 'verify' | 'claim' | 'transfer_complete' | 'seal';
 
 export type SunResult =
   | 'ok'

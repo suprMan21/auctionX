@@ -79,7 +79,7 @@ import { sealImageStore } from '../lib/seal/sealImageStore';
 
 interface TagRequest extends RequestWithId, AuthRequest {}
 
-const getServiceClient = (): SupabaseClient =>
+export const getServiceClient = (): SupabaseClient =>
   createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
 /**
@@ -135,7 +135,7 @@ const terminalStateError = (status: string | null): SecurityResult | null => {
   }
 };
 
-const errorFor = (code: SecurityResult): AppError => {
+export const errorFor = (code: SecurityResult): AppError => {
   // `reason` is the closed-set, machine-readable code the client branches on
   // (CLIENT_REASONS in routes/tagManagement.ts); the message is for humans.
   const withReason = (status: ConstructorParameters<typeof AppError>[0], message: string) =>
@@ -165,6 +165,10 @@ const errorFor = (code: SecurityResult): AppError => {
       return withReason('invalid_argument', 'Your tap has expired or was already used. Please tap the tag again');
     case 'not_found':
       return new AppError('not_found', 'Not found');
+    case 'seal_gap':
+      return withReason('failed_precondition', 'The seal was read by something else during the video. Record it again with two new taps');
+    case 'not_sealable':
+      return withReason('failed_precondition', 'This seal cannot be sealed in the app');
     default:
       return new AppError('invalid_argument', 'Request could not be processed');
   }
@@ -242,7 +246,7 @@ type MintedProof = ReturnType<typeof mintOwnershipProof>;
  * threw on a missing OWNERSHIP_SALT_KEY, leaving an owned token with no
  * Ownership ID.)
  */
-const mintProof = (
+export const mintProof = (
   params: { tagId: string; ownershipEventId: string; ownershipEventType: 'claim' | 'transfer' },
   ctx: SecurityLogContext,
 ): MintedProof => mintOwnershipProof(params, ctx);
@@ -254,7 +258,7 @@ const mintProof = (
  *
  * Old and new IDs are never linked in any public output.
  */
-const rotateOwnershipProof = async (
+export const rotateOwnershipProof = async (
   supabase: SupabaseClient,
   minted: MintedProof,
   params: { tagId: string; ownerId: string },
