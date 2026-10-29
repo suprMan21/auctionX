@@ -42,7 +42,7 @@ SMIL parts (colour turn, glint) exist in the page only while Verified with motio
 - 2026-10-28: backend deploy SUCCEEDED 22:20 (health 200). `backend/.env.op` fixed (`30e5d3a`).
 - 2026-10-28: Shimmer (`62d12ff`, sweep fix `b960c89`) pushed; frontend staging deployed.
 - 2026-10-28: iPhone tap of `chip_004` (WAV4-F6TT): Shimmer works, the sweep crosses the whole badge (Boss: "yup works").
-- Open: Reduce Motion check and My Seals small seal were not reported separately; Android not tested.
+- 2026-10-28: Reduce Motion and My Seals small seal checked on iPhone (Boss: "looks great"). Android not tested.
 
 ## Side finding: frangible sticker on plastic (Boss, 2026-10-28)
 
