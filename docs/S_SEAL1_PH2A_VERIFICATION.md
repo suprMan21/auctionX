@@ -13,10 +13,10 @@ Date: 2026-10-28 (Toronto). Status: **code done, tests green; migration, backfil
 | API | tap (`POST /nfc/tap`), `GET /nfc/mine`, enroll | `sealSpec: { v, colors, pattern }` (no code inside; the code is `sealCode`). Enroll stores it right after insert, never blocking. Tap key list pinned (`tokenReads.test.ts`). |
 | Backfill | `backend/scripts/backfill-seal-specs.ts` | Dry run by default; `--write` stores. Counts only in the output. Safe to re-run. |
 | Geometry | `backend/src/lib/seal/geometry.ts`, `frontend/src/components/seal/geometry.ts` | Same constants; both tests pin SHA-256 `f7796b2b…57434`. |
-| Badge | `frontend/src/components/seal/SealBadge.tsx` + `seal.css` | Optional `spec`. Pattern v1 as Locked: rings clipped at r 30.5, stroke .35, opacity .20 / .14. **Verified only:** outer ring turns the other way every 48 s, inner with the words every 30 s, two outer electrons (30 s, half a lap apart) and one inner going the other way (20 s), 4-dot tail + halo. **Sealed:** pattern still, no electrons. **Reduce Motion:** electrons are left out of the page and rings stop. No spec (homepage, older backend): unchanged. |
+| Badge | `frontend/src/components/seal/SealBadge.tsx` + `seal.css` | Optional `spec`. Pattern v1 rings clipped at r 30.5. **Verified: Shimmer** (Boss 2026-10-28, replaces the electrons): rings turn (48 s other way / 30 s), holographic ring lines, faint rainbow sheen, rainbow glint sweeping every 30 s (first 1 s after the seal appears; started with `beginElement()` on mount, not page load). **Sealed:** white still rings, no sheen. **Reduce Motion:** holographic look, nothing animated in the page. No spec (homepage, older backend): unchanged. |
 | Call sites | tap page, My Seals, token page | Pass `sealSpec`. Frontend schema drops a malformed spec instead of failing the page. |
 
-Electrons use SMIL `animateMotion` but exist in the page only while Verified, so the 90 s end and Reduce Motion stop them by removing them.
+SMIL parts (colour turn, glint) exist in the page only while Verified with motion allowed, so the 90 s end and Reduce Motion stop them by removing them.
 
 ## Tests
 
@@ -32,7 +32,7 @@ Electrons use SMIL `animateMotion` but exist in the page only while Verified, so
 3. Push `dev`; run `scripts/verify-backend-deploy.sh`.
 4. Backfill: `cd backend && op run --env-file .env.op -- npx tsx scripts/backfill-seal-specs.ts` (dry run), then with `--write`. Expect "still without a spec: 0".
 5. Frontend staging deploy: `scripts/deploy-frontend.sh staging`.
-6. iPhone: tap `chip_004` (WAV4-F6TT): rings visible, rings turn, electrons move for ~90 s, then the seal goes still with the rings still drawn. With Settings → Accessibility → Reduce Motion on: rings drawn, nothing moves. My Seals: still pattern on the small seal.
+6. iPhone: tap `chip_004` (WAV4-F6TT): rainbow rings turn, sheen visible, a glint sweeps ~1 s after the tap and again at ~31 s and ~61 s; after ~90 s the seal goes still with white rings. With Settings → Accessibility → Reduce Motion on: rainbow rings, nothing moves. My Seals: still pattern on the small seal.
 
 ## Live results
 
