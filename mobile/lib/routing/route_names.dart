@@ -10,4 +10,7 @@ class RouteNames {
   static const creatorsOnly = '/creators-only';
   static const problem = '/problem';
   static const security = '/security';
+
+  /// Test builds only.
+  static const sealPreview = '/seal-preview';
 }

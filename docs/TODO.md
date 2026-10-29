@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-28 (S-MOB1 Ph C merged, device test pending; S-SEAL1 Ph2a live, Shimmer seal; frangible set time + no metal; production backend = ECS Express Mode, launch-blocking)
+**Last updated:** 2026-10-29 (S-SEAL1 Ph3 Flutter seal widget merged to local dev, iPhone check pending; S-MOB1 Ph C merged, device test pending; S-SEAL1 Ph2a live, Shimmer seal; frangible set time + no metal; production backend = ECS Express Mode, launch-blocking)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -16,7 +16,7 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ## 🔴 BOSS ACTION
 
 ### S-MOB1 Creator app (Ph B verified on iPhone; Ph C merged to local dev 2026-10-28)
-- [ ] Push `dev`, archive build **0.1.0+8** to TestFlight, run the 9 checks in `docs/S_MOB1_C_VERIFICATION.md` (Claude reads results back from the logs).
+- [ ] Push `dev`, archive build **0.1.0+9** (now also carries the seal widget) to TestFlight, run the 9 checks in `docs/S_MOB1_C_VERIFICATION.md` (Claude reads results back from the logs).
 - [ ] Play internal testing: Play Console app entry + upload key, then the upload / Play signing hashes in `WEBAUTHN_ORIGINS`.
 - [ ] Android check on a real phone before launch (emulator OK for a basic run).
 - [ ] 1Password doesn't fill the authenticator code on the app's code screen: Ph C check #5 (add through "Open in authenticator app") shows whether that fixes it.
@@ -24,6 +24,10 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [ ] Delete the throwaway app sign-up account (Boss's +alias) from Admin → Accounts.
 - [ ] Production: `VITE_APP_OPEN_ORIGIN` must be a different domain from the web app serving the finish screens (S-LAUNCH1).
 - Next: S-SEAL1 seal spec → **S-MOB2** (recorded sealing + `seal` step-up, reuses the Confirm it's you sheet).
+
+### S-SEAL1 Ph3 Flutter seal widget (merged to local dev 2026-10-29, build 0.1.0+9)
+- [ ] Push `dev`, archive **0.1.0+9** to TestFlight, Home → **Seal preview** (test builds only): the 5 checks in `docs/S_SEAL1_PH3_VERIFICATION.md`.
+- [ ] Android 9 check of the seal (AC 7) when an Android phone is available.
 
 ### S-SEAL1 Ph2 (planned 2026-10-28; plan `docs/plans/2026-10-28-s-seal1-ph2.md`)
 - [x] **Ph2b** live + iPhone-verified 2026-10-29 (`docs/S_SEAL1_PH2B_VERIFICATION.md`): `/s/<code>` page, preview + share pictures (S3 `am-seal-images-staging`, tick every 10 min), Share link / Share picture.

@@ -16,6 +16,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
     final email = auth is SignedIn ? auth.user.email : '';
+    final testBuild = !ref.watch(appConfigProvider).isProd;
 
     return Scaffold(
       appBar: AppBar(
@@ -65,6 +66,22 @@ class HomeScreen extends ConsumerWidget {
                 onTap: () => context.push(RouteNames.security),
               ),
             ),
+            if (testBuild) ...[
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  leading: const Icon(Icons.verified_outlined, color: AppColors.accent400),
+                  title: Text('Seal preview', style: AppTypography.titleMedium),
+                  subtitle: Text(
+                    'Test builds only',
+                    style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(RouteNames.sealPreview),
+                ),
+              ),
+            ],
           ],
         ),
       ),
