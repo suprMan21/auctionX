@@ -54,7 +54,7 @@ const nickname = z.string().trim().min(1).max(40).regex(/^[^<>\u0000-\u001f]+$/,
 
 const stepUpAction = z.enum([
   'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen', 'admin_action', 'admin_approve',
-  'account_change', 'recovery_undo', 'recovery_channel',
+  'account_change', 'recovery_undo', 'recovery_channel', 'seal',
 ]);
 const targetId = z.string().min(1).max(200).regex(/^[A-Za-z0-9_:.-]+$/);
 const totpCode = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict();

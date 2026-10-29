@@ -47,6 +47,9 @@ describe('S-NFC3 tag management routes', () => {
     { method: 'get', path: '/api/v1/nfc/enroll/precheck/04A27E02936980' },
     { method: 'post', path: '/api/v1/nfc/enroll/reserve-name' },
     { method: 'post', path: '/api/v1/nfc/claim' },
+    // S-MOB2 recorded sealing.
+    { method: 'post', path: '/api/v1/nfc/seal/session' },
+    { method: 'post', path: '/api/v1/nfc/seal' },
     { method: 'post', path: '/api/v1/nfc/release' },
     { method: 'post', path: '/api/v1/nfc/replace' },
     { method: 'post', path: '/api/v1/nfc/reissue-request' },

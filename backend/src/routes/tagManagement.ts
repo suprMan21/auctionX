@@ -30,6 +30,7 @@ import {
 import { ownershipAuthProbeDetector, resolveOwnershipId } from '../controllers/ownershipController';
 import { getMyVouchers, getPrices } from '../controllers/tokenPricesController';
 import { getShareImage } from '../controllers/sealShareController';
+import { commitSeal, startSealSession } from '../controllers/sealController';
 import {
   tapTag,
   listMyTokens,
@@ -91,6 +92,10 @@ const CLIENT_REASONS = new Set([
   'mail_unavailable',
   'nonce_required',
   'same_as_account_email',
+  // S-MOB2 recorded sealing.
+  'seal_gap',
+  'not_sealable',
+  'creator_only',
 ]);
 
 const sunReason = (details: unknown): string | null => {
@@ -178,6 +183,18 @@ tagManagementRoutes.post('/enroll', requireAuth, mutationLimit, handle(enrollTag
 tagManagementRoutes.get('/enroll/precheck/:tagUid', requireAuth, mutationLimit, handle(enrollPrecheck));
 tagManagementRoutes.post('/enroll/reserve-name', requireAuth, mutationLimit, handle(reserveChipName));
 tagManagementRoutes.post('/claim', requireAuth, mutationLimit, handle(claimTag));
+// S-MOB2 recorded sealing (Creator app). The commit needs a fresh `seal` step-up bound to the chip serial,
+// always (Locked 2026-10-28: passkey or authenticator code, never a backup code, never a local check alone).
+tagManagementRoutes.post('/seal/session', requireAuth, mutationLimit, requireSecondFactor(), refuseWhileFrozen, handle(startSealSession));
+tagManagementRoutes.post(
+  '/seal',
+  requireAuth,
+  mutationLimit,
+  requireSecondFactor(),
+  refuseWhileFrozen,
+  requireStepUp('seal', (req) => (req.body as { serial?: unknown } | undefined)?.serial, { always: true }),
+  handle(commitSeal),
+);
 // S-2FA: release ends a token for good, so it needs the second factor AND a
 // fresh passkey check for this exact token (typed RELEASE stays as well).
 tagManagementRoutes.post(

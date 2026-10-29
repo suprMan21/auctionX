@@ -77,7 +77,7 @@ import {
 
 export const STEP_UP_ACTIONS: readonly StepUpAction[] = [
   'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
-  'admin_action', 'admin_approve', 'account_change', 'recovery_undo', 'recovery_channel',
+  'admin_action', 'admin_approve', 'account_change', 'recovery_undo', 'recovery_channel', 'seal',
 ];
 
 /**
@@ -92,7 +92,7 @@ export const CODE_STEP_UP_ACTIONS: readonly StepUpAction[] = ['factor_add', 'fac
  * Refused before anything is checked, so no code is spent.
  */
 export const FROZEN_STEP_UP_ACTIONS: readonly StepUpAction[] = [
-  'release', 'transfer_complete', 'factor_add', 'factor_remove', 'recovery_regen', 'account_change', 'recovery_channel',
+  'release', 'transfer_complete', 'factor_add', 'factor_remove', 'recovery_regen', 'account_change', 'recovery_channel', 'seal',
 ];
 
 /**
@@ -100,7 +100,7 @@ export const FROZEN_STEP_UP_ACTIONS: readonly StepUpAction[] = [
  * (Boss, 2026-10-27). Never with a backup code, and never for staff: staff
  * confirm these with a passkey. Every other action is passkey only.
  */
-export const TOTP_STEP_UP_ACTIONS: readonly StepUpAction[] = ['release', 'transfer_complete', 'account_change'];
+export const TOTP_STEP_UP_ACTIONS: readonly StepUpAction[] = ['release', 'transfer_complete', 'account_change', 'seal'];
 
 export interface Caller {
   userId: string;

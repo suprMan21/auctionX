@@ -22,6 +22,8 @@ export type StepUpAction =
   | 'recovery_undo'
   /** Ph3b: add / replace / remove the backup email (target 'backup_email'). */
   | 'recovery_channel'
+  /** S-MOB2: start a recorded seal (target = chip serial from the tap URL). */
+  | 'seal'
   | 'release'
   | 'transfer_complete'
   | 'price_change'

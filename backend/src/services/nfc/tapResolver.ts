@@ -164,3 +164,71 @@ export const resolveAndBurnSun = async (
 
   return { tag, result, sunResult };
 };
+
+// ── S-MOB2: seal taps ───────────────────────────────────────────────────────
+
+export type SealTagRow = ResolvedTagRow & { seal_baseline_counter: number | null; suspended_at: string | null };
+
+const SEAL_COLUMNS = `${RESOLVE_COLUMNS}, seal_baseline_counter, suspended_at`;
+
+export interface ResolvedSealTap {
+  readonly tag: SealTagRow;
+  readonly result: ScanValidationResult;
+  readonly sunResult: SunResult;
+}
+
+/**
+ * Checks one seal tap WITHOUT burning its counter (S-MOB2). Seal taps arrive
+ * late and can be older than the chip's latest public tap, so the counter only
+ * has to be above the chip's seal baseline here; commit_seal (one transaction,
+ * row lock) then refuses any counter the server has already accepted.
+ *
+ * v2 chips only: the serial in the URL selects the row. Returns null when no
+ * enrolled v2 chip matches.
+ */
+export const resolveSealTap = async (
+  supabase: SupabaseClient,
+  parts: SunMessageParts,
+  ctx: SecurityLogContext,
+): Promise<ResolvedSealTap | null> => {
+  const logger = withLogContext({ requestId: ctx.requestId, route: ctx.route });
+  if (parts.serial === undefined) return null;
+
+  const { data: row, error } = await supabase
+    .from('nfc_tags')
+    .select(SEAL_COLUMNS)
+    .eq('chip_serial', parts.serial)
+    .maybeSingle();
+  if (error) {
+    logger.error('nfc_seal_lookup_failed', { error: error.message });
+    throw new AppError('internal', 'Tag lookup failed');
+  }
+  const tag = row as SealTagRow | null;
+  const version = tag?.sdm_key_version ?? 1;
+  if (!tag || version < SERIAL_KDF_VERSION) {
+    emitSunVerify(null, 'seal', 'unknown_tag', null, null, 'not_found', ctx);
+    return null;
+  }
+
+  const provider = getTagKeyProvider();
+  const picc = await recoverPiccData(parts.encPiccData, version, provider, { ctx, tagId: tag.id });
+  if (!picc || picc.uidHex !== tag.tag_uid.toUpperCase()) {
+    emitSunVerify(tag.id, 'seal', 'invalid_signature', null, null, 'invalid_signature', ctx);
+    return null;
+  }
+
+  const baseline = tag.seal_baseline_counter ?? tag.sun_counter;
+  const result = await verifyRecoveredScan({
+    picc,
+    encPiccHex: parts.encPiccData,
+    cmacHex: parts.cmac,
+    serial: parts.serial,
+    version,
+    lastCounter: baseline,
+    provider,
+    audit: { ctx, tagId: tag.id },
+  });
+  const sunResult = classify(result.error);
+  emitSunVerify(tag.id, 'seal', sunResult, result.counterValue, baseline, result.valid ? 'ok' : sunFailureCode(sunResult), ctx);
+  return { tag, result, sunResult };
+};

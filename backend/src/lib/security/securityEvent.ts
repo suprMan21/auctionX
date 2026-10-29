@@ -69,6 +69,9 @@ export const securityResultSchema = z.enum([
   'rate_limited',
   'recovery_freeze',
   'unavailable',
+  // S-MOB2: the chip was read between the two seal taps (take void), or the chip cannot be sealed.
+  'seal_gap',
+  'not_sealable',
 ]);
 
 export type SecurityResult = z.infer<typeof securityResultSchema>;
@@ -88,7 +91,7 @@ const envelopeSchema = z.object({
 const sunVerifySchema = envelopeSchema.extend({
   event: z.literal('nfc.sun_verify'),
   tag_id: uuid.nullable(),
-  context: z.enum(['verify', 'claim', 'transfer_complete']),
+  context: z.enum(['verify', 'claim', 'transfer_complete', 'seal']),
   // S-NFC3.5 renames: cmac_invalid -> invalid_signature; counter_replay and
   // counter_regression -> replay_detected (regression is derivable from
   // counter < last_counter); UID mismatch now has its own code.
@@ -268,7 +271,7 @@ const mfaSchema = envelopeSchema.extend({
   method: z.enum(['passkey', 'totp', 'recovery_code', 'email_code']).nullable(),
   step_up_action: z.enum([
     'release', 'transfer_complete', 'price_change', 'factor_remove', 'factor_add', 'recovery_regen',
-    'admin_action', 'admin_approve', 'account_change', 'recovery_undo', 'recovery_channel',
+    'admin_action', 'admin_approve', 'account_change', 'recovery_undo', 'recovery_channel', 'seal',
   ]).nullable(),
   break_glass: z.boolean(),
 }).strict();
