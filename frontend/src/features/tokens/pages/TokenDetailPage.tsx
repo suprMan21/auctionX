@@ -15,6 +15,7 @@ import { ReleaseTokenDialog } from '../components/ReleaseTokenDialog';
 import { ReplacementSection } from '../components/ReplacementSection';
 import { tokenDisplayName } from '../lib/tokenName';
 import { OwnedSeal } from '../components/OwnedSeal';
+import { SealShare } from '../components/SealShare';
 
 type Load =
   | { kind: 'loading' }
@@ -101,6 +102,16 @@ export const TokenDetailPage = () => {
                 />
               </div>
             </section>
+
+            {/* S-SEAL1 Ph2b: only the current owner reaches this page, and only live seals show it. */}
+            {load.token.sealCode && (load.token.lifecycleStatus === 'ACTIVE' || load.token.lifecycleStatus === 'ENROLLED') && (
+              <section aria-labelledby="share-heading" className="glass rounded-2xl p-6">
+                <h2 id="share-heading" className="text-lg font-semibold text-white mb-2">
+                  Share
+                </h2>
+                <SealShare tagId={load.token.tagId} sealCode={load.token.sealCode} lifecycleStatus={load.token.lifecycleStatus} />
+              </section>
+            )}
 
             <TransferSection
               token={load.token}

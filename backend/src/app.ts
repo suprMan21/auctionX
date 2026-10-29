@@ -35,6 +35,8 @@ import { sellerVerificationRoutes } from './routes/sellerVerification';
 import messageRoutes from './routes/messages';
 import { appConfigRoutes } from './routes/appConfig';
 import { appVersionGate } from './middleware/appVersionGate';
+import sealImagesTickRoutes from './routes/sealImagesTick';
+import { createSealPageRouter } from './routes/sealPage';
 
 /**
  * A router mount. `raw: true` means the router needs the unparsed request body
@@ -59,6 +61,8 @@ export const TOKEN_MOUNTS: readonly Mount[] = [
   { path: '/api/v1/internal/token-fee-sweep', router: tokenFeeSweepRoutes },
   // S-ANCHOR1 Ph1: the hourly anchoring tick (pg_cron, its own shared secret).
   { path: '/api/v1/internal/anchor-tick', router: anchorTickRoutes },
+  // S-SEAL1 Ph2b: the 10-minute seal-pictures tick (pg_cron, its own shared secret).
+  { path: '/api/v1/internal/seal-images', router: sealImagesTickRoutes },
   { path: '/api/v1/verification', router: yotiVerificationRoutes },
   { path: '/api/v1/nfc', router: nfcRoutes },
   { path: '/api/v1/ownership', router: ownershipRoutes },
@@ -142,9 +146,15 @@ const corsFor: cors.CorsOptionsDelegate<cors.CorsRequest> = (req, cb) => {
 export const createApp = (): express.Express => {
   const app = express();
   app.set('trust proxy', [...TRUSTED_PROXIES]);
+  app.disable('x-powered-by');
   const marketplace = isMarketplaceEnabled();
 
   app.use(requestIdMiddleware as express.RequestHandler);
+
+  // S-SEAL1 Ph2b: the public seal page is a plain GET page (server HTML behind CloudFront /s/*),
+  // so it sits before the API's CORS, version gate and body parsers.
+  app.use('/s', createSealPageRouter());
+
   app.use(cors(corsFor));
 
   // Health before the body parsers and every downstream middleware, so a

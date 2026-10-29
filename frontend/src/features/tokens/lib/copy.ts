@@ -157,3 +157,17 @@ export const releaseErrorCopy = (reason: TokenErrorReason | null, fallback: stri
 
 export const formatMoney = (minorUnits: number, currency: string): string =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency: currency.toUpperCase() }).format(minorUnits / 100);
+
+/** S-SEAL1 Ph2b: sharing a seal (owner only). A shared link or picture never checks a seal; only a tap does. */
+export const SHARE_COPY = {
+  explainer: 'Anyone with the link sees the seal and the story you chose to show. Only a tap on the seal checks it.',
+  shareLink: 'Share link',
+  sharePicture: 'Share picture',
+  preparing: 'Preparing picture…',
+  titlePrefix: 'Seal',
+  linkCopied: 'Link copied.',
+  copyThisLink: 'Copy this link:',
+  pictureSaved: 'Picture saved.',
+  pictureReady: 'Your picture is ready. Tap Share picture again.',
+  pictureFailed: 'We could not share the picture. Please try again.',
+} as const;

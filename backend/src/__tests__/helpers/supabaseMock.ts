@@ -22,6 +22,7 @@
  *
  * S-ANCHOR1: `.upsert(row, { onConflict })`.
  *
+ * S-SEAL1 Ph2b: `.not(col, 'in', '(a,b)')`.
  * S-2FA Ph3a: `.neq()`, and `or()` terms `col.not.is.null` and `col.lte.v` (approval queue).
  *
  * S-NFC3.5: `.lt()` (the conditional counter burn) and an optional
@@ -41,7 +42,7 @@ export type Tables = Record<string, Row[]>;
 
 interface Filter {
   column: string;
-  op: 'eq' | 'neq' | 'lt' | 'gt' | 'gte' | 'lte' | 'in' | 'is' | 'ilike' | 'or' | 'notnull';
+  op: 'eq' | 'neq' | 'lt' | 'gt' | 'gte' | 'lte' | 'in' | 'notin' | 'is' | 'ilike' | 'or' | 'notnull';
   value: unknown;
 }
 
@@ -62,6 +63,9 @@ const matches = (row: Row, filters: Filter[]): boolean =>
         return (cell ?? null) !== null;
       case 'in':
         return (f.value as unknown[]).includes(cell);
+      case 'notin':
+        // PostgREST `not.in`: NULL is neither in nor not in the list.
+        return cell !== null && cell !== undefined && !(f.value as unknown[]).includes(cell);
       // Numbers compare numerically; ISO timestamps compare lexically, which is
       // chronological for same-format UTC strings.
       case 'lt':
@@ -243,8 +247,14 @@ class QueryBuilder {
     return this;
   }
 
-  /** Only the `not(col, 'is', null)` form (IS NOT NULL). */
+  /** `not(col, 'is', null)` (IS NOT NULL) and S-SEAL1 Ph2b `not(col, 'in', '(a,b)')`. */
   not(column: string, operator: string, value: unknown): this {
+    if (operator === 'in' && typeof value === 'string') {
+      const list = /^\((.*)\)$/.exec(value);
+      if (!list) throw new Error(`supabaseMock: unsupported not-in list ${value}`);
+      this.filters.push({ column, op: 'notin', value: list[1] === '' ? [] : list[1].split(',') });
+      return this;
+    }
     if (operator !== 'is' || value !== null) {
       throw new Error(`supabaseMock: unsupported not(${column}, ${operator}, ${String(value)})`);
     }

@@ -74,6 +74,8 @@ import { confirmedEmail } from '../lib/security/confirmedEmail';
 import { hasManageNfc } from '../lib/admin/tokenAdmin';
 import { displaySealCode } from '../lib/nfc/sealCode';
 import { ensureSealSpec } from '../lib/seal/ensureSealSpec';
+import { drawSealImages } from '../lib/seal/sealImageSync';
+import { sealImageStore } from '../lib/seal/sealImageStore';
 
 interface TagRequest extends RequestWithId, AuthRequest {}
 
@@ -362,7 +364,13 @@ export const enrollTag = async (req: TagRequest, res: Response) => {
 
   // S-SEAL1 Ph2a: store the seal's spec now. Never blocks the enroll (a failed store is
   // logged, and the first read of the seal stores it instead).
-  await ensureSealSpec(supabase, { id: data.id, seal_code: data.seal_code, seal_spec: null }, {
+  const sealSpec = await ensureSealSpec(supabase, { id: data.id, seal_code: data.seal_code, seal_spec: null }, {
+    requestId: ctx.requestId,
+    route: ctx.route,
+  });
+  // S-SEAL1 Ph2b: draw and store the link-preview picture now. Never blocks the enroll either:
+  // on any failure the 10-minute seal-images tick draws it.
+  await drawSealImages(supabase, sealImageStore(), { id: data.id, seal_code: data.seal_code, seal_spec: sealSpec }, {
     requestId: ctx.requestId,
     route: ctx.route,
   });

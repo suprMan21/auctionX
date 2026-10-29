@@ -6,6 +6,7 @@ import { TokenStatusBadge } from '../components/TokenStatusBadge';
 import { TransferProcessing } from '../components/TransferProcessing';
 import { tokenDisplayName } from '../lib/tokenName';
 import { OwnedSeal } from '../components/OwnedSeal';
+import { SealShare } from '../components/SealShare';
 
 type Load =
   | { kind: 'loading' }
@@ -113,10 +114,10 @@ export const MyTokensPage = () => {
               ) : (
                 <ul className="grid gap-3 sm:grid-cols-2">
                   {load.tokens.map((token) => (
-                    <li key={token.tagId}>
+                    <li key={token.tagId} className="glass rounded-2xl">
                       <Link
                         to={`/tokens/${token.tagId}`}
-                        className="block glass rounded-2xl p-5 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="block rounded-2xl p-5 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
@@ -134,6 +135,10 @@ export const MyTokensPage = () => {
                           <p className="text-amber-300 text-sm mt-2">Transfer pending</p>
                         )}
                       </Link>
+                      {/* Outside the link: buttons cannot sit inside one (S-SEAL1 Ph2b). */}
+                      <div className="px-5 pb-4 empty:hidden">
+                        <SealShare tagId={token.tagId} sealCode={token.sealCode} lifecycleStatus={token.lifecycleStatus} compact />
+                      </div>
                     </li>
                   ))}
                 </ul>
