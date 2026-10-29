@@ -15,6 +15,11 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ## 🔴 BOSS ACTION
 
+### S-MOB2 recorded sealing (Ph A backend merged to local dev 2026-10-29; plan `docs/plans/2026-10-29-s-mob2.md`)
+- [ ] Apply migration `20261029000002`: `supabase db push --linked`, then `supabase db query --linked -f supabase/tests/s_mob2_seal_live.sql` → 18 × ok.
+- [ ] Push `dev`, run `scripts/verify-backend-deploy.sh`. Then Claude regenerates `database.types.ts`.
+- Next: **Ph B** Flutter sealing flow. First iPhone check: one app read raises the chip counter by exactly 1. A successful seal uses a chip for sealing for good (reuse failed-path tests on one chip; 1000 chips arrived 2026-10-29).
+
 ### S-MOB1 Creator app (Ph B verified on iPhone; Ph C merged to local dev 2026-10-28)
 - [ ] Push `dev`, archive build **0.1.0+9** (now also carries the seal widget) to TestFlight, run the 9 checks in `docs/S_MOB1_C_VERIFICATION.md` (Claude reads results back from the logs).
 - [ ] Play internal testing: Play Console app entry + upload key, then the upload / Play signing hashes in `WEBAUTHN_ORIGINS`.
@@ -23,7 +28,7 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [ ] Confirm the Decision "Creator app manages sign-in methods in-app; backup email + recovery stay on the website" (Proposed).
 - [ ] Delete the throwaway app sign-up account (Boss's +alias) from Admin → Accounts.
 - [ ] Production: `VITE_APP_OPEN_ORIGIN` must be a different domain from the web app serving the finish screens (S-LAUNCH1).
-- Next: S-SEAL1 seal spec → **S-MOB2** (recorded sealing + `seal` step-up, reuses the Confirm it's you sheet).
+- Next: **S-MOB2** Ph B (see above).
 
 ### S-SEAL1 Ph3 Flutter seal widget (✅ verified on iPhone 2026-10-29, build 0.1.0+9)
 - [ ] Android 9 check of the seal (AC 7) when an Android phone is available.
@@ -38,7 +43,7 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [ ] Before launch: counsel on the `/s/` page sentence ("This code names a seal. It doesn't prove the item in front of you. Tap the seal.").
 - [x] **Ph2a** live + iPhone-verified 2026-10-28 (`docs/S_SEAL1_PH2A_VERIFICATION.md`). Reduce Motion + My Seals ✅. Open: regenerate `database.types.ts`.
 - [ ] Frangible seal: peel test at 10 min / 1 h / 24 h / 72 h on seal-flag plastic (tears only after ≥10 min; sets the S-MOB2 'wait before shipping' number). Ask Shunxin for part no. + peel data + an on-metal frangible option (current seal does not read on metal).
-- Next: **S-MOB2** (recorded sealing + `seal` step-up).
+- Next: **S-MOB2** Ph B (see above).
 
 ### Production backend hosting (Boss 2026-10-28)
 - [ ] Move to **ECS Express Mode** before launch (Locked decision now launch-blocking; backlog Module 19, High). Production never runs on App Runner.
