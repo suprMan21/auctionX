@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-28 (S-MOB1 Ph B verified on iPhone; production backend = ECS Express Mode, launch-blocking)
+**Last updated:** 2026-10-28 (S-MOB1 Ph C merged to local dev, device test pending; production backend = ECS Express Mode, launch-blocking)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -15,12 +15,15 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ## 🔴 BOSS ACTION
 
-### S-MOB1 Creator app (Ph B verified on iPhone 2026-10-28)
-- [ ] Android check on a real phone before launch (emulator OK for a basic run). Needs Play signing hash in `WEBAUTHN_ORIGINS` (Ph C).
-- [ ] 1Password doesn't fill the authenticator code on the app's code screen: check the item (website + code in one item) and iOS Passwords (Ph C).
+### S-MOB1 Creator app (Ph B verified on iPhone; Ph C merged to local dev 2026-10-28)
+- [ ] Push `dev`, archive build **0.1.0+8** to TestFlight, run the 9 checks in `docs/S_MOB1_C_VERIFICATION.md` (Claude reads results back from the logs).
+- [ ] Play internal testing: Play Console app entry + upload key, then the upload / Play signing hashes in `WEBAUTHN_ORIGINS`.
+- [ ] Android check on a real phone before launch (emulator OK for a basic run).
+- [ ] 1Password doesn't fill the authenticator code on the app's code screen: Ph C check #5 (add through "Open in authenticator app") shows whether that fixes it.
+- [ ] Confirm the Decision "Creator app manages sign-in methods in-app; backup email + recovery stay on the website" (Proposed).
 - [ ] Delete the throwaway app sign-up account (Boss's +alias) from Admin → Accounts.
 - [ ] Production: `VITE_APP_OPEN_ORIGIN` must be a different domain from the web app serving the finish screens (S-LAUNCH1).
-- Next: **Ph C** (in-app Security screen, add/remove methods, step-up sheet, Play internal testing).
+- Next: S-SEAL1 seal spec → **S-MOB2** (recorded sealing + `seal` step-up, reuses the Confirm it's you sheet).
 
 ### Production backend hosting (Boss 2026-10-28)
 - [ ] Move to **ECS Express Mode** before launch (Locked decision now launch-blocking; backlog Module 19, High). Production never runs on App Runner.
