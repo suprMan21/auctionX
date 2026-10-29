@@ -54,3 +54,13 @@ What it means for sealing:
 - A freshly applied seal is not yet tamper-evident. Someone could lift it and move it in the first minutes.
 - The sealing flow (S-MOB2) should tell the creator to press it down firmly and **not ship or hand over the item until it has set** (24 h recommended; confirm with the peel test).
 - Still open: the DR-14 peel test at 10 min / 1 h / 24 h / 72 h on the real seal-flag plastic, and Shunxin's part number and peel data.
+
+### Metal items (Boss, 2026-10-28)
+
+The current sticker **does not work on metal**: it doesn't read once it's stuck to a metal surface. This is expected for a plain NFC inlay. Metal under the antenna detunes it and soaks up the reader's field. The usual fix is an **on-metal tag**, which has a ferrite layer between the antenna and the surface, but that makes the tag thicker and stiffer. A thicker, stiffer layer may work against a frangible design, which needs the sticker to tear. The research so far (DR-9, DR-14) does not cover on-metal at all.
+
+For now:
+- Seals go on non-metal surfaces only: plastic, card, wood, fabric tags. Medals, coins, metal figures and metal cases need a non-metal flag or tag, or a separate on-metal seal.
+- Creator guidance (S-MOB2 sealing flow, creator help) must say "not on metal", and should tell the creator to tap-test after applying.
+- Open question for the supplier (Shunxin) and a possible research item: is there a 424 DNA on-metal frangible label, and how does it hold up against peeling?
+
