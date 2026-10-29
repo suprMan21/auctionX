@@ -235,6 +235,7 @@ const ValidTapView = ({ tap, tokenName, fresh, claimed, signedIn, pendingTransfe
       <TapSealCard
         lifecycleStatus={tap.lifecycleStatus}
         sealCode={tap.sealCode}
+        sealSpec={tap.sealSpec}
         checkedAt={tap.checkedAt}
         state={state}
         freshAt={ownFresh?.at ?? null}

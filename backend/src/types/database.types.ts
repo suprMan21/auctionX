@@ -1400,6 +1400,8 @@ export type Database = {
           retired_reason: string | null
           sdm_key_version: number | null
           seal_code: string | null
+          seal_design_version_id: string | null
+          seal_spec: Json | null
           seller_id: string
           status: string
           sun_counter: number
@@ -1433,6 +1435,8 @@ export type Database = {
           retired_reason?: string | null
           sdm_key_version?: number | null
           seal_code?: string | null
+          seal_design_version_id?: string | null
+          seal_spec?: Json | null
           seller_id: string
           status?: string
           sun_counter?: number
@@ -1466,6 +1470,8 @@ export type Database = {
           retired_reason?: string | null
           sdm_key_version?: number | null
           seal_code?: string | null
+          seal_design_version_id?: string | null
+          seal_spec?: Json | null
           seller_id?: string
           status?: string
           sun_counter?: number

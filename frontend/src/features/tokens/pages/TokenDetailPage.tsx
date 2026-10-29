@@ -95,6 +95,7 @@ export const TokenDetailPage = () => {
                 {/* Untitled seals are already named "Seal XXXX-XXXX". */}
                 <OwnedSeal
                   sealCode={load.token.sealCode}
+                  sealSpec={load.token.sealSpec}
                   lifecycleStatus={load.token.lifecycleStatus}
                   showCode={Boolean(load.token.title)}
                 />

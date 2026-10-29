@@ -28,7 +28,8 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ### S-SEAL1 Ph2 (planned 2026-10-28; plan `docs/plans/2026-10-28-s-seal1-ph2.md`)
 - [ ] At Ph2b: S3 bucket `am-seal-images-staging` (private, OAC), `s3:PutObject`/`DeleteObject` for `am-backend-staging-instance`; CloudFront `/s/*` → backend and `/seal-img/*` → bucket on the staging distribution, Origin Shield on.
 - [ ] Before launch: counsel on the `/s/` page sentence ("This code names a seal. It doesn't prove the item in front of you. Tap the seal.").
-- Next: **Ph2a** build (spec column, store specs, moving pattern on the tap page). Pattern v1 Locked (`docs/design/seal-pattern-v1-motion-preview.html`).
+- [ ] **Ph2a** code merged to local `dev` 2026-10-28 (`docs/S_SEAL1_PH2A_VERIFICATION.md`): Boss runs migration `20261028000004` dry run + push + live SQL (12 checks), pushes `dev`, backfill script, frontend staging deploy, iPhone tap of chip_004.
+- Next: **Ph2b** (server SVG + `/s/<code>` page + images + Share), needs the S3 bucket + CloudFront behaviours above.
 
 ### Production backend hosting (Boss 2026-10-28)
 - [ ] Move to **ECS Express Mode** before launch (Locked decision now launch-blocking; backlog Module 19, High). Production never runs on App Runner.

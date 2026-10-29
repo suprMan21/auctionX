@@ -35,6 +35,7 @@ import { issueTapSession } from '../services/nfc/tapSession';
 import { tapSchema } from '../services/nfc/tagManagementSchemas';
 import { confirmedEmail } from '../lib/security/confirmedEmail';
 import { displaySealCode } from '../lib/nfc/sealCode';
+import { ensureSealSpec, publicSealSpec } from '../lib/seal/ensureSealSpec';
 
 interface ReadRequest extends RequestWithId, AuthRequest {}
 
@@ -199,6 +200,8 @@ export const tapTag = async (req: ReadRequest, res: Response) => {
     // S-SEAL1: public-safe (identifies, never authenticates). checkedAt is the
     // server's check time; the Verified seal window is counted from the tap.
     sealCode: displaySealCode(tag.seal_code),
+    // S-SEAL1 Ph2a: how to draw this seal (decoration seeded from the public code).
+    sealSpec: publicSealSpec(await ensureSealSpec(supabase, tag, { requestId: ctx.requestId, route: ctx.route })),
     checkedAt,
     provenance,
     tapSession,
@@ -217,6 +220,7 @@ type OwnedTagRow = {
   chip_name: string | null;
   chip_serial: string | null;
   seal_code: string | null;
+  seal_spec: unknown;
 };
 
 /** The owner-facing chip reference when a token has no title: the end of its serial (as printed in admin). */
@@ -238,7 +242,7 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
 
   const { data: tagRows, error } = await supabase
     .from('nfc_tags')
-    .select('id, lifecycle_status, activated_at, disclosure, linked_item_id, chip_name, chip_serial, seal_code')
+    .select('id, lifecycle_status, activated_at, disclosure, linked_item_id, chip_name, chip_serial, seal_code, seal_spec')
     .eq('current_owner_id', user.id);
   if (error) throw new AppError('internal', 'Could not load your seals');
 
@@ -246,7 +250,8 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
   const tagIds = tags.map((t) => t.id);
   if (tagIds.length === 0) return ok(res, { tokens: [] });
 
-  const [provenance, proofs, outgoing, items] = await Promise.all([
+  const specLog = { requestId: req.requestId, route: '/api/v1/nfc/mine' };
+  const [provenance, proofs, outgoing, items, specs] = await Promise.all([
     loadProvenance(supabase, tagIds),
     supabase
       .from('ownership_proofs')
@@ -264,7 +269,9 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
       .from('items')
       .select('id, title')
       .in('id', tags.map((t) => t.linked_item_id).filter((id): id is string => id !== null)),
+    Promise.all(tags.map((t) => ensureSealSpec(supabase, t, specLog))),
   ]);
+  const specByTag = new Map(tags.map((t, i) => [t.id, publicSealSpec(specs[i])]));
 
   type ProofRow = { tag_id: string; ownership_id: string; anchored_at: string | null; anchored_tx_hash: string | null };
   const proofByTag = new Map(((proofs.data ?? []) as ProofRow[]).map((p) => [p.tag_id, p]));
@@ -287,6 +294,7 @@ export const listMyTokens = async (req: ReadRequest, res: Response) => {
         chipName: t.chip_name,
         serialSuffix: t.chip_serial ? t.chip_serial.slice(-SERIAL_SUFFIX_LENGTH).toUpperCase() : null,
         sealCode: displaySealCode(t.seal_code),
+        sealSpec: specByTag.get(t.id) ?? null,
         disclosure: t.disclosure ?? {},
         ownershipId: proofByTag.get(t.id)?.ownership_id ?? null,
         ownershipAnchor: ownershipAnchorFor(proofByTag.get(t.id), anchorChainId),

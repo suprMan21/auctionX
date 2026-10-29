@@ -120,7 +120,7 @@ export const MyTokensPage = () => {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <OwnedSeal sealCode={token.sealCode} lifecycleStatus={token.lifecycleStatus} showCode={false} />
+                            <OwnedSeal sealCode={token.sealCode} sealSpec={token.sealSpec} lifecycleStatus={token.lifecycleStatus} showCode={false} />
                             <p className="text-white font-semibold">{tokenDisplayName(token)}</p>
                           </div>
                           <TokenStatusBadge status={token.lifecycleStatus} />
