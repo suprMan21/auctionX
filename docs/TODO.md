@@ -26,11 +26,15 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - Next: S-SEAL1 seal spec → **S-MOB2** (recorded sealing + `seal` step-up, reuses the Confirm it's you sheet).
 
 ### S-SEAL1 Ph2 (planned 2026-10-28; plan `docs/plans/2026-10-28-s-seal1-ph2.md`)
-- [ ] At Ph2b: S3 bucket `am-seal-images-staging` (private, OAC), `s3:PutObject`/`DeleteObject` for `am-backend-staging-instance`; CloudFront `/s/*` → backend and `/seal-img/*` → bucket on the staging distribution, Origin Shield on.
+- [x] **Ph2b** live + iPhone-verified 2026-10-29 (`docs/S_SEAL1_PH2B_VERIFICATION.md`): `/s/<code>` page, preview + share pictures (S3 `am-seal-images-staging`, tick every 10 min), Share link / Share picture.
+- [ ] Before launch: CloudFront / WAF rate rule for `/s/*` (backend limit is only a backstop behind CloudFront).
+- [ ] Boss: disclosure settings wording should say the chosen story is visible to anyone with the seal code (no tap needed).
+- [ ] ECS / domain cutover: align the web Share link origin with `PUBLIC_SEAL_BASE_URL`; production needs its own bucket + `/s/*` App Runner/ECS origin (origin request policy None).
+- [ ] Regenerate `database.types.ts` (backend + frontend) for `seal_images_at` (hand-added).
 - [ ] Before launch: counsel on the `/s/` page sentence ("This code names a seal. It doesn't prove the item in front of you. Tap the seal.").
 - [x] **Ph2a** live + iPhone-verified 2026-10-28 (`docs/S_SEAL1_PH2A_VERIFICATION.md`). Reduce Motion + My Seals ✅. Open: regenerate `database.types.ts`.
 - [ ] Frangible seal: peel test at 10 min / 1 h / 24 h / 72 h on seal-flag plastic (tears only after ≥10 min; sets the S-MOB2 'wait before shipping' number). Ask Shunxin for part no. + peel data + an on-metal frangible option (current seal does not read on metal).
-- Next: **Ph2b** (server SVG + `/s/<code>` page + images + Share), needs the S3 bucket + CloudFront behaviours above.
+- Next: **S-MOB2** (recorded sealing + `seal` step-up).
 
 ### Production backend hosting (Boss 2026-10-28)
 - [ ] Move to **ECS Express Mode** before launch (Locked decision now launch-blocking; backlog Module 19, High). Production never runs on App Runner.
