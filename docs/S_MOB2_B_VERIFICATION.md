@@ -43,7 +43,7 @@ Build 0.1.0+11 (not yet uploaded to TestFlight).
 
 ## Device test (Boss, iPhone, test@ = the only Creator)
 
-**1. Read check: the gate.** Any v2 chip works (chip_004 is fine: nothing goes to the server).
+**1. Read check: the gate.** ✅ Passed 2026-10-30 (Boss: counter +1 per read). Any v2 chip works (chip_004 is fine: nothing goes to the server).
 Home → Read check → read the same seal twice → **Send to my Mac**. On the Mac:
 ```bash
 cd tag-encoder

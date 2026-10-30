@@ -19,7 +19,8 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [x] Ph A: migration `20261029000002` applied + live SQL 18/18; deploy SUCCEEDED 17:13; types regenerated.
 - [x] Ph B app flow merged + pushed (`b086eea`, build 0.1.0+11; `docs/S_MOB2_B_VERIFICATION.md`).
 - [ ] Boss: archive + upload build **0.1.0+12** to TestFlight (Ph B + app icon 1.2, mark 15% bigger).
-- [ ] Boss: **Read check** (test build) on any v2 chip → Mac `verify --kms --url` ×2 → counters must differ by exactly 1. Send the numbers.
+- [x] Read check ✅ 2026-10-30: counter +1 per app read (Boss).
+- [ ] Backlog: **Admin console UX-4** live updates (tap counts, chart bars, tiles without refresh, light on the network); future session.
 - [ ] Boss: one fresh unclaimed v2 chip (encode with no name → expect `chip_005`): gap take → Record it again → airplane mode at Seal it → Try now → Sealed → tap page → "already claimed".
 - [ ] Boss: confirm the 2 Proposed decisions (offline seal finishes online; redo labelling).
 - Then, only after Ph B is verified on the iPhone: **Ph C** video upload (resumable, hash match) + admin review queue + tap page video states; keep redone takes' taps as audit; exclude seal videos from iCloud backup.
