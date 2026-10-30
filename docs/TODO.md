@@ -18,7 +18,8 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 ### S-MOB2 recorded sealing (Ph A live 2026-10-29; Ph B pushed 2026-10-29; plan `docs/plans/2026-10-29-s-mob2.md`)
 - [x] Ph A: migration `20261029000002` applied + live SQL 18/18; deploy SUCCEEDED 17:13; types regenerated.
 - [x] Ph B app flow merged + pushed (`b086eea`, build 0.1.0+11; `docs/S_MOB2_B_VERIFICATION.md`).
-- [ ] Boss: archive + upload build **0.1.0+12** to TestFlight (Ph B + app icon 1.2, mark 15% bigger).
+- [x] Build 0.1.0+12 (Ph B + icon 1.2) on TestFlight 2026-10-30.
+- [ ] Boss: archive + upload build **0.1.0+13** to TestFlight (app icon 1.3, mark 30% bigger than 1.2; `artAssets/aM_appIcon_1.3`; ribbon alternate kept in `aM_appIcon_1.3_ribbonAlt`).
 - [x] Read check ✅ 2026-10-30: counter +1 per app read (Boss).
 - [ ] Backlog: **Admin console UX-4** live updates (tap counts, chart bars, tiles without refresh, light on the network); future session.
 - [ ] Boss: one fresh unclaimed v2 chip (encode with no name → expect `chip_005`): gap take → Record it again → airplane mode at Seal it → Try now → Sealed → tap page → "already claimed".
@@ -37,7 +38,6 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ### S-SEAL1 Ph3 Flutter seal widget (✅ verified on iPhone 2026-10-29, build 0.1.0+9)
 - [ ] Android 9 check of the seal (AC 7) when an Android phone is available.
-- [ ] Push `dev` (app icon 1.1, build **0.1.0+10**); next TestFlight upload shows the new icon.
 
 ### S-SEAL1 Ph2 (planned 2026-10-28; plan `docs/plans/2026-10-28-s-seal1-ph2.md`)
 - [x] **Ph2b** live + iPhone-verified 2026-10-29 (`docs/S_SEAL1_PH2B_VERIFICATION.md`): `/s/<code>` page, preview + share pictures (S3 `am-seal-images-staging`, tick every 10 min), Share link / Share picture.
