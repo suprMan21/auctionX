@@ -1,7 +1,7 @@
 name: authentic_materials
 description: "Authentic Materials Creator app"
 publish_to: 'none'
-version: 0.1.0+11
+version: 0.1.0+12
 
 environment:
   sdk: ^3.11.1
@@ -60,7 +60,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.3
   flutter_native_splash: ^2.4.5
 
-# App icon 1.1 (artAssets/aM_appIcon_1.1, 2026-10-28). Regenerate with: dart run flutter_launcher_icons
+# App icon 1.2 (artAssets/aM_appIcon_1.2, 2026-10-29: mark +15% on iOS + legacy Android; adaptive layers still 1.1). Regenerate with: dart run flutter_launcher_icons
 flutter_launcher_icons:
   android: true
   ios: true
