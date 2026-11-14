@@ -50,6 +50,13 @@ const _refusedCopy = {
   'not_found': 'This isn’t an Authentic Materials seal we can find.',
 };
 
+/// The creator-facing reason a seal can't be sealed at all, for a server answer at tap 1. Null for anything
+/// else (no signal, a slow server, …): the take goes ahead and the commit decides.
+String? tap1RefusalCopy(Object error) {
+  if (error is! ApiException || error.isNetwork) return null;
+  return _refusedCopy[error.reason];
+}
+
 /// What a failed commit means for the creator. Branches on the server's closed-set reason, never on text.
 CommitResult classifyCommitError(Object error, PendingSeal seal) {
   if (error is! ApiException) return const CommitResult(CommitOutcome.keepWaiting, message: keepWaitingCopy);

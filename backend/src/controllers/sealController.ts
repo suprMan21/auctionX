@@ -4,7 +4,8 @@
  * Locked protocol (2026-10-26): two taps of the same seal bracket a video of at most 2 minutes. The app captures
  * both taps offline and commits them here later, together with the video's SHA-256 (the file uploads after, Ph C).
  *
- *   POST /api/v1/nfc/seal/session   optional, online at tap 1: a server time for the record
+ *   POST /api/v1/nfc/seal/session   optional, online at tap 1: a server time for the record, and (with the tap 1
+ *                                   URL) an early "this seal can't be sealed" before anything is recorded
  *   POST /api/v1/nfc/seal           the commit: needs the `seal` step-up bound to the chip serial
  *
  * Counter rule (Boss 2026-10-29, docs/plans/2026-10-29-s-mob2.md): seal taps may be older than the chip's latest
@@ -37,7 +38,7 @@ const serial = z.string().regex(/^[0-9A-F]{16}$/);
 const sunUrl = z.string().min(1).max(512);
 const deviceTime = z.string().datetime({ offset: true });
 
-export const sealSessionSchema = z.object({ serial }).strict();
+export const sealSessionSchema = z.object({ serial, tap1: sunUrl.optional() }).strict();
 
 export const sealCommitSchema = z
   .object({
@@ -67,14 +68,48 @@ const assertCreator = async (userId: string): Promise<void> => {
 
 // ── POST /nfc/seal/session ──────────────────────────────────────────────────
 
+/**
+ * Early answer at tap 1 (Boss 2026-11-14): a creator holding a seal that is already claimed (or can't be sealed)
+ * hears so before recording, not after a whole take. Only a MAC-valid tap 1 above the seal baseline gets an
+ * answer: anything else (unknown serial, bad MAC, old counter) falls through to the plain session, so this is no
+ * oracle for which serials exist. A valid tap proves the chip is in hand, and the public tap page already shows
+ * its state. Reads only: the counter is not spent, so the same tap 1 still commits.
+ */
+const refuseUnsealable = async (req: SealRequest, serialHex: string, tap1Url: string): Promise<void> => {
+  const parts = parseSunMessage(tap1Url);
+  if (!parts || parts.serial !== serialHex) return;
+  const ctx = securityContext(req, SESSION_ROUTE, 'user');
+  const supabase = getServiceClient();
+  const tap = await resolveSealTap(supabase, parts, ctx);
+  if (!tap || !tap.result.valid) return;
+
+  const { tag } = tap;
+  const { data: seal, error } = await supabase.from('nfc_seals').select('id').eq('tag_id', tag.id).maybeSingle();
+  if (error) return;
+  // Same order and rules as commit_seal.
+  const code: SecurityResult | null =
+    tag.lifecycle_status !== 'ENROLLED' || tag.current_owner_id !== null || seal !== null
+      ? 'already_claimed'
+      : tag.chip_serial === null || tag.suspended_at !== null
+        ? 'not_sealable'
+        : null;
+  if (!code) return;
+  emitSecurityEvent({
+    event: 'nfc.claim', tag_id: tag.id, prior_status: tag.lifecycle_status, result: code,
+    request_id: ctx.requestId, actor_id: ctx.actorId, actor_type: 'user', ip: ctx.ip, route: ctx.route,
+  });
+  throw errorFor(code);
+};
+
 export const startSealSession = async (req: SealRequest, res: Response) => {
   const userId = req.user?.id;
   if (!userId) throw new AppError('unauthenticated', 'Authentication required');
   const parsed = sealSessionSchema.safeParse(req.body);
   if (!parsed.success) throw new AppError('invalid_argument', 'Validation failed', parsed.error.issues);
   await assertCreator(userId);
+  if (parsed.data.tap1) await refuseUnsealable(req, parsed.data.serial, parsed.data.tap1);
 
-  // Never says whether the serial belongs to a chip: the commit checks that.
+  // Without a verified tap 1 this never says whether the serial belongs to a chip: the commit checks that.
   const { data, error } = await getServiceClient()
     .from('seal_sessions')
     .insert({ creator_id: userId, chip_serial: parsed.data.serial })

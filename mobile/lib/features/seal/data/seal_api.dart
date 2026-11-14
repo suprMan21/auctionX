@@ -20,9 +20,11 @@ class SealApi {
 
   final ApiClient _api;
 
-  /// Optional, online at tap 1: gives the record a server time. Never says whether the serial is a chip.
-  Future<SealSession> startSession(String serial) async {
-    final data = await _api.post('/nfc/seal/session', body: {'serial': serial});
+  /// Optional, online at tap 1: gives the record a server time. With [tap1] the server also refuses a seal
+  /// that can't be sealed (already claimed, not sealable) before anything is recorded; it only answers for a
+  /// valid tap, so it never says whether a serial is a chip.
+  Future<SealSession> startSession(String serial, {String? tap1}) async {
+    final data = await _api.post('/nfc/seal/session', body: {'serial': serial, 'tap1': ?tap1});
     final id = data['sessionId'];
     final at = data['startedAt'];
     if (id is! String || at is! String) {
