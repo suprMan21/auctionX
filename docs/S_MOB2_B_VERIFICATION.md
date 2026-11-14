@@ -106,6 +106,10 @@ no-name run → expect `chip_005`), or check whether `chip_` is unowned.
   (counter not spent), logs `nfc.claim` on the session route. No signal → the take goes ahead; the commit decides.
 - **Test (+16, after the backend deploy):** new take on chip_005 → tap 1 → "already claimed", no countdown.
   Airplane mode → tap 1 → countdown starts (refused at Seal it once online).
+- +16 ✅ (Boss): tap 1 on the sealed chip says "already claimed" at once. Airplane-mode path showed "This seal is
+  no longer on this phone": +15's dead-take rule removed the refused take (sibling of this phone's accepted seal)
+  while the result screen was showing it. Fixed in build 0.1.0+17 (`feature/s-mob2-b-result-shown`): the screen
+  keeps the last answer after the take leaves the queue. No widget test (needs the step-up sheet); device check.
 - The video is not on the tap page yet: it stays on the phone until Ph C (upload, review, tap page states).
 
 ## Open / next
