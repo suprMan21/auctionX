@@ -5,6 +5,7 @@ import '../../core/storage/secure_session_storage.dart';
 import '../auth/data/auth_service.dart';
 import 'data/pending_seal.dart';
 import 'data/seal_api.dart';
+import 'data/seal_sync.dart';
 import 'data/seal_reader.dart';
 import 'data/seal_video_store.dart';
 
@@ -31,6 +32,8 @@ class PendingSealsController extends AsyncNotifier<List<PendingSeal>> {
   Future<List<PendingSeal>> build() async {
     ref.watch(authControllerProvider);
     _all = await ref.read(pendingSealStoreProvider).load();
+    final dead = deadTakes(_all);
+    if (dead.isNotEmpty) await _drop(dead);
     return _mine();
   }
 
@@ -47,13 +50,34 @@ class PendingSealsController extends AsyncNotifier<List<PendingSeal>> {
 
   Future<void> add(PendingSeal seal) => _write([..._all, seal]);
 
+  /// Removes entries and their videos.
+  Future<void> _drop(List<PendingSeal> drop) async {
+    final ids = {for (final s in drop) s.id};
+    for (final s in drop) {
+      await SealVideoStore.discard(s.videoPath);
+    }
+    await _write([for (final s in _all) if (!ids.contains(s.id)) s]);
+  }
+
+  /// Applies one commit attempt to the queue. A take the server says to record again can never
+  /// finish, so it goes (with its video) straight away, wherever the creator goes next. Once a take is
+  /// accepted, the creator's other takes on that seal go too: they could only be "already claimed".
+  Future<void> settle(PendingSeal seal, CommitResult result) async {
+    if (result.outcome == CommitOutcome.redo) {
+      await _drop([seal]);
+      return;
+    }
+    final updated = result.updated;
+    if (updated == null) return;
+    await replace(updated);
+    final dead = deadTakes(_all);
+    if (dead.isNotEmpty) await _drop(dead);
+  }
+
   Future<void> replace(PendingSeal seal) => _write([for (final s in _all) s.id == seal.id ? seal : s]);
 
   /// Only for refused seals the creator dismissed: the video goes too.
-  Future<void> dismiss(PendingSeal seal) async {
-    await SealVideoStore.discard(seal.videoPath);
-    await _write([for (final s in _all) if (s.id != seal.id) s]);
-  }
+  Future<void> dismiss(PendingSeal seal) => _drop([seal]);
 }
 
 final pendingSealsProvider =
