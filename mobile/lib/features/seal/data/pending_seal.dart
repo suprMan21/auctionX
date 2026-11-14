@@ -14,6 +14,16 @@ enum PendingSealState {
   refused,
 }
 
+/// Takes that can never finish because the same creator's take on the same seal was accepted:
+/// the server would only answer `already_claimed`. Sealed entries are never in it.
+List<PendingSeal> deadTakes(List<PendingSeal> all) {
+  final sealed = {for (final s in all) if (s.state == PendingSealState.sealed) (s.ownerId, s.tap1.serial)};
+  return [
+    for (final s in all)
+      if (s.state != PendingSealState.sealed && sealed.contains((s.ownerId, s.tap1.serial))) s,
+  ];
+}
+
 /// A take the creator chose to seal: both taps, the video's fingerprint and where the file is.
 ///
 /// Kept in the keychain until the server has it: the taps are the proof and can't be read again.

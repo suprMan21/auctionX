@@ -34,6 +34,10 @@ class _SealResultScreenState extends ConsumerState<SealResultScreen> {
   bool _working = false;
   CommitResult? _last;
 
+  /// The take as it was when this screen last saw it: a "record it again" take leaves the queue at
+  /// once, and the screen still has to show it.
+  PendingSeal? _shown;
+
   @override
   void initState() {
     super.initState();
@@ -66,8 +70,8 @@ class _SealResultScreenState extends ConsumerState<SealResultScreen> {
     if (seal == null || seal.state != PendingSealState.waiting || _working) return;
     setState(() => _working = true);
     final result = await finishSeal(ref.read(sealApiProvider), seal, _confirm);
-    final updated = result.updated;
-    if (updated != null) await ref.read(pendingSealsProvider.notifier).replace(updated);
+    _shown = result.updated ?? seal;
+    await ref.read(pendingSealsProvider.notifier).settle(seal, result);
     if (!mounted) return;
     setState(() {
       _working = false;
@@ -76,15 +80,16 @@ class _SealResultScreenState extends ConsumerState<SealResultScreen> {
   }
 
   Future<void> _recordAgain(PendingSeal seal) async {
-    // These taps can't be used; the seal is on the piece now.
-    await ref.read(pendingSealsProvider.notifier).dismiss(seal);
+    // These taps can't be used (already off the queue); the seal is on the piece now.
     if (mounted) context.pushReplacement(RouteNames.sealTake, extra: const TakeArgs(sealAlreadyOn: true));
   }
 
   @override
   Widget build(BuildContext context) {
     final seals = ref.watch(pendingSealsProvider);
-    final seal = seals.valueOrNull?.where((s) => s.id == widget.sealId).firstOrNull;
+    final queued = seals.valueOrNull?.where((s) => s.id == widget.sealId).firstOrNull;
+    if (queued != null) _shown = queued;
+    final seal = queued ?? (_last?.outcome == CommitOutcome.redo ? _shown : null);
     return Scaffold(
       appBar: AppBar(title: const Text('Your seal')),
       body: SafeArea(

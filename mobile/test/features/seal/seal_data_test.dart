@@ -125,6 +125,20 @@ void main() {
   });
 
   group('pending seal', () {
+    test('once a take is accepted, the same creator’s other takes on that seal are dead', () {
+      final sealed = pendingSeal(id: 'ok').copyWith(state: PendingSealState.sealed, sealId: 's1');
+      final waiting = pendingSeal(id: 'old1');
+      final refused = pendingSeal(id: 'old2').copyWith(state: PendingSealState.refused, refusedReason: 'already_claimed');
+      final otherOwner = pendingSeal(id: 'theirs', owner: 'user-2');
+      final otherSeal = PendingSeal.fromJson({
+        ...pendingSeal(id: 'other').toJson(),
+        'tap1': SealTap(url: sealUrl(serial: serialB), serial: serialB, readAt: at).toJson(),
+      });
+      final dead = deadTakes([sealed, waiting, refused, otherOwner, otherSeal]);
+      expect(dead.map((s) => s.id), unorderedEquals(['old1', 'old2']));
+      expect(deadTakes([waiting, otherOwner]), isEmpty, reason: 'nothing accepted yet: nothing is dead');
+    });
+
     test('commit body matches the backend schema exactly (strict: no other keys)', () {
       final body = pendingSeal().commitBody();
       expect(body.keys.toSet(), {'serial', 'tap1', 'tap2', 'videoSha256', 'tap1DeviceAt', 'tap2DeviceAt'});

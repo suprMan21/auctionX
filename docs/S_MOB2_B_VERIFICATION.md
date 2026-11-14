@@ -89,6 +89,17 @@ no-name run → expect `chip_005`), or check whether `chip_` is unowned.
 - Also seen: test@'s iCloud passkey "trest1key" is refused in the app ("This passkey could not be used to sign
   in", nothing reaches the server) but works on the web; the 1Password passkey works in the app.
 
+## Device test 2026-11-14 (build +14): ✅ sealed
+
+- Read check on chip_005: 31 → 32 → 33 (+1 per read). Gate passed.
+- Clean take: tap 1 = 34, tap 2 = 35 → **accepted**; chip_005 ACTIVE, owned by test@, 1 row in `nfc_seals`.
+- Old queued takes (10/13, 22/25) then sent → `already_claimed` (step 5 behaviour confirmed).
+- Found: a "Record it again" take stayed queued unless the creator pressed that button, so it kept coming
+  back as "Finish your seal". Fixed (build 0.1.0+15, `feature/s-mob2-b-queue`): `PendingSealsController.settle`
+  drops a redo take (and its video) as soon as the server says so, and once a take is accepted drops the
+  creator's other takes on that seal (`deadTakes`); also pruned on load for phones that already have them.
+- Still to run: camera tap on chip_005 shows the seal as claimed.
+
 ## Open / next
 
 - **Ph C**: video upload (resumable, hash must match), admin review queue, tap page video states; keep the taps of
