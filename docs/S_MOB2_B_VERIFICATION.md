@@ -98,7 +98,15 @@ no-name run → expect `chip_005`), or check whether `chip_` is unowned.
   back as "Finish your seal". Fixed (build 0.1.0+15, `feature/s-mob2-b-queue`): `PendingSealsController.settle`
   drops a redo take (and its video) as soon as the server says so, and once a take is accepted drops the
   creator's other takes on that seal (`deadTakes`); also pruned on load for phones that already have them.
-- Still to run: camera tap on chip_005 shows the seal as claimed.
+- Camera tap on chip_005 ✅ (17:46 counter 36, 17:51 counter 39, verify ok; tap page shows Verified).
+- Second take on the sealed chip went through a whole recording before "already claimed" at Seal it. Boss: it must
+  stop at tap 1. Fixed (build 0.1.0+16 + backend, `feature/s-mob2-b-tap1-check`): the app sends the tap 1 URL with
+  `POST /nfc/seal/session` and waits ≤ 5 s; the server answers `already_claimed` / `not_sealable` only for a
+  MAC-valid tap above the baseline (unknown serial, bad MAC, old counter → plain session, no oracle), reads only
+  (counter not spent), logs `nfc.claim` on the session route. No signal → the take goes ahead; the commit decides.
+- **Test (+16, after the backend deploy):** new take on chip_005 → tap 1 → "already claimed", no countdown.
+  Airplane mode → tap 1 → countdown starts (refused at Seal it once online).
+- The video is not on the tap page yet: it stays on the phone until Ph C (upload, review, tap page states).
 
 ## Open / next
 

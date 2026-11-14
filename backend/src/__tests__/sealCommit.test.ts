@@ -297,6 +297,63 @@ describe('POST /nfc/seal/session', () => {
     expect(out.threw?.details?.reason).toBe('creator_only');
     expect(tables.seal_sessions).toHaveLength(0);
   });
+  describe('with the tap 1 URL (early answer)', () => {
+    it('an already claimed seal is refused before anything is recorded', async () => {
+      tables.nfc_tags = [tagRow({ lifecycle_status: 'ACTIVE', current_owner_id: CREATOR })];
+      const { startSealSession } = await controller();
+      const out = await call(startSealSession, makeReq(CREATOR, { serial: SERIAL, tap1: sunFor(12) }));
+
+      expect(out.threw?.details?.reason).toBe('already_claimed');
+      expect(tables.seal_sessions).toHaveLength(0);
+      expect(logSpy.named('nfc.claim').at(-1)).toMatchObject({
+        result: 'already_claimed', route: '/api/v1/nfc/seal/session',
+      });
+    });
+
+    it('a chip that already has a seal row is claimed too', async () => {
+      tables.nfc_tags = [tagRow()];
+      tables.nfc_seals = [{ id: SEAL_ID, tag_id: TAG_ID }];
+      const { startSealSession } = await controller();
+      const out = await call(startSealSession, makeReq(CREATOR, { serial: SERIAL, tap1: sunFor(12) }));
+      expect(out.threw?.details?.reason).toBe('already_claimed');
+    });
+
+    it('a suspended chip is not sealable', async () => {
+      tables.nfc_tags = [tagRow({ suspended_at: '2026-11-01T00:00:00Z' })];
+      const { startSealSession } = await controller();
+      const out = await call(startSealSession, makeReq(CREATOR, { serial: SERIAL, tap1: sunFor(12) }));
+      expect(out.threw?.details?.reason).toBe('not_sealable');
+    });
+
+    it('a sealable chip starts the session and spends nothing', async () => {
+      tables.nfc_tags = [tagRow()];
+      const { startSealSession } = await controller();
+      const out = await call(startSealSession, makeReq(CREATOR, { serial: SERIAL, tap1: sunFor(12) }));
+
+      expect(out.threw).toBeNull();
+      expect(out.status).toBe(201);
+      expect(tables.nfc_tags[0]).toMatchObject({ sun_counter: 9, lifecycle_status: 'ENROLLED' });
+      expect(rpcCalls).toHaveLength(0);
+    });
+
+    it('a forged MAC, an old counter or an unknown serial get no answer (no oracle): plain session', async () => {
+      tables.nfc_tags = [tagRow({ lifecycle_status: 'ACTIVE', current_owner_id: CREATOR })];
+      const { startSealSession } = await controller();
+      for (const tap1 of [sunFor(12, SERIAL, true), sunFor(2)]) {
+        const out = await call(startSealSession, makeReq(CREATOR, { serial: SERIAL, tap1 }));
+        expect(out.threw, tap1).toBeNull();
+        expect(out.status).toBe(201);
+      }
+      const unknown = await call(
+        startSealSession,
+        makeReq(CREATOR, { serial: OTHER_SERIAL, tap1: sunFor(12, OTHER_SERIAL) }),
+      );
+      expect(unknown.threw).toBeNull();
+      const mismatch = await call(startSealSession, makeReq(CREATOR, { serial: OTHER_SERIAL, tap1: sunFor(12) }));
+      expect(mismatch.threw).toBeNull();
+      expect(tables.seal_sessions).toHaveLength(4);
+    });
+  });
 });
 
 describe('seal step-up rules', () => {

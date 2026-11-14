@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/api_client_test.dart' show FakeAdapter;
-import 'seal_data_test.dart' show sealApiWith;
+import 'seal_data_test.dart' show refused, sealApiWith;
 import 'seal_fakes.dart';
 
 void main() {
@@ -17,7 +17,7 @@ void main() {
   late FakeRecorder recorder;
   late DateTime now;
 
-  Future<void> open(WidgetTester tester, {TakeArgs args = const TakeArgs()}) async {
+  Future<void> open(WidgetTester tester, {TakeArgs args = const TakeArgs(), FakeAdapter? server}) async {
     reader = FakeSealReader();
     recorder = FakeRecorder();
     now = DateTime.utc(2026, 10, 29, 20);
@@ -29,11 +29,18 @@ void main() {
         sealReaderProvider.overrideWithValue(reader),
         takeRecorderFactoryProvider.overrideWithValue(() => recorder),
         takeClockProvider.overrideWithValue(() => now),
-        sealApiProvider.overrideWithValue(sealApiWith(FakeAdapter(503, {}))),
+        sealApiProvider.overrideWithValue(sealApiWith(server ?? FakeAdapter(503, {}))),
       ],
       child: MaterialApp(home: SealTakeScreen(args: args)),
     ));
     await tester.pump();
+  }
+
+  /// Tap 1 now waits for the server's answer (a fake): let it arrive.
+  Future<void> afterTap1(WidgetTester tester) async {
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
   }
 
   Future<void> countdown(WidgetTester tester) async {
@@ -48,7 +55,7 @@ void main() {
 
     reader.results.add(sealUrl());
     await tester.tap(find.text('Tap the seal to start'));
-    await tester.pump();
+    await afterTap1(tester);
     expect(find.text('3'), findsOneWidget);
     expect(recorder.starts, 0, reason: 'nothing records during the countdown');
     await countdown(tester);
@@ -78,7 +85,7 @@ void main() {
     await open(tester);
     reader.results.add(sealUrl());
     await tester.tap(find.text('Tap the seal to start'));
-    await tester.pump();
+    await afterTap1(tester);
     await countdown(tester);
 
     now = now.add(const Duration(minutes: 1, seconds: 45));
@@ -97,7 +104,7 @@ void main() {
     await open(tester);
     reader.results.add(sealUrl());
     await tester.tap(find.text('Tap the seal to start'));
-    await tester.pump();
+    await afterTap1(tester);
     await countdown(tester);
     await tester.tap(find.text('Tap the seal to finish'));
     await tester.pump();
@@ -114,20 +121,32 @@ void main() {
     await open(tester);
     reader.results.add('https://x.test/verify/chip_001?picc_data=A1B2C3D4E5F60718293A4B5C6D7E8F90&cmac=0011223344556677');
     await tester.tap(find.text('Tap the seal to start'));
-    await tester.pump();
+    await afterTap1(tester);
     expect(find.textContaining('older kind'), findsOneWidget);
     reader.results.add(const SealReadException(SealReadFailure.unavailable));
     await tester.tap(find.text('Tap the seal to start'));
-    await tester.pump();
+    await afterTap1(tester);
     expect(find.textContaining('NFC is off'), findsOneWidget);
     expect(recorder.starts, 0);
+  });
+
+  testWidgets('a seal the server says is already claimed stops at tap 1, before any recording', (tester) async {
+    await open(tester, server: FakeAdapter(409, refused('already_claimed', code: 'conflict')));
+    reader.results.add(sealUrl());
+    await tester.tap(find.text('Tap the seal to start'));
+    await afterTap1(tester);
+    expect(find.textContaining('already claimed'), findsOneWidget);
+    expect(find.text('3'), findsNothing, reason: 'no countdown');
+    await countdown(tester);
+    expect(recorder.starts, 0);
+    expect(find.text('Tap the seal to start'), findsOneWidget);
   });
 
   testWidgets('tap 2 that read the seal but failed voids the take at once', (tester) async {
     await open(tester);
     reader.results.add(sealUrl());
     await tester.tap(find.text('Tap the seal to start'));
-    await tester.pump();
+    await afterTap1(tester);
     await countdown(tester);
     expect(recorder.recording, isTrue);
 
@@ -164,7 +183,7 @@ void main() {
     expect(find.textContaining('The seal is already on'), findsOneWidget);
     reader.results.add(sealUrl());
     await tester.tap(find.text('Tap the seal to start'));
-    await tester.pump();
+    await afterTap1(tester);
     await countdown(tester);
     expect(find.textContaining('Tap the seal again to finish'), findsOneWidget);
   });

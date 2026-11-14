@@ -15,6 +15,7 @@ import '../../auth/data/auth_service.dart';
 import '../../auth/presentation/widgets/gradient_button.dart';
 import '../data/pending_seal.dart';
 import '../data/seal_reader.dart';
+import '../data/seal_sync.dart';
 import '../data/seal_tap.dart';
 import '../data/seal_video_store.dart';
 import '../data/take_recorder.dart';
@@ -130,7 +131,11 @@ class _SealTakeScreenState extends ConsumerState<SealTakeScreen> with WidgetsBin
             .read(sealReaderProvider)
             .readUrl(prompt: widget.args.sealAlreadyOn ? tap1PromptRedo : tap1Prompt);
         tap = parseSealTap(url, _now());
-        _startSession(tap.serial);
+        final refused = await _startSession(tap);
+        if (refused != null) {
+          if (mounted) setState(() => _note = refused);
+          return;
+        }
       }
       if (!mounted) return;
       _tap1 = tap;
@@ -142,13 +147,20 @@ class _SealTakeScreenState extends ConsumerState<SealTakeScreen> with WidgetsBin
     }
   }
 
-  /// Optional server time for the record. Never waits on it and never fails the take.
-  void _startSession(String serial) {
-    ref
-        .read(sealApiProvider)
-        .startSession(serial)
-        .timeout(const Duration(seconds: 5))
-        .then<void>((s) => _sessionId = s.id, onError: (Object _) {});
+  /// Server time for the record, and the server's early "this seal can't be sealed" (already claimed, …).
+  /// Waits at most 5 s; no signal or a slow server never stops the take (the commit decides then).
+  /// Returns the message to show when the seal can't be sealed.
+  Future<String?> _startSession(SealTap tap) async {
+    try {
+      final s = await ref
+          .read(sealApiProvider)
+          .startSession(tap.serial, tap1: tap.url)
+          .timeout(const Duration(seconds: 5));
+      _sessionId = s.id;
+      return null;
+    } catch (e) {
+      return tap1RefusalCopy(e);
+    }
   }
 
   Future<void> _runCountdown() async {
