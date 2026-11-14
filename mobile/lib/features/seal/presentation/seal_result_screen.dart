@@ -34,8 +34,8 @@ class _SealResultScreenState extends ConsumerState<SealResultScreen> {
   bool _working = false;
   CommitResult? _last;
 
-  /// The take as it was when this screen last saw it: a "record it again" take leaves the queue at
-  /// once, and the screen still has to show it.
+  /// The take as it was when this screen last saw it: a take can leave the queue as soon as the server
+  /// answers, and the screen still has to show that answer.
   PendingSeal? _shown;
 
   @override
@@ -70,13 +70,12 @@ class _SealResultScreenState extends ConsumerState<SealResultScreen> {
     if (seal == null || seal.state != PendingSealState.waiting || _working) return;
     setState(() => _working = true);
     final result = await finishSeal(ref.read(sealApiProvider), seal, _confirm);
+    // Set before the queue changes, so no frame shows the take as gone.
     _shown = result.updated ?? seal;
+    _last = result;
     await ref.read(pendingSealsProvider.notifier).settle(seal, result);
     if (!mounted) return;
-    setState(() {
-      _working = false;
-      _last = result;
-    });
+    setState(() => _working = false);
   }
 
   Future<void> _recordAgain(PendingSeal seal) async {
@@ -89,7 +88,9 @@ class _SealResultScreenState extends ConsumerState<SealResultScreen> {
     final seals = ref.watch(pendingSealsProvider);
     final queued = seals.valueOrNull?.where((s) => s.id == widget.sealId).firstOrNull;
     if (queued != null) _shown = queued;
-    final seal = queued ?? (_last?.outcome == CommitOutcome.redo ? _shown : null);
+    // After an answer the take may already be off the queue (record it again, or a sibling of a seal this
+    // phone already finished): keep showing that answer.
+    final seal = queued ?? (_last != null ? _shown : null);
     return Scaffold(
       appBar: AppBar(title: const Text('Your seal')),
       body: SafeArea(
