@@ -62,6 +62,40 @@ String? uriFromRecordPayload(List<int> payload) {
   return prefix + String.fromCharCodes(payload.sublist(1));
 }
 
+/// The URL in an NDEF file image as a seal stores it: NLEN (2 bytes, big endian), then one
+/// well-known URI record (`U`). Null when the file isn't that.
+String? urlFromNdefFile(List<int> file) {
+  if (file.length < 2) return null;
+  final nlen = (file[0] << 8) | file[1];
+  if (nlen == 0 || file.length < 2 + nlen) return null;
+  final msg = file.sublist(2, 2 + nlen);
+  final header = msg[0];
+  final tnf = header & 0x07;
+  final shortRecord = (header & 0x10) != 0;
+  final hasId = (header & 0x08) != 0;
+  var i = 1;
+  if (msg.length < i + 1) return null;
+  final typeLength = msg[i++];
+  final int payloadLength;
+  if (shortRecord) {
+    if (msg.length < i + 1) return null;
+    payloadLength = msg[i++];
+  } else {
+    if (msg.length < i + 4) return null;
+    payloadLength = (msg[i] << 24) | (msg[i + 1] << 16) | (msg[i + 2] << 8) | msg[i + 3];
+    i += 4;
+  }
+  var idLength = 0;
+  if (hasId) {
+    if (msg.length < i + 1) return null;
+    idLength = msg[i++];
+  }
+  if (msg.length < i + typeLength + idLength + payloadLength) return null;
+  if (tnf != 0x01 || typeLength != 1 || msg[i] != 0x55) return null;
+  i += typeLength + idLength;
+  return uriFromRecordPayload(msg.sublist(i, i + payloadLength));
+}
+
 /// Reads a seal URL. Throws [SealTapException] when it can't be a sealable seal.
 SealTap parseSealTap(String url, DateTime readAt) {
   final uri = Uri.tryParse(url);

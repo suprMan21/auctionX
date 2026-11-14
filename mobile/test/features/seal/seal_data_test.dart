@@ -71,6 +71,35 @@ void main() {
     });
 
     test('serial suffix is the last four', () => expect(serialSuffix(serialA), 'CDEF'));
+
+    // The NDEF file as the encoder writes it: NLEN, then one short well-known URI record.
+    List<int> ndefFile(String rest, {int header = 0xD1, List<int> trailing = const []}) {
+      final payload = [0x04, ...rest.codeUnits];
+      final record = [header, 0x01, payload.length, 0x55, ...payload];
+      return [record.length >> 8, record.length & 0xFF, ...record, ...trailing];
+    }
+
+    test('NDEF file image → URL (the bytes after NLEN are ignored)', () {
+      const rest = 'd1bwev65w7rqzl.cloudfront.net/verify/chip_005?sn=27976EBBCC1B5038'
+          '&picc_data=A1B2C3D4E5F60718293A4B5C6D7E8F90&cmac=0011223344556677';
+      expect(urlFromNdefFile(ndefFile(rest, trailing: List.filled(40, 0))), 'https://$rest');
+    });
+
+    test('a long (non-short) record still reads', () {
+      final payload = [0x04, ...'x.test/a'.codeUnits];
+      final record = [0xC1, 0x01, 0, 0, 0, payload.length, 0x55, ...payload];
+      expect(urlFromNdefFile([0, record.length, ...record]), 'https://x.test/a');
+    });
+
+    test('anything that isn’t one URI record is null, never a throw', () {
+      expect(urlFromNdefFile([]), isNull);
+      expect(urlFromNdefFile([0, 0]), isNull, reason: 'empty file');
+      expect(urlFromNdefFile([0, 40, 0xD1]), isNull, reason: 'NLEN longer than the data');
+      expect(urlFromNdefFile(ndefFile('x.test', header: 0xD2)), isNull, reason: 'MIME, not well-known');
+      final text = [0xD1, 0x01, 0x03, 0x54, 0x02, 0x65, 0x6E];
+      expect(urlFromNdefFile([0, text.length, ...text]), isNull, reason: 'a text record');
+      expect(urlFromNdefFile([0, 4, 0xD1, 0x01, 0x09, 0x55]), isNull, reason: 'payload cut short');
+    });
   });
 
   group('take rules', () {

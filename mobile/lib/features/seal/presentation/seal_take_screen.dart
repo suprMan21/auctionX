@@ -211,14 +211,20 @@ class _SealTakeScreenState extends ConsumerState<SealTakeScreen> with WidgetsBin
         return;
       }
       if (!sameSeal(tap1.serial, tap.serial)) {
-        setState(() => _note = 'That’s a different seal. Tap the seal you started with '
-            '(ends in ${serialSuffix(tap1.serial)}).');
+        setState(() => _note = 'That’s a different seal. Tap the seal you started with.');
         return;
       }
       _tap2 = tap;
       await _stopAndReview();
     } catch (e) {
-      if (mounted && _phase == TakePhase.recording) setState(() => _note = readFailureCopy(e));
+      if (!mounted || _phase != TakePhase.recording) return;
+      // The seal was read but the tap didn't finish: its counter moved, so the server would void
+      // this take (tap 2 must be tap 1 + 1). Say so now instead of at Seal it.
+      if (e is SealReadException && e.chipRead) {
+        _voidTake(extraReadCopy);
+      } else {
+        setState(() => _note = readFailureCopy(e));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

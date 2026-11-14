@@ -123,6 +123,28 @@ void main() {
     expect(recorder.starts, 0);
   });
 
+  testWidgets('tap 2 that read the seal but failed voids the take at once', (tester) async {
+    await open(tester);
+    reader.results.add(sealUrl());
+    await tester.tap(find.text('Tap the seal to start'));
+    await tester.pump();
+    await countdown(tester);
+    expect(recorder.recording, isTrue);
+
+    reader.results.add(const SealReadException(SealReadFailure.cancelled));
+    await tester.tap(find.text('Tap the seal to finish'));
+    await tester.pump();
+    expect(recorder.recording, isTrue, reason: 'nothing was read: the take goes on');
+
+    reader.results.add(const SealReadException(SealReadFailure.nothingRead, 'read_failed', true));
+    await tester.tap(find.text('Tap the seal to finish'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('this take can’t be used'), findsOneWidget);
+    expect(recorder.recording, isFalse);
+    expect(find.text('Tap the seal to start'), findsOneWidget, reason: 'back to tap 1 of a new take');
+  });
+
   testWidgets('practice reads no seal and says nothing is kept', (tester) async {
     await open(tester, args: const TakeArgs(practice: true));
     expect(find.text('PRACTICE · nothing is kept'), findsOneWidget);

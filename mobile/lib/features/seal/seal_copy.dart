@@ -40,6 +40,10 @@ const tap1Prompt = 'Hold the top of your phone to the loose seal';
 const tap1PromptRedo = 'Hold the top of your phone to the seal on the piece';
 const tap2Prompt = 'Hold the top of your phone to the seal on the piece';
 
+/// Tap 2 read the seal but didn't finish: the take can't be used.
+const extraReadCopy = 'The seal was read but the tap didn’t finish, so this take can’t be used. '
+    'Record it again: tap the seal to start and tap it again to finish.';
+
 String readFailureCopy(Object error) {
   if (error is SealReadException) {
     return switch (error.failure) {
