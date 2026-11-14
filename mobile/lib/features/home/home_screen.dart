@@ -9,7 +9,7 @@ import '../../routing/route_names.dart';
 import '../auth/data/auth_service.dart';
 import '../auth/presentation/widgets/gradient_button.dart';
 import '../seal/data/pending_seal.dart';
-import '../seal/data/seal_tap.dart';
+import '../security/method_flows.dart' show formatWhen;
 import '../seal/seal_providers.dart';
 
 /// Signed-in home: seal a piece, finish seals still on this phone, security.
@@ -129,7 +129,7 @@ class HomeScreen extends ConsumerWidget {
               style: AppTypography.titleMedium,
             ),
             subtitle: Text(
-              'Seal ending in ${serialSuffix(s.serial)}',
+              'Started ${formatWhen(context, s.createdAt)}',
               style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
             ),
             trailing: const Icon(Icons.chevron_right),

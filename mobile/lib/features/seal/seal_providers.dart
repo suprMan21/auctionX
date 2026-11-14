@@ -11,7 +11,7 @@ import 'data/seal_video_store.dart';
 final sealApiProvider = Provider<SealApi>((ref) => SealApi(ref.watch(apiClientProvider)));
 
 /// The phone's NFC reader (tests use a fake).
-final sealReaderProvider = Provider<SealReader>((_) => NfcSealReader());
+final sealReaderProvider = Provider<SealReader>((_) => platformSealReader());
 
 final pendingSealStoreProvider = Provider<PendingSealStore>((_) => PendingSealStore(PlatformSecureStore()));
 

@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:flutter/services.dart';
 import 'package:ndef_record/ndef_record.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/nfc_manager_android.dart';
-import 'package:nfc_manager/nfc_manager_ios.dart';
 
 import 'seal_tap.dart';
 
@@ -12,11 +12,15 @@ import 'seal_tap.dart';
 enum SealReadFailure { unavailable, cancelled, nothingRead }
 
 class SealReadException implements Exception {
-  const SealReadException(this.failure, [this.detail]);
+  const SealReadException(this.failure, [this.detail, this.chipRead = false]);
   final SealReadFailure failure;
   final String? detail;
+
+  /// The chip's file was read before the failure, so its counter moved: a take in progress
+  /// can no longer be used (tap 2 must be tap 1 + 1).
+  final bool chipRead;
   @override
-  String toString() => 'SealReadException($failure, $detail)';
+  String toString() => 'SealReadException($failure, $detail, chipRead: $chipRead)';
 }
 
 /// Reads the URL off one seal. One call = one read of the chip's NDEF file
@@ -30,6 +34,46 @@ abstract class SealReader {
   void cancel();
 }
 
+/// SealReader for this platform: one ReadBinary on iOS, the system's NDEF read on Android.
+SealReader platformSealReader() => Platform.isIOS ? ApduSealReader() : NfcSealReader();
+
+/// iOS: native session in AppDelegate.swift (`am/seal_reader`) that selects the NDEF app and file
+/// and sends one ReadBinary, so a tap is exactly +1. nfc_manager reads the file twice on its own
+/// when it finds a tag, which made every tap +3 (2026-11-14).
+class ApduSealReader implements SealReader {
+  ApduSealReader([MethodChannel? channel]) : _channel = channel ?? const MethodChannel('am/seal_reader');
+  final MethodChannel _channel;
+
+  @override
+  Future<bool> isAvailable() async => await _channel.invokeMethod<bool>('isAvailable') ?? false;
+
+  @override
+  Future<String> readUrl({required String prompt}) async {
+    final Uint8List? file;
+    try {
+      file = await _channel.invokeMethod<Uint8List>('read', {'prompt': prompt});
+    } on PlatformException catch (e) {
+      final read = e.details is Map && (e.details as Map)['chipRead'] == true;
+      final failure = switch (e.code) {
+        'unavailable' => SealReadFailure.unavailable,
+        'cancelled' || 'busy' => SealReadFailure.cancelled,
+        _ => SealReadFailure.nothingRead,
+      };
+      throw SealReadException(failure, e.code, read);
+    }
+    final url = file == null ? null : urlFromNdefFile(file);
+    if (url == null) throw const SealReadException(SealReadFailure.nothingRead, 'not_a_uri_record', true);
+    return url;
+  }
+
+  @override
+  void cancel() {
+    _channel.invokeMethod<void>('cancel').ignore();
+  }
+}
+
+/// Android: the system reads the NDEF file once when it finds the tag (`cachedNdefMessage`);
+/// nothing here reads it again.
 class NfcSealReader implements SealReader {
   Completer<String>? _pending;
 
@@ -48,30 +92,27 @@ class NfcSealReader implements SealReader {
 
     await NfcManager.instance.startSession(
       pollingOptions: {NfcPollingOption.iso14443},
-      alertMessageIos: prompt,
       onDiscovered: (NfcTag tag) async {
-        // Read once and stop: a second read would raise the counter again.
+        // Never read again: a second read would raise the counter again.
         String? url;
         try {
-          final message = Platform.isIOS
-              ? await NdefIos.from(tag)?.readNdef()
-              : NdefAndroid.from(tag)?.cachedNdefMessage;
+          final message = NdefAndroid.from(tag)?.cachedNdefMessage;
           final record = message?.records.isNotEmpty == true ? message!.records.first : null;
           if (record != null && record.typeNameFormat == TypeNameFormat.wellKnown) {
             url = uriFromRecordPayload(record.payload);
           }
         } catch (e) {
-          fail(SealReadException(SealReadFailure.nothingRead, e.toString()));
+          fail(SealReadException(SealReadFailure.nothingRead, e.toString(), true));
         }
         if (url != null) {
           if (!done.isCompleted) done.complete(url);
-          await NfcManager.instance.stopSession(alertMessageIos: 'Got it');
+          await NfcManager.instance.stopSession();
         } else {
-          fail(const SealReadException(SealReadFailure.nothingRead));
-          await NfcManager.instance.stopSession(errorMessageIos: 'That didn’t read as a seal');
+          // The system already read the file to hand us the tag.
+          fail(const SealReadException(SealReadFailure.nothingRead, null, true));
+          await NfcManager.instance.stopSession();
         }
       },
-      onSessionErrorIos: (error) => fail(SealReadException(SealReadFailure.cancelled, error.message)),
     );
     try {
       return await done.future;
@@ -87,6 +128,6 @@ class NfcSealReader implements SealReader {
     if (pending != null && !pending.isCompleted) {
       pending.completeError(const SealReadException(SealReadFailure.cancelled));
     }
-    NfcManager.instance.stopSession(errorMessageIos: 'Cancelled');
+    NfcManager.instance.stopSession();
   }
 }

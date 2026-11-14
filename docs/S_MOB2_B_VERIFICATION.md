@@ -66,6 +66,29 @@ no-name run → expect `chip_005`), or check whether `chip_` is unowned.
 4. Tap the seal with the iPhone camera → tap page shows the seal as claimed.
 5. Try to seal it again (new take) → "already claimed".
 
+## Device test 2026-11-14 (build +13, chip_005): every take voided → native iOS reader (build +14)
+
+- chip_005 encoded with no name (first auto-named chip). `chip_` (5RQPP74E) kept as the spare.
+- Offline path ✅ (airplane mode → still Sealed + Syncing + "Saved on this phone").
+- Every take came back `seal_gap`: tap 1 / tap 2 counters 4/7, 16/19, 22/25, including one clean take.
+  Read check: chip_005 28 → 31, chip_004 30 → 33. **Each app read was +3**, on two chips.
+- Cause: `nfc_manager` 4.2.1 iOS discovery (`NfcManagerPlugin.swift` ~754) runs `queryNDEFStatus` and
+  `readNDEF` on every tag before Dart sees it, then our reader called `readNdef()` again. Each touches the
+  SDM file. (The 2026-10-30 "+1" can't come from this code; treat it as unexplained.)
+- Fix (`feature/s-mob2-b-ios-reader`, build 0.1.0+14): `SealReaderPlugin` in `ios/Runner/AppDelegate.swift`
+  (`am/seal_reader` channel) runs its own `NFCTagReaderSession`: SELECT D2760000850101, SELECT E104, **one**
+  ReadBinary (Le 256), returns the file image; Dart `urlFromNdefFile` parses NLEN + the URI record. Android
+  keeps the system's `cachedNdefMessage` (no second read). `platformSealReader()` picks per platform.
+- A tap 2 that read the seal but failed now voids the take on the spot (`SealReadException.chipRead`,
+  `extraReadCopy`) instead of at Seal it.
+- Wording: no more "seal ending in …" (the serial isn't printed on a seal): Finish card says "Started <when>",
+  Confirm it's you says "Seal your piece. This is permanent.", wrong seal says "Tap the seal you started with."
+- Tests: 155 app tests, analyze clean, iOS no-codesign build OK.
+- **Gate before the next take:** Read check on chip_005 with build +14 must be +1. Then: clean take → Sealed →
+  camera tap shows claimed → second take "already claimed".
+- Also seen: test@'s iCloud passkey "trest1key" is refused in the app ("This passkey could not be used to sign
+  in", nothing reaches the server) but works on the web; the 1Password passkey works in the app.
+
 ## Open / next
 
 - **Ph C**: video upload (resumable, hash must match), admin review queue, tap page video states; keep the taps of

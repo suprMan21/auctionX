@@ -12,7 +12,6 @@ import '../../mfa/data/mfa_models.dart';
 import '../../mfa/presentation/step_up_sheet.dart';
 import '../data/pending_seal.dart';
 import '../data/seal_sync.dart';
-import '../data/seal_tap.dart';
 import '../seal_providers.dart';
 import 'seal_take_screen.dart';
 
@@ -57,7 +56,7 @@ class _SealResultScreenState extends ConsumerState<SealResultScreen> {
       action: StepUpAction.seal,
       targetId: serial,
       status: status,
-      purpose: 'Seal your piece with the seal ending in ${serialSuffix(serial)}. This is permanent.',
+      purpose: 'Seal your piece. This is permanent.',
     );
   }
 
