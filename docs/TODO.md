@@ -1,6 +1,6 @@
 # Authentic Materials — TODO
 
-**Last updated:** 2026-10-29 (S-MOB2 Ph B app sealing flow pushed, device test pending; /dashboard auction leak fixed; S-SEAL1 Ph3 Flutter seal widget verified on iPhone; app icon 1.1; S-MOB1 Ph C merged, device test pending; S-SEAL1 Ph2a live, Shimmer seal; frangible set time + no metal; production backend = ECS Express Mode, launch-blocking)
+**Last updated:** 2026-11-14 (S-MOB2 Ph B verified on iPhone, build +17; S-DEPS1 next, then Ph C; S-MOB2 Ph B app sealing flow pushed, device test pending; /dashboard auction leak fixed; S-SEAL1 Ph3 Flutter seal widget verified on iPhone; app icon 1.1; S-MOB1 Ph C merged, device test pending; S-SEAL1 Ph2a live, Shimmer seal; frangible set time + no metal; production backend = ECS Express Mode, launch-blocking)
 
 This file tracks **live, actionable items only**. Per-session history is in Notion → Session Handoffs DB.
 The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and Ideas have their own DBs.
@@ -15,16 +15,14 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 
 ## 🔴 BOSS ACTION
 
-### S-MOB2 recorded sealing (Ph A live 2026-10-29; Ph B pushed 2026-10-29; plan `docs/plans/2026-10-29-s-mob2.md`)
-- [x] Ph A: migration `20261029000002` applied + live SQL 18/18; deploy SUCCEEDED 17:13; types regenerated.
-- [x] Ph B app flow merged + pushed (`b086eea`, build 0.1.0+11; `docs/S_MOB2_B_VERIFICATION.md`).
-- [x] Build 0.1.0+12 (Ph B + icon 1.2) on TestFlight 2026-10-30.
-- [ ] Boss: archive + upload build **0.1.0+13** to TestFlight (app icon 1.3, mark 30% bigger than 1.2; `artAssets/aM_appIcon_1.3`; ribbon alternate kept in `aM_appIcon_1.3_ribbonAlt`).
-- [x] Read check ✅ 2026-10-30: counter +1 per app read (Boss).
-- [ ] Backlog: **Admin console UX-4** live updates (tap counts, chart bars, tiles without refresh, light on the network); future session.
-- [ ] Boss: one fresh unclaimed v2 chip (encode with no name → expect `chip_005`): gap take → Record it again → airplane mode at Seal it → Try now → Sealed → tap page → "already claimed".
+### S-MOB2 recorded sealing (Ph A live 2026-10-29; Ph B ✅ verified on iPhone 2026-11-14, build 0.1.0+17; plan `docs/plans/2026-10-29-s-mob2.md`)
+- Ph B result + fixes (+14 native iOS reader, +15 dead takes, +16 tap-1 check, +17 result screen): `docs/S_MOB2_B_VERIFICATION.md`.
+- [ ] Next session: **S-DEPS1** dependency updates (Flutter + packages; all at once or by area), **before Ph C**.
+- [ ] Then **Ph C** video upload (resumable, hash match) + admin review queue + tap page video states (Boss wants the video on the tap page); keep redone takes' taps as audit; exclude seal videos from iCloud backup.
 - [ ] Boss: confirm the 2 Proposed decisions (offline seal finishes online; redo labelling).
-- Then, only after Ph B is verified on the iPhone: **Ph C** video upload (resumable, hash match) + admin review queue + tap page video states; keep redone takes' taps as audit; exclude seal videos from iCloud backup.
+- [ ] Backlog: **Admin console UX-4** live updates (tap counts, chart bars, tiles without refresh, light on the network); future session.
+- [ ] Encoder station for employees / suppliers (S-STATION1, Mac first then Windows + Linux) after S-STAFF1 puts staff MFA on the enroll routes; move the encoder AWS OTP to the YubiKeys.
+- [ ] 1Password "To Encode" note still says `--item chip_###` (auto-naming needs no name).
 
 ### S-MOB1 Creator app (Ph B verified on iPhone; Ph C merged to local dev 2026-10-28)
 - [ ] Push `dev`, archive build **0.1.0+9** (now also carries the seal widget) to TestFlight, run the 9 checks in `docs/S_MOB1_C_VERIFICATION.md` (Claude reads results back from the logs).
@@ -34,7 +32,7 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [ ] Confirm the Decision "Creator app manages sign-in methods in-app; backup email + recovery stay on the website" (Proposed).
 - [ ] Delete the throwaway app sign-up account (Boss's +alias) from Admin → Accounts.
 - [ ] Production: `VITE_APP_OPEN_ORIGIN` must be a different domain from the web app serving the finish screens (S-LAUNCH1).
-- Next: **S-MOB2** Ph B (see above).
+- Next: **S-DEPS1**, then S-MOB2 Ph C (see above).
 
 ### S-SEAL1 Ph3 Flutter seal widget (✅ verified on iPhone 2026-10-29, build 0.1.0+9)
 - [ ] Android 9 check of the seal (AC 7) when an Android phone is available.
@@ -48,7 +46,7 @@ The pre-launch pipeline lives in the Feature Backlog DB. Lessons, Decisions and 
 - [ ] Before launch: counsel on the `/s/` page sentence ("This code names a seal. It doesn't prove the item in front of you. Tap the seal.").
 - [x] **Ph2a** live + iPhone-verified 2026-10-28 (`docs/S_SEAL1_PH2A_VERIFICATION.md`). Reduce Motion + My Seals ✅. Open: regenerate `database.types.ts`.
 - [ ] Frangible seal: peel test at 10 min / 1 h / 24 h / 72 h on seal-flag plastic (tears only after ≥10 min; sets the S-MOB2 'wait before shipping' number). Ask Shunxin for part no. + peel data + an on-metal frangible option (current seal does not read on metal).
-- Next: **S-MOB2** Ph B (see above).
+- Next: **S-DEPS1**, then S-MOB2 Ph C (see above).
 
 ### Production backend hosting (Boss 2026-10-28)
 - [ ] Move to **ECS Express Mode** before launch (Locked decision now launch-blocking; backlog Module 19, High). Production never runs on App Runner.
