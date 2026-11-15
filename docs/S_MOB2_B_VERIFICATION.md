@@ -1,7 +1,7 @@
 # S-MOB2 Ph B — app sealing flow: verification
 
 Date: 2026-10-29 · Branch `feature/s-mob2-b` · Plan `docs/plans/2026-10-29-s-mob2.md` · Builds on Ph A (`docs/S_MOB2_A_VERIFICATION.md`, live on staging).
-Build 0.1.0+11 (not yet uploaded to TestFlight).
+Build 0.1.0+11 (first cut). **Verified on iPhone 2026-11-14 on build 0.1.0+17 (`dev` `73e6f1c`, pushed), chip_005.**
 
 ## What changed
 
@@ -110,6 +110,8 @@ no-name run → expect `chip_005`), or check whether `chip_` is unowned.
   no longer on this phone": +15's dead-take rule removed the refused take (sibling of this phone's accepted seal)
   while the result screen was showing it. Fixed in build 0.1.0+17 (`feature/s-mob2-b-result-shown`): the screen
   keeps the last answer after the take leaves the queue. No widget test (needs the step-up sheet); device check.
+- +17 ✅ (Boss, 2026-11-14): airplane-mode path → back online → Try now shows "This seal can’t be finished /
+  already claimed"; OK clears the take. **Ph B verified on iPhone.**
 - The video is not on the tap page yet: it stays on the phone until Ph C (upload, review, tap page states).
 
 ## Open / next
@@ -119,4 +121,7 @@ no-name run → expect `chip_005`), or check whether `chip_` is unowned.
   iCloud backup.
 - Seal code is not shown at tap 1 (the app doesn't know it offline; the server could return it from `/seal/session`).
 - Android: untested (no device).
-- TestFlight: upload build 0.1.0+11 after review.
+- Before Ph C: **S-DEPS1** dependency updates (Flutter + packages; Boss 2026-11-14).
+- test@'s iCloud Keychain passkey failed in the app (works on the web); the 1Password passkey works. Unexplained; S-MOB1.
+- Encoder station (no terminal) for employees + suppliers (Mac first, Windows + Linux): backlog S-STATION1; enroll
+  routes need staff MFA first (S-STAFF1).
