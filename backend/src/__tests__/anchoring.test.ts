@@ -180,6 +180,11 @@ describe('anchor config', () => {
     expect(r.ok && r.config.chainId).toBe(84532);
   });
 
+  it('defaults the low-balance alert to 0.00002 ETH (testnet gas)', () => {
+    const r = withEnv(base);
+    expect(r.ok && r.config.lowBalanceWei).toBe(20_000_000_000_000n);
+  });
+
   it('refuses Base mainnet in Ph1', () => {
     const r = withEnv({ ...base, ANCHOR_CHAIN_ID: '8453' });
     expect(r.ok).toBe(false);

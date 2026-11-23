@@ -81,7 +81,7 @@ anchored the same day.
 | **Registry (live, use this)** | `0x05bFd2DADb164716Cb19F50B8BA632a157B22671`, deploy block `62276622`, tx `0x0f8931e7e1bd0fa0ec1200b8f7235880de627908a9c4d430e8247b03620c5406`. On-chain check 2026-11-22: `owner()` = `0xD75b16A68A0Dd6e57afa80F71B3e104971f23765` (Boss's hardware wallet, read from its app's Receive screen and confirmed on the device; 0 txs on Base Sepolia + Ethereum before deploy), `writer()` = KMS writer. Source not yet verified on Basescan (no API key): `npx hardhat verify --network baseSepolia 0x05bFd2DADb164716Cb19F50B8BA632a157B22671 0xD75b16A68A0Dd6e57afa80F71B3e104971f23765 0x704BD2499738c0dBc84C2F84ffD17b587a64A70b` |
 | Abandoned deploy | `0xC74C99F15bE59781869D2BF7baB8C5EEC20C913d` (block `50979710`, tx `0x71dacb…04bc`). **Do not use.** Its owner `0x6Cd0…515d` is the Coinbase CDP faucet's sending wallet (5.7 M txs), copied from Basescan's "From" by mistake, so nobody at AM can rotate its writer. Lesson: the owner address must come from the wallet's own Receive screen |
 | Writer funding | 0.0001 Sepolia ETH (CDP faucet), still there; reused for the redeploy |
-| Deploy cost | 398,868 gas at 0.0051 gwei = 0.000002 ETH. A daily root is ~30k gas, so 0.0001 ETH lasts over a year; set `ANCHOR_LOW_BALANCE_WEI=20000000000000` |
+| Deploy cost | 398,868 gas at 0.0051 gwei = 0.000002 ETH. A daily root is ~30k gas, so 0.0001 ETH lasts over a year; the default alert threshold is 0.00002 ETH since 2026-11-22 (App Runner had only 5 free env slots, so `ANCHOR_LOW_BALANCE_WEI` is not set) |
 | Redeploy (done 2026-11-22) | Throwaway deployer `0x31308C65C88F6Ff2692bd2f4bc88b4b12e3521D2` (CDP faucet, 0.0001 ETH; no role), key generated in the Claude scratchpad, never printed, deleted after the on-chain check |
 
 ## Boss runbook (testnet setup)
@@ -98,7 +98,7 @@ anchored the same day.
 5. **App Runner env** (literals): `ANCHOR_TICK_SECRET` (`openssl rand -base64 36`, save in 1Password),
    `ANCHOR_RPC_URL` (Alchemy Base Sepolia HTTPS URL), `ANCHOR_REGISTRY_ADDRESS`, `ANCHOR_REGISTRY_DEPLOY_BLOCK`,
    `ANCHOR_KMS_KEY_ID=alias/am-anchor-writer-staging`. Optional: `ANCHOR_MODE` (default `daily_batch`),
-   `ANCHOR_LOW_BALANCE_WEI` (default 0.002 ETH), `ANCHOR_CONFIRMATIONS` (default 3).
+   `ANCHOR_LOW_BALANCE_WEI` (default 0.00002 ETH), `ANCHOR_CONFIRMATIONS` (default 3).
 6. **Vault** (SQL editor): `select vault.create_secret('<ANCHOR_TICK_SECRET>', 'anchor_tick_secret');`
    **No trailing newline** (a newline in the fee-sweep secret caused 403s on 2026-10-25).
 7. **GitHub:** create the label `anchoring` on the app repo so alert issues are tagged.

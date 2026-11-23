@@ -10,7 +10,7 @@
  *   ANCHOR_REGISTRY_ADDRESS        OwnershipRegistry address
  *   ANCHOR_REGISTRY_DEPLOY_BLOCK   first block the reconciliation scan reads
  *   ANCHOR_KMS_KEY_ID              alias/am-anchor-writer-staging
- *   ANCHOR_LOW_BALANCE_WEI         alert below this writer balance (default 0.002 ETH)
+ *   ANCHOR_LOW_BALANCE_WEI         alert below this writer balance (default 0.00002 ETH)
  *   ANCHOR_CONFIRMATIONS           blocks before a batch counts as anchored (default 3)
  *
  * Not configured means the tick does nothing and says so. It never guesses.
@@ -45,7 +45,9 @@ export type ConfigResult =
   | { readonly ok: true; readonly config: AnchorConfig }
   | { readonly ok: false; readonly missing: readonly string[] };
 
-const DEFAULT_LOW_BALANCE_WEI = 2_000_000_000_000_000n; // 0.002 ETH
+// 0.00002 ETH: Base Sepolia (Ph1 only) costs ~30k gas per daily root, so this is
+// many weeks of roots. Revisit with real gas prices before mainnet.
+const DEFAULT_LOW_BALANCE_WEI = 20_000_000_000_000n;
 
 const env = (name: string): string => process.env[name]?.trim() ?? '';
 
