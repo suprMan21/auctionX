@@ -78,7 +78,7 @@ anchored the same day.
 | Writer address | `0x704BD2499738c0dBc84C2F84ffD17b587a64A70b` (derived from the KMS public key) |
 | No-human-sign check | `chris-admin`: AccessDenied (script). `claude-ro`: AccessDenied, "explicit deny in a resource-based policy", i.e. the key policy's own Deny |
 | **Status** | **Registry redeployed 2026-11-22 with the hardware-wallet owner.** Next: App Runner `ANCHOR_*` settings + Vault `anchor_tick_secret` (Boss runbook steps 5–8), then the rotation drill (step 9) |
-| **Registry (live, use this)** | `0x05bFd2DADb164716Cb19F50B8BA632a157B22671`, deploy block `62276622`, tx `0x0f8931e7e1bd0fa0ec1200b8f7235880de627908a9c4d430e8247b03620c5406`. On-chain check 2026-11-22: `owner()` = `0xD75b16A68A0Dd6e57afa80F71B3e104971f23765` (Boss's hardware wallet, read from its app's Receive screen and confirmed on the device; 0 txs on Base Sepolia + Ethereum before deploy), `writer()` = KMS writer. Source not yet verified on Basescan (no API key): `npx hardhat verify --network baseSepolia 0x05bFd2DADb164716Cb19F50B8BA632a157B22671 0xD75b16A68A0Dd6e57afa80F71B3e104971f23765 0x704BD2499738c0dBc84C2F84ffD17b587a64A70b` |
+| **Registry (live, use this)** | `0x05bFd2DADb164716Cb19F50B8BA632a157B22671`, deploy block `62276622`, tx `0x0f8931e7e1bd0fa0ec1200b8f7235880de627908a9c4d430e8247b03620c5406`. On-chain check 2026-11-22: `owner()` = `0xD75b16A68A0Dd6e57afa80F71B3e104971f23765` (Boss's hardware wallet, read from its app's Receive screen and confirmed on the device; 0 txs on Base Sepolia + Ethereum before deploy), `writer()` = KMS writer. Source verified on Basescan 2026-11-22 (https://sepolia.basescan.org/address/0x05bFd2DADb164716Cb19F50B8BA632a157B22671#code; Etherscan key in 1Password `Employee` → "Etherscan" item `7l2gwch7…`, password field) |
 | Abandoned deploy | `0xC74C99F15bE59781869D2BF7baB8C5EEC20C913d` (block `50979710`, tx `0x71dacb…04bc`). **Do not use.** Its owner `0x6Cd0…515d` is the Coinbase CDP faucet's sending wallet (5.7 M txs), copied from Basescan's "From" by mistake, so nobody at AM can rotate its writer. Lesson: the owner address must come from the wallet's own Receive screen |
 | Writer funding | 0.0001 Sepolia ETH (CDP faucet), still there; reused for the redeploy |
 | Deploy cost | 398,868 gas at 0.0051 gwei = 0.000002 ETH. A daily root is ~30k gas, so 0.0001 ETH lasts over a year; the default alert threshold is 0.00002 ETH since 2026-11-22 (App Runner had only 5 free env slots, so `ANCHOR_LOW_BALANCE_WEI` is not set) |
@@ -113,7 +113,7 @@ anchored the same day.
 
 | Criterion | Status |
 |---|---|
-| Contract deployed + source-verified on Base Sepolia | Deployed 2026-11-22 (`0x05bF…2671`, owner = hardware wallet); source verification pending an Etherscan API key |
+| Contract deployed + source-verified on Base Sepolia | ✅ Deployed + source-verified 2026-11-22 (`0x05bF…2671`, owner = hardware wallet) |
 | Only the anchoring address can write; others revert | ✅ Hardhat tests + chain e2e |
 | Writer rotation by owner works; old writer reverts | ✅ Hardhat + chain e2e; **real drill with the hardware wallet pending (runbook 9)** |
 | No human principal can `kms:Sign` | Key policy has an explicit Deny for every principal but the instance role; script proves it for the caller. Claude to repeat with `claude-ro` after creation |
