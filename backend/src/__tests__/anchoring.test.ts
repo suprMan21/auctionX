@@ -233,6 +233,8 @@ class FakeChain implements ChainPort {
   private signed = new Map<Hex, { fn: AnchorFunction; value: Hex }>();
   private txs = new Map<Hex, { fn: AnchorFunction; value: Hex; minedAt: bigint | null; status: 'success' | 'reverted' }>();
 
+  chainId = 84532;
+  getChainId = async () => this.chainId;
   getBlockNumber = async () => this.block;
   getBlockTimestamp = async (n: bigint) => 1_800_000_000n + n;
   getBalance = async () => this.balance;
@@ -388,6 +390,18 @@ describe('anchor tick', () => {
     // Proof 1 stays in its per_event batch; proof 2 went into the daily root.
     expect(tables.ownership_proofs[0].anchor_batch_id).toBe('batch-1');
     expect(verifyInRoot(daily.merkle_root as string, id32(2), tables.ownership_proofs[1].merkle_proof as string[])).toBe(true);
+  });
+
+  it('stops before any step when the RPC serves another network', async () => {
+    chain.chainId = 11155111; // Ethereum Sepolia
+    const s = await tick();
+    expect(s.errors).toEqual(['rpc:wrong_chain_11155111']);
+    expect(s.batchesCreated).toBe(0);
+    expect(s.sent).toBe(0);
+    expect(s.writerOk).toBeNull();
+    expect(tables.anchor_batches).toEqual([]);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({ kind: 'anchor_failing', key: 'rpc_wrong_chain:11155111' });
   });
 
   it('pauses sends and alerts when the registry writer is not our key', async () => {

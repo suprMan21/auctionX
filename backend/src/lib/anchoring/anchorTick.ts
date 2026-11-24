@@ -141,6 +141,27 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
     if (data) summary.returnedToPending++;
   };
 
+  // 0. Network check ─────────────────────────────────────────────────────────
+  // A URL for the wrong network (e.g. Ethereum Sepolia) reads "no contract" and
+  // a zero balance, which looks like other faults. Stop before any step.
+  try {
+    const served = await chain.getChainId();
+    if (served !== config.chainId) {
+      summary.errors.push(`rpc:wrong_chain_${served}`);
+      log.error('anchor_tick_rpc_wrong_chain', { expected: config.chainId, served });
+      await alert('anchor_failing', `rpc_wrong_chain:${served}`, {
+        reason: 'ANCHOR_RPC_URL serves the wrong network', expectedChainId: config.chainId, servedChainId: served,
+      }).catch(() => undefined);
+      log.info('anchor_tick', { ...summary, errors: summary.errors.join(',') });
+      return summary;
+    }
+  } catch (err) {
+    summary.errors.push(`rpc:${errCode(err)}`);
+    log.error('anchor_tick_step_failed', { step: 'rpc', error: errCode(err) });
+    log.info('anchor_tick', { ...summary, errors: summary.errors.join(',') });
+    return summary;
+  }
+
   // 1. Writer check ──────────────────────────────────────────────────────────
   await step('writer', async () => {
     const onChain = await chain.readWriter();

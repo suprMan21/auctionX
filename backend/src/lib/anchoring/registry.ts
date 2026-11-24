@@ -54,6 +54,8 @@ export interface TxReceiptInfo {
 }
 
 export interface ChainPort {
+  /** Network the RPC actually serves; the tick stops if it is not config.chainId. */
+  getChainId(): Promise<number>;
   getBlockNumber(): Promise<bigint>;
   getBlockTimestamp(blockNumber: bigint): Promise<bigint>;
   getBalance(address: Hex): Promise<bigint>;
@@ -76,6 +78,8 @@ export const createViemChainPort = (config: AnchorConfig, signer: KmsSigner): Ch
   const address = config.registryAddress;
 
   return {
+    getChainId: () => publicClient.getChainId(),
+
     getBlockNumber: () => publicClient.getBlockNumber(),
 
     getBlockTimestamp: async (blockNumber) => (await publicClient.getBlock({ blockNumber })).timestamp,
