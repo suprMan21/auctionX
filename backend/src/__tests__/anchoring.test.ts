@@ -165,7 +165,7 @@ describe('anchor config', () => {
     ANCHOR_KMS_KEY_ID: 'alias/am-anchor-writer-staging',
   };
   const withEnv = (vars: Record<string, string | undefined>) => {
-    const keys = ['ANCHOR_MODE', 'ANCHOR_CHAIN_ID', ...Object.keys(base)];
+    const keys = ['ANCHOR_MODE', 'ANCHOR_CHAIN_ID', 'ANCHOR_LOGS_RPC_URL', ...Object.keys(base)];
     const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
     for (const k of keys) delete process.env[k];
     Object.assign(process.env, Object.fromEntries(Object.entries(vars).filter(([, v]) => v !== undefined)));
@@ -178,6 +178,19 @@ describe('anchor config', () => {
     const r = withEnv(base);
     expect(r.ok && r.config.mode).toBe('daily_batch');
     expect(r.ok && r.config.chainId).toBe(84532);
+  });
+
+  it('scans logs over the public Base Sepolia endpoint in 200-block calls by default', () => {
+    const r = withEnv(base);
+    expect(r.ok && r.config.logsRpcUrl).toBe('https://sepolia.base.org');
+    expect(r.ok && r.config.logChunkBlocks).toBe(200n);
+    expect(r.ok && r.config.maxLogChunksPerTick).toBe(300);
+    expect(r.ok && r.config.reconcileBudgetMs).toBe(40_000);
+  });
+
+  it('refuses a non-https logs endpoint', () => {
+    const r = withEnv({ ...base, ANCHOR_LOGS_RPC_URL: 'http://plain.example' });
+    expect(!r.ok && r.missing).toContain('ANCHOR_LOGS_RPC_URL');
   });
 
   it('defaults the low-balance alert to 0.00002 ETH (testnet gas)', () => {
@@ -209,6 +222,7 @@ const config = (over: Partial<AnchorConfig> = {}): AnchorConfig => ({
   mode: 'daily_batch',
   chainId: 84532,
   rpcUrl: 'https://rpc.example',
+  logsRpcUrl: 'https://logs.example',
   registryAddress: REGISTRY as Hex,
   deployBlock: 1000n,
   kmsKeyId: 'alias/test',
@@ -216,6 +230,7 @@ const config = (over: Partial<AnchorConfig> = {}): AnchorConfig => ({
   confirmations: 3,
   maxSendsPerTick: 10,
   logChunkBlocks: 50n,
+  reconcileBudgetMs: 40_000,
   maxLogChunksPerTick: 50,
   ...over,
 });
@@ -402,6 +417,15 @@ describe('anchor tick', () => {
     expect(tables.anchor_batches).toEqual([]);
     expect(alerts).toHaveLength(1);
     expect(alerts[0]).toMatchObject({ kind: 'anchor_failing', key: 'rpc_wrong_chain:11155111' });
+  });
+
+  it('stops the log scan at the time budget and resumes from the saved block next tick', async () => {
+    chain.block = 1000n + 50n * 10n + 3n; // ten chunks behind
+    let t = 0;
+    let s = await tick({}, { elapsedMs: () => (t += 40_000) });
+    expect(s.scannedTo).toBe('1049'); // one chunk, then the budget is spent
+    s = await tick();
+    expect(s.scannedTo).toBe('1500');
   });
 
   it('pauses sends and alerts when the registry writer is not our key', async () => {

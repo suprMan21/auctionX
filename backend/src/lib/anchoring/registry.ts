@@ -75,6 +75,10 @@ export const createViemChainPort = (config: AnchorConfig, signer: KmsSigner): Ch
   const transport = http(config.rpcUrl, { timeout: 15_000, retryCount: 2 });
   const publicClient = createPublicClient({ chain: baseSepolia, transport });
   const walletClient = createWalletClient({ account: signer.account, chain: baseSepolia, transport });
+  // The log scan has its own endpoint (provider getLogs range caps differ).
+  const logsClient = createPublicClient({
+    chain: baseSepolia, transport: http(config.logsRpcUrl, { timeout: 15_000, retryCount: 2 }),
+  });
   const address = config.registryAddress;
 
   return {
@@ -109,7 +113,7 @@ export const createViemChainPort = (config: AnchorConfig, signer: KmsSigner): Ch
     },
 
     getRegistryEvents: async (fromBlock, toBlock) => {
-      const logs = await publicClient.getLogs({
+      const logs = await logsClient.getLogs({
         address,
         events: registryAbi.filter((item) => item.type === 'event'),
         fromBlock,

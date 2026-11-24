@@ -84,6 +84,14 @@ anchored the same day.
 | Deploy cost | 398,868 gas at 0.0051 gwei = 0.000002 ETH. A daily root is ~30k gas, so 0.0001 ETH lasts over a year; the default alert threshold is 0.00002 ETH since 2026-11-22 (App Runner had only 5 free env slots, so `ANCHOR_LOW_BALANCE_WEI` is not set) |
 | Redeploy (done 2026-11-22) | Throwaway deployer `0x31308C65C88F6Ff2692bd2f4bc88b4b12e3521D2` (CDP faucet, 0.0001 ETH; no role), key generated in the Claude scratchpad, never printed, deleted after the on-chain check |
 
+## First live run (2026-11-24)
+
+| Item | Value |
+|---|---|
+| First roots | 2 daily roots sent 07:07 UTC, confirmed 08:07 UTC: tx `0x83e74291245f6cc8aa1893b97b1326953699383bb67e5cc93ed446d487a186b1`, `0xd8544d84655628d23e830fd264e3bbbd65396a92c317f38bc6c5ab81fb3b76df` (from the KMS writer, status success) |
+| Fixed on the way | Vault secret created with arguments swapped (rotated); `ANCHOR_RPC_URL` was Base **mainnet** (tick now checks `eth_chainId` first, alert `anchor_failing` key `rpc_wrong_chain:<id>`); App Runner at its 50-variable cap (removed `CHAIN_ID`, `STRIPE_PUBLISHABLE_KEY`, `RELEASE_ESCROW_SECRET`; low-balance default 0.00002 ETH in code) |
+| Reconcile | Failed HTTP 400: Alchemy Free caps `eth_getLogs` at 10 blocks, and Base Sepolia makes a block every 0.2 s (18k/h). Boss chose option A: log scan over the public `https://sepolia.base.org` (200 blocks/call, ~50 ms each), 300 calls or 40 s per tick (`ANCHOR_LOGS_RPC_URL` optional override). Before mainnet: add an on-chain write counter (option C) so reconcile does not depend on provider log limits |
+
 ## Boss runbook (testnet setup)
 
 1. **Hardware wallet address.** Any EVM address on it; Base Sepolia uses the same address. This is `REGISTRY_OWNER`.

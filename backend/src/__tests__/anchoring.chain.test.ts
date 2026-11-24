@@ -71,9 +71,9 @@ describe.skipIf(!RPC)('anchoring end to end (local EVM, chain id 84532)', () => 
   let clock: Date;
 
   const config = (): AnchorConfig => ({
-    mode: 'daily_batch', chainId: 84532, rpcUrl: RPC!, registryAddress: registry, deployBlock,
+    mode: 'daily_batch', chainId: 84532, rpcUrl: RPC!, logsRpcUrl: RPC!, registryAddress: registry, deployBlock,
     kmsKeyId: 'local', lowBalanceWei: parseEther('0.002'), confirmations: 2,
-    maxSendsPerTick: 10, logChunkBlocks: 5n, maxLogChunksPerTick: 100,
+    maxSendsPerTick: 10, logChunkBlocks: 5n, maxLogChunksPerTick: 100, reconcileBudgetMs: 40_000,
   });
 
   const tick = () => runAnchorTick({

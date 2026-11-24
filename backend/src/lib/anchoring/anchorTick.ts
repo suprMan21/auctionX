@@ -46,6 +46,8 @@ export interface TickDeps {
   readonly writer: Hex;
   readonly now: () => Date;
   readonly randomLeaf: () => Hex;
+  /** Monotonic ms for the scan budget; defaults to Date.now. */
+  readonly elapsedMs?: () => number;
   /** Resolves true once the alert is durably recorded. */
   readonly alert?: (kind: AnchorAlertKind, key: string, detail: AlertDetail) => Promise<boolean>;
 }
@@ -389,7 +391,10 @@ export const runAnchorTick = async (deps: TickDeps): Promise<TickSummary> => {
     let from = state ? BigInt((state as { last_scanned_block: number }).last_scanned_block) + 1n : config.deployBlock;
     const safeTo = (await chain.getBlockNumber()) - BigInt(config.confirmations);
 
+    const clock = deps.elapsedMs ?? Date.now;
+    const started = clock();
     for (let chunk = 0; chunk < config.maxLogChunksPerTick && from <= safeTo; chunk++) {
+      if (chunk > 0 && clock() - started >= config.reconcileBudgetMs) break;
       const to = from + config.logChunkBlocks - 1n < safeTo ? from + config.logChunkBlocks - 1n : safeTo;
       const events = await chain.getRegistryEvents(from, to);
       summary.eventsScanned += events.length;
